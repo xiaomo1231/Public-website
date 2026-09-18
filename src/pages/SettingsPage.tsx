@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
-import { Eye, EyeOff, Loader2, RotateCcw, Save, Wifi } from 'lucide-react'
+import { Eye, EyeOff, Languages, Loader2, RotateCcw, Save, Wifi } from 'lucide-react'
 import { useAISettings } from '@/features/settings/useAISettings'
+import { useUILanguage } from '@/features/settings/useUILanguage'
 import {
   PROVIDER_PRESETS,
   type AIProviderId,
@@ -25,8 +26,11 @@ import { toast } from '@/features/toast/toastStore'
 import { isAppError } from '@/infrastructure/errors/AppError'
 import { AIService } from '@/services/aiService'
 import { DataManagementPanel } from '@/widgets/dataManagement/DataManagementPanel'
+import { LANGUAGE_LABELS, UI_LANGUAGES, useTranslation, type UILanguage } from '@/i18n'
 
 export function SettingsPage(): JSX.Element {
+  const { t } = useTranslation()
+  const { language, setLanguage } = useUILanguage()
   const { settings, loaded, loading, saving, update, reset } = useAISettings()
   const [draft, setDraft] = useState<AISettings | null>(null)
   const [showKey, setShowKey] = useState(false)
@@ -44,7 +48,7 @@ export function SettingsPage(): JSX.Element {
     return (
       <PageContainer>
         <PageContent>
-          <LoadingState label="Loading settings" />
+          <LoadingState label={t('settings.loading')} />
         </PageContent>
       </PageContainer>
     )
@@ -70,10 +74,10 @@ export function SettingsPage(): JSX.Element {
     try {
       await update(draft)
       setDirty(false)
-      toast({ variant: 'success', title: 'Settings saved' })
+      toast({ variant: 'success', title: t('settings.saved') })
     } catch (err) {
-      const msg = isAppError(err) ? err.message : 'Failed to save settings'
-      toast({ variant: 'error', title: 'Save failed', description: msg })
+      const msg = isAppError(err) ? err.message : t('settings.saveFailed')
+      toast({ variant: 'error', title: t('settings.saveFailedTitle'), description: msg })
     }
   }
 
@@ -81,10 +85,10 @@ export function SettingsPage(): JSX.Element {
     try {
       await reset()
       setDirty(false)
-      toast({ variant: 'info', title: 'Settings reset to defaults' })
+      toast({ variant: 'info', title: t('settings.resetDone') })
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Failed to reset'
-      toast({ variant: 'error', title: 'Reset failed', description: msg })
+      const msg = err instanceof Error ? err.message : t('settings.resetFailed')
+      toast({ variant: 'error', title: t('settings.resetFailedTitle'), description: msg })
     }
   }
 
@@ -99,19 +103,22 @@ export function SettingsPage(): JSX.Element {
       if (result.ok) {
         toast({
           variant: 'success',
-          title: 'Connection succeeded',
-          description: `Model ${result.model} responded in ${result.latencyMs} ms`,
+          title: t('settings.connectionOk'),
+          description: t('settings.connectionOkBody', {
+            model: result.model,
+            latency: result.latencyMs,
+          }),
         })
       } else {
         toast({
           variant: 'error',
-          title: 'Connection failed',
-          description: result.error ?? 'Unknown error',
+          title: t('settings.connectionFailed'),
+          description: result.error ?? t('settings.unknownError'),
         })
       }
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Test failed'
-      toast({ variant: 'error', title: 'Test failed', description: msg })
+      const msg = err instanceof Error ? err.message : t('settings.testFailed')
+      toast({ variant: 'error', title: t('settings.testFailed'), description: msg })
       setTestResult({ ok: false, latencyMs: 0, model: draft.model, error: msg })
     } finally {
       setTesting(false)
@@ -123,21 +130,21 @@ export function SettingsPage(): JSX.Element {
   return (
     <PageContainer>
       <PageHeader
-        title="AI Settings"
-        description="Configure your AI provider. API keys are stored locally on this device and sent only to the provider you select."
+        title={t('settings.title')}
+        description={t('settings.description')}
         actions={
           <>
             <Button variant="outline" onClick={resetDefaults}>
               <RotateCcw className="h-4 w-4" />
-              Reset to defaults
+              {t('settings.resetDefaults')}
             </Button>
             <Button variant="outline" onClick={testConnection} disabled={testing || !draft.apiKey}>
               {testing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Wifi className="h-4 w-4" />}
-              {testing ? 'Testing…' : 'Test connection'}
+              {testing ? t('settings.testing') : t('settings.testConnection')}
             </Button>
             <Button onClick={save} disabled={!dirty || saving}>
               <Save className="h-4 w-4" />
-              {saving ? 'Saving…' : 'Save changes'}
+              {saving ? t('settings.saving') : t('settings.saveChanges')}
             </Button>
           </>
         }
@@ -145,15 +152,39 @@ export function SettingsPage(): JSX.Element {
       <PageContent className="space-y-4">
         <Card>
           <CardHeader>
-            <CardTitle>Provider</CardTitle>
-            <CardDescription>
-              Pick a preset or choose Custom for any OpenAI-compatible endpoint.
-            </CardDescription>
+            <CardTitle className="flex items-center gap-2">
+              <Languages className="h-4 w-4" />
+              {t('settings.language.title')}
+            </CardTitle>
+            <CardDescription>{t('settings.language.description')}</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            <Label htmlFor="ui-language">{t('settings.language.label')}</Label>
+            <Select value={language} onValueChange={(v) => setLanguage(v as UILanguage)}>
+              <SelectTrigger id="ui-language" className="sm:max-w-xs">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {UI_LANGUAGES.map((lang) => (
+                  <SelectItem key={lang} value={lang}>
+                    {LANGUAGE_LABELS[lang]}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">{t('settings.language.hint')}</p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>{t('settings.provider.title')}</CardTitle>
+            <CardDescription>{t('settings.provider.description')}</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2">
-                <Label htmlFor="provider">AI provider</Label>
+                <Label htmlFor="provider">{t('settings.provider.label')}</Label>
                 <Select value={draft.provider} onValueChange={onProviderChange}>
                   <SelectTrigger id="provider">
                     <SelectValue />
@@ -161,25 +192,22 @@ export function SettingsPage(): JSX.Element {
                   <SelectContent>
                     {PROVIDER_PRESETS.map((p) => (
                       <SelectItem key={p.id} value={p.id}>
-                        {p.label}
+                        {p.id === 'custom' ? t('provider.custom') : p.label}
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
-                <p className="text-xs text-muted-foreground">
-                  Choosing a preset suggests its base URL and default model. You can override them
-                  below.
-                </p>
+                <p className="text-xs text-muted-foreground">{t('settings.provider.hint')}</p>
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="model">Model</Label>
+                <Label htmlFor="model">{t('settings.model')}</Label>
                 <Input
                   id="model"
                   list="model-suggestions"
                   value={draft.model}
                   onChange={(e) => patch('model', e.target.value)}
-                  placeholder={preset?.defaultModel || 'model-name'}
+                  placeholder={preset?.defaultModel || t('settings.modelPlaceholder')}
                 />
                 {preset && preset.models.length > 0 && (
                   <datalist id="model-suggestions">
@@ -192,33 +220,26 @@ export function SettingsPage(): JSX.Element {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="baseURL">API Base URL</Label>
+              <Label htmlFor="baseURL">{t('settings.baseUrl')}</Label>
               <Input
                 id="baseURL"
                 value={draft.baseURL}
                 onChange={(e) => patch('baseURL', e.target.value)}
                 placeholder="https://api.example.com/v1"
               />
-              <p className="text-xs text-muted-foreground">
-                Must start with <code className="rounded bg-muted px-1">http://</code> or{' '}
-                <code className="rounded bg-muted px-1">https://</code>. Browser CORS must permit
-                requests from this domain.
-              </p>
+              <p className="text-xs text-muted-foreground">{t('settings.baseUrlHint')}</p>
             </div>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader>
-            <CardTitle>API Key</CardTitle>
-            <CardDescription>
-              Stored locally only. Never logged, never transmitted anywhere except to your
-              selected provider when you make a request.
-            </CardDescription>
+            <CardTitle>{t('settings.apiKey.title')}</CardTitle>
+            <CardDescription>{t('settings.apiKey.description')}</CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
             <div className="space-y-2">
-              <Label htmlFor="apiKey">Key</Label>
+              <Label htmlFor="apiKey">{t('settings.apiKey.label')}</Label>
               <div className="flex gap-2">
                 <Input
                   id="apiKey"
@@ -234,14 +255,11 @@ export function SettingsPage(): JSX.Element {
                   variant="outline"
                   size="icon"
                   onClick={() => setShowKey((s) => !s)}
-                  aria-label={showKey ? 'Hide API key' : 'Show API key'}
+                  aria-label={showKey ? t('settings.apiKey.hide') : t('settings.apiKey.show')}
                 >
                   {showKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </Button>
               </div>
-              <p className="text-xs text-muted-foreground">
-                Tip: encryption-at-rest will be added in a later phase.
-              </p>
               {testResult && (
                 <p
                   className={cn(
@@ -250,8 +268,13 @@ export function SettingsPage(): JSX.Element {
                   )}
                 >
                   {testResult.ok
-                    ? `Connected in ${testResult.latencyMs} ms (model ${testResult.model})`
-                    : `Failed: ${testResult.error ?? 'unknown error'}`}
+                    ? t('settings.apiKey.connected', {
+                        latency: testResult.latencyMs,
+                        model: testResult.model,
+                      })
+                    : t('settings.apiKey.failed', {
+                        error: testResult.error ?? t('settings.unknownError'),
+                      })}
                 </p>
               )}
             </div>
@@ -260,13 +283,13 @@ export function SettingsPage(): JSX.Element {
 
         <Card>
           <CardHeader>
-            <CardTitle>Sampling</CardTitle>
-            <CardDescription>Adjust creativity and output length for AI responses.</CardDescription>
+            <CardTitle>{t('settings.sampling.title')}</CardTitle>
+            <CardDescription>{t('settings.sampling.description')}</CardDescription>
           </CardHeader>
           <CardContent className="grid gap-6 sm:grid-cols-2">
             <div className="space-y-3">
               <div className="flex items-baseline justify-between">
-                <Label htmlFor="temperature">Temperature</Label>
+                <Label htmlFor="temperature">{t('settings.sampling.temperature')}</Label>
                 <span className="text-sm tabular-nums text-muted-foreground">
                   {draft.temperature.toFixed(2)}
                 </span>
@@ -280,12 +303,12 @@ export function SettingsPage(): JSX.Element {
                 onValueChange={(v) => patch('temperature', v[0] ?? draft.temperature)}
               />
               <p className="text-xs text-muted-foreground">
-                0 = deterministic, 2 = highly creative. Recommended 0.3–0.8 for study content.
+                {t('settings.sampling.temperatureHint')}
               </p>
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="maxTokens">Max tokens</Label>
+              <Label htmlFor="maxTokens">{t('settings.sampling.maxTokens')}</Label>
               <Input
                 id="maxTokens"
                 type="number"
@@ -296,7 +319,7 @@ export function SettingsPage(): JSX.Element {
                 onChange={(e) => patch('maxTokens', Number(e.target.value))}
               />
               <p className="text-xs text-muted-foreground">
-                Maximum tokens per response. Range 64 – 32000.
+                {t('settings.sampling.maxTokensHint')}
               </p>
             </div>
           </CardContent>

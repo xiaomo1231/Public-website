@@ -1,5 +1,15 @@
+import type { TranslationKey } from '@/i18n/types'
+
 export type DocumentType = 'pdf' | 'docx' | 'pptx' | 'image' | 'text'
+
 export type ProcessingStatus = 'uploading' | 'processing' | 'ready' | 'failed'
+
+export const PROCESSING_STATUS_LABEL_KEYS: Record<ProcessingStatus, TranslationKey> = {
+  uploading: 'docStatus.uploading',
+  processing: 'docStatus.processing',
+  ready: 'docStatus.ready',
+  failed: 'docStatus.failed',
+}
 export type ChunkContentType =
   | 'heading'
   | 'paragraph'
@@ -47,6 +57,12 @@ export interface Document {
   chunkCount?: number
   uploadedAt: number
   processedAt?: number
+  /**
+   * `File.lastModified` of the original upload, when there was one.
+   * Used together with name + size to detect duplicate uploads. Absent for
+   * pasted text and for documents created before this field existed.
+   */
+  sourceModifiedAt?: number
 }
 
 export interface DocumentBlobRow {
@@ -65,6 +81,8 @@ export interface CreateDocumentInput {
   /** Either a Blob or pre-read ArrayBuffer. ArrayBuffer is preferred in
    *  environments where Blob.prototype.arrayBuffer is unreliable. */
   blob?: Blob | ArrayBuffer
+  /** `File.lastModified`, forwarded for duplicate detection. */
+  sourceModifiedAt?: number
 }
 
 export interface UpdateDocumentInput {

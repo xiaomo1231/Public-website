@@ -1,9 +1,8 @@
 /**
  * Tutor question generation prompt — asks the model for a JSON `TutorQuestion`.
  *
- * Question types match `entities/question/types.ts` for the future quiz
- * system; for now only `short_answer`, `numeric`, `multiple_choice`,
- * `true_false`, and `math_expr` are relevant to the interactive tutor.
+ * Question types match `entities/question/types.ts` so a tutor question can be
+ * recorded in the mistake book exactly like a quiz question.
  */
 
 import type { DifficultyLevel } from '../types'
@@ -28,6 +27,10 @@ export function buildSystemPrompt(): string {
   return [
     'You are a tutor generating the next practice question for a student.',
     'Output strictly valid JSON. No prose. The question must be grounded in the source material provided.',
+    'Set `type` to exactly one of: "multiple_choice", "true_false", "numeric", "math_expr".',
+    'For "multiple_choice", `options` must list 4 distinct, non-empty answer strings and `expectedAnswer` must repeat the correct one verbatim.',
+    'For "true_false", `expectedAnswer` must be "true" or "false".',
+    'For "numeric", `expectedAnswer` must be a bare number. For "math_expr", a mathjs-parseable expression.',
     'Include 2-3 progressive hints that the tutor can release one at a time.',
     'Keep prompts crisp; numeric / math expression answers must be evaluable by a deterministic grader later.',
     '',

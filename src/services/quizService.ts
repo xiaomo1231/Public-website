@@ -5,7 +5,7 @@ import { QuestionAttemptRepository } from '@/entities/questionAttempt/repository
 import { QuizRepository } from '@/entities/quiz/repository'
 import { CourseAnalysisRepository } from '@/entities/courseAnalysis/repository'
 import { ChunkRepository } from '@/entities/chunk/repository'
-import type { Question, QuestionType } from '@/entities/question/types'
+import { QUESTION_TYPES, type Question, type QuestionType } from '@/entities/question/types'
 import type { QuestionAttempt, QuestionEvaluation } from '@/entities/questionAttempt/types'
 import type {
   Quiz,
@@ -27,6 +27,7 @@ import type { ProjectService } from './projectService'
 import { collectSourceSnippets } from './sourceContext'
 import { logger } from '@/infrastructure/logger/logger'
 import { AppError } from '@/infrastructure/errors/AppError'
+import { t } from '@/i18n'
 
 export interface QuizServiceDeps {
   ai: AIService
@@ -60,6 +61,41 @@ export type MoreQuestionsMode = 'same_topic' | 'similar' | 'harder' | 'easier' |
 
 const MAX_GENERATION_ATTEMPTS = 2
 
+/** Used when the model omits `type` entirely. */
+const DEFAULT_QUESTION_TYPE: QuestionType = 'multiple_choice'
+
+/**
+ * Coerce the model's option array into `{ label, isCorrect }` entries.
+ *
+ * Returns `null` when the set is unusable: not an array, a non-object entry,
+ * an option whose `label` is missing/blank, fewer than two options, or a
+ * number of `isCorrect` options other than exactly one.
+ *
+ * This is what prevents the reported bug — a multiple-choice question whose
+ * options rendered as "A. B. C. D." with no content, because blank labels
+ * were accepted and stored.
+ */
+function normalizeChoiceOptions(
+  value: unknown,
+): Array<{ label: string; isCorrect: boolean }> | null {
+  if (!Array.isArray(value)) return null
+  const options: Array<{ label: string; isCorrect: boolean }> = []
+  for (const raw of value) {
+    if (!raw || typeof raw !== 'object') return null
+    const label = (raw as { label?: unknown }).label
+    if (typeof label !== 'string') return null
+    const trimmed = label.trim()
+    if (!trimmed) return null
+    options.push({
+      label: trimmed,
+      isCorrect: (raw as { isCorrect?: unknown }).isCorrect === true,
+    })
+  }
+  if (options.length < 2) return null
+  if (options.filter((o) => o.isCorrect).length !== 1) return null
+  return options
+}
+
 export class QuizService {
   private db: AppDatabase
   private questions: QuestionRepository
@@ -87,7 +123,7 @@ export class QuizService {
 
   async getQuiz(id: string): Promise<Quiz> {
     const quiz = await this.quizzes.get(id)
-    if (!quiz) throw new AppError('Quiz not found', 'NOT_FOUND')
+    if (!quiz) throw new AppError(t('errors.quizNotFound'), 'NOT_FOUND')
     return quiz
   }
 
@@ -122,7 +158,7 @@ export class QuizService {
   }
 
   buildTypePlan(config: QuizConfig, count: number): QuestionType[] {
-    const types = config.types.length > 0 ? config.types : (['multiple_choice', 'short_answer'] as QuestionType[])
+    const types = config.types.length > 0 ? config.types : [DEFAULT_QUESTION_TYPE]
     const plan: QuestionType[] = []
     for (let i = 0; i < count; i++) plan.push(types[i % types.length]!)
     return plan
@@ -140,15 +176,15 @@ export class QuizService {
 
     const analysis = await this.analyses.getByProject(projectId)
     if (!analysis || analysis.status !== 'ready') {
-      throw new AppError('Run Analyze Course first — no course analysis found.', 'NO_ANALYSIS')
+      throw new AppError(t('errors.analysisMissing'), 'NO_ANALYSIS')
     }
     if (config.count < 1 || config.count > 30) {
-      throw new AppError('Question count must be between 1 and 30.', 'INVALID_COUNT')
+      throw new AppError(t('errors.questionCountRange'), 'INVALID_COUNT')
     }
 
     const topic = config.topicId ? await this.analyses.getTopic(config.topicId) : undefined
-    const topicName = topic?.name ?? config.topicName ?? 'Mixed review'
-    const topicDescription = topic?.description ?? 'Review of the analysed course material.'
+    const topicName = topic?.name ?? config.topicName ?? t('quiz.mixedReviewName')
+    const topicDescription = topic?.description ?? t('quiz.topicDescriptionMixed')
     const knowledgePoints = await this.resolveKnowledgePoints(projectId, config, topic?.name)
 
     const difficultyPlan = this.buildDifficultyPlan(config)
@@ -158,7 +194,7 @@ export class QuizService {
     const quiz: Quiz = {
       id: crypto.randomUUID(),
       projectId,
-      title: `${topicName} · ${config.count} questions`,
+      title: t('quiz.topicTitle', { topic: topicName, count: config.count }),
       config,
       questionIds: [],
       status: 'generating',
@@ -194,7 +230,7 @@ export class QuizService {
           projectId,
           ...(topic ? { topicId: topic.id } : {}),
           knowledgePoint: q.knowledgePoint || knowledgePoints[i % Math.max(1, knowledgePoints.length)] || topicName,
-          type: plan[i]?.type ?? 'short_answer',
+          type: plan[i]?.type ?? DEFAULT_QUESTION_TYPE,
           difficulty: plan[i]?.difficulty ?? DEFAULT_DIFFICULTY,
           prompt: q.prompt,
           ...(q.options ? { options: q.options } : {}),
@@ -221,7 +257,7 @@ export class QuizService {
       logger.info('Quiz generated', { quizId: ready.id, count: stored.length })
       return ready
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Quiz generation failed'
+      const message = err instanceof Error ? err.message : t('errors.quizGenerationFailed')
       await this.quizzes.upsert({ ...quiz, status: 'failed', errorMessage: message })
       throw err
     }
@@ -249,7 +285,7 @@ export class QuizService {
       }
     }
     throw new AppError(
-      `AI did not return a valid quiz: ${lastError instanceof Error ? lastError.message : 'unknown error'}`,
+      t('errors.invalidQuiz', { reason: lastError instanceof Error ? lastError.message : 'unknown error' }),
       'QUIZ_GENERATION_FAILED',
     )
   }
@@ -257,7 +293,7 @@ export class QuizService {
   /** Defensive validation of AI output — never trust the shape blindly. */
   validateGenerated(data: QuizGenerationOutput, expected: number): GeneratedQuizQuestion[] {
     if (!data || typeof data !== 'object' || !Array.isArray(data.questions)) {
-      throw new AppError('AI response did not contain a questions array.', 'MALFORMED_QUIZ')
+      throw new AppError(t('errors.quizMissingArray'), 'MALFORMED_QUIZ')
     }
     const valid: GeneratedQuizQuestion[] = []
     for (const raw of data.questions) {
@@ -265,17 +301,30 @@ export class QuizService {
       const q = raw as Partial<GeneratedQuizQuestion>
       if (typeof q.prompt !== 'string' || q.prompt.trim().length === 0) continue
       if (typeof q.correctAnswer !== 'string' || q.correctAnswer.trim().length === 0) continue
-      const type = (q.type ?? 'short_answer') as QuestionType
+      const type = (q.type ?? DEFAULT_QUESTION_TYPE) as QuestionType
+      // Reject anything outside the supported quiz types.
+      if (!QUESTION_TYPES.includes(type)) continue
+
+      let correctAnswer = q.correctAnswer.trim()
+      let options: Array<{ label: string; isCorrect: boolean }> | undefined
       if (type === 'multiple_choice') {
-        const options = Array.isArray(q.options) ? q.options : []
-        const hasCorrect = options.some((o) => o && o.isCorrect === true)
-        if (options.length < 2 || !hasCorrect) continue
+        const parsed = normalizeChoiceOptions(q.options)
+        if (!parsed) continue
+        options = parsed
+        // Grading matches `correctAnswer` against an option, so it must name
+        // one. If the model only flagged an option, adopt that label.
+        if (!parsed.some((o) => o.label === correctAnswer)) {
+          const flagged = parsed.find((o) => o.isCorrect)
+          if (!flagged) continue
+          correctAnswer = flagged.label
+        }
       }
+
       valid.push({
         prompt: q.prompt.trim(),
         type,
-        ...(Array.isArray(q.options) ? { options: q.options.filter((o) => o && typeof o.label === 'string') } : {}),
-        correctAnswer: q.correctAnswer.trim(),
+        ...(options ? { options } : {}),
+        correctAnswer,
         solution: typeof q.solution === 'string' ? q.solution : '',
         knowledgePoint: typeof q.knowledgePoint === 'string' && q.knowledgePoint.trim() ? q.knowledgePoint.trim() : 'General',
         difficulty: (q.difficulty ?? 'basic') as DifficultyLevel,
@@ -285,7 +334,7 @@ export class QuizService {
       if (valid.length >= expected) break
     }
     if (valid.length === 0) {
-      throw new AppError('AI returned no usable questions.', 'MALFORMED_QUIZ')
+      throw new AppError(t('errors.noUsableQuestions'), 'MALFORMED_QUIZ')
     }
     return valid
   }
@@ -322,7 +371,7 @@ export class QuizService {
   ): Promise<SubmitAnswerResult> {
     const quiz = await this.getQuiz(quizId)
     const question = await this.questions.get(questionId)
-    if (!question) throw new AppError('Question not found', 'NOT_FOUND')
+    if (!question) throw new AppError(t('errors.questionNotFound'), 'NOT_FOUND')
 
     let evaluation = evaluateDeterministic(question, userAnswer)
     if (evaluation.isCorrect === null && opts.aiFallback) {
@@ -413,7 +462,7 @@ export class QuizService {
         ...(fallback.expected ? { expected: fallback.expected } : {}),
         ...(fallback.normalizedUser ? { normalizedUser: fallback.normalizedUser } : {}),
         ...(data.feedback ? { explanation: data.feedback } : {}),
-        note: 'Judged by AI.',
+        note: t('errors.judgedByAi'),
       }
     } catch (err) {
       logger.warn('AI answer evaluation failed; keeping unverified', { error: (err as Error)?.message })
@@ -466,7 +515,12 @@ export class QuizService {
         ...baseConfig,
         mode: 'weakness',
         ...(weak[0]?.topicId ? { topicId: weak[0].topicId } : {}),
-        topicName: weak.length > 0 ? `Weakness training: ${weak.map((w) => w.knowledgePoint).join(', ')}` : 'Weakness training',
+        topicName:
+          weak.length > 0
+            ? t('quizResult.followUp.weaknessLabel', {
+                topic: weak.map((w) => w.knowledgePoint).join(', '),
+              })
+            : t('quizResult.followUp.weakness'),
       }
     }
 
@@ -502,7 +556,7 @@ export function scoreQuiz(quiz: Quiz, attempts: QuestionAttempt[]): QuizScore {
     const dStat = byDifficulty[difficulty]!
     dStat.total++
 
-    const kp = attempt?.knowledgePoint ?? 'Unknown'
+    const kp = attempt?.knowledgePoint ?? t('common.unknown')
     if (!byKpMap.has(kp)) {
       byKpMap.set(kp, { knowledgePoint: kp, correct: 0, wrong: 0, unverified: 0, total: 0 })
     }

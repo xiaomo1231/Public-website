@@ -14,6 +14,7 @@ import type {
 import type { DifficultyLevel } from '@/infrastructure/ai/prompts/types'
 import { logger } from '@/infrastructure/logger/logger'
 import { StorageError } from '@/infrastructure/errors/AppError'
+import { t } from '@/i18n'
 
 export class CourseAnalysisRepository {
   private db: AppDatabase
@@ -142,7 +143,7 @@ export class CourseAnalysisRepository {
       )
     } catch (err) {
       logger.error('deleteByProject failed', { projectId }, err)
-      throw new StorageError('Failed to clear course analysis', err)
+      throw new StorageError(t('storage.failedToClearAnalysis'), err)
     }
   }
 

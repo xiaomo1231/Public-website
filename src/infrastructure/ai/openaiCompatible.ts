@@ -15,6 +15,19 @@ import {
   TimeoutError,
   errorFromStatus,
 } from './errors'
+import { logger } from '@/infrastructure/logger/logger'
+import { t } from '@/i18n'
+
+interface RequestBudget {
+  signal: AbortSignal
+  /**
+   * Restart the inactivity window. Called whenever the provider sends data, so
+   * a long but healthy stream is not killed merely for taking a long time
+   * overall.
+   */
+  touch: () => void
+  dispose: () => void
+}
 
 export interface OpenAICompatibleOptions {
   /** Default model when caller doesn't specify one. */
@@ -54,91 +67,149 @@ export class OpenAICompatibleProvider implements AIProvider {
   async chat(req: ChatRequest): Promise<ChatResponse> {
     const url = this.endpoint()
     const body = this.buildChatBody(req, false)
-    const signal = this.combineSignals(req.signal)
-    const res = await this.fetchWithTimeout(url, signal, { method: 'POST', body: JSON.stringify(body) })
-    if (!res.ok) {
-      const message = await safeReadError(res)
-      throw errorFromStatus(res.status, message)
+    const budget = this.budgetSignal(req.signal)
+    const startedAt = this.logRequestStart('chat', req)
+    try {
+      const res = await this.fetchWithBudget(url, budget.signal, {
+        method: 'POST',
+        body: JSON.stringify(body),
+      })
+      if (!res.ok) {
+        const message = await safeReadError(res)
+        throw errorFromStatus(res.status, message)
+      }
+      const json = await res.json().catch(() => null)
+      if (!json) throw new AIProviderError(t('errors.aiNonJson'), 'INVALID_RESPONSE', res.status)
+      const choice = json.choices?.[0]
+      const content = choice?.message?.content ?? choice?.delta?.content ?? ''
+      const u = json.usage
+      const usage = u
+        ? { promptTokens: u.prompt_tokens ?? 0, completionTokens: u.completion_tokens ?? 0, totalTokens: u.total_tokens ?? 0 }
+        : undefined
+      const model = json.model ?? req.model ?? this.config.model
+      const finishReason =
+        typeof choice?.finish_reason === 'string' ? choice.finish_reason : undefined
+      const response: ChatResponse = {
+        content,
+        usage,
+        model,
+        ...(finishReason ? { finishReason } : {}),
+      }
+      this.logRequestEnd('chat', startedAt, response)
+      return response
+    } catch (err) {
+      this.logRequestError('chat', startedAt, err, budget.signal)
+      throw err
+    } finally {
+      budget.dispose()
     }
-    const json = await res.json().catch(() => null)
-    if (!json) throw new AIProviderError('AI returned a non-JSON response', 'INVALID_RESPONSE', res.status)
-    const choice = json.choices?.[0]
-    const content = choice?.message?.content ?? choice?.delta?.content ?? ''
-    const u = json.usage
-    const usage = u
-      ? { promptTokens: u.prompt_tokens ?? 0, completionTokens: u.completion_tokens ?? 0, totalTokens: u.total_tokens ?? 0 }
-      : undefined
-    const model = json.model ?? req.model ?? this.config.model
-    return { content, usage, model }
   }
 
   async streamChat(req: ChatRequest, onChunk: (chunk: ChatChunk) => void): Promise<ChatResponse> {
     const url = this.endpoint()
     const body = this.buildChatBody(req, true)
-    const signal = this.combineSignals(req.signal)
-    const res = await this.fetchWithTimeout(url, signal, { method: 'POST', body: JSON.stringify(body) })
-    if (!res.ok || !res.body) {
-      const message = await safeReadError(res)
-      throw errorFromStatus(res.status, message)
-    }
-    const reader = res.body.getReader()
-    const decoder = new TextDecoder('utf-8')
-    let buffer = ''
-    let content = ''
-    let usage: ChatResponse['usage'] | undefined
-    let finalModel = ''
+    const budget = this.budgetSignal(req.signal)
+    const startedAt = this.logRequestStart('stream', req)
     try {
-      while (true) {
-        const { value, done } = await reader.read()
-        if (done) break
-        buffer += decoder.decode(value, { stream: true })
-        const events = buffer.split(/\r?\n\r?\n/)
-        buffer = events.pop() ?? ''
-        for (const block of events) {
-          const ev = parseBlock(block)
-          if (!ev) continue
-          if (ev.data === '[DONE]') {
-            onChunk({ delta: '', done: true, usage })
-            return { content, usage, model: finalModel || req.model || this.config.model }
-          }
-          const parsed = safeJSON(ev.data)
-          if (!parsed) continue
-          const choice = parsed.choices?.[0]
-          const delta = choice?.delta?.content ?? choice?.message?.content ?? ''
-          if (delta) {
-            content += delta
-            onChunk({ delta, done: false })
-          }
-          const u = parsed.usage
-          if (u) {
-            usage = {
-              promptTokens: u.prompt_tokens ?? 0,
-              completionTokens: u.completion_tokens ?? 0,
-              totalTokens: u.total_tokens ?? 0,
+      const res = await this.fetchWithBudget(url, budget.signal, {
+        method: 'POST',
+        body: JSON.stringify(body),
+      })
+      if (!res.ok || !res.body) {
+        const message = await safeReadError(res)
+        throw errorFromStatus(res.status, message)
+      }
+      const reader = res.body.getReader()
+      const decoder = new TextDecoder('utf-8')
+      let buffer = ''
+      let content = ''
+      let usage: ChatResponse['usage'] | undefined
+      let finalModel = ''
+      let finalFinishReason: string | undefined
+      try {
+        while (true) {
+          const { value, done } = await reader.read()
+          if (done) break
+          // Receiving data resets the inactivity window, so a long generation
+          // is bounded by silence rather than by total elapsed time.
+          budget.touch()
+          buffer += decoder.decode(value, { stream: true })
+          const events = buffer.split(/\r?\n\r?\n/)
+          buffer = events.pop() ?? ''
+          for (const block of events) {
+            const ev = parseBlock(block)
+            if (!ev) continue
+            if (ev.data === '[DONE]') {
+              onChunk({ delta: '', done: true, usage })
+              const response: ChatResponse = {
+                content,
+                usage,
+                model: finalModel || req.model || this.config.model,
+                ...(finalFinishReason ? { finishReason: finalFinishReason } : {}),
+              }
+              this.logRequestEnd('stream', startedAt, response)
+              return response
+            }
+            const parsed = safeJSON(ev.data)
+            if (!parsed) continue
+            const choice = parsed.choices?.[0]
+            const delta = choice?.delta?.content ?? choice?.message?.content ?? ''
+            if (delta) {
+              content += delta
+              onChunk({ delta, done: false })
+            }
+            const u = parsed.usage
+            if (u) {
+              usage = {
+                promptTokens: u.prompt_tokens ?? 0,
+                completionTokens: u.completion_tokens ?? 0,
+                totalTokens: u.total_tokens ?? 0,
+              }
+            }
+            if (parsed.model) finalModel = parsed.model
+            if (typeof choice?.finish_reason === 'string') {
+              finalFinishReason = choice.finish_reason
             }
           }
-          if (parsed.model) finalModel = parsed.model
+        }
+      } catch (err) {
+        if ((err as { name?: string } | undefined)?.name === 'AbortError') {
+          // Preserve why we aborted: our own inactivity timeout, or the caller.
+          const reason: unknown = budget.signal.reason
+          if (reason instanceof AIProviderError) throw reason
+          throw new AbortedError()
+        }
+        throw err
+      } finally {
+        try {
+          reader.releaseLock()
+        } catch {
+          /* ignore */
         }
       }
+      onChunk({ delta: '', done: true, usage })
+      const response: ChatResponse = {
+        content,
+        usage,
+        model: finalModel || req.model || this.config.model,
+        ...(finalFinishReason ? { finishReason: finalFinishReason } : {}),
+      }
+      this.logRequestEnd('stream', startedAt, response)
+      return response
     } catch (err) {
-      if ((err as { name?: string } | undefined)?.name === 'AbortError') throw new AbortedError()
+      this.logRequestError('stream', startedAt, err, budget.signal)
       throw err
     } finally {
-      try {
-        reader.releaseLock()
-      } catch {
-        /* ignore */
-      }
+      budget.dispose()
     }
-    onChunk({ delta: '', done: true, usage })
-    return { content, usage, model: finalModel || req.model || this.config.model }
   }
 
   async testConnection(): Promise<{ ok: boolean; latencyMs: number; model: string; error?: string }> {
     const start = Date.now()
+    const budget = this.budgetSignal()
     try {
       const url = this.endpoint()
-      const res = await this.fetchWithTimeout(url, undefined, {
+      const res = await this.fetchWithBudget(url, budget.signal, {
         method: 'POST',
         body: JSON.stringify({
           model: this.config.model,
@@ -161,9 +232,64 @@ export class OpenAICompatibleProvider implements AIProvider {
       return { ok: true, latencyMs, model: this.config.model }
     } catch (err) {
       const latencyMs = Date.now() - start
-      const message = err instanceof Error ? err.message : 'Connection failed'
+      const message = err instanceof Error ? err.message : t('errors.aiConnectionFailed')
       return { ok: false, latencyMs, model: this.config.model, error: message }
+    } finally {
+      budget.dispose()
     }
+  }
+
+  /**
+   * Structured lifecycle logging. Never logs the API key, the Authorization
+   * header, or any message content — only sizes and timing.
+   */
+  private logRequestStart(mode: 'chat' | 'stream', req: ChatRequest): number {
+    const inputChars = req.messages.reduce((total, m) => total + m.content.length, 0)
+    logger.debug('AI request start', {
+      provider: this.id,
+      model: req.model ?? this.config.model,
+      url: this.endpoint(),
+      streaming: mode === 'stream',
+      inputChars,
+      estimatedInputTokens: Math.round(inputChars / 3),
+      maxOutputTokens: req.maxTokens ?? this.config.maxTokens,
+      timeoutMs: this.totalBudgetMs(),
+    })
+    return Date.now()
+  }
+
+  private logRequestEnd(mode: 'chat' | 'stream', startedAt: number, res: ChatResponse): void {
+    logger.debug('AI request end', {
+      provider: this.id,
+      model: res.model,
+      streaming: mode === 'stream',
+      durationMs: Date.now() - startedAt,
+      finishReason: res.finishReason,
+      responseChars: res.content.length,
+      estimatedOutputTokens: Math.round(res.content.length / 4),
+      promptTokens: res.usage?.promptTokens,
+      completionTokens: res.usage?.completionTokens,
+    })
+  }
+
+  private logRequestError(
+    mode: 'chat' | 'stream',
+    startedAt: number,
+    err: unknown,
+    signal: AbortSignal,
+  ): void {
+    logger.warn('AI request error', {
+      provider: this.id,
+      model: this.config.model,
+      streaming: mode === 'stream',
+      durationMs: Date.now() - startedAt,
+      errorName: err instanceof Error ? err.name : typeof err,
+      errorMessage: err instanceof Error ? err.message : String(err),
+      code: err instanceof AIProviderError ? err.code : undefined,
+      httpStatus: err instanceof AIProviderError ? err.status : undefined,
+      aborted: signal.aborted,
+      timeoutMs: this.totalBudgetMs(),
+    })
   }
 
   private endpoint(): string {
@@ -191,34 +317,59 @@ export class OpenAICompatibleProvider implements AIProvider {
     return body
   }
 
-  private combineSignals(extra?: AbortSignal): AbortSignal {
-    const ctrl = new AbortController()
+  /**
+   * Build the time budget for one request.
+   *
+   * `connectTimeoutMs` bounds establishing the connection and
+   * `readTimeoutMs` bounds waiting for the response. They are **additive**,
+   * because a non-streaming completion only returns its response headers once
+   * the model has finished generating. Applying the (much shorter) connect
+   * timeout to that wait would abort healthy long requests — a large analysis
+   * prompt takes far longer than 10 s to answer.
+   */
+  private totalBudgetMs(): number {
     const readMs = this.options.readTimeoutMs ?? 60_000
     const connectMs = this.options.connectTimeoutMs ?? 10_000
-    const timeout = setTimeout(() => ctrl.abort(new TimeoutError(readMs)), connectMs + readMs)
-    if (extra) {
-      extra.addEventListener('abort', () => {
-        ctrl.abort(new AbortedError())
-        clearTimeout(timeout)
-      })
-    }
-    return ctrl.signal
+    return connectMs + readMs
   }
 
-  private async fetchWithTimeout(
+  private budgetSignal(extra?: AbortSignal): RequestBudget {
+    const totalMs = this.totalBudgetMs()
+    const ctrl = new AbortController()
+    let timer: ReturnType<typeof setTimeout> | null = null
+
+    const arm = (): void => {
+      if (timer) clearTimeout(timer)
+      timer = setTimeout(() => ctrl.abort(new TimeoutError(totalMs)), totalMs)
+    }
+    arm()
+
+    const onExternalAbort = (): void => {
+      if (timer) clearTimeout(timer)
+      ctrl.abort(new AbortedError())
+    }
+    if (extra) {
+      if (extra.aborted) onExternalAbort()
+      else extra.addEventListener('abort', onExternalAbort)
+    }
+
+    return {
+      signal: ctrl.signal,
+      touch: () => {
+        if (!ctrl.signal.aborted) arm()
+      },
+      dispose: () => {
+        if (timer) clearTimeout(timer)
+        extra?.removeEventListener('abort', onExternalAbort)
+      },
+    }
+  }
+
+  private async fetchWithBudget(
     url: string,
-    signal?: AbortSignal,
+    signal: AbortSignal,
     init?: RequestInit,
   ): Promise<Response> {
-    const connectMs = this.options.connectTimeoutMs ?? 10_000
-    const ctrl = new AbortController()
-    const timer = setTimeout(() => ctrl.abort(new TimeoutError(connectMs)), connectMs)
-    if (signal) {
-      signal.addEventListener('abort', () => {
-        ctrl.abort(signal.reason)
-        clearTimeout(timer)
-      })
-    }
     try {
       return await fetch(url, {
         ...init,
@@ -228,19 +379,22 @@ export class OpenAICompatibleProvider implements AIProvider {
           Authorization: `Bearer ${this.config.apiKey}`,
           ...(init?.headers as Record<string, string> | undefined),
         },
-        signal: ctrl.signal,
+        signal,
       })
     } catch (err) {
       const name = (err as { name?: string } | undefined)?.name
       if (name === 'AbortError') {
-        // Could be our timeout or the caller's cancellation.
-        if (signal?.aborted) throw new AbortedError()
-        throw new TimeoutError(connectMs)
+        // The budget signal carries the reason: either our own timeout or the
+        // caller's cancellation.
+        const reason: unknown = signal.reason
+        if (reason instanceof AIProviderError) throw reason
+        if (signal.aborted) throw new AbortedError()
+        // An AbortError we did not raise means the request budget expired
+        // somewhere below us (transport-level abort).
+        throw new TimeoutError(this.totalBudgetMs())
       }
       if (err instanceof AIProviderError) throw err
-      throw new ProviderUnavailableError((err as Error)?.message ?? 'Network error')
-    } finally {
-      clearTimeout(timer)
+      throw new ProviderUnavailableError((err as Error)?.message ?? t('errors.aiNetwork'))
     }
   }
 }
@@ -260,6 +414,7 @@ function parseBlock(block: string): { data: string } | null {
 interface SSEChoice {
   delta?: { content?: string }
   message?: { content?: string }
+  finish_reason?: string | null
 }
 interface SSEParsed {
   choices?: SSEChoice[]
@@ -291,11 +446,51 @@ async function safeReadError(res: Response): Promise<string | undefined> {
 }
 
 /**
- * Parse a JSON object out of an AI response. Handles:
+ * Return the balanced JSON slice that starts at `start`, or `null` when its
+ * brackets never close. Handles strings, escaped quotes and nesting.
+ */
+function balancedSlice(text: string, start: number): string | null {
+  let depth = 0
+  let inString = false
+  let escape = false
+  for (let i = start; i < text.length; i += 1) {
+    const ch = text[i]!
+    if (escape) {
+      escape = false
+      continue
+    }
+    if (ch === '\\') {
+      escape = true
+      continue
+    }
+    if (ch === '"') {
+      inString = !inString
+      continue
+    }
+    if (inString) continue
+    if (ch === '{' || ch === '[') depth += 1
+    else if (ch === '}' || ch === ']') {
+      depth -= 1
+      if (depth === 0) return text.slice(start, i + 1)
+    }
+  }
+  return null
+}
+
+/** Bounds the scan so pathological prose cannot make parsing quadratic. */
+const MAX_JSON_CANDIDATES = 200
+
+/**
+ * Parse a JSON value out of an AI response. Handles:
  *  - clean JSON
  *  - JSON wrapped in ```json fences
  *  - JSON embedded in prose
  *  - fallback: throws InvalidJSONError
+ *
+ * Candidates are validated by actually parsing them. Merely starting at the
+ * first `{` or `[` is not enough: the page markers we send to the model
+ * (`[p1]`, `[p2]`, …) are echoed back when it cites sources, and `[p1]` would
+ * otherwise be mistaken for the JSON document.
  */
 export function extractJSON<T = unknown>(content: string): T {
   const trimmed = content.trim()
@@ -314,40 +509,33 @@ export function extractJSON<T = unknown>(content: string): T {
     /* fall through */
   }
 
-  // Try to find the first JSON object/array in the text.
-  const start = trimmed.search(/[[{]/)
-  if (start === -1) throw new InvalidJSONError('no JSON token found')
-  let end = -1
-  let depth = 0
-  let inString = false
-  let escape = false
-  for (let i = start; i < trimmed.length; i++) {
-    const ch = trimmed[i]!
-    if (escape) {
-      escape = false
-      continue
-    }
-    if (ch === '\\') {
-      escape = true
-      continue
-    }
-    if (ch === '"') {
-      inString = !inString
-      continue
-    }
-    if (inString) continue
-    if (ch === '{' || ch === '[') depth++
-    else if (ch === '}' || ch === ']') {
-      depth--
-      if (depth === 0) {
-        end = i
-        break
-      }
+  // Scan each bracket that could start a JSON value; take the first that parses.
+  let sawBracket = false
+  let lastError: Error | null = null
+  let attempts = 0
+  for (let start = 0; start < trimmed.length && attempts < MAX_JSON_CANDIDATES; start += 1) {
+    const ch = trimmed[start]
+    if (ch !== '{' && ch !== '[') continue
+    sawBracket = true
+    attempts += 1
+    const candidate = balancedSlice(trimmed, start)
+    if (!candidate) continue
+    try {
+      return JSON.parse(candidate) as T
+    } catch (err) {
+      lastError = err as Error
     }
   }
-  if (end === -1) throw new InvalidJSONError('unbalanced braces')
-  const candidate = trimmed.slice(start, end + 1)
-  return parseStrict(candidate) as T
+
+  logger.debug('AI JSON extraction failed', {
+    length: trimmed.length,
+    prefix: trimmed.slice(0, 160),
+    suffix: trimmed.slice(-160),
+  })
+
+  if (lastError) throw new InvalidJSONError(lastError.message)
+  if (sawBracket) throw new InvalidJSONError('unbalanced braces')
+  throw new InvalidJSONError('no JSON token found')
 }
 
 function parseStrict(text: string): unknown {

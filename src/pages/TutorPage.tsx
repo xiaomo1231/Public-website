@@ -26,16 +26,18 @@ import type { CourseAnalysis, Topic } from '@/entities/courseAnalysis/types'
 import { TutorPanel } from '@/widgets/tutor/TutorPanel'
 import { FormulaPanel } from '@/widgets/formulaPanel/FormulaPanel'
 import { cn } from '@/shared/lib/utils'
+import { useTranslation, type TranslationKey } from '@/i18n'
 
-const LANGUAGES: Array<{ value: 'zh' | 'en' | 'mixed'; label: string }> = [
-  { value: 'en', label: 'English' },
-  { value: 'zh', label: '中文' },
-  { value: 'mixed', label: 'Bilingual' },
+const LANGUAGES: Array<{ value: 'zh' | 'en' | 'mixed'; labelKey: TranslationKey }> = [
+  { value: 'en', labelKey: 'language.en' },
+  { value: 'zh', labelKey: 'language.zh' },
+  { value: 'mixed', labelKey: 'language.bilingual' },
 ]
 
 export function TutorPage(): JSX.Element {
   const { id: projectId, topicId } = useParams<{ id: string; topicId: string }>()
   const navigate = useNavigate()
+  const { t } = useTranslation()
   const [analysis, setAnalysis] = useState<CourseAnalysis | null>(null)
   const [topics, setTopics] = useState<Topic[]>([])
   const [loading, setLoading] = useState(true)
@@ -78,7 +80,7 @@ export function TutorPage(): JSX.Element {
     return (
       <PageContainer>
         <PageContent>
-          <LoadingState label="Loading tutor" />
+          <LoadingState label={t('tutor.loading')} />
         </PageContent>
       </PageContainer>
     )
@@ -88,17 +90,17 @@ export function TutorPage(): JSX.Element {
     return (
       <PageContainer>
         <PageHeader
-          title="AI Tutor"
-          description="Run the course analysis first to extract topics."
+          title={t('tutor.title')}
+          description={t('tutor.notAnalysedPageHint')}
         />
         <PageContent>
           <EmptyState
             icon={<Brain className="h-10 w-10" />}
-            title="Course not analysed yet"
-            description="Open the project and click Analyze Course to extract topics, formulas, and symbols."
+            title={t('tutor.notAnalysed')}
+            description={t('tutor.notAnalysedHint')}
             action={
               <Button onClick={() => navigate(`/projects/${projectId}`)}>
-                Go to project
+                {t('tutor.goToProject')}
               </Button>
             }
           />
@@ -108,6 +110,9 @@ export function TutorPage(): JSX.Element {
   }
 
   const activeTopic = topics.find((t) => t.id === activeTopicId) ?? topics[0]
+
+  const analysisLanguageLabel =
+    analysis.language === 'mixed' ? t('language.bilingual') : analysis.language.toUpperCase()
 
   const formulaPanelNode = activeTopic ? (
     <FormulaPanel projectId={projectId} topicId={activeTopic.id} />
@@ -120,16 +125,16 @@ export function TutorPage(): JSX.Element {
       <PageHeader
         title={
           <div className="flex items-center gap-2">
-            <Button asChild variant="ghost" size="icon" aria-label="Back to project">
+            <Button asChild variant="ghost" size="icon" aria-label={t('tutor.backToProject')}>
               <Link to={`/projects/${projectId}`}>
                 <ArrowLeft className="h-4 w-4" />
               </Link>
             </Button>
             <Sparkles className="h-4 w-4" />
-            AI Tutor
+            {t('tutor.title')}
           </div>
         }
-        description="Question-driven learning grounded in your course material."
+        description={t('tutor.subtitle')}
         actions={
           <div className="flex items-center gap-2">
             <Button
@@ -137,24 +142,24 @@ export function TutorPage(): JSX.Element {
               size="sm"
               className="lg:hidden"
               onClick={() => setFormulasOpen(true)}
-              aria-label="Open formulas"
+              aria-label={t('tutor.openFormulas')}
             >
               <Sigma className="h-4 w-4" />
-              Formulas
+              {t('tutor.formulas')}
             </Button>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="outline" size="sm">
                   <Languages className="h-4 w-4" />
-                  {LANGUAGES.find((l) => l.value === language)?.label ?? 'English'}
+                  {t(LANGUAGES.find((l) => l.value === language)?.labelKey ?? 'language.en')}
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
-                <DropdownMenuLabel>Teaching language</DropdownMenuLabel>
+                <DropdownMenuLabel>{t('tutor.teachingLanguage')}</DropdownMenuLabel>
                 <DropdownMenuSeparator />
                 {LANGUAGES.map((l) => (
                   <DropdownMenuItem key={l.value} onSelect={() => setLanguage(l.value)}>
-                    {l.label}
+                    {t(l.labelKey)}
                   </DropdownMenuItem>
                 ))}
               </DropdownMenuContent>
@@ -168,8 +173,8 @@ export function TutorPage(): JSX.Element {
           <aside className="space-y-3">
             <Card>
               <CardHeader>
-                <CardTitle className="text-base">Topics</CardTitle>
-                <CardDescription>Pick a topic to study.</CardDescription>
+                <CardTitle className="text-base">{t('tutor.topics')}</CardTitle>
+                <CardDescription>{t('tutor.pickTopic')}</CardDescription>
               </CardHeader>
               <CardContent className="space-y-1">
                 {topics.map((t) => (
@@ -192,11 +197,16 @@ export function TutorPage(): JSX.Element {
             {analysis && (
               <Card className="hidden lg:block">
                 <CardHeader>
-                  <CardTitle className="text-base">Status</CardTitle>
+                  <CardTitle className="text-base">{t('tutor.status')}</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-2 text-xs text-muted-foreground">
-                  <Badge variant="outline">{analysis.language === 'mixed' ? 'Bilingual' : analysis.language.toUpperCase()}</Badge>
-                  <p>{topics.length} topics · prompt {analysis.promptVersion}</p>
+                  <Badge variant="outline">{analysisLanguageLabel}</Badge>
+                  <p>
+                    {t('tutor.statusLine', {
+                      count: topics.length,
+                      version: analysis.promptVersion,
+                    })}
+                  </p>
                 </CardContent>
               </Card>
             )}
@@ -213,11 +223,11 @@ export function TutorPage(): JSX.Element {
                 onClose={() => navigate(`/projects/${projectId}`)}
               />
             ) : (
-              <EmptyState title="Pick a topic" description="Choose a topic on the left to start the tutor." />
+              <EmptyState title={t('tutor.pickTopicTitle')} description={t('tutor.pickTopicHint')} />
             )}
           </section>
           <aside className="hidden lg:block">
-            <div className="mb-2 text-sm font-semibold">Formula &amp; Symbols</div>
+            <div className="mb-2 text-sm font-semibold">{t('tutor.formulaSymbols')}</div>
             {formulaPanelNode}
           </aside>
         </div>
@@ -232,13 +242,13 @@ export function TutorPage(): JSX.Element {
         >
           <DialogHeader className="mb-2">
             <DialogTitle className="flex items-center gap-2">
-              <Sigma className="h-4 w-4" /> Formula &amp; Symbols
+              <Sigma className="h-4 w-4" /> {t('tutor.formulaSymbols')}
               <Button
                 variant="ghost"
                 size="icon"
                 className="ml-auto"
                 onClick={() => setFormulasOpen(false)}
-                aria-label="Close formulas"
+                aria-label={t('tutor.closeFormulas')}
               >
                 <X className="h-4 w-4" />
               </Button>

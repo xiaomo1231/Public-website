@@ -1,5 +1,6 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react'
 import { AlertCircle, RotateCcw } from 'lucide-react'
+import { t } from '@/i18n'
 import { Button } from '@/shared/ui/Button'
 import { logger } from '@/infrastructure/logger/logger'
 import { isAppError } from '@/infrastructure/errors/AppError'
@@ -40,13 +41,13 @@ export class ErrorBoundary extends Component<Props, State> {
       <div className="grid min-h-screen place-items-center bg-background p-6">
         <div className="max-w-md rounded-lg border border-destructive/40 bg-destructive/5 p-6 text-center">
           <AlertCircle className="mx-auto mb-3 h-8 w-8 text-destructive" />
-          <h2 className="mb-2 text-lg font-semibold">Something went wrong</h2>
+          <h2 className="mb-2 text-lg font-semibold">{t('common.somethingWrong')}</h2>
           <p className="mb-4 text-sm text-muted-foreground">
-            {isAppError(error) ? error.message : error.message || 'Unexpected error'}
+            {isAppError(error) ? error.message : error.message || t('common.unexpectedError')}
           </p>
           <Button onClick={this.reset} variant="outline">
             <RotateCcw className="h-4 w-4" />
-            Try again
+            {t('common.tryAgain')}
           </Button>
         </div>
       </div>

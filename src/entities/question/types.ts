@@ -1,27 +1,21 @@
 import type { DifficultyLevel } from '@/infrastructure/ai/prompts/types'
 import type { SourceReference } from '@/entities/courseAnalysis/types'
+import type { TranslationKey } from '@/i18n/types'
 
-export type QuestionType =
-  | 'multiple_choice'
-  | 'true_false'
-  | 'short_answer'
-  | 'numeric'
-  | 'math_expr'
+export type QuestionType = 'multiple_choice' | 'true_false' | 'numeric' | 'math_expr'
 
 export const QUESTION_TYPES: QuestionType[] = [
   'multiple_choice',
   'true_false',
-  'short_answer',
   'numeric',
   'math_expr',
 ]
 
-export const QUESTION_TYPE_LABELS: Record<QuestionType, string> = {
-  multiple_choice: 'Multiple choice',
-  true_false: 'True / False',
-  short_answer: 'Short answer',
-  numeric: 'Numeric answer',
-  math_expr: 'Mathematical expression',
+export const QUESTION_TYPE_LABEL_KEYS: Record<QuestionType, TranslationKey> = {
+  multiple_choice: 'questionType.multipleChoice',
+  true_false: 'questionType.trueFalse',
+  numeric: 'questionType.numeric',
+  math_expr: 'questionType.expression',
 }
 
 export interface QuestionOption {

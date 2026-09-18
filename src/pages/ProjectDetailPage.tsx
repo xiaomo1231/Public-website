@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { ArrowLeft, BookX, Brain, Calendar, FileText, History, Layers, ListChecks, Pencil, Sparkles } from 'lucide-react'
 import { useProject, useProjects } from '@/features/project/useProjects'
-import { SUBJECT_LABELS } from '@/entities/project/types'
+import { SUBJECT_LABEL_KEYS } from '@/entities/project/types'
 import { Badge } from '@/shared/ui/Badge'
 import { Button } from '@/shared/ui/Button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/shared/ui/Card'
@@ -16,8 +16,10 @@ import { CourseAnalysisPanel } from '@/widgets/documentAnalysis/CourseAnalysisPa
 import { RenameProjectDialog } from '@/widgets/project/RenameProjectDialog'
 import { toast } from '@/features/toast/toastStore'
 import { formatDate, formatDateTime } from '@/shared/lib/utils'
+import { useTranslation } from '@/i18n'
 
 export function ProjectDetailPage(): JSX.Element {
+  const { t } = useTranslation()
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const { project, loading, update } = useProject(id)
@@ -25,16 +27,16 @@ export function ProjectDetailPage(): JSX.Element {
   const [renameOpen, setRenameOpen] = useState(false)
 
   useEffect(() => {
-    if (!loaded || listLoading) return
+    if (loading || listLoading || !loaded) return
     if (!id) return
     if (!project) navigate('/projects', { replace: true })
-  }, [id, project, loaded, listLoading, navigate])
+  }, [id, project, loading, loaded, listLoading, navigate])
 
   if (loading || listLoading || !loaded) {
     return (
       <PageContainer>
         <PageContent>
-          <LoadingState label="Loading project" />
+          <LoadingState label={t('projectDetail.loading')} />
         </PageContent>
       </PageContainer>
     )
@@ -45,13 +47,13 @@ export function ProjectDetailPage(): JSX.Element {
       <PageContainer>
         <PageContent>
           <ErrorState
-            title="Project not found"
-            description="This project may have been deleted, or the link is wrong."
+            title={t('projectDetail.notFound')}
+            description={t('projectDetail.notFoundHint')}
             action={
               <Button asChild>
                 <Link to="/projects">
                   <ArrowLeft className="h-4 w-4" />
-                  Back to projects
+                  {t('projectDetail.backToProjects')}
                 </Link>
               </Button>
             }
@@ -63,7 +65,7 @@ export function ProjectDetailPage(): JSX.Element {
 
   async function handleRename(name: string) {
     await update({ name })
-    toast({ variant: 'success', title: 'Project renamed', description: name })
+    toast({ variant: 'success', title: t('projectDetail.renamed'), description: name })
   }
 
   return (
@@ -71,39 +73,39 @@ export function ProjectDetailPage(): JSX.Element {
       <PageHeader
         title={
           <div className="flex flex-wrap items-center gap-2">
-            <Button asChild variant="ghost" size="icon" aria-label="Back to projects">
+            <Button asChild variant="ghost" size="icon" aria-label={t('projectDetail.backToProjects')}>
               <Link to="/projects">
                 <ArrowLeft className="h-4 w-4" />
               </Link>
             </Button>
             <span>{project.name}</span>
-            <Badge variant="outline">{SUBJECT_LABELS[project.subject]}</Badge>
+            <Badge variant="outline">{t(SUBJECT_LABEL_KEYS[project.subject])}</Badge>
           </div>
         }
-        description={project.description || 'Manage documents, lessons, and progress for this project.'}
+        description={project.description || t('projectDetail.subtitle')}
         actions={
           <Button variant="outline" onClick={() => setRenameOpen(true)}>
             <Pencil className="h-4 w-4" />
-            Rename
+            {t('common.rename')}
           </Button>
         }
       />
       <PageContent>
         <Tabs defaultValue="documents">
           <TabsList>
-            <TabsTrigger value="documents">Documents</TabsTrigger>
+            <TabsTrigger value="documents">{t('projectDetail.tab.documents')}</TabsTrigger>
             <TabsTrigger value="analysis">
               <Brain className="h-4 w-4" />
-              Analysis
+              {t('projectDetail.tab.analysis')}
             </TabsTrigger>
-            <TabsTrigger value="overview">Overview</TabsTrigger>
+            <TabsTrigger value="overview">{t('projectDetail.tab.overview')}</TabsTrigger>
             <TabsTrigger value="quiz">
               <ListChecks className="h-4 w-4" />
-              Quiz
+              {t('projectDetail.tab.quiz')}
             </TabsTrigger>
             <TabsTrigger value="mistakes">
               <BookX className="h-4 w-4" />
-              Mistakes
+              {t('projectDetail.tab.mistakes')}
             </TabsTrigger>
           </TabsList>
           <TabsContent value="documents">
@@ -114,48 +116,48 @@ export function ProjectDetailPage(): JSX.Element {
               <div>
                 <h2 className="flex items-center gap-2 text-base font-semibold">
                   <Sparkles className="h-4 w-4" />
-                  AI Course Analysis
+                  {t('projectDetail.analysis.title')}
                 </h2>
                 <p className="text-sm text-muted-foreground">
-                  Ask the AI to read your documents and extract topics, formulas, and symbols.
+                  {t('projectDetail.analysis.description')}
                 </p>
               </div>
               <div className="flex flex-wrap items-center gap-2">
                 <Button variant="outline" asChild>
                   <Link to={`/projects/${project.id}/quiz`}>
                     <ListChecks className="h-4 w-4" />
-                    Quiz
+                    {t('projectDetail.card.quiz')}
                   </Link>
                 </Button>
                 <Button variant="outline" asChild>
                   <Link to={`/projects/${project.id}/mistakes`}>
                     <BookX className="h-4 w-4" />
-                    Mistakes
+                    {t('projectDetail.card.mistakes')}
                   </Link>
                 </Button>
                 <Button variant="outline" asChild>
                   <Link to={`/projects/${project.id}/mastery`}>
                     <Brain className="h-4 w-4" />
-                    Mastery
+                    {t('projectDetail.card.mastery')}
                   </Link>
                 </Button>
                 <Button variant="outline" asChild>
                   <Link to={`/projects/${project.id}/history`}>
                     <History className="h-4 w-4" />
-                    Chat History
+                    {t('projectDetail.card.chatHistory')}
                   </Link>
                 </Button>
                 <Button variant="outline" asChild>
                   <Link to={`/projects/${project.id}/tutor`}>
                     <Sparkles className="h-4 w-4" />
-                    Open Tutor
+                    {t('projectDetail.openTutor')}
                   </Link>
                 </Button>
               </div>
             </div>
             <CourseAnalysisPanel
               projectId={project.id}
-              subject={SUBJECT_LABELS[project.subject]}
+              subject={t(SUBJECT_LABEL_KEYS[project.subject])}
               onStartTutor={(topicId) => navigate(`/projects/${project.id}/tutor/${topicId}`)}
             />
           </TabsContent>
@@ -164,23 +166,25 @@ export function ProjectDetailPage(): JSX.Element {
               <div>
                 <h2 className="flex items-center gap-2 text-base font-semibold">
                   <ListChecks className="h-4 w-4" />
-                  Quizzes
+                  {t('projectDetail.quizzes.title')}
                 </h2>
                 <p className="text-sm text-muted-foreground">
-                  Generate adaptive practice questions from your course material.
+                  {t('projectDetail.quizzes.description')}
                 </p>
               </div>
               <Button asChild>
-                <Link to={`/projects/${project.id}/quiz`}>Open Quiz</Link>
+                <Link to={`/projects/${project.id}/quiz`}>{t('projectDetail.quizzes.open')}</Link>
               </Button>
             </div>
             <EmptyState
               icon={<ListChecks className="h-8 w-8" />}
-              title="Ready when you are"
-              description="The quiz generator uses your course analysis to create questions and adapts difficulty as you answer."
+              title={t('projectDetail.quizzes.emptyTitle')}
+              description={t('projectDetail.quizzes.emptyBody')}
               action={
                 <Button asChild>
-                  <Link to={`/projects/${project.id}/quiz`}>Generate Quiz</Link>
+                  <Link to={`/projects/${project.id}/quiz`}>
+                    {t('projectDetail.quizzes.generate')}
+                  </Link>
                 </Button>
               }
             />
@@ -190,23 +194,27 @@ export function ProjectDetailPage(): JSX.Element {
               <div>
                 <h2 className="flex items-center gap-2 text-base font-semibold">
                   <BookX className="h-4 w-4" />
-                  Mistake Book
+                  {t('projectDetail.mistakes.title')}
                 </h2>
                 <p className="text-sm text-muted-foreground">
-                  Wrong answers are collected automatically. Analyse and practise them.
+                  {t('projectDetail.mistakes.description')}
                 </p>
               </div>
               <Button asChild>
-                <Link to={`/projects/${project.id}/mistakes`}>Open Mistake Book</Link>
+                <Link to={`/projects/${project.id}/mistakes`}>
+                  {t('projectDetail.mistakes.open')}
+                </Link>
               </Button>
             </div>
             <EmptyState
               icon={<BookX className="h-8 w-8" />}
-              title="Nothing recorded yet"
-              description="Mistakes from quizzes appear here automatically. You can also add one manually."
+              title={t('projectDetail.mistakes.emptyTitle')}
+              description={t('projectDetail.mistakes.emptyBody')}
               action={
                 <Button asChild>
-                  <Link to={`/projects/${project.id}/mistakes`}>Open Mistake Book</Link>
+                  <Link to={`/projects/${project.id}/mistakes`}>
+                    {t('projectDetail.mistakes.open')}
+                  </Link>
                 </Button>
               }
             />
@@ -215,31 +223,42 @@ export function ProjectDetailPage(): JSX.Element {
             <div className="grid gap-4 lg:grid-cols-3">
               <Card className="lg:col-span-2">
                 <CardHeader>
-                  <CardTitle>About this project</CardTitle>
-                  <CardDescription>
-                    Upload course materials from the Documents tab. The AI Tutor and Quiz features
-                    arrive in later phases.
-                  </CardDescription>
+                  <CardTitle>{t('projectDetail.about.title')}</CardTitle>
+                  <CardDescription>{t('projectDetail.about.description')}</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-3 text-sm">
-                  <Meta icon={<Layers className="h-4 w-4" />} label="Subject" value={SUBJECT_LABELS[project.subject]} />
-                  <Meta icon={<Calendar className="h-4 w-4" />} label="Created" value={formatDate(project.createdAt)} />
-                  <Meta icon={<Calendar className="h-4 w-4" />} label="Last updated" value={formatDateTime(project.updatedAt)} />
+                  <Meta
+                    icon={<Layers className="h-4 w-4" />}
+                    label={t('projectDetail.about.subject')}
+                    value={t(SUBJECT_LABEL_KEYS[project.subject])}
+                  />
+                  <Meta
+                    icon={<Calendar className="h-4 w-4" />}
+                    label={t('projectDetail.about.created')}
+                    value={formatDate(project.createdAt)}
+                  />
+                  <Meta
+                    icon={<Calendar className="h-4 w-4" />}
+                    label={t('projectDetail.about.lastUpdated')}
+                    value={formatDateTime(project.updatedAt)}
+                  />
                 </CardContent>
               </Card>
 
               <Card>
                 <CardHeader>
-                  <CardTitle>Upcoming in this project</CardTitle>
+                  <CardTitle>{t('projectDetail.upcoming.title')}</CardTitle>
                 </CardHeader>
                 <CardContent>
                   <EmptyState
                     icon={<FileText className="h-6 w-6" />}
-                    title="Upload to begin"
-                    description="Add PDFs, slides, or paste text. We'll extract and structure them automatically."
+                    title={t('projectDetail.upcoming.uploadTitle')}
+                    description={t('projectDetail.upcoming.uploadBody')}
                     action={
                       <Button asChild size="sm">
-                        <Link to={`/projects/${project.id}`}>Go to Documents</Link>
+                        <Link to={`/projects/${project.id}`}>
+                          {t('projectDetail.upcoming.goToDocuments')}
+                        </Link>
                       </Button>
                     }
                   />

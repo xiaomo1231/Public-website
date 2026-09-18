@@ -14,11 +14,13 @@ import type { Quiz } from '@/entities/quiz/types'
 import type { QuestionEvaluation } from '@/entities/questionAttempt/types'
 import { toast } from '@/features/toast/toastStore'
 import { isAppError } from '@/infrastructure/errors/AppError'
+import { useTranslation } from '@/i18n'
 
 export function QuizPage(): JSX.Element {
   const { id: projectId, quizId } = useParams<{ id: string; quizId: string }>()
   const navigate = useNavigate()
   const service = useMemo(() => buildOfflineQuizService(), [])
+  const { t } = useTranslation()
 
   const [quiz, setQuiz] = useState<Quiz | null>(null)
   const [questions, setQuestions] = useState<Question[]>([])
@@ -65,7 +67,7 @@ export function QuizPage(): JSX.Element {
       })
       setEvaluation(result.evaluation)
     } catch (err) {
-      toast({ variant: 'error', title: 'Could not grade answer', description: (err as Error).message })
+      toast({ variant: 'error', title: t('quiz.gradeFailed'), description: (err as Error).message })
     } finally {
       setBusy(false)
     }
@@ -86,7 +88,7 @@ export function QuizPage(): JSX.Element {
     return (
       <PageContainer>
         <PageContent>
-          <LoadingState label="Loading quiz" />
+          <LoadingState label={t('quiz.loadingQuiz')} />
         </PageContent>
       </PageContainer>
     )
@@ -97,11 +99,11 @@ export function QuizPage(): JSX.Element {
       <PageContainer>
         <PageContent>
           <ErrorState
-            title="Quiz unavailable"
-            description={error ?? 'This quiz has no questions.'}
+            title={t('quiz.unavailable')}
+            description={error ?? t('quiz.noQuestions')}
             action={
               <Button asChild>
-                <Link to={`/projects/${projectId}/quiz`}>Back to quizzes</Link>
+                <Link to={`/projects/${projectId}/quiz`}>{t('quiz.backToQuizzes')}</Link>
               </Button>
             }
           />
@@ -115,7 +117,7 @@ export function QuizPage(): JSX.Element {
       <PageHeader
         title={
           <div className="flex items-center gap-2">
-            <Button asChild variant="ghost" size="icon" aria-label="Back to quizzes">
+            <Button asChild variant="ghost" size="icon" aria-label={t('quiz.backToQuizzes')}>
               <Link to={`/projects/${projectId}/quiz`}>
                 <ArrowLeft className="h-4 w-4" />
               </Link>
@@ -124,13 +126,16 @@ export function QuizPage(): JSX.Element {
             {quiz.title}
           </div>
         }
-        description="Answer each question, then submit to see feedback."
+        description={t('quiz.instructions')}
       />
       <PageContent className="space-y-4">
         <div className="space-y-1">
           <Progress value={((index + (evaluation ? 1 : 0)) / questions.length) * 100} />
           <p className="text-xs text-muted-foreground">
-            {index + (evaluation ? 1 : 0)} of {questions.length} answered
+            {t('quiz.progress', {
+              answered: index + (evaluation ? 1 : 0),
+              total: questions.length,
+            })}
           </p>
         </div>
 
@@ -153,7 +158,7 @@ export function QuizPage(): JSX.Element {
         {evaluation?.isCorrect === null && (
           <Card>
             <CardContent className="p-4 text-xs text-muted-foreground">
-              This answer could not be graded automatically. It will be excluded from your score rather than counted as wrong.
+              {t('quiz.unverifiedNote')}
             </CardContent>
           </Card>
         )}

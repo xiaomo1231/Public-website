@@ -9,6 +9,7 @@ import { decryptString, encryptString } from '@/infrastructure/crypto/crypto'
 import { getDeviceKey } from '@/infrastructure/crypto/deviceKey'
 import { logger } from '@/infrastructure/logger/logger'
 import { ValidationError } from '@/infrastructure/errors/AppError'
+import { t } from '@/i18n'
 
 /**
  * Owns AI settings: validation, encryption at rest, and legacy migration.
@@ -47,22 +48,22 @@ export class SettingsService {
     if (patch.baseURL !== undefined) {
       const url = patch.baseURL.trim()
       if (url && !/^https?:\/\//i.test(url)) {
-        throw new ValidationError('Base URL must start with http:// or https://')
+        throw new ValidationError(t('errors.baseUrlInvalid'))
       }
       next.baseURL = url
     }
     if (patch.model !== undefined) next.model = patch.model.trim()
     if (patch.temperature !== undefined) {
-      const t = Number(patch.temperature)
-      if (Number.isNaN(t) || t < 0 || t > 2) {
-        throw new ValidationError('Temperature must be between 0 and 2')
+      const temp = Number(patch.temperature)
+      if (Number.isNaN(temp) || temp < 0 || temp > 2) {
+        throw new ValidationError(t('errors.temperatureRange'))
       }
-      next.temperature = t
+      next.temperature = temp
     }
     if (patch.maxTokens !== undefined) {
       const m = Number(patch.maxTokens)
       if (!Number.isInteger(m) || m < 64 || m > 32000) {
-        throw new ValidationError('Max tokens must be an integer between 64 and 32000')
+        throw new ValidationError(t('errors.maxTokensRange'))
       }
       next.maxTokens = m
     }

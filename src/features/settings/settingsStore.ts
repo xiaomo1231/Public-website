@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import type { AISettings } from '@/entities/settings/types'
 import { SettingsService } from '@/services/settingsService'
+import { t } from '@/i18n'
 
 interface SettingsStoreState {
   settings: AISettings | null
@@ -19,7 +20,12 @@ interface SettingsStoreActions {
 
 export type SettingsStore = SettingsStoreState & SettingsStoreActions
 
-const service = new SettingsService()
+let service = new SettingsService()
+
+/** Test seam: inject a service bound to a fresh database. */
+export function setSettingsServiceForTesting(svc: SettingsService | null): void {
+  service = svc ?? new SettingsService()
+}
 
 export const useSettingsStore = create<SettingsStore>((set) => ({
   settings: null,
@@ -34,7 +40,7 @@ export const useSettingsStore = create<SettingsStore>((set) => ({
       const settings = await service.get()
       set({ settings, loaded: true, loading: false })
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Failed to load settings'
+      const msg = err instanceof Error ? err.message : t('errors.failedToLoadSettings')
       set({ error: msg, loaded: true, loading: false })
     }
   },
@@ -45,7 +51,7 @@ export const useSettingsStore = create<SettingsStore>((set) => ({
       const settings = await service.update(patch)
       set({ settings, saving: false })
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Failed to save settings'
+      const msg = err instanceof Error ? err.message : t('errors.failedToSaveSettings')
       set({ error: msg, saving: false })
       throw err
     }
@@ -57,7 +63,7 @@ export const useSettingsStore = create<SettingsStore>((set) => ({
       const settings = await service.applyProviderPreset(providerId)
       set({ settings, saving: false })
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Failed to apply preset'
+      const msg = err instanceof Error ? err.message : t('errors.failedToApplyPreset')
       set({ error: msg, saving: false })
       throw err
     }

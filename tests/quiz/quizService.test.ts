@@ -80,7 +80,7 @@ const baseConfig: QuizConfig = {
   mode: 'topic',
   count: 2,
   difficulty: 'adaptive',
-  types: ['short_answer'],
+  types: ['numeric'],
 }
 
 describe('QuizService.generateQuiz', () => {
@@ -103,8 +103,8 @@ describe('QuizService.generateQuiz', () => {
     const chatJSON = vi.fn().mockResolvedValue({
       data: {
         questions: [
-          { prompt: 'What is the derivative of x^2?', type: 'short_answer', correctAnswer: '2x', solution: 'power rule', knowledgePoint: 'Power Rule', difficulty: 'basic', hints: ['use the power rule'] },
-          { prompt: 'Differentiate sin(x)', type: 'short_answer', correctAnswer: 'cos(x)', solution: 'standard derivative', knowledgePoint: 'Trig Derivatives', difficulty: 'intermediate', hints: [] },
+          { prompt: 'What is the derivative of x^2?', type: 'numeric', correctAnswer: '2x', solution: 'power rule', knowledgePoint: 'Power Rule', difficulty: 'basic', hints: ['use the power rule'] },
+          { prompt: 'Differentiate sin(x)', type: 'numeric', correctAnswer: 'cos(x)', solution: 'standard derivative', knowledgePoint: 'Trig Derivatives', difficulty: 'intermediate', hints: [] },
         ],
       },
       raw: { content: '{}', model: 'gpt-test' },
@@ -208,8 +208,8 @@ describe('QuizService.submitAnswer', () => {
   }
 
   it('grades an answer and records an attempt', async () => {
-    const { quiz, stored, svc } = await setupQuiz([{ type: 'short_answer', correctAnswer: 'rate of change' }])
-    const result = await svc.submitAnswer(quiz.id, stored[0]!.id, 'rate of change')
+    const { quiz, stored, svc } = await setupQuiz([{ type: 'numeric', correctAnswer: '2.5' }])
+    const result = await svc.submitAnswer(quiz.id, stored[0]!.id, '2.5')
     expect(result.evaluation.isCorrect).toBe(true)
     const attempts = await svc.getAttempts(quiz.id)
     expect(attempts).toHaveLength(1)
@@ -218,9 +218,9 @@ describe('QuizService.submitAnswer', () => {
 
   it('updates knowledge mastery after an attempt', async () => {
     const { project, quiz, stored, svc } = await setupQuiz([
-      { type: 'short_answer', correctAnswer: 'rate of change', knowledgePoint: 'Derivative' },
+      { type: 'numeric', correctAnswer: '2.5', knowledgePoint: 'Derivative' },
     ])
-    await svc.submitAnswer(quiz.id, stored[0]!.id, 'rate of change')
+    await svc.submitAnswer(quiz.id, stored[0]!.id, '2.5')
     const mastery = await new MasteryService(db).get(project.id, 'Derivative')
     expect(mastery).toBeDefined()
     expect(mastery!.attempts).toBe(1)
@@ -247,7 +247,7 @@ describe('QuizService.submitAnswer', () => {
   it('excludes unverified answers from the percentage', async () => {
     const { quiz, stored, svc } = await setupQuiz([
       { type: 'numeric', correctAnswer: '9.81' },
-      { type: 'short_answer', correctAnswer: 'rate of change' },
+      { type: 'numeric', correctAnswer: 'rate of change' },
     ])
     await svc.submitAnswer(quiz.id, stored[0]!.id, '9.81')
     // A free-text answer with no keyword overlap cannot be graded reliably.
@@ -286,7 +286,7 @@ describe('QuizService.submitAnswer', () => {
   })
 
   it('reports NO_ACTIVE quiz gracefully when question id is unknown', async () => {
-    const { quiz, svc } = await setupQuiz([{ type: 'short_answer', correctAnswer: 'a' }])
+    const { quiz, svc } = await setupQuiz([{ type: 'numeric', correctAnswer: 'a' }])
     await expect(svc.submitAnswer(quiz.id, 'missing-question', 'a')).rejects.toMatchObject({ code: 'NOT_FOUND' })
   })
 })
@@ -304,7 +304,7 @@ describe('QuizService.generateMore', () => {
     const chatJSON = vi.fn().mockResolvedValue({
       data: {
         questions: [
-          { prompt: 'Harder?', type: 'short_answer', correctAnswer: 'x', solution: '', knowledgePoint: 'KP', difficulty: 'advanced', hints: [] },
+          { prompt: 'Harder?', type: 'numeric', correctAnswer: 'x', solution: '', knowledgePoint: 'KP', difficulty: 'advanced', hints: [] },
         ],
       },
       raw: { content: '{}', model: 'm' },
@@ -314,7 +314,7 @@ describe('QuizService.generateMore', () => {
       mode: 'topic',
       count: 1,
       difficulty: 'intermediate',
-      types: ['short_answer'],
+      types: ['numeric'],
       topicId,
     })
     const harder = await svc.generateMore(quiz.id, 'harder')
@@ -327,7 +327,7 @@ describe('QuizService.generateMore', () => {
     const chatJSON = vi.fn().mockResolvedValue({
       data: {
         questions: [
-          { prompt: 'Easier?', type: 'short_answer', correctAnswer: 'x', solution: '', knowledgePoint: 'KP', difficulty: 'basic', hints: [] },
+          { prompt: 'Easier?', type: 'numeric', correctAnswer: 'x', solution: '', knowledgePoint: 'KP', difficulty: 'basic', hints: [] },
         ],
       },
       raw: { content: '{}', model: 'm' },
@@ -337,7 +337,7 @@ describe('QuizService.generateMore', () => {
       mode: 'topic',
       count: 1,
       difficulty: 'intermediate',
-      types: ['short_answer'],
+      types: ['numeric'],
       topicId,
     })
     const easier = await svc.generateMore(quiz.id, 'easier')
@@ -349,7 +349,7 @@ describe('QuizService.generateMore', () => {
     const chatJSON = vi.fn().mockResolvedValue({
       data: {
         questions: [
-          { prompt: 'Weak?', type: 'short_answer', correctAnswer: 'x', solution: '', knowledgePoint: 'Chain Rule', difficulty: 'basic', hints: [] },
+          { prompt: 'Weak?', type: 'numeric', correctAnswer: 'x', solution: '', knowledgePoint: 'Chain Rule', difficulty: 'basic', hints: [] },
         ],
       },
       raw: { content: '{}', model: 'm' },
@@ -363,7 +363,7 @@ describe('QuizService.generateMore', () => {
         questionId: 'q',
         topicId,
         knowledgePoint: 'Chain Rule',
-        questionType: 'short_answer',
+        questionType: 'numeric',
         difficulty: 'basic',
         userAnswer: 'x',
         evaluation: { isCorrect: false, method: 'exact', confidence: 1 },
@@ -375,7 +375,7 @@ describe('QuizService.generateMore', () => {
       mode: 'topic',
       count: 1,
       difficulty: 'adaptive',
-      types: ['short_answer'],
+      types: ['numeric'],
       topicId,
     })
     const more = await svc.generateMore(quiz.id, 'weakness')

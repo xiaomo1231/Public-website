@@ -1,5 +1,6 @@
 import type { DifficultyLevel } from '@/infrastructure/ai/prompts/types'
 import type { QuestionType } from '@/entities/question/types'
+import type { TranslationKey } from '@/i18n/types'
 
 export type QuizDifficulty = 'adaptive' | DifficultyLevel
 
@@ -23,6 +24,14 @@ export interface QuizConfig {
 }
 
 export type QuizStatus = 'generating' | 'ready' | 'in_progress' | 'completed' | 'failed'
+
+export const QUIZ_STATUS_LABEL_KEYS: Record<QuizStatus, TranslationKey> = {
+  generating: 'quizStatus.generating',
+  ready: 'quizStatus.ready',
+  in_progress: 'quizStatus.in_progress',
+  completed: 'quizStatus.completed',
+  failed: 'quizStatus.failed',
+}
 
 export interface QuizDifficultyStat {
   correct: number

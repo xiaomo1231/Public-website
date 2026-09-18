@@ -1,4 +1,5 @@
 import { AIProviderError, MissingAPIKeyError } from './errors'
+import { t } from '@/i18n'
 
 /** Roles accepted by OpenAI-compatible chat APIs. */
 export type ChatRole = 'system' | 'user' | 'assistant' | 'tool'
@@ -35,6 +36,12 @@ export interface ChatResponse {
   content: string
   usage?: { promptTokens: number; completionTokens: number; totalTokens: number }
   model: string
+  /**
+   * Provider stop reason. `'length'` means the model hit the output token cap
+   * and `content` is cut off — for a JSON request that guarantees a parse
+   * failure, so callers must report it as truncation rather than "bad JSON".
+   */
+  finishReason?: string
 }
 
 export interface ProviderCapabilities {
@@ -75,7 +82,7 @@ export interface ProviderConfig {
 
 export function ensureConfig(cfg: ProviderConfig): ProviderConfig {
   if (!cfg.apiKey) throw new MissingAPIKeyError()
-  if (!cfg.baseURL) throw new AIProviderError('API base URL is required', 'MISSING_BASE_URL')
-  if (!cfg.model) throw new AIProviderError('Model is required', 'MISSING_MODEL')
+  if (!cfg.baseURL) throw new AIProviderError(t('errors.aiBaseUrlRequired'), 'MISSING_BASE_URL')
+  if (!cfg.model) throw new AIProviderError(t('errors.aiModelRequired'), 'MISSING_MODEL')
   return cfg
 }

@@ -17,6 +17,7 @@ import {
 } from '@/infrastructure/files/chunking'
 import { logger } from '@/infrastructure/logger/logger'
 import { AppError, ValidationError } from '@/infrastructure/errors/AppError'
+import { t } from '@/i18n'
 
 export interface ProcessingProgress {
   stage: 'extracting' | 'chunking' | 'indexing' | 'done' | 'failed'
@@ -74,7 +75,7 @@ export class ProcessingService {
       await this.chunks.addMany(newChunks)
 
       const warnings = (extraction.warnings ?? []).slice()
-      if (extraction.lowConfidence) warnings.push(`OCR confidence low: ${extraction.confidence}%`)
+      if (extraction.lowConfidence) warnings.push(t('errors.ocrLowConfidence', { value: `${extraction.confidence}%` }))
       await this.documents.update(document.id, {
         status: 'ready',
         errorMessage: undefined,
@@ -89,7 +90,7 @@ export class ProcessingService {
       await this.jobs.setStage(jobId, 'done', 100)
       logger.info('Document processed', { id: document.id, chunks: newChunks.length })
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Processing failed'
+      const message = err instanceof Error ? err.message : t('upload.processingFailed')
       logger.error('Document processing failed', { id: document.id }, err)
       await this.documents.update(document.id, {
         status: 'failed',
@@ -102,7 +103,7 @@ export class ProcessingService {
 
   private async extract(document: Document): Promise<ExtractionOutput> {
     const stored = await this.documents.getBytes(document.id)
-    if (!stored) throw new ValidationError('Document content missing')
+    if (!stored) throw new ValidationError(t('errors.documentContentMissing'))
     const blob = new Blob([stored.bytes], { type: stored.mimeType })
 
     if (document.type === 'text') {
@@ -156,7 +157,7 @@ export class ProcessingService {
       }
       default: {
         const exhaustive: never = document.type
-        throw new ValidationError(`Unsupported document type: ${exhaustive as string}`)
+        throw new ValidationError(t('errors.unsupportedType', { type: exhaustive as string }))
       }
     }
   }
@@ -185,7 +186,7 @@ export class ProcessingService {
         return chunksFromText(ctx, extraction.raw.text ?? '')
       default: {
         const exhaustive: never = document.type
-        throw new ValidationError(`Unsupported chunking for: ${exhaustive as string}`)
+        throw new ValidationError(t('errors.unsupportedChunking', { type: exhaustive as string }))
       }
     }
   }

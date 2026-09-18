@@ -26,21 +26,24 @@ import type { QuestionAttempt } from '@/entities/questionAttempt/types'
 import { toast } from '@/features/toast/toastStore'
 import { friendlyAIError } from '@/shared/lib/aiErrors'
 import { cn } from '@/shared/lib/utils'
+import { useTranslation, type TranslationKey } from '@/i18n'
+import { difficultyLabelKey } from '@/infrastructure/ai/prompts/types'
 
 type MoreMode = 'same_topic' | 'similar' | 'harder' | 'easier' | 'weakness'
 
-const MORE_OPTIONS: Array<{ mode: MoreMode; label: string; hint: string }> = [
-  { mode: 'same_topic', label: 'Same topic', hint: 'Another set on this topic' },
-  { mode: 'similar', label: 'Similar questions', hint: 'Same knowledge points' },
-  { mode: 'harder', label: 'Harder', hint: 'One level up' },
-  { mode: 'easier', label: 'Easier', hint: 'One level down' },
-  { mode: 'weakness', label: 'Weakness training', hint: 'Targets your weakest points' },
+const MORE_OPTIONS: Array<{ mode: MoreMode; labelKey: TranslationKey; hintKey: TranslationKey }> = [
+  { mode: 'same_topic', labelKey: 'quizResult.followUp.sameTopic', hintKey: 'quizResult.followUp.sameTopicHint' },
+  { mode: 'similar', labelKey: 'quizResult.followUp.similar', hintKey: 'quizResult.followUp.similarHint' },
+  { mode: 'harder', labelKey: 'quizResult.followUp.harder', hintKey: 'quizResult.followUp.harderHint' },
+  { mode: 'easier', labelKey: 'quizResult.followUp.easier', hintKey: 'quizResult.followUp.easierHint' },
+  { mode: 'weakness', labelKey: 'quizResult.followUp.weakness', hintKey: 'quizResult.followUp.weaknessHint' },
 ]
 
 export function QuizResultPage(): JSX.Element {
   const { id: projectId, quizId } = useParams<{ id: string; quizId: string }>()
   const navigate = useNavigate()
   const service = useMemo(() => buildOfflineQuizService(), [])
+  const { t } = useTranslation()
   const [quiz, setQuiz] = useState<Quiz | null>(null)
   const [questions, setQuestions] = useState<Question[]>([])
   const [attempts, setAttempts] = useState<QuestionAttempt[]>([])
@@ -80,16 +83,16 @@ export function QuizResultPage(): JSX.Element {
     try {
       const bundle = await buildAIServices()
       if (!bundle) {
-        toast({ variant: 'error', title: 'Configure AI provider first' })
+        toast({ variant: 'error', title: t('quizResult.noProvider') })
         return
       }
       const next = await bundle.quiz.generateMore(quizId, mode)
       await bundle.quiz.startQuiz(next.id)
-      toast({ variant: 'success', title: 'New quiz ready' })
+      toast({ variant: 'success', title: t('quizResult.newReady') })
       navigate(`/projects/${projectId}/quiz/${next.id}`)
     } catch (err) {
       const msg = friendlyAIError(err)
-      toast({ variant: 'error', title: 'Could not generate more questions', description: msg })
+      toast({ variant: 'error', title: t('quizResult.generateFailed'), description: msg })
     } finally {
       setMoreBusy(null)
     }
@@ -99,7 +102,7 @@ export function QuizResultPage(): JSX.Element {
     return (
       <PageContainer>
         <PageContent>
-          <LoadingState label="Loading results" />
+          <LoadingState label={t('quizResult.loading')} />
         </PageContent>
       </PageContainer>
     )
@@ -110,11 +113,11 @@ export function QuizResultPage(): JSX.Element {
       <PageContainer>
         <PageContent>
           <ErrorState
-            title="Results unavailable"
-            description={error ?? 'This quiz has not been completed yet.'}
+            title={t('quizResult.unavailable')}
+            description={error ?? t('quizResult.notCompleted')}
             action={
               <Button asChild>
-                <Link to={`/projects/${projectId}/quiz`}>Back to quizzes</Link>
+                <Link to={`/projects/${projectId}/quiz`}>{t('quizResult.backToQuizzes')}</Link>
               </Button>
             }
           />
@@ -139,18 +142,18 @@ export function QuizResultPage(): JSX.Element {
       <PageHeader
         title={
           <div className="flex items-center gap-2">
-            <Button asChild variant="ghost" size="icon" aria-label="Back to quizzes">
+            <Button asChild variant="ghost" size="icon" aria-label={t('quizResult.backToQuizzes')}>
               <Link to={`/projects/${projectId}/quiz`}>
                 <ArrowLeft className="h-4 w-4" />
               </Link>
             </Button>
-            Results
+            {t('quizResult.title')}
           </div>
         }
         description={quiz.title}
         actions={
           <Button variant="outline" asChild>
-            <Link to={`/projects/${projectId}/mastery`}>Knowledge Mastery</Link>
+            <Link to={`/projects/${projectId}/mastery`}>{t('quizResult.mastery')}</Link>
           </Button>
         }
       />
@@ -159,25 +162,27 @@ export function QuizResultPage(): JSX.Element {
           <CardContent className="grid gap-6 p-6 sm:grid-cols-[160px_1fr] sm:items-center">
             <div className="text-center">
               <div className="text-4xl font-semibold tabular-nums">{score.percentage}%</div>
-              <div className="text-xs text-muted-foreground">Score</div>
+              <div className="text-xs text-muted-foreground">{t('quizResult.score')}</div>
             </div>
             <div className="space-y-3">
               <Progress value={score.percentage} />
               <div className="flex flex-wrap gap-4 text-sm">
                 <span className="flex items-center gap-1 text-emerald-600">
-                  <CheckCircle2 className="h-4 w-4" /> {score.correct} correct
+                  <CheckCircle2 className="h-4 w-4" /> {t('quizResult.correct', { count: score.correct })}
                 </span>
                 <span className="flex items-center gap-1 text-destructive">
-                  <XCircle className="h-4 w-4" /> {score.wrong} wrong
+                  <XCircle className="h-4 w-4" /> {t('quizResult.wrong', { count: score.wrong })}
                 </span>
                 <span className="flex items-center gap-1 text-amber-600">
-                  <HelpCircle className="h-4 w-4" /> {score.unverified} unverified
+                  <HelpCircle className="h-4 w-4" /> {t('quizResult.unverifiedCount', { count: score.unverified })}
                 </span>
-                <span className="text-muted-foreground">of {score.total}</span>
+                <span className="text-muted-foreground">
+                  {t('quizResult.scoreLine', { correct: score.correct, total: score.total })}
+                </span>
               </div>
               {score.unverified > 0 && (
                 <p className="text-xs text-muted-foreground">
-                  Unverified answers could not be graded automatically and are excluded from the score.
+                  {t('quizResult.unverifiedNote')}
                 </p>
               )}
             </div>
@@ -189,9 +194,9 @@ export function QuizResultPage(): JSX.Element {
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-base">
                 <TrendingDown className="h-4 w-4 text-amber-600" />
-                Weak knowledge points
+                {t('quizResult.weakPoints')}
               </CardTitle>
-              <CardDescription>Below 60% accuracy in this quiz — good candidates for review.</CardDescription>
+              <CardDescription>{t('quizResult.weakPointsHint')}</CardDescription>
             </CardHeader>
             <CardContent className="flex flex-wrap gap-2">
               {score.weakKnowledgePoints.map((kp) => (
@@ -206,11 +211,11 @@ export function QuizResultPage(): JSX.Element {
         <div className="grid gap-4 lg:grid-cols-2">
           <Card>
             <CardHeader>
-              <CardTitle className="text-base">By knowledge point</CardTitle>
+              <CardTitle className="text-base">{t('quizResult.byKnowledgePoint')}</CardTitle>
             </CardHeader>
             <CardContent className="space-y-2">
               {score.byKnowledgePoint.length === 0 ? (
-                <p className="text-xs text-muted-foreground">No data.</p>
+                <p className="text-xs text-muted-foreground">{t('quizResult.noData')}</p>
               ) : (
                 score.byKnowledgePoint.map((k) => {
                   const gradable = k.correct + k.wrong
@@ -231,11 +236,11 @@ export function QuizResultPage(): JSX.Element {
 
           <Card>
             <CardHeader>
-              <CardTitle className="text-base">By difficulty</CardTitle>
+              <CardTitle className="text-base">{t('quizResult.byDifficulty')}</CardTitle>
             </CardHeader>
             <CardContent className="space-y-2">
               {Object.entries(score.byDifficulty).length === 0 ? (
-                <p className="text-xs text-muted-foreground">No data.</p>
+                <p className="text-xs text-muted-foreground">{t('quizResult.noData')}</p>
               ) : (
                 Object.entries(score.byDifficulty).map(([difficulty, stat]) => {
                   const gradable = stat.correct + stat.wrong
@@ -261,11 +266,13 @@ export function QuizResultPage(): JSX.Element {
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0">
               <div>
-                <CardTitle className="text-base">Mistakes ({mistakes.length})</CardTitle>
-                <CardDescription>Review what went wrong before moving on.</CardDescription>
+                <CardTitle className="text-base">
+                  {t('quizResult.mistakes', { count: mistakes.length })}
+                </CardTitle>
+                <CardDescription>{t('quizResult.mistakesHint')}</CardDescription>
               </div>
               <Button variant="outline" onClick={() => setShowMistakes((s) => !s)}>
-                {showMistakes ? 'Hide' : 'Review mistakes'}
+                {showMistakes ? t('quizResult.hide') : t('quizResult.reviewMistakes')}
               </Button>
             </CardHeader>
             {showMistakes && (
@@ -277,17 +284,25 @@ export function QuizResultPage(): JSX.Element {
                       <div className="flex items-center gap-2">
                         <Badge variant="outline">{q.knowledgePoint}</Badge>
                         <Badge variant="outline">{q.type.replace('_', ' ')}</Badge>
-                        <Badge variant="outline">{attempt.difficulty}</Badge>
+                        <Badge variant="outline">
+                          {t(difficultyLabelKey(attempt.difficulty))}
+                        </Badge>
                       </div>
                       <p className="mt-2 font-medium">{q.prompt}</p>
                       <p className="mt-1 text-xs text-muted-foreground">
-                        Your answer: <span className="font-mono">{attempt.userAnswer || '(blank)'}</span>
+                        {t('quizResult.yourAnswer', {
+                          value: attempt.userAnswer || t('quizResult.blank'),
+                        })}
                       </p>
                       <p className="text-xs text-muted-foreground">
-                        Expected: <span className="font-mono">{attempt.evaluation.expected ?? q.correctAnswer}</span>
+                        {t('quizResult.expected', {
+                          value: attempt.evaluation.expected ?? q.correctAnswer,
+                        })}
                       </p>
                       {q.solution && (
-                        <p className="mt-1 text-xs text-muted-foreground">Solution: {q.solution}</p>
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          {t('quizResult.solution', { value: q.solution })}
+                        </p>
                       )}
                     </div>
                   )
@@ -302,10 +317,10 @@ export function QuizResultPage(): JSX.Element {
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-base">
                 <AlertCircle className="h-4 w-4 text-amber-600" />
-                Unverified answers ({unverified.length})
+                {t('quizResult.unverifiedAnswers', { count: unverified.length })}
               </CardTitle>
               <CardDescription>
-                The system could not grade these automatically. Compare your answer with the expected one.
+                {t('quizResult.unverifiedAnswersHint')}
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-2 text-sm">
@@ -315,8 +330,10 @@ export function QuizResultPage(): JSX.Element {
                   <div key={q.id} className="rounded-md border p-2">
                     <p className="font-medium">{q.prompt}</p>
                     <p className="text-xs text-muted-foreground">
-                      Your answer: <span className="font-mono">{attempt?.userAnswer ?? '(blank)'}</span> · Expected:{' '}
-                      <span className="font-mono">{q.correctAnswer}</span>
+                      {t('quizResult.answerExpected', {
+                        yours: attempt?.userAnswer ?? t('quizResult.blank'),
+                        expected: q.correctAnswer,
+                      })}
                     </p>
                   </div>
                 )
@@ -329,9 +346,9 @@ export function QuizResultPage(): JSX.Element {
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">
               <TrendingUp className="h-4 w-4" />
-              More questions
+              {t('quizResult.moreQuestions')}
             </CardTitle>
-            <CardDescription>Keep practising with a follow-up quiz.</CardDescription>
+            <CardDescription>{t('quizResult.moreQuestionsHint')}</CardDescription>
           </CardHeader>
           <CardContent className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
             {MORE_OPTIONS.map((opt) => (
@@ -345,21 +362,21 @@ export function QuizResultPage(): JSX.Element {
                 )}
               >
                 <span className="flex w-full items-center gap-2 font-medium">
-                  {opt.label}
+                  {t(opt.labelKey)}
                   {moreBusy === opt.mode ? (
                     <Loader2 className="ml-auto h-4 w-4 animate-spin" />
                   ) : (
                     <ChevronRight className="ml-auto h-4 w-4 text-muted-foreground" />
                   )}
                 </span>
-                <span className="text-xs text-muted-foreground">{opt.hint}</span>
+                <span className="text-xs text-muted-foreground">{t(opt.hintKey)}</span>
               </button>
             ))}
           </CardContent>
         </Card>
 
         {questions.length === 0 && (
-          <EmptyState title="No questions" description="This quiz has no questions to review." />
+          <EmptyState title={t('quizResult.noQuestions')} description={t('quizResult.noQuestionsHint')} />
         )}
       </PageContent>
     </PageContainer>

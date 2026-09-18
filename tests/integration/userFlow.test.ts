@@ -152,6 +152,8 @@ function scriptedAI(): AIService {
   return {
     chat: vi.fn(async () => ({ content: 'Welcome to derivatives.', model: 'fake' })),
     chatJSON,
+    // The analysis path streams; reuse the same scripted responses.
+    streamJSON: vi.fn((messages: ChatMessage[]) => chatJSON(messages)),
     streamChat: vi.fn(async (_m, onDelta: (d: string) => void) => {
       onDelta('Welcome to derivatives.')
       return { content: 'Welcome to derivatives.', model: 'fake' }

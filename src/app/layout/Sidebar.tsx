@@ -7,19 +7,20 @@ import {
   Sparkles,
 } from 'lucide-react'
 import type { ComponentType } from 'react'
+import { useTranslation, type TranslationKey } from '@/i18n'
 import { cn } from '@/shared/lib/utils'
 
 interface NavItem {
   to: string
-  label: string
+  labelKey: TranslationKey
   icon: ComponentType<{ className?: string }>
   end?: boolean
 }
 
 const NAV_ITEMS: NavItem[] = [
-  { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
-  { to: '/projects', label: 'Projects', icon: FolderKanban },
-  { to: '/settings', label: 'Settings', icon: SettingsIcon },
+  { to: '/dashboard', labelKey: 'nav.dashboard', icon: LayoutDashboard },
+  { to: '/projects', labelKey: 'nav.projects', icon: FolderKanban },
+  { to: '/settings', labelKey: 'nav.settings', icon: SettingsIcon },
 ]
 
 export interface SidebarProps {
@@ -27,6 +28,7 @@ export interface SidebarProps {
 }
 
 export function Sidebar({ onNavigate }: SidebarProps): JSX.Element {
+  const { t } = useTranslation()
   const location = useLocation()
 
   return (
@@ -36,9 +38,9 @@ export function Sidebar({ onNavigate }: SidebarProps): JSX.Element {
           <Sparkles className="h-4 w-4" />
         </div>
         <div className="flex flex-col leading-tight">
-          <span className="text-sm font-semibold">AI Learning</span>
+          <span className="text-sm font-semibold">{t('app.name')}</span>
           <span className="text-[10px] uppercase tracking-wider text-muted-foreground">
-            Local-first
+            {t('app.tagline')}
           </span>
         </div>
       </div>
@@ -63,7 +65,7 @@ export function Sidebar({ onNavigate }: SidebarProps): JSX.Element {
               )}
             >
               <Icon className="h-4 w-4" />
-              {item.label}
+              {t(item.labelKey)}
             </NavLink>
           )
         })}
@@ -72,7 +74,7 @@ export function Sidebar({ onNavigate }: SidebarProps): JSX.Element {
       <div className="border-t p-3 text-xs text-muted-foreground">
         <div className="flex items-center gap-2 rounded-md bg-muted/50 px-3 py-2">
           <BookOpen className="h-4 w-4" />
-          <span>Data stays on your device.</span>
+          <span>{t('app.dataStaysLocal')}</span>
         </div>
       </div>
     </aside>

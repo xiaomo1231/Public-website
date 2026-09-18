@@ -8,6 +8,7 @@ import {
 } from './types'
 import { NotFoundError, StorageError, ValidationError } from '@/infrastructure/errors/AppError'
 import { logger } from '@/infrastructure/logger/logger'
+import { t } from '@/i18n'
 
 function normalizeName(name: string): string {
   return name.trim()
@@ -37,7 +38,7 @@ export class DocumentRepository {
       return this.db.documents.where('projectId').equals(projectId).reverse().sortBy('uploadedAt')
     } catch (err) {
       logger.error('DocumentRepository.listByProject failed', { projectId }, err)
-      throw new StorageError('Failed to list documents', err)
+      throw new StorageError(t('storage.failedToListDocuments'), err)
     }
   }
 
@@ -45,7 +46,7 @@ export class DocumentRepository {
     try {
       return this.db.documents.orderBy('uploadedAt').reverse().toArray()
     } catch (err) {
-      throw new StorageError('Failed to list documents', err)
+      throw new StorageError(t('storage.failedToListDocuments'), err)
     }
   }
 
@@ -57,8 +58,8 @@ export class DocumentRepository {
 
   async create(input: CreateDocumentInput): Promise<Document> {
     const name = normalizeName(input.name)
-    if (!name) throw new ValidationError('Document name is required')
-    if (input.sizeBytes < 0) throw new ValidationError('Invalid file size')
+    if (!name) throw new ValidationError(t('errors.documentNameRequired'))
+    if (input.sizeBytes < 0) throw new ValidationError(t('errors.invalidFileSize'))
     const now = Date.now()
     const document: Document = {
       id: crypto.randomUUID(),
@@ -73,6 +74,7 @@ export class DocumentRepository {
       uploadedAt: now,
     }
     if (input.mimeType !== undefined) document.mimeType = input.mimeType
+    if (input.sourceModifiedAt !== undefined) document.sourceModifiedAt = input.sourceModifiedAt
 
     // Read blob bytes OUTSIDE the transaction so Dexie's transaction scope
     // never has to wait on an async boundary (FileReader, fetch, etc.).
@@ -107,7 +109,7 @@ export class DocumentRepository {
     const next: Document = { ...existing }
     if (patch.name !== undefined) {
       const trimmed = normalizeName(patch.name)
-      if (!trimmed) throw new ValidationError('Document name is required')
+      if (!trimmed) throw new ValidationError(t('errors.documentNameRequired'))
       next.name = trimmed
     }
     if (patch.status !== undefined) next.status = patch.status

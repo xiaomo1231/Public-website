@@ -3,7 +3,7 @@ import { Loader2, Sparkles } from 'lucide-react'
 import type { CourseAnalysis, Topic } from '@/entities/courseAnalysis/types'
 import type { QuizConfig, QuizDifficulty } from '@/entities/quiz/types'
 import type { QuestionType } from '@/entities/question/types'
-import { QUESTION_TYPES, QUESTION_TYPE_LABELS } from '@/entities/question/types'
+import { QUESTION_TYPES, QUESTION_TYPE_LABEL_KEYS } from '@/entities/question/types'
 import { CourseAnalysisRepository } from '@/entities/courseAnalysis/repository'
 import { Button } from '@/shared/ui/Button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/shared/ui/Card'
@@ -17,6 +17,7 @@ import {
   SelectValue,
 } from '@/shared/ui/Select2'
 import { cn } from '@/shared/lib/utils'
+import { useTranslation, type TranslationKey } from '@/i18n'
 
 export interface QuizConfigDialogProps {
   projectId: string
@@ -25,22 +26,31 @@ export interface QuizConfigDialogProps {
   progress?: { stage: string; progress: number } | null
 }
 
-const DIFFICULTIES: Array<{ value: QuizDifficulty; label: string }> = [
-  { value: 'adaptive', label: 'Adaptive (recommended)' },
-  { value: 'beginner', label: 'Beginner' },
-  { value: 'basic', label: 'Basic' },
-  { value: 'intermediate', label: 'Intermediate' },
-  { value: 'advanced', label: 'Advanced' },
-  { value: 'challenge', label: 'Challenge' },
+const DIFFICULTIES: Array<{ value: QuizDifficulty; labelKey: TranslationKey }> = [
+  { value: 'adaptive', labelKey: 'quizConfig.adaptive' },
+  { value: 'beginner', labelKey: 'difficulty.beginner' },
+  { value: 'basic', labelKey: 'difficulty.basic' },
+  { value: 'intermediate', labelKey: 'difficulty.intermediate' },
+  { value: 'advanced', labelKey: 'difficulty.advanced' },
+  { value: 'challenge', labelKey: 'difficulty.challenge' },
 ]
 
+const STAGE_LABEL_KEYS: Record<string, TranslationKey> = {
+  starting: 'quiz.starting',
+  collecting: 'stage.collectingShort',
+  generating: 'stage.generating',
+  storing: 'stage.storing',
+  done: 'stage.done',
+}
+
 export function QuizConfigDialog({ projectId, onStart, busy, progress }: QuizConfigDialogProps): JSX.Element {
+  const { t } = useTranslation()
   const [analysis, setAnalysis] = useState<CourseAnalysis | null>(null)
   const [topics, setTopics] = useState<Topic[]>([])
   const [topicId, setTopicId] = useState<string>('__mixed__')
   const [count, setCount] = useState(5)
   const [difficulty, setDifficulty] = useState<QuizDifficulty>('adaptive')
-  const [types, setTypes] = useState<QuestionType[]>(['multiple_choice', 'short_answer'])
+  const [types, setTypes] = useState<QuestionType[]>(['multiple_choice'])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -65,14 +75,14 @@ export function QuizConfigDialog({ projectId, onStart, busy, progress }: QuizCon
     setTypes((prev) => {
       if (prev.includes(type)) {
         if (prev.length === 1) return prev // keep at least one
-        return prev.filter((t) => t !== type)
+        return prev.filter((item) => item !== type)
       }
       return [...prev, type]
     })
   }
 
   function handleStart() {
-    const topic = topics.find((t) => t.id === topicId)
+    const topic = topics.find((item) => item.id === topicId)
     const config: QuizConfig = {
       mode: topicId === '__mixed__' ? 'mixed' : 'topic',
       count,
@@ -87,7 +97,7 @@ export function QuizConfigDialog({ projectId, onStart, busy, progress }: QuizCon
     return (
       <Card>
         <CardContent className="flex items-center gap-2 p-6 text-sm text-muted-foreground">
-          <Loader2 className="h-4 w-4 animate-spin" /> Loading quiz options…
+          <Loader2 className="h-4 w-4 animate-spin" /> {t('quizConfig.loadingOptions')}
         </CardContent>
       </Card>
     )
@@ -97,9 +107,9 @@ export function QuizConfigDialog({ projectId, onStart, busy, progress }: QuizCon
     return (
       <Card>
         <CardHeader>
-          <CardTitle>Analyze the course first</CardTitle>
+          <CardTitle>{t('quizConfig.needAnalysis')}</CardTitle>
           <CardDescription>
-            Quizzes are generated from your analysed course material. Run Analyze Course on the project's Analysis tab.
+            {t('quizConfig.needAnalysisHint')}
           </CardDescription>
         </CardHeader>
       </Card>
@@ -111,25 +121,25 @@ export function QuizConfigDialog({ projectId, onStart, busy, progress }: QuizCon
       <CardHeader>
         <CardTitle className="flex items-center gap-2 text-base">
           <Sparkles className="h-4 w-4" />
-          Generate Quiz
+          {t('quizConfig.title')}
         </CardTitle>
         <CardDescription>
-          The AI writes questions grounded in your uploaded documents. Difficulty adapts as you answer.
+          {t('quizConfig.description')}
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-5">
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="space-y-2">
-            <Label htmlFor="quiz-topic">Topic</Label>
+            <Label htmlFor="quiz-topic">{t('quizConfig.topic')}</Label>
             <Select value={topicId} onValueChange={setTopicId}>
               <SelectTrigger id="quiz-topic">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="__mixed__">Mixed review (all topics)</SelectItem>
-                {topics.map((t) => (
-                  <SelectItem key={t.id} value={t.id}>
-                    {t.name}
+                <SelectItem value="__mixed__">{t('quizConfig.mixedReview')}</SelectItem>
+                {topics.map((topic) => (
+                  <SelectItem key={topic.id} value={topic.id}>
+                    {topic.name}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -137,7 +147,7 @@ export function QuizConfigDialog({ projectId, onStart, busy, progress }: QuizCon
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="quiz-count">Number of questions</Label>
+            <Label htmlFor="quiz-count">{t('quizConfig.questionCount')}</Label>
             <Input
               id="quiz-count"
               type="number"
@@ -146,12 +156,12 @@ export function QuizConfigDialog({ projectId, onStart, busy, progress }: QuizCon
               value={count}
               onChange={(e) => setCount(Math.max(1, Math.min(30, Number(e.target.value) || 1)))}
             />
-            <p className="text-xs text-muted-foreground">Between 1 and 30.</p>
+            <p className="text-xs text-muted-foreground">{t('quizConfig.questionCountHint')}</p>
           </div>
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="quiz-difficulty">Difficulty</Label>
+          <Label htmlFor="quiz-difficulty">{t('quizConfig.difficulty')}</Label>
           <Select value={difficulty} onValueChange={(v) => setDifficulty(v as QuizDifficulty)}>
             <SelectTrigger id="quiz-difficulty">
               <SelectValue />
@@ -159,41 +169,41 @@ export function QuizConfigDialog({ projectId, onStart, busy, progress }: QuizCon
             <SelectContent>
               {DIFFICULTIES.map((d) => (
                 <SelectItem key={d.value} value={d.value}>
-                  {d.label}
+                  {t(d.labelKey)}
                 </SelectItem>
               ))}
             </SelectContent>
           </Select>
           {difficulty === 'adaptive' && (
             <p className="text-xs text-muted-foreground">
-              Starts at Basic and adjusts after each answer based on accuracy, streaks, and knowledge-point mastery.
+              {t('quizConfig.difficultyHint')}
             </p>
           )}
         </div>
 
         <div className="space-y-2">
-          <Label>Question types</Label>
+          <Label>{t('quizConfig.questionTypes')}</Label>
           <div className="flex flex-wrap gap-2">
-            {QUESTION_TYPES.map((t) => {
-              const active = types.includes(t)
+            {QUESTION_TYPES.map((type) => {
+              const active = types.includes(type)
               return (
                 <button
-                  key={t}
+                  key={type}
                   type="button"
-                  onClick={() => toggleType(t)}
+                  onClick={() => toggleType(type)}
                   className={cn(
                     'rounded-md border px-3 py-1.5 text-xs transition-colors',
                     active ? 'border-foreground/40 bg-accent' : 'hover:bg-accent/50',
                   )}
                   aria-pressed={active}
                 >
-                  {QUESTION_TYPE_LABELS[t]}
+                  {t(QUESTION_TYPE_LABEL_KEYS[type])}
                 </button>
               )
             })}
           </div>
           <p className="text-xs text-muted-foreground">
-            Types cycle through the quiz in the order above. At least one type must be selected.
+            {t('quizConfig.questionTypesHint')}
           </p>
         </div>
 
@@ -202,13 +212,17 @@ export function QuizConfigDialog({ projectId, onStart, busy, progress }: QuizCon
             <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
               <div className="h-full bg-primary transition-[width]" style={{ width: `${progress.progress}%` }} />
             </div>
-            <p className="text-xs capitalize text-muted-foreground">{progress.stage}…</p>
+            <p className="text-xs capitalize text-muted-foreground">
+              {(STAGE_LABEL_KEYS[progress.stage]
+                ? t(STAGE_LABEL_KEYS[progress.stage])
+                : progress.stage) + '…'}
+            </p>
           </div>
         )}
 
         <Button onClick={handleStart} disabled={busy} className="w-full sm:w-auto">
           {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
-          {busy ? 'Generating…' : 'Generate Quiz'}
+          {busy ? t('quizConfig.generating') : t('quizConfig.title')}
         </Button>
       </CardContent>
     </Card>

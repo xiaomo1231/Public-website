@@ -29,6 +29,7 @@ import type {
 } from '@/entities/tutorSession/types'
 import { AppError } from '@/infrastructure/errors/AppError'
 import { logger } from '@/infrastructure/logger/logger'
+import { t } from '@/i18n'
 
 const SOURCE_CHUNK_LIMIT = 6
 const MAX_HINTS = 3
@@ -171,7 +172,7 @@ export class TutorService {
 
   async getSession(id: string): Promise<TutorSession> {
     const session = await this.sessions.get(id)
-    if (!session) throw new AppError('Tutor session not found', 'NOT_FOUND')
+    if (!session) throw new AppError(t('errors.sessionNotFound'), 'NOT_FOUND')
     return session
   }
 
@@ -319,10 +320,10 @@ export class TutorService {
   async requestHint(sessionId: string): Promise<{ session: TutorSession; hint: string }> {
     const session = await this.getSession(sessionId)
     if (!session.pendingQuestion) {
-      throw new AppError('No active question', 'NO_ACTIVE_QUESTION')
+      throw new AppError(t('errors.noActiveQuestion'), 'NO_ACTIVE_QUESTION')
     }
     const idx = Math.min(session.hintsRevealed, session.pendingQuestion.hints.length - 1)
-    const hint = session.pendingQuestion.hints[idx] ?? session.pendingQuestion.hints[session.pendingQuestion.hints.length - 1] ?? 'No hint available.'
+    const hint = session.pendingQuestion.hints[idx] ?? session.pendingQuestion.hints[session.pendingQuestion.hints.length - 1] ?? t('errors.hintUnavailable')
     session.hintsRevealed = Math.min(session.hintsRevealed + 1, session.pendingQuestion.hints.length)
     const turn: TutorTurn = {
       role: 'tutor',
@@ -344,7 +345,7 @@ export class TutorService {
   ): Promise<TutorActionResult> {
     const session = await this.getSession(sessionId)
     if (!session.pendingQuestion) {
-      throw new AppError('No active question', 'NO_ACTIVE_QUESTION')
+      throw new AppError(t('errors.noActiveQuestion'), 'NO_ACTIVE_QUESTION')
     }
     const sources = await this.collectSources(session)
     const question = session.pendingQuestion
@@ -380,7 +381,7 @@ export class TutorService {
       role: 'tutor',
       kind: 'feedback',
       content: `${evaluationTyped.feedback}\n\n${evaluationTyped.groundedExplanation}${
-        evaluationTyped.isSupplementary ? '\n\n(Supplementary explanation — not in your course material.)' : ''
+        evaluationTyped.isSupplementary ? `\n\n${t('errors.supplementary')}` : ''
       }`,
       question,
       evaluation: evaluationTyped,
@@ -435,7 +436,7 @@ export class TutorService {
         normalizedUser: studentAnswer,
         normalizedExpected: question.expectedAnswer,
         ...(evaluation.feedback ? { explanation: evaluation.feedback } : {}),
-        note: 'Judged by the AI tutor.',
+        note: t('errors.judgedByTutor'),
       }
       const attempt: QuestionAttempt = {
         id: crypto.randomUUID(),

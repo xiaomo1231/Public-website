@@ -7,8 +7,17 @@ import {
   createProvider,
   extractJSON,
 } from '@/infrastructure/ai'
-import { InvalidJSONError } from '@/infrastructure/ai/errors'
+import { InvalidJSONError, OutputTruncatedError } from '@/infrastructure/ai/errors'
 import { logger } from '@/infrastructure/logger/logger'
+
+/**
+ * A model that stopped because it hit the output cap returns incomplete JSON.
+ * Parsing it would produce a misleading "malformed JSON" error, so callers are
+ * told what actually happened instead.
+ */
+function assertNotTruncated(res: ChatResponse, maxTokens: number): void {
+  if (res.finishReason === 'length') throw new OutputTruncatedError(maxTokens)
+}
 
 export interface AIServiceOptions {
   config: ProviderConfig
@@ -60,16 +69,18 @@ export class AIService {
    */
   async chatJSON<T>(messages: ChatMessage[], options?: { model?: string; maxTokens?: number; signal?: AbortSignal }): Promise<{ data: T; raw: ChatResponse }> {
     const useNativeJson = this.provider.capabilities.jsonMode
+    const maxTokens = options?.maxTokens ?? this.config.maxTokens
     const req: ChatRequest = {
       messages,
+      maxTokens,
       ...(options?.model ? { model: options.model } : {}),
-      ...(options?.maxTokens !== undefined ? { maxTokens: options.maxTokens } : {}),
       ...(options?.signal ? { signal: options.signal } : {}),
       ...(useNativeJson ? { responseFormat: { type: 'json_object' } } : {}),
       temperature: this.config.temperature,
     }
 
     const res = await this.provider.chat(req)
+    assertNotTruncated(res, maxTokens)
     try {
       const data = extractJSON<T>(res.content)
       return { data, raw: res }
@@ -81,6 +92,7 @@ export class AIService {
         })
         // One retry without json mode to coax a parsable result.
         const retry = await this.provider.chat({ ...req, responseFormat: { type: 'text' } })
+        assertNotTruncated(retry, maxTokens)
         try {
           const data = extractJSON<T>(retry.content)
           return { data, raw: retry }
@@ -90,6 +102,47 @@ export class AIService {
       }
       throw err
     }
+  }
+
+  /**
+   * Stream a JSON response and parse it once the stream completes.
+   *
+   * Long structured outputs (course analysis, quiz generation) can take
+   * minutes to generate. A non-streaming request has to finish entirely inside
+   * the request budget, which is impossible for those; streaming keeps data
+   * flowing, so the budget only has to cover the gap *between* chunks.
+   */
+  async streamJSON<T>(
+    messages: ChatMessage[],
+    onDelta?: (delta: string) => void,
+    options?: { model?: string; maxTokens?: number; signal?: AbortSignal },
+  ): Promise<{ data: T; raw: ChatResponse }> {
+    if (!this.provider.capabilities.streaming) {
+      return this.chatJSON<T>(messages, options)
+    }
+
+    const maxTokens = options?.maxTokens ?? this.config.maxTokens
+    const useNativeJson = this.provider.capabilities.jsonMode
+    const req: ChatRequest = {
+      messages,
+      maxTokens,
+      ...(options?.model ? { model: options.model } : {}),
+      ...(options?.signal ? { signal: options.signal } : {}),
+      ...(useNativeJson ? { responseFormat: { type: 'json_object' } } : {}),
+      temperature: this.config.temperature,
+    }
+
+    const res = await this.provider.streamChat(req, (chunk) => {
+      if (chunk.delta && onDelta) onDelta(chunk.delta)
+    })
+    assertNotTruncated(res, maxTokens)
+    const data = extractJSON<T>(res.content)
+    return { data, raw: res }
+  }
+
+  /** The output token cap currently configured by the user. */
+  get maxOutputTokens(): number {
+    return this.config.maxTokens
   }
 
   async streamChat(

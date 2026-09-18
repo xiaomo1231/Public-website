@@ -37,7 +37,7 @@ function scriptedAI(streamedText: string) {
     chatJSON: vi.fn().mockResolvedValue({
       data: {
         prompt: 'What is a derivative?',
-        type: 'short_answer',
+        type: 'numeric',
         expectedAnswer: 'rate of change',
         explanation: '',
         knowledgePoint: 'Derivatives',

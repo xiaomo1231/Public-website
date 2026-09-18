@@ -3,6 +3,7 @@ import { getDb } from '@/infrastructure/db/database'
 import type { InviteKeyRecord } from './types'
 import { logger } from '@/infrastructure/logger/logger'
 import { StorageError } from '@/infrastructure/errors/AppError'
+import { t } from '@/i18n'
 
 export class InviteRepository {
   private db: AppDatabase
@@ -16,7 +17,7 @@ export class InviteRepository {
       return this.db.inviteKeys.toArray()
     } catch (err) {
       logger.error('InviteRepository.list failed', undefined, err)
-      throw new StorageError('Failed to list invite keys', err)
+      throw new StorageError(t('storage.failedToListInviteKeys'), err)
     }
   }
 

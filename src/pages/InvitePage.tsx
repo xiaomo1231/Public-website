@@ -8,10 +8,12 @@ import { Input } from '@/shared/ui/Input'
 import { Label } from '@/shared/ui/Label'
 import { AuthError, isAppError } from '@/infrastructure/errors/AppError'
 import { logger } from '@/infrastructure/logger/logger'
+import { useTranslation } from '@/i18n'
 
 const DEMO_CODES = ['WELCOME-LEARN', 'STUDENT-2026']
 
 export function InvitePage(): JSX.Element {
+  const { t } = useTranslation()
   const { unlock, isUnlocked, loaded, loading, error } = useAuth()
   const [code, setCode] = useState('')
   const [submitting, setSubmitting] = useState(false)
@@ -36,7 +38,7 @@ export function InvitePage(): JSX.Element {
         setLocalError(err.message)
       } else {
         logger.error('Invite submit failed', undefined, err)
-        setLocalError('Could not verify invite code')
+        setLocalError(t('invite.verifyFailed'))
       }
     } finally {
       setSubmitting(false)
@@ -50,15 +52,13 @@ export function InvitePage(): JSX.Element {
           <div className="mb-2 grid h-10 w-10 place-items-center rounded-md bg-primary text-primary-foreground">
             <Sparkles className="h-5 w-5" />
           </div>
-          <CardTitle>Enter invite code</CardTitle>
-          <CardDescription>
-            The first version is invite-only. Enter your code below to unlock the app.
-          </CardDescription>
+          <CardTitle>{t('invite.title')}</CardTitle>
+          <CardDescription>{t('invite.description')}</CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={onSubmit} className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="invite">Invite code</Label>
+              <Label htmlFor="invite">{t('invite.label')}</Label>
               <div className="relative">
                 <KeyRound className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                 <Input
@@ -79,11 +79,11 @@ export function InvitePage(): JSX.Element {
             </div>
 
             <Button type="submit" className="w-full" disabled={submitting || loading || !code.trim()}>
-              {submitting ? 'Verifying…' : 'Unlock'}
+              {submitting ? t('invite.verifying') : t('invite.unlock')}
             </Button>
 
             <div className="rounded-md border bg-muted/40 p-3 text-xs text-muted-foreground">
-              <div className="mb-1 font-medium text-foreground">Demo codes</div>
+              <div className="mb-1 font-medium text-foreground">{t('invite.demoCodes')}</div>
               <div className="flex flex-wrap gap-1.5">
                 {DEMO_CODES.map((c) => (
                   <button

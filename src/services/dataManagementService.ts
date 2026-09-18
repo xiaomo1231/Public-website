@@ -15,6 +15,7 @@ import { clearCachedDeviceKey } from '@/infrastructure/crypto/deviceKey'
 
 import { AppError } from '@/infrastructure/errors/AppError'
 import { logger } from '@/infrastructure/logger/logger'
+import { t } from '@/i18n'
 
 export interface DataInventory {
   projects: number
@@ -183,5 +184,5 @@ export class DataManagementService {
 
 export function ensureError(err: unknown): AppError {
   if (err instanceof AppError) return err
-  return new AppError(err instanceof Error ? err.message : 'Unknown error', 'UNKNOWN')
+  return new AppError(err instanceof Error ? err.message : t('errors.unknownError'), 'UNKNOWN')
 }

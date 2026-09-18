@@ -38,6 +38,7 @@ import {
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogDescription } from '@/shared/ui/Dialog'
 import { relativeTime } from '@/shared/lib/utils'
 import { formatBytes } from '@/shared/lib/format'
+import { useTranslation, type TranslationKey } from '@/i18n'
 
 const TYPE_ICON: Record<DocumentType, typeof FileText> = {
   pdf: FileText,
@@ -47,19 +48,19 @@ const TYPE_ICON: Record<DocumentType, typeof FileText> = {
   text: FileText,
 }
 
-const TYPE_LABEL: Record<DocumentType, string> = {
-  pdf: 'PDF',
-  docx: 'Word',
-  pptx: 'PowerPoint',
-  image: 'Image',
-  text: 'Text',
+const TYPE_LABEL_KEY: Record<DocumentType, TranslationKey> = {
+  pdf: 'docType.pdf',
+  docx: 'docType.word',
+  pptx: 'docType.powerpoint',
+  image: 'docType.image',
+  text: 'docType.text',
 }
 
-const STATUS_BADGE: Record<ProcessingStatus, { label: string; variant: 'default' | 'secondary' | 'destructive' | 'outline' }> = {
-  uploading: { label: 'Uploading', variant: 'outline' },
-  processing: { label: 'Processing', variant: 'secondary' },
-  ready: { label: 'Ready', variant: 'default' },
-  failed: { label: 'Failed', variant: 'destructive' },
+const STATUS_BADGE: Record<ProcessingStatus, { labelKey: TranslationKey; variant: 'default' | 'secondary' | 'destructive' | 'outline' }> = {
+  uploading: { labelKey: 'docStatus.uploading', variant: 'outline' },
+  processing: { labelKey: 'docStatus.processing', variant: 'secondary' },
+  ready: { labelKey: 'docStatus.ready', variant: 'default' },
+  failed: { labelKey: 'docStatus.failed', variant: 'destructive' },
 }
 
 const STATUS_ICON: Record<ProcessingStatus, typeof Loader2 | typeof CheckCircle2 | typeof AlertCircle> = {
@@ -90,6 +91,7 @@ export function DocumentList({
   onRename,
   onDelete,
 }: DocumentListProps): JSX.Element {
+  const { t } = useTranslation()
   const [query, setQuery] = useState('')
   const [type, setType] = useState<TypeFilter>('all')
   const [status, setStatus] = useState<StatusFilter>('all')
@@ -124,18 +126,18 @@ export function DocumentList({
   }, [documents, query, type, status, sort])
 
   if (loading) {
-    return <LoadingState label="Loading content library" />
+    return <LoadingState label={t('documents.loading')} />
   }
 
   if (documents.length === 0) {
     return (
       <EmptyState
         icon={<FileText className="h-10 w-10" />}
-        title="No content yet"
-        description="Upload PDFs, Word files, PowerPoint slides, images, or paste text to start building your study material."
+        title={t('documents.empty')}
+        description={t('documents.emptyHint')}
         action={
           <Button onClick={onUploadClick}>
-            Upload your first document
+            {t('documents.uploadFirst')}
           </Button>
         }
       />
@@ -150,7 +152,7 @@ export function DocumentList({
           <Input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search by filename"
+            placeholder={t('documents.searchPlaceholder')}
             className="pl-9"
           />
         </div>
@@ -160,12 +162,12 @@ export function DocumentList({
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">All types</SelectItem>
-            <SelectItem value="pdf">PDF</SelectItem>
-            <SelectItem value="docx">Word</SelectItem>
-            <SelectItem value="pptx">PowerPoint</SelectItem>
-            <SelectItem value="image">Image</SelectItem>
-            <SelectItem value="text">Text</SelectItem>
+            <SelectItem value="all">{t('documents.filter.allTypes')}</SelectItem>
+            <SelectItem value="pdf">{t('docType.pdf')}</SelectItem>
+            <SelectItem value="docx">{t('docType.word')}</SelectItem>
+            <SelectItem value="pptx">{t('docType.powerpoint')}</SelectItem>
+            <SelectItem value="image">{t('docType.image')}</SelectItem>
+            <SelectItem value="text">{t('docType.text')}</SelectItem>
           </SelectContent>
         </Select>
         <Select value={status} onValueChange={(v) => setStatus(v as StatusFilter)}>
@@ -173,11 +175,11 @@ export function DocumentList({
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">All status</SelectItem>
-            <SelectItem value="uploading">Uploading</SelectItem>
-            <SelectItem value="processing">Processing</SelectItem>
-            <SelectItem value="ready">Ready</SelectItem>
-            <SelectItem value="failed">Failed</SelectItem>
+            <SelectItem value="all">{t('documents.filter.allStatus')}</SelectItem>
+            <SelectItem value="uploading">{t('docStatus.uploading')}</SelectItem>
+            <SelectItem value="processing">{t('docStatus.processing')}</SelectItem>
+            <SelectItem value="ready">{t('docStatus.ready')}</SelectItem>
+            <SelectItem value="failed">{t('docStatus.failed')}</SelectItem>
           </SelectContent>
         </Select>
         <Select value={sort} onValueChange={(v) => setSort(v as SortKey)}>
@@ -185,25 +187,25 @@ export function DocumentList({
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="newest">Newest first</SelectItem>
-            <SelectItem value="oldest">Oldest first</SelectItem>
-            <SelectItem value="name">Name</SelectItem>
-            <SelectItem value="size">Size</SelectItem>
+            <SelectItem value="newest">{t('documents.sort.newest')}</SelectItem>
+            <SelectItem value="oldest">{t('documents.sort.oldest')}</SelectItem>
+            <SelectItem value="name">{t('documents.sort.name')}</SelectItem>
+            <SelectItem value="size">{t('documents.sort.size')}</SelectItem>
           </SelectContent>
         </Select>
         <Button onClick={onUploadClick}>
-          Upload
+          {t('documents.upload')}
         </Button>
       </div>
 
       {filtered.length === 0 ? (
-        <EmptyState title="No matches" description="Adjust filters or clear the search." />
+        <EmptyState title={t('documents.noMatches')} description={t('documents.noMatchesHint')} />
       ) : (
         <Card>
           <CardHeader className="pb-3">
-            <CardTitle className="text-sm">Content library</CardTitle>
+            <CardTitle className="text-sm">{t('documents.title')}</CardTitle>
             <CardDescription>
-              {filtered.length} of {documents.length} item{documents.length === 1 ? '' : 's'}
+              {t('documents.count', { shown: filtered.length, total: documents.length, count: documents.length })}
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-1">
@@ -224,7 +226,7 @@ export function DocumentList({
                     {doc.name}
                   </Link>
                   <Badge variant="outline" className="hidden sm:inline-flex">
-                    {TYPE_LABEL[doc.type]}
+                    {t(TYPE_LABEL_KEY[doc.type])}
                   </Badge>
                   <span className="hidden text-xs tabular-nums text-muted-foreground md:inline">
                     {formatBytes(doc.sizeBytes)}
@@ -233,20 +235,20 @@ export function DocumentList({
                     <StatusIcon
                       className={`h-3 w-3 ${doc.status === 'processing' || doc.status === 'uploading' ? 'animate-spin' : ''}`}
                     />
-                    {statusBadge.label}
+                    {t(statusBadge.labelKey)}
                   </Badge>
                   <span className="hidden text-xs text-muted-foreground lg:inline">
                     {relativeTime(doc.uploadedAt)}
                   </span>
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
-                      <Button variant="ghost" size="icon" aria-label="Document actions">
+                      <Button variant="ghost" size="icon" aria-label={t('documents.actions')}>
                         <MoreHorizontal className="h-4 w-4" />
                       </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
                       <DropdownMenuItem asChild>
-                        <Link to={`/projects/${projectId}/documents/${doc.id}`}>Open</Link>
+                        <Link to={`/projects/${projectId}/documents/${doc.id}`}>{t('documents.open')}</Link>
                       </DropdownMenuItem>
                       <DropdownMenuItem
                         onSelect={() => {
@@ -255,7 +257,7 @@ export function DocumentList({
                         }}
                       >
                         <Pencil className="h-4 w-4" />
-                        Rename
+                        {t('documents.rename')}
                       </DropdownMenuItem>
                       <DropdownMenuSeparator />
                       <DropdownMenuItem
@@ -263,7 +265,7 @@ export function DocumentList({
                         className="text-destructive focus:text-destructive"
                       >
                         <Trash2 className="h-4 w-4" />
-                        Delete
+                        {t('documents.delete')}
                       </DropdownMenuItem>
                     </DropdownMenuContent>
                   </DropdownMenu>
@@ -282,13 +284,13 @@ export function DocumentList({
       >
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Rename document</DialogTitle>
-            <DialogDescription>Pick a new filename for this document.</DialogDescription>
+            <DialogTitle>{t('documents.renameTitle')}</DialogTitle>
+            <DialogDescription>{t('documents.renameDescription')}</DialogDescription>
           </DialogHeader>
           <Input value={renameValue} onChange={(e) => setRenameValue(e.target.value)} autoFocus />
           <DialogFooter>
             <Button variant="outline" onClick={() => setRenaming(null)}>
-              Cancel
+              {t('common.cancel')}
             </Button>
             <Button
               onClick={async () => {
@@ -297,7 +299,7 @@ export function DocumentList({
                 setRenaming(null)
               }}
             >
-              Save
+              {t('common.save')}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -311,15 +313,14 @@ export function DocumentList({
       >
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Delete document?</DialogTitle>
+            <DialogTitle>{t('documents.deleteTitle')}</DialogTitle>
             <DialogDescription>
-              <span className="font-medium">{deleting?.name}</span> and its extracted chunks will
-              be permanently removed from this device.
+              {t('documents.deleteBody', { name: deleting?.name ?? '' })}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
             <Button variant="outline" onClick={() => setDeleting(null)}>
-              Cancel
+              {t('common.cancel')}
             </Button>
             <Button
               variant="destructive"
@@ -329,7 +330,7 @@ export function DocumentList({
                 setDeleting(null)
               }}
             >
-              Delete
+              {t('common.delete')}
             </Button>
           </DialogFooter>
         </DialogContent>

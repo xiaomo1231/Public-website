@@ -9,8 +9,10 @@ import type { Mistake, MistakeAnalysis, MistakeType } from '@/entities/mistake/t
 import { MISTAKE_TYPES } from '@/entities/mistake/types'
 import { collectSourceSnippets } from './sourceContext'
 import { AppError } from '@/infrastructure/errors/AppError'
+import { t } from '@/i18n'
 
-const FALLBACK_CAUSE = 'A possible cause is worth exploring together — the analysis could not be completed.'
+/** Resolved lazily so it follows the current UI language. */
+const fallbackCause = (): string => t('mistakeAnalysis.fallbackCause')
 
 /** Language used when the project has no detected language. */
 const DEFAULT_LANGUAGE: AnalysisLanguage = 'en'
@@ -48,13 +50,13 @@ export class MistakeAnalysisService {
   /** Analyse a stored mistake and persist the result. */
   async analyze(mistakeId: string, opts: AnalysisOptions = {}): Promise<Mistake> {
     const mistake = await this.mistakes.get(mistakeId)
-    if (!mistake) throw new AppError('Mistake not found', 'NOT_FOUND')
+    if (!mistake) throw new AppError(t('errors.mistakeNotFound'), 'NOT_FOUND')
     await this.mistakes.markAnalysisRunning(mistakeId)
     try {
       const analysis = await this.runAnalysis(mistake, opts)
       return this.mistakes.saveAnalysis(mistakeId, analysis)
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Analysis failed'
+      const message = err instanceof Error ? err.message : t('errors.analysisFailed')
       await this.mistakes.markAnalysisFailed(mistakeId, message)
       throw err
     }
@@ -131,16 +133,18 @@ export function normalizeAnalysis(raw: Partial<MistakeAnalyzerOutput> | null | u
   const safeType: MistakeType = MISTAKE_TYPES.includes(type) ? type : 'unknown'
   const cause = typeof raw?.possibleCause === 'string' && raw.possibleCause.trim()
     ? raw.possibleCause.trim()
-    : FALLBACK_CAUSE
+    : fallbackCause()
   const normalizedCause = /careless|lazy|sloppy|stupid/i.test(cause)
-    ? `A possible cause is something to explore together. (${cause.replace(/careless|lazy|sloppy|stupid/gi, 'unclear')})`
+    ? t('mistakeAnalysis.neutralCause', {
+        cause: cause.replace(/careless|lazy|sloppy|stupid/gi, 'unclear'),
+      })
     : cause
 
   return {
-    whereWrong: str(raw?.whereWrong, 'The first divergence could not be pinpointed from the answer alone.'),
-    firstError: str(raw?.firstError, 'The key error could not be isolated automatically.'),
-    whyWrong: str(raw?.whyWrong, 'This step does not hold, but the reason needs a closer look.'),
-    correctApproach: str(raw?.correctApproach, 'Review the worked solution for the correct path.'),
+    whereWrong: str(raw?.whereWrong, t('mistakeAnalysis.fallbackWhereWrong')),
+    firstError: str(raw?.firstError, t('mistakeAnalysis.fallbackFirstError')),
+    whyWrong: str(raw?.whyWrong, t('mistakeAnalysis.fallbackWhyWrong')),
+    correctApproach: str(raw?.correctApproach, t('mistakeAnalysis.fallbackCorrectApproach')),
     possibleCause: normalizedCause,
     mistakeType: safeType,
     reviewKnowledgePoints: Array.isArray(raw?.reviewKnowledgePoints)
@@ -158,7 +162,7 @@ export function normalizeAnalysis(raw: Partial<MistakeAnalyzerOutput> | null | u
           },
         }
       : {}),
-    continuePrompt: str(raw?.continuePrompt, 'Would you like to try a similar question?'),
+    continuePrompt: str(raw?.continuePrompt, t('mistakeAnalysis.fallbackContinuePrompt')),
     analyzedAt: Date.now(),
     promptVersion: prompts.mistakeAnalyzer.VERSION,
   }

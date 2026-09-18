@@ -17,10 +17,12 @@ import { DeleteProjectDialog } from './DeleteProjectDialog'
 import { toast } from '@/features/toast/toastStore'
 import { isAppError } from '@/infrastructure/errors/AppError'
 import { formatBytes } from '@/shared/lib/format'
+import { useTranslation } from '@/i18n'
 
 type ConfirmAction = 'delete-all' | 'clear-key' | null
 
 export function DataManagementPanel(): JSX.Element {
+  const { t } = useTranslation()
   const navigate = useNavigate()
   const [inventory, setInventory] = useState<DataInventory | null>(null)
   const [loading, setLoading] = useState(true)
@@ -57,9 +59,9 @@ export function DataManagementPanel(): JSX.Element {
       a.click()
       a.remove()
       URL.revokeObjectURL(url)
-      toast({ variant: 'success', title: 'Export ready', description: 'Saved to your downloads.' })
+      toast({ variant: 'success', title: t('data.exportReady'), description: t('data.exportReadyBody') })
     } catch (err) {
-      toast({ variant: 'error', title: 'Export failed', description: (err as Error).message })
+      toast({ variant: 'error', title: t('data.exportFailed'), description: (err as Error).message })
     } finally {
       setExporting(false)
     }
@@ -69,11 +71,11 @@ export function DataManagementPanel(): JSX.Element {
     setBusy(true)
     try {
       await new DataManagementService().deleteAll()
-      toast({ variant: 'success', title: 'All local data deleted' })
+      toast({ variant: 'success', title: t('data.allDeleted') })
       setConfirm(null)
       await refreshInventory()
     } catch (err) {
-      toast({ variant: 'error', title: 'Could not delete', description: isAppError(err) ? err.message : (err as Error).message })
+      toast({ variant: 'error', title: t('data.deleteFailed'), description: isAppError(err) ? err.message : (err as Error).message })
     } finally {
       setBusy(false)
     }
@@ -83,11 +85,11 @@ export function DataManagementPanel(): JSX.Element {
     setBusy(true)
     try {
       await new DataManagementService().clearAISettings()
-      toast({ variant: 'success', title: 'AI settings cleared' })
+      toast({ variant: 'success', title: t('data.settingsCleared') })
       setConfirm(null)
       await refreshInventory()
     } catch (err) {
-      toast({ variant: 'error', title: 'Could not clear', description: isAppError(err) ? err.message : (err as Error).message })
+      toast({ variant: 'error', title: t('data.clearFailed'), description: isAppError(err) ? err.message : (err as Error).message })
     } finally {
       setBusy(false)
     }
@@ -98,65 +100,66 @@ export function DataManagementPanel(): JSX.Element {
       <CardHeader>
         <CardTitle className="flex items-center gap-2 text-base">
           <Database className="h-4 w-4" />
-          Data
+          {t('data.title')}
         </CardTitle>
         <CardDescription>
-          What we store locally and what leaves your device. AI provider calls go directly to your configured endpoint — nothing is relayed through a project server.
+          {t('data.description')}
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
         {loading ? (
-          <LoadingState label="Loading inventory" inline />
+          <LoadingState label={t('data.loading')} inline />
         ) : inventory ? (
           <div className="grid gap-2 text-sm sm:grid-cols-3">
-            <InventoryLine label="Projects" value={inventory.projects} />
-            <InventoryLine label="Documents" value={inventory.documents} />
-            <InventoryLine label="Chunks" value={inventory.chunks} />
-            <InventoryLine label="Quizzes" value={inventory.quizzes} />
-            <InventoryLine label="Tutor sessions" value={inventory.tutorSessions} />
-            <InventoryLine label="Mistakes" value={inventory.mistakes} />
-            <InventoryLine label="Translations" value={inventory.translations} />
-            <InventoryLine label="Course analyses" value={inventory.courseAnalyses} />
-            <InventoryLine label="Document blobs" value={formatBytes(inventory.estimatedTotalBytes)} />
-            <InventoryLine label="AI key configured" value={inventory.hasApiKey ? 'yes' : 'no'} badge={inventory.hasApiKey ? 'default' : 'secondary'} />
+            <InventoryLine label={t('data.projects')} value={inventory.projects} />
+            <InventoryLine label={t('data.documents')} value={inventory.documents} />
+            <InventoryLine label={t('data.chunks')} value={inventory.chunks} />
+            <InventoryLine label={t('data.quizzes')} value={inventory.quizzes} />
+            <InventoryLine label={t('data.tutorSessions')} value={inventory.tutorSessions} />
+            <InventoryLine label={t('data.mistakes')} value={inventory.mistakes} />
+            <InventoryLine label={t('data.translations')} value={inventory.translations} />
+            <InventoryLine label={t('data.courseAnalyses')} value={inventory.courseAnalyses} />
+            <InventoryLine label={t('data.documentBlobs')} value={formatBytes(inventory.estimatedTotalBytes)} />
+            <InventoryLine label={t('data.aiKeyConfigured')} value={inventory.hasApiKey ? t('data.yes') : t('data.no')} badge={inventory.hasApiKey ? 'default' : 'secondary'} />
           </div>
         ) : null}
 
         <div className="flex flex-wrap gap-2 border-t pt-4">
           <Button onClick={handleExport} disabled={exporting}>
             {exporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
-            {exporting ? 'Exporting…' : 'Export data'}
+            {exporting ? t('data.exporting') : t('data.export')}
           </Button>
           <Button variant="outline" onClick={() => setDeleteProjectOpen(true)}>
             <Trash2 className="h-4 w-4" />
-            Delete a project
+            {t('data.deleteProject')}
           </Button>
           <Button variant="outline" onClick={() => setConfirm('clear-key')}>
-            Clear AI settings
+            {t('data.clearAiSettings')}
           </Button>
           <Button variant="destructive" onClick={() => setConfirm('delete-all')}>
             <AlertTriangle className="h-4 w-4" />
-            Delete all local data
+            {t('data.deleteAll')}
           </Button>
         </div>
 
         <p className="text-xs text-muted-foreground">
-          AI provider requests include only the necessary chunks / selections for the task — never your full document library.
-          See the <LinkInline>Privacy section</LinkInline> of the README for the full contract.
+          {t('data.privacy')}
+          <LinkInline>{t('data.privacyLink')}</LinkInline>
+          {t('data.privacyEnd')}
         </p>
       </CardContent>
 
       <ConfirmDialog
         open={confirm !== null}
         onOpenChange={(open) => setConfirm(open ? confirm : null)}
-        title={confirm === 'delete-all' ? 'Delete all local data?' : 'Clear AI settings?'}
+        title={confirm === 'delete-all' ? t('data.deleteAllTitle') : t('data.clearTitle')}
         description={
           confirm === 'delete-all'
-            ? 'Wipes every project, document, chunk, quiz, mistake, tutor session, and AI setting. Invite unlocks survive. This cannot be undone.'
-            : 'The API key, base URL, and model name are cleared. Your projects and learning data are kept. Tutor and Quiz features will be unavailable until you reconfigure.'
+            ? t('data.deleteAllBody')
+            : t('data.clearBody')
         }
-        requireText={confirm === 'delete-all' ? 'DELETE ALL' : 'CLEAR KEY'}
-        confirmLabel={confirm === 'delete-all' ? 'Delete everything' : 'Clear settings'}
+        requireText={confirm === 'delete-all' ? t('data.deleteAllConfirm') : t('data.clearConfirm')}
+        confirmLabel={confirm === 'delete-all' ? t('data.deleteAllAction') : t('data.clearAction')}
         variant={confirm === 'delete-all' ? 'destructive' : 'default'}
         busy={busy}
         onConfirm={confirm === 'delete-all' ? handleDeleteAll : handleClearKey}

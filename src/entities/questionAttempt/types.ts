@@ -1,3 +1,5 @@
+import type { TranslationKey } from '@/i18n/types'
+
 export type EvaluationMethod =
   | 'exact'
   | 'case_insensitive'
@@ -7,6 +9,17 @@ export type EvaluationMethod =
   | 'option_id'
   | 'ai'
   | 'unverified'
+
+export const EVAL_METHOD_LABEL_KEYS: Record<EvaluationMethod, TranslationKey> = {
+  exact: 'evalMethod.exact',
+  case_insensitive: 'evalMethod.case_insensitive',
+  numeric: 'evalMethod.numeric',
+  numeric_tolerance: 'evalMethod.numeric_tolerance',
+  math_equivalent: 'evalMethod.math_equivalent',
+  option_id: 'evalMethod.option_id',
+  ai: 'evalMethod.ai',
+  unverified: 'evalMethod.unverified',
+}
 
 export interface QuestionEvaluation {
   /** null when the answer could not be verified automatically. */

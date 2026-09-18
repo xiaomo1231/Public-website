@@ -1,7 +1,9 @@
-import { Monitor, Moon, Sun, LogOut } from 'lucide-react'
+import { Monitor, Moon, Sun, LogOut, Languages } from 'lucide-react'
 import type { UserTheme } from '@/entities/user/types'
 import { useAuth } from '@/features/auth/useAuth'
 import { useThemeStore } from '@/features/theme/themeStore'
+import { useUILanguage } from '@/features/settings/useUILanguage'
+import { LANGUAGE_LABELS, UI_LANGUAGES, useTranslation, type TranslationKey } from '@/i18n'
 import { Button } from '@/shared/ui/Button'
 import {
   DropdownMenu,
@@ -13,10 +15,10 @@ import {
 } from '@/shared/ui/DropdownMenu'
 import { cn } from '@/shared/lib/utils'
 
-const THEME_OPTIONS: { value: UserTheme; label: string; icon: typeof Sun }[] = [
-  { value: 'light', label: 'Light', icon: Sun },
-  { value: 'dark', label: 'Dark', icon: Moon },
-  { value: 'system', label: 'System', icon: Monitor },
+const THEME_OPTIONS: { value: UserTheme; labelKey: TranslationKey; icon: typeof Sun }[] = [
+  { value: 'light', labelKey: 'header.theme.light', icon: Sun },
+  { value: 'dark', labelKey: 'header.theme.dark', icon: Moon },
+  { value: 'system', labelKey: 'header.theme.system', icon: Monitor },
 ]
 
 export interface HeaderProps {
@@ -25,6 +27,8 @@ export interface HeaderProps {
 
 export function Header({ onOpenMobileNav }: HeaderProps): JSX.Element {
   const { profile, lock } = useAuth()
+  const { t } = useTranslation()
+  const { language, setLanguage } = useUILanguage()
   const preference = useThemeStore((s) => s.preference)
   const setPreference = useThemeStore((s) => s.setPreference)
 
@@ -38,25 +42,25 @@ export function Header({ onOpenMobileNav }: HeaderProps): JSX.Element {
           variant="ghost"
           size="icon"
           className="lg:hidden"
-          aria-label="Open navigation"
+          aria-label={t('header.openNavigation')}
           onClick={onOpenMobileNav}
         >
           <span className="block h-4 w-4 rounded-sm border" aria-hidden />
         </Button>
         <div className="text-sm text-muted-foreground">
-          {profile ? `Welcome, ${profile.name}` : 'Welcome'}
+          {profile ? t('header.welcomeNamed', { name: profile.name }) : t('header.welcome')}
         </div>
       </div>
 
       <div className="flex items-center gap-2">
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="icon" aria-label="Change theme">
+            <Button variant="ghost" size="icon" aria-label={t('header.changeTheme')}>
               <ThemeIcon className="h-4 w-4" />
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
-            <DropdownMenuLabel>Theme</DropdownMenuLabel>
+            <DropdownMenuLabel>{t('header.theme')}</DropdownMenuLabel>
             <DropdownMenuSeparator />
             {THEME_OPTIONS.map((opt) => {
               const Icon = opt.icon
@@ -67,10 +71,31 @@ export function Header({ onOpenMobileNav }: HeaderProps): JSX.Element {
                   className={cn(preference === opt.value && 'bg-accent')}
                 >
                   <Icon className="h-4 w-4" />
-                  {opt.label}
+                  {t(opt.labelKey)}
                 </DropdownMenuItem>
               )
             })}
+          </DropdownMenuContent>
+        </DropdownMenu>
+
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="ghost" size="icon" aria-label={t('header.changeLanguage')}>
+              <Languages className="h-4 w-4" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuLabel>{t('header.language')}</DropdownMenuLabel>
+            <DropdownMenuSeparator />
+            {UI_LANGUAGES.map((lang) => (
+              <DropdownMenuItem
+                key={lang}
+                onSelect={() => setLanguage(lang)}
+                className={cn(language === lang && 'bg-accent')}
+              >
+                {LANGUAGE_LABELS[lang]}
+              </DropdownMenuItem>
+            ))}
           </DropdownMenuContent>
         </DropdownMenu>
 
@@ -80,15 +105,15 @@ export function Header({ onOpenMobileNav }: HeaderProps): JSX.Element {
               <span className="grid h-7 w-7 place-items-center rounded-full bg-muted text-xs font-semibold uppercase">
                 {profile?.name?.[0] ?? 'S'}
               </span>
-              <span className="hidden sm:inline">{profile?.name ?? 'Account'}</span>
+              <span className="hidden sm:inline">{profile?.name ?? t('header.account')}</span>
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
-            <DropdownMenuLabel>{profile?.name ?? 'Student'}</DropdownMenuLabel>
+            <DropdownMenuLabel>{profile?.name ?? t('header.student')}</DropdownMenuLabel>
             <DropdownMenuSeparator />
             <DropdownMenuItem onSelect={() => void lock()}>
               <LogOut className="h-4 w-4" />
-              Lock app
+              {t('header.lockApp')}
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>

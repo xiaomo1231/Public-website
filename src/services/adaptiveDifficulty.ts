@@ -1,5 +1,6 @@
 import type { DifficultyLevel } from '@/infrastructure/ai/prompts/types'
 import type { MasteryObservation } from '@/entities/knowledgeMastery/types'
+import { t } from '@/i18n'
 
 export const DIFFICULTY_ORDER: DifficultyLevel[] = [
   'beginner',
@@ -91,7 +92,7 @@ export function decideNextDifficulty(input: AdaptiveInput): AdaptiveDecision {
     return {
       difficulty: input.currentDifficulty,
       changed: false,
-      reason: `Need at least ${MIN_SAMPLES} graded answers before adjusting.`,
+      reason: t('difficultyReason.needMore', { count: MIN_SAMPLES }),
       metrics: metricsBase,
     }
   }
@@ -129,7 +130,7 @@ export function decideNextDifficulty(input: AdaptiveInput): AdaptiveDecision {
     return {
       difficulty,
       changed: difficulty !== input.currentDifficulty,
-      reason: `${input.consecutiveWrong} consecutive wrong answers with ${Math.round(recentAccuracy * 100)}% recent accuracy.`,
+      reason: t('difficultyReason.streakWrong', { streak: input.consecutiveWrong, accuracy: Math.round(recentAccuracy * 100) }),
       metrics,
     }
   }
@@ -138,7 +139,7 @@ export function decideNextDifficulty(input: AdaptiveInput): AdaptiveDecision {
     return {
       difficulty,
       changed: difficulty !== input.currentDifficulty,
-      reason: `${input.consecutiveCorrect} consecutive correct answers with ${Math.round(recentAccuracy * 100)}% recent accuracy.`,
+      reason: t('difficultyReason.streakCorrect', { streak: input.consecutiveCorrect, accuracy: Math.round(recentAccuracy * 100) }),
       metrics,
     }
   }
@@ -148,7 +149,7 @@ export function decideNextDifficulty(input: AdaptiveInput): AdaptiveDecision {
     return {
       difficulty,
       changed: difficulty !== input.currentDifficulty,
-      reason: `Composite score ${composite.toFixed(2)} is above the raise threshold.`,
+      reason: t('difficultyReason.aboveThreshold', { score: composite.toFixed(2) }),
       metrics,
     }
   }
@@ -157,14 +158,14 @@ export function decideNextDifficulty(input: AdaptiveInput): AdaptiveDecision {
     return {
       difficulty,
       changed: difficulty !== input.currentDifficulty,
-      reason: `Composite score ${composite.toFixed(2)} is below the lower threshold.`,
+      reason: t('difficultyReason.belowThreshold', { score: composite.toFixed(2) }),
       metrics,
     }
   }
   return {
     difficulty: input.currentDifficulty,
     changed: false,
-    reason: `Composite score ${composite.toFixed(2)} is within the stable band.`,
+    reason: t('difficultyReason.stable', { score: composite.toFixed(2) }),
     metrics,
   }
 }

@@ -28,6 +28,7 @@ pnpm-debug.log*
 .env.*.local
 .env.development
 .env.production
+!.env.example
 
 # 构建产物
 dist/
@@ -41,10 +42,34 @@ node_modules/
 bower_components/
 jspm_packages/
 
-# 上传 / 临时
+# 上传 / 临时 / 本地数据（用户运行时产生，绝不能提交）
 uploads/
+uploaded/
 tmp/
 temp/
+data/
+storage/
+database/
+db/
+release/
+
+# 课程资料与用户文件（绝不能提交到仓库）
+*.pdf
+*.doc
+*.docx
+*.ppt
+*.pptx
+*.xls
+*.xlsx
+
+# 证书与私钥
+*.key
+*.pem
+*.p12
+*.pfx
+*.crt
+
+# 压缩包
 *.zip
 *.tar.gz
 

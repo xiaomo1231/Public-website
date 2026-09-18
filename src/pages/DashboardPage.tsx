@@ -19,10 +19,12 @@ import { LoadingState } from '@/shared/ui/LoadingState'
 import { PageContainer, PageContent, PageHeader } from '@/shared/ui/Page'
 import { Progress } from '@/shared/ui/Progress'
 import { WeaknessPanel } from '@/widgets/mistakes/WeaknessPanel'
-import { SUBJECT_LABELS } from '@/entities/project/types'
+import { SUBJECT_LABEL_KEYS } from '@/entities/project/types'
 import { relativeTime } from '@/shared/lib/utils'
+import { useTranslation } from '@/i18n'
 
 export function DashboardPage(): JSX.Element {
+  const { t } = useTranslation()
   const { projects, loading, loaded } = useProjects()
   const { profile } = useAuth()
 
@@ -40,13 +42,13 @@ export function DashboardPage(): JSX.Element {
   return (
     <PageContainer>
       <PageHeader
-        title={`Welcome, ${profile?.name ?? 'Student'}`}
-        description="Your local-first learning workspace."
+        title={t('dashboard.greeting', { name: profile?.name ?? t('dashboard.student') })}
+        description={t('dashboard.subtitle')}
         actions={
           <Button asChild>
             <Link to="/projects">
               <FolderKanban className="h-4 w-4" />
-              My Projects
+              {t('dashboard.myProjects')}
               <ArrowRight className="h-4 w-4" />
             </Link>
           </Button>
@@ -54,52 +56,56 @@ export function DashboardPage(): JSX.Element {
       />
       <PageContent>
         {!loaded && loading ? (
-          <LoadingState label="Loading dashboard" />
+          <LoadingState label={t('dashboard.loading')} />
         ) : (
           <div className="grid gap-4">
             <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
               <StatCard
                 icon={<FolderKanban className="h-4 w-4" />}
-                label="Projects"
+                label={t('dashboard.projects')}
                 value={String(stats.total)}
-                hint={stats.total === 0 ? 'Create your first project' : `${stats.subjects} subjects`}
+                hint={
+                  stats.total === 0
+                    ? t('dashboard.createFirstProject')
+                    : t('dashboard.projectsCount', { count: stats.subjects })
+                }
               />
               <StatCard
                 icon={<BookOpen className="h-4 w-4" />}
-                label="Study streak"
+                label={t('dashboard.studyStreak')}
                 value="—"
-                hint="Coming in a later phase"
+                hint={t('dashboard.comingLater')}
               />
               <StatCard
                 icon={<Target className="h-4 w-4" />}
-                label="Mastery"
+                label={t('dashboard.mastery')}
                 value="—"
-                hint="Quiz & Tutor coming next"
+                hint={t('dashboard.quizTutorComing')}
               />
               <StatCard
                 icon={<TrendingUp className="h-4 w-4" />}
-                label="Last activity"
+                label={t('dashboard.lastActivity')}
                 value={stats.lastUpdated ? relativeTime(stats.lastUpdated) : '—'}
-                hint={stats.lastUpdated ? 'Auto-saved locally' : 'No activity yet'}
+                hint={stats.lastUpdated ? t('dashboard.autoSaved') : t('dashboard.noActivity')}
               />
             </section>
 
             <section className="grid gap-4 lg:grid-cols-3">
               <Card className="lg:col-span-2">
                 <CardHeader>
-                  <CardTitle>Recent projects</CardTitle>
-                  <CardDescription>Quickly resume what you were studying.</CardDescription>
+                  <CardTitle>{t('dashboard.recentProjects')}</CardTitle>
+                  <CardDescription>{t('dashboard.recentProjectsHint')}</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-3">
                   {recent.length === 0 ? (
                     <EmptyState
                       icon={<FolderKanban className="h-8 w-8" />}
-                      title="No projects yet"
-                      description="Create a project to start uploading course materials."
+                      title={t('dashboard.noProjects')}
+                      description={t('dashboard.noProjectsHint')}
                       action={
                         <Button asChild>
                           <Link to="/projects">
-                            Create your first project
+                            {t('dashboard.createFirstProject')}
                             <ArrowRight className="h-4 w-4" />
                           </Link>
                         </Button>
@@ -115,7 +121,8 @@ export function DashboardPage(): JSX.Element {
                         <div className="min-w-0">
                           <div className="truncate text-sm font-medium">{p.name}</div>
                           <div className="text-xs text-muted-foreground">
-                            {SUBJECT_LABELS[p.subject]} · updated {relativeTime(p.updatedAt)}
+                            {t(SUBJECT_LABEL_KEYS[p.subject])} ·{' '}
+                            {t('dashboard.updatedAt', { date: relativeTime(p.updatedAt) })}
                           </div>
                         </div>
                         <Badge variant="outline">{p.subject}</Badge>
@@ -127,19 +134,35 @@ export function DashboardPage(): JSX.Element {
 
               <Card>
                 <CardHeader>
-                  <CardTitle>What&apos;s next</CardTitle>
-                  <CardDescription>Roadmap for upcoming phases.</CardDescription>
+                  <CardTitle>{t('dashboard.whatsNext')}</CardTitle>
+                  <CardDescription>{t('dashboard.roadmap')}</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-3 text-sm">
                   <RoadmapItem
                     icon={<Sparkles className="h-4 w-4" />}
-                    title="AI Provider"
+                    title={t('dashboard.aiProvider')}
                     state="configured"
                   />
-                  <RoadmapItem icon={<FolderKanban className="h-4 w-4" />} title="Content Library" state="ready" />
-                  <RoadmapItem icon={<BookOpen className="h-4 w-4" />} title="AI Tutor" state="ready" />
-                  <RoadmapItem icon={<Target className="h-4 w-4" />} title="Quiz & Mastery" state="ready" />
-                  <RoadmapItem icon={<BookX className="h-4 w-4" />} title="Mistake Book" state="configured" />
+                  <RoadmapItem
+                    icon={<FolderKanban className="h-4 w-4" />}
+                    title={t('dashboard.contentLibrary')}
+                    state="ready"
+                  />
+                  <RoadmapItem
+                    icon={<BookOpen className="h-4 w-4" />}
+                    title={t('dashboard.aiTutor')}
+                    state="ready"
+                  />
+                  <RoadmapItem
+                    icon={<Target className="h-4 w-4" />}
+                    title={t('dashboard.quizMastery')}
+                    state="ready"
+                  />
+                  <RoadmapItem
+                    icon={<BookX className="h-4 w-4" />}
+                    title={t('dashboard.mistakeBook')}
+                    state="configured"
+                  />
                 </CardContent>
               </Card>
             </section>
@@ -152,17 +175,12 @@ export function DashboardPage(): JSX.Element {
 
             <Card>
               <CardHeader>
-                <CardTitle>Local-first</CardTitle>
-                <CardDescription>
-                  Your projects, documents, mistakes, and AI settings live on this device. Configure an
-                  AI provider in Settings to unlock Tutor, Quiz, and Mistake analysis.
-                </CardDescription>
+                <CardTitle>{t('dashboard.localFirstTitle')}</CardTitle>
+                <CardDescription>{t('dashboard.localFirstBody')}</CardDescription>
               </CardHeader>
               <CardContent>
                 <Progress value={stats.total > 0 ? 60 : 5} />
-                <p className="mt-2 text-xs text-muted-foreground">
-                  Phases 1–5 shipped. Next: knowledge retrieval, then dashboard polish.
-                </p>
+                <p className="mt-2 text-xs text-muted-foreground">{t('dashboard.phaseStatus')}</p>
               </CardContent>
             </Card>
           </div>
@@ -208,19 +226,20 @@ function RoadmapItem({
   title: string
   state: 'configured' | 'ready' | 'soon' | 'later'
 }) {
+  const { t } = useTranslation()
   const map = {
-    configured: { label: 'Phase 1 ✓', variant: 'default' as const },
-    ready: { label: 'Ready', variant: 'secondary' as const },
-    soon: { label: 'Phase 2', variant: 'outline' as const },
-    later: { label: 'Later', variant: 'outline' as const },
-  }
+    configured: { labelKey: 'dashboard.phase1Done', variant: 'default' },
+    ready: { labelKey: 'dashboard.ready', variant: 'secondary' },
+    soon: { labelKey: 'dashboard.phase2', variant: 'outline' },
+    later: { labelKey: 'dashboard.later', variant: 'outline' },
+  } as const
   return (
     <div className="flex items-center justify-between">
       <div className="flex items-center gap-2 text-foreground">
         <span className="text-muted-foreground">{icon}</span>
         {title}
       </div>
-      <Badge variant={map[state].variant}>{map[state].label}</Badge>
+      <Badge variant={map[state].variant}>{t(map[state].labelKey)}</Badge>
     </div>
   )
 }

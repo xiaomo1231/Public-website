@@ -15,11 +15,12 @@ import { Badge } from '@/shared/ui/Badge'
 import { DataManagementService } from '@/services/dataManagementService'
 import { ProjectService } from '@/services/projectService'
 import type { Project } from '@/entities/project/types'
-import { SUBJECT_LABELS } from '@/entities/project/types'
+import { SUBJECT_LABEL_KEYS } from '@/entities/project/types'
 import { toast } from '@/features/toast/toastStore'
 import { isAppError } from '@/infrastructure/errors/AppError'
 import { canConfirmProjectDeletion } from '@/shared/lib/deletion'
 import { cn } from '@/shared/lib/utils'
+import { useTranslation } from '@/i18n'
 
 export interface DeleteProjectDialogProps {
   open: boolean
@@ -39,6 +40,7 @@ export function DeleteProjectDialog({
   onDeleted,
   initialProjectId,
 }: DeleteProjectDialogProps): JSX.Element {
+  const { t } = useTranslation()
   const [projects, setProjects] = useState<Project[]>([])
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
@@ -62,7 +64,7 @@ export function DeleteProjectDialog({
       })
       .catch((err) => {
         if (cancelled) return
-        setLoadError(err instanceof Error ? err.message : 'Could not load projects')
+        setLoadError(err instanceof Error ? err.message : t('deleteProject.loadFailed'))
       })
       .finally(() => {
         if (!cancelled) setLoading(false)
@@ -70,7 +72,7 @@ export function DeleteProjectDialog({
     return () => {
       cancelled = true
     }
-  }, [open])
+  }, [open, t])
 
   // Reset transient state whenever the dialog closes.
   useEffect(() => {
@@ -88,12 +90,12 @@ export function DeleteProjectDialog({
     setBusy(true)
     try {
       await new DataManagementService().deleteProject(selected.id)
-      toast({ variant: 'success', title: 'Project deleted', description: selected.name })
+      toast({ variant: 'success', title: t('deleteProject.deleted'), description: selected.name })
       onOpenChange(false)
       await onDeleted()
     } catch (err) {
       const msg = isAppError(err) ? err.message : (err as Error).message
-      toast({ variant: 'error', title: 'Could not delete project', description: msg })
+      toast({ variant: 'error', title: t('deleteProject.deleteFailed'), description: msg })
     } finally {
       setBusy(false)
     }
@@ -110,26 +112,25 @@ export function DeleteProjectDialog({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <AlertTriangle className="h-4 w-4 text-destructive" />
-            Delete a project
+            {t('deleteProject.title')}
           </DialogTitle>
           <DialogDescription>
-            Permanently removes the project and everything inside it — documents, chunks, quizzes,
-            mistakes, tutor sessions, and course analysis. This cannot be undone.
+            {t('deleteProject.description')}
           </DialogDescription>
         </DialogHeader>
 
         {loading ? (
           <div className="flex items-center gap-2 py-6 text-sm text-muted-foreground">
-            <Loader2 className="h-4 w-4 animate-spin" /> Loading projects…
+            <Loader2 className="h-4 w-4 animate-spin" /> {t('deleteProject.loading')}
           </div>
         ) : loadError ? (
           <p className="py-4 text-sm text-destructive">{loadError}</p>
         ) : projects.length === 0 ? (
-          <p className="py-4 text-sm text-muted-foreground">There are no projects to delete.</p>
+          <p className="py-4 text-sm text-muted-foreground">{t('deleteProject.empty')}</p>
         ) : (
           <div className="space-y-4">
             <div className="space-y-2">
-              <Label id="delete-project-label">Select the project to delete</Label>
+              <Label id="delete-project-label">{t('deleteProject.select')}</Label>
               <div
                 role="radiogroup"
                 aria-labelledby="delete-project-label"
@@ -163,7 +164,7 @@ export function DeleteProjectDialog({
                         />
                         <span className="truncate font-medium">{project.name}</span>
                         <Badge variant="outline" className="ml-auto shrink-0">
-                          {SUBJECT_LABELS[project.subject]}
+                          {t(SUBJECT_LABEL_KEYS[project.subject])}
                         </Badge>
                       </span>
                       <span className="pl-6 font-mono text-[11px] text-muted-foreground">
@@ -178,16 +179,14 @@ export function DeleteProjectDialog({
             {selected && (
               <div className="space-y-2 rounded-md border border-destructive/40 bg-destructive/5 p-3">
                 <div className="text-sm">
-                  <span className="text-muted-foreground">Project: </span>
-                  <span className="font-medium">{selected.name}</span>
+                  {t('deleteProject.project', { name: selected.name })}
                 </div>
-                <div className="text-sm">
-                  <span className="text-muted-foreground">ID: </span>
-                  <span className="break-all font-mono text-xs">{selected.id}</span>
+                <div className="break-all font-mono text-xs text-muted-foreground">
+                  {t('deleteProject.id', { id: selected.id })}
                 </div>
                 <div className="space-y-2 pt-1">
                   <Label htmlFor="delete-project-confirm">
-                    Type <span className="font-mono text-foreground">{selected.name}</span> to confirm
+                    {t('deleteProject.typeToConfirm', { word: selected.name })}
                   </Label>
                   <Input
                     id="delete-project-confirm"
@@ -207,11 +206,11 @@ export function DeleteProjectDialog({
 
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={busy}>
-            Cancel
+            {t('common.cancel')}
           </Button>
           <Button variant="destructive" onClick={() => void handleDelete()} disabled={!canDelete}>
             {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
-            Delete project
+            {t('deleteProject.action')}
           </Button>
         </DialogFooter>
       </DialogContent>

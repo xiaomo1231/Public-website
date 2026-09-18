@@ -3,6 +3,7 @@ import { getDb } from '@/infrastructure/db/database'
 import { type DocumentChunk, type NewChunkInput } from './types'
 import { logger } from '@/infrastructure/logger/logger'
 import { StorageError } from '@/infrastructure/errors/AppError'
+import { t } from '@/i18n'
 
 export class ChunkRepository {
   private db: AppDatabase
@@ -18,7 +19,7 @@ export class ChunkRepository {
         .equals(documentId)
         .sortBy('order')
     } catch (err) {
-      throw new StorageError('Failed to list chunks', err)
+      throw new StorageError(t('storage.failedToListChunks'), err)
     }
   }
 
@@ -29,7 +30,7 @@ export class ChunkRepository {
         .equals(projectId)
         .sortBy('order')
     } catch (err) {
-      throw new StorageError('Failed to list chunks', err)
+      throw new StorageError(t('storage.failedToListChunks'), err)
     }
   }
 
@@ -46,7 +47,7 @@ export class ChunkRepository {
       logger.debug('Chunks added', { count: rows.length, documentId: rows[0]?.documentId })
       return rows
     } catch (err) {
-      throw new StorageError('Failed to save chunks', err)
+      throw new StorageError(t('storage.failedToSaveChunks'), err)
     }
   }
 

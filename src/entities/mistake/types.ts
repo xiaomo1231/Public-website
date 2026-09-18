@@ -1,5 +1,6 @@
 import type { DifficultyLevel } from '@/infrastructure/ai/prompts/types'
 import type { QuestionOption } from '@/entities/question/types'
+import type { TranslationKey } from '@/i18n/types'
 
 /**
  * Mistake categories. Deliberately excludes a "careless" label — the system
@@ -26,15 +27,15 @@ export const MISTAKE_TYPES: MistakeType[] = [
   'unknown',
 ]
 
-export const MISTAKE_TYPE_LABELS: Record<MistakeType, string> = {
-  conceptual: 'Conceptual',
-  formula: 'Formula',
-  calculation: 'Calculation',
-  sign: 'Sign',
-  unit: 'Unit',
-  misreading: 'Misreading',
-  incomplete_reasoning: 'Incomplete reasoning',
-  unknown: 'Unknown',
+export const MISTAKE_TYPE_LABEL_KEYS: Record<MistakeType, TranslationKey> = {
+  conceptual: 'mistakeCategory.conceptual',
+  formula: 'mistakeCategory.formula',
+  calculation: 'mistakeCategory.calculation',
+  sign: 'mistakeCategory.sign',
+  unit: 'mistakeCategory.unit',
+  misreading: 'mistakeCategory.misreading',
+  incomplete_reasoning: 'mistakeCategory.incomplete',
+  unknown: 'mistakeCategory.unknown',
 }
 
 export type MistakeStatus = 'active' | 'understood' | 'archived'

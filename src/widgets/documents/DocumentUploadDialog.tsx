@@ -1,6 +1,13 @@
-import { useState } from 'react'
-import { FileText, Image as ImageIcon, Upload } from 'lucide-react'
-import { toast } from '@/features/toast/toastStore'
+import { useRef, useState } from 'react'
+import {
+  AlertTriangle,
+  CheckCircle2,
+  FileText,
+  Loader2,
+  Upload,
+  X,
+  XCircle,
+} from 'lucide-react'
 import { Button } from '@/shared/ui/Button'
 import {
   Dialog,
@@ -12,12 +19,20 @@ import {
 } from '@/shared/ui/Dialog'
 import { Input } from '@/shared/ui/Input'
 import { Label } from '@/shared/ui/Label'
+import { Progress } from '@/shared/ui/Progress'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/shared/ui/Tabs'
 import { Textarea } from '@/shared/ui/Textarea'
-import type { DocumentType } from '@/entities/document/types'
-import { useDocumentUpload } from '@/features/documents/useUpload'
+import { useTranslation, type TranslationKey } from '@/i18n'
 import { ACCEPTED_TYPES } from '@/infrastructure/files/validation'
+import { formatBytes } from '@/shared/lib/format'
 import { cn } from '@/shared/lib/utils'
+import { useBatchUpload } from '@/features/documents/useBatchUpload'
+import {
+  MAX_BATCH_FILES,
+  type FileIssue,
+  type UploadQueueItem,
+  type UploadStatus,
+} from '@/features/documents/batchUpload'
 
 export interface DocumentUploadDialogProps {
   projectId: string
@@ -25,203 +40,333 @@ export interface DocumentUploadDialogProps {
   onOpenChange: (open: boolean) => void
 }
 
-const TYPE_LABELS: Record<DocumentType, string> = {
-  pdf: 'PDF',
-  docx: 'Word',
-  pptx: 'PowerPoint',
-  image: 'Image',
-  text: 'Text',
-}
-
 const TEXT_TAB = 'text' as const
 const FILE_TAB = 'file' as const
 
 type Mode = typeof FILE_TAB | typeof TEXT_TAB
+
+const STATUS_KEYS: Record<UploadStatus, TranslationKey> = {
+  queued: 'batch.status.queued',
+  uploading: 'batch.status.uploading',
+  processing: 'batch.status.processing',
+  completed: 'batch.status.completed',
+  failed: 'batch.status.failed',
+  cancelled: 'batch.status.cancelled',
+  skipped: 'batch.status.skipped',
+}
+
+const ISSUE_KEYS: Record<FileIssue, TranslationKey> = {
+  unsupported: 'batch.issue.unsupported',
+  'too-large': 'batch.issue.too-large',
+  duplicate: 'batch.issue.duplicate',
+}
+
+const STAGE_KEYS: Record<string, TranslationKey> = {
+  validating: 'batch.stage.validating',
+  saving: 'batch.stage.saving',
+  extracting: 'batch.stage.extracting',
+  chunking: 'batch.stage.chunking',
+  indexing: 'batch.stage.indexing',
+  done: 'batch.stage.done',
+  failed: 'batch.stage.failed',
+}
+
+const ACCEPT = ACCEPTED_TYPES.flatMap((entry) => entry.mime)
+  .concat(ACCEPTED_TYPES.flatMap((entry) => entry.ext.map((e) => `.${e}`)))
+  .join(',')
+
+function ItemIcon({ item }: { item: UploadQueueItem }): JSX.Element {
+  if (item.status === 'completed') {
+    return <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
+  }
+  if (item.status === 'failed') {
+    return <XCircle className="h-4 w-4 shrink-0 text-destructive" />
+  }
+  if (item.status === 'skipped') {
+    return <AlertTriangle className="h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
+  }
+  if (item.status === 'uploading' || item.status === 'processing') {
+    return <Loader2 className="h-4 w-4 shrink-0 animate-spin text-muted-foreground" />
+  }
+  return <FileText className="h-4 w-4 shrink-0 text-muted-foreground" />
+}
 
 export function DocumentUploadDialog({
   projectId,
   open,
   onOpenChange,
 }: DocumentUploadDialogProps): JSX.Element {
+  const { t } = useTranslation()
   const [mode, setMode] = useState<Mode>(FILE_TAB)
-  const [file, setFile] = useState<File | null>(null)
   const [text, setText] = useState('')
   const [textName, setTextName] = useState('')
   const [dragOver, setDragOver] = useState(false)
-  const { upload, uploading, progress, message } = useDocumentUpload(projectId)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
-  const accept = ACCEPTED_TYPES.flatMap((t) => t.mime).concat(ACCEPTED_TYPES.flatMap((t) => t.ext.map((e) => `.${e}`))).join(',')
+  const batch = useBatchUpload(projectId)
+  const { items, summary, running } = batch
 
-  function reset() {
-    setFile(null)
-    setText('')
-    setTextName('')
-    setMode(FILE_TAB)
-    setDragOver(false)
+  const started = items.some((item) => item.status !== 'queued' && item.status !== 'skipped')
+  const finished = summary.finished && started
+  const settled = summary.completed + summary.failed + summary.cancelled
+  const overall = summary.uploadable > 0 ? Math.round((settled / summary.uploadable) * 100) : 0
+  const invalid = summary.unsupported + summary.tooLarge
+
+  function statusLabel(item: UploadQueueItem): string {
+    if (item.issue) return t(ISSUE_KEYS[item.issue])
+    if ((item.status === 'uploading' || item.status === 'processing') && item.phase) {
+      const stageKey = STAGE_KEYS[item.phase]
+      if (stageKey) return t(stageKey)
+    }
+    return t(STATUS_KEYS[item.status])
   }
 
-  async function handleSubmit() {
-    try {
-      if (mode === FILE_TAB) {
-        if (!file) return
-        const detected = detectType(file)
-        if (!detected) {
-          toast({ variant: 'error', title: 'Unsupported file type' })
-          return
-        }
-        await upload({ type: detected, file })
-      } else {
-        if (!text.trim()) return
-        await upload({ type: 'text', text, name: textName })
-      }
-      reset()
-      onOpenChange(false)
-    } catch {
-      /* toast already shown */
+  async function handlePick(event: React.ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(event.target.files ?? [])
+    // Reset so picking the same file again still fires `change`.
+    event.target.value = ''
+    if (files.length > 0) await batch.addFiles(files)
+  }
+
+  async function handleDrop(event: React.DragEvent<HTMLLabelElement>) {
+    event.preventDefault()
+    setDragOver(false)
+    const files = Array.from(event.dataTransfer.files ?? [])
+    if (files.length > 0) await batch.addFiles(files)
+  }
+
+  async function handleUploadText() {
+    if (!text.trim()) return
+    const body = text
+    const name = textName
+    setText('')
+    setTextName('')
+    await batch.addTextAndStart({ text: body, ...(name.trim() ? { name: name.trim() } : {}) })
+  }
+
+  function handleOpenChange(next: boolean) {
+    if (!next) {
+      // Closing mid-run stops the queue; already-completed documents remain.
+      if (running) batch.cancelRemaining()
+      batch.reset()
+      setText('')
+      setTextName('')
+      setMode(FILE_TAB)
+      setDragOver(false)
     }
+    onOpenChange(next)
   }
 
   return (
-    <Dialog
-      open={open}
-      onOpenChange={(o) => {
-        if (!o) reset()
-        onOpenChange(o)
-      }}
-    >
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="max-w-2xl">
         <DialogHeader>
-          <DialogTitle>Upload content</DialogTitle>
-          <DialogDescription>
-            Add course material to this project. Files are processed locally.
-          </DialogDescription>
+          <DialogTitle>{t('batch.title')}</DialogTitle>
+          <DialogDescription>{t('batch.description')}</DialogDescription>
         </DialogHeader>
 
-        <Tabs value={mode} onValueChange={(v) => setMode(v as Mode)}>
-          <TabsList className="grid w-full grid-cols-2">
-            <TabsTrigger value={FILE_TAB}>
-              <Upload className="h-4 w-4" /> Upload file
-            </TabsTrigger>
-            <TabsTrigger value={TEXT_TAB}>
-              <FileText className="h-4 w-4" /> Paste text
-            </TabsTrigger>
-          </TabsList>
+        {!running && !finished && (
+          <Tabs value={mode} onValueChange={(v) => setMode(v as Mode)}>
+            <TabsList className="grid w-full grid-cols-2">
+              <TabsTrigger value={FILE_TAB}>
+                <Upload className="h-4 w-4" /> {t('upload.tab.file')}
+              </TabsTrigger>
+              <TabsTrigger value={TEXT_TAB}>
+                <FileText className="h-4 w-4" /> {t('upload.tab.text')}
+              </TabsTrigger>
+            </TabsList>
 
-          <TabsContent value={FILE_TAB} className="space-y-3">
-            <Label
-              htmlFor="upload-file"
-              className={cn(
-                'flex cursor-pointer flex-col items-center justify-center gap-2 rounded-md border border-dashed bg-muted/30 px-6 py-10 text-center text-sm transition-colors',
-                dragOver && 'border-primary bg-primary/5',
+            <TabsContent value={FILE_TAB} className="space-y-3">
+              <Label
+                htmlFor="upload-files"
+                className={cn(
+                  'flex cursor-pointer flex-col items-center justify-center gap-2 rounded-md border border-dashed bg-muted/30 px-6 py-8 text-center text-sm transition-colors',
+                  dragOver && 'border-primary bg-primary/5',
+                )}
+                onDragOver={(e) => {
+                  e.preventDefault()
+                  setDragOver(true)
+                }}
+                onDragLeave={() => setDragOver(false)}
+                onDrop={handleDrop}
+              >
+                <Upload className="h-6 w-6 text-muted-foreground" />
+                <span className="font-medium">{t('batch.dropzone')}</span>
+                <span className="text-xs text-muted-foreground">{t('upload.acceptedFormats')}</span>
+                <Input
+                  id="upload-files"
+                  ref={fileInputRef}
+                  type="file"
+                  multiple
+                  accept={ACCEPT}
+                  className="hidden"
+                  onChange={handlePick}
+                />
+              </Label>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={summary.total >= MAX_BATCH_FILES}
+              >
+                <Upload className="h-4 w-4" />
+                {summary.total > 0 ? t('batch.addMore') : t('batch.selectFiles')}
+              </Button>
+              {summary.total === 0 && (
+                <p className="text-xs text-muted-foreground">{t('batch.noFiles')}</p>
               )}
-              onDragOver={(e) => {
-                e.preventDefault()
-                setDragOver(true)
-              }}
-              onDragLeave={() => setDragOver(false)}
-              onDrop={(e) => {
-                e.preventDefault()
-                setDragOver(false)
-                const dropped = e.dataTransfer.files[0]
-                if (dropped) setFile(dropped)
-              }}
-            >
-              <Upload className="h-6 w-6 text-muted-foreground" />
-              <span className="font-medium">
-                {file ? file.name : 'Drop a file or click to browse'}
+            </TabsContent>
+
+            <TabsContent value={TEXT_TAB} className="space-y-3">
+              <div className="space-y-2">
+                <Label htmlFor="text-name">{t('upload.titleOptional')}</Label>
+                <Input
+                  id="text-name"
+                  value={textName}
+                  onChange={(e) => setTextName(e.target.value)}
+                  placeholder={t('upload.titlePlaceholder')}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="text-body">{t('upload.textLabel')}</Label>
+                <Textarea
+                  id="text-body"
+                  rows={8}
+                  value={text}
+                  onChange={(e) => setText(e.target.value)}
+                  placeholder={t('upload.textPlaceholder')}
+                />
+                <p className="text-xs text-muted-foreground">
+                  {t('upload.charLimit', { count: text.length.toLocaleString() })}
+                </p>
+              </div>
+              <Button type="button" variant="outline" onClick={handleUploadText} disabled={!text.trim()}>
+                <Upload className="h-4 w-4" />
+                {t('batch.addText')}
+              </Button>
+            </TabsContent>
+          </Tabs>
+        )}
+
+        {items.length > 0 && (
+          <div className="space-y-2">
+            <div className="flex flex-wrap items-baseline justify-between gap-2">
+              <span className="text-sm font-medium">
+                {t('batch.filesSelected', { count: summary.total })}
               </span>
-              <span className="text-xs text-muted-foreground">
-                PDF · DOCX · PPTX · PNG · JPG · WebP · GIF · BMP
-              </span>
-              <Input
-                id="upload-file"
-                type="file"
-                accept={accept}
-                className="hidden"
-                onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-              />
-            </Label>
-            {file && (
-              <div className="flex items-center gap-2 rounded-md border bg-card px-3 py-2 text-sm">
-                <ImageIcon className="h-4 w-4 text-muted-foreground" />
-                <span className="truncate">{file.name}</span>
-                <span className="ml-auto text-xs text-muted-foreground">
-                  {Math.ceil(file.size / 1024)} KB · {TYPE_LABELS[detectType(file) ?? 'text']}
+              {running && (
+                <span className="text-xs text-muted-foreground">
+                  {t('batch.uploadingProgress', { done: settled, total: summary.uploadable })}
                 </span>
+              )}
+            </div>
+
+            {running && summary.uploadable > 0 && (
+              <div className="space-y-1">
+                <div className="flex items-center justify-between text-xs text-muted-foreground">
+                  <span>{t('batch.overall')}</span>
+                  <span className="tabular-nums">{overall}%</span>
+                </div>
+                <Progress value={overall} className="h-1.5" />
               </div>
             )}
-          </TabsContent>
 
-          <TabsContent value={TEXT_TAB} className="space-y-3">
-            <div className="space-y-2">
-              <Label htmlFor="text-name">Title (optional)</Label>
-              <Input
-                id="text-name"
-                value={textName}
-                onChange={(e) => setTextName(e.target.value)}
-                placeholder="e.g. Lecture 3 notes"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="text-body">Course material</Label>
-              <Textarea
-                id="text-body"
-                rows={10}
-                value={text}
-                onChange={(e) => setText(e.target.value)}
-                placeholder="Paste or type your notes here…"
-              />
-              <p className="text-xs text-muted-foreground">
-                {text.length.toLocaleString()} / 1,048,576 characters
-              </p>
-            </div>
-          </TabsContent>
-        </Tabs>
+            <ul
+              className="max-h-64 space-y-1 overflow-y-auto rounded-md border bg-card p-2"
+              aria-label={t('batch.queue')}
+            >
+              {items.map((item) => (
+                <li key={item.id} className="flex items-center gap-2 rounded px-1.5 py-1 text-sm">
+                  <ItemIcon item={item} />
+                  <span className="min-w-0 flex-1 truncate" title={item.name || t('upload.tab.text')}>
+                    {item.name || t('upload.tab.text')}
+                  </span>
+                  <span className="shrink-0 text-xs text-muted-foreground">
+                    {item.sizeBytes > 0 ? formatBytes(item.sizeBytes) : null}
+                  </span>
+                  <span
+                    className={cn(
+                      'w-40 shrink-0 truncate text-right text-xs',
+                      item.status === 'failed' && 'text-destructive',
+                      item.status === 'skipped' && 'text-amber-600 dark:text-amber-400',
+                      (item.status === 'completed' || item.status === 'queued') &&
+                        'text-muted-foreground',
+                    )}
+                    title={item.error ?? statusLabel(item)}
+                  >
+                    {statusLabel(item)}
+                  </span>
+                  {!running && item.status !== 'completed' && (
+                    <button
+                      type="button"
+                      onClick={() => batch.removeItem(item.id)}
+                      aria-label={t('batch.remove')}
+                      className="shrink-0 rounded p-0.5 text-muted-foreground hover:bg-accent hover:text-foreground"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  )}
+                </li>
+              ))}
+            </ul>
 
-        {uploading && (
-          <div className="space-y-2 rounded-md border bg-muted/30 px-3 py-2 text-sm">
-            <div className="flex items-center justify-between">
-              <span className="capitalize">{message ?? 'Working…'}</span>
-              <span className="tabular-nums text-muted-foreground">{progress}%</span>
-            </div>
-            <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
-              <div
-                className="h-full bg-primary transition-[width]"
-                style={{ width: `${progress}%` }}
-              />
-            </div>
+            {!started && (
+              <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
+                <span>{t('batch.readyToUpload', { count: summary.uploadable })}</span>
+                {summary.duplicates > 0 && (
+                  <span>{t('batch.duplicatesCount', { count: summary.duplicates })}</span>
+                )}
+                {invalid > 0 && <span>{t('batch.invalidCount', { count: invalid })}</span>}
+                <span className="ml-auto">{t('batch.processingNote')}</span>
+              </div>
+            )}
+
+            {finished && (
+              <div className="rounded-md border bg-muted/30 px-3 py-2 text-sm">
+                <p className="font-medium">{t('batch.completeTitle')}</p>
+                <p className="text-muted-foreground">
+                  {summary.failed === 0 && summary.cancelled === 0 && summary.duplicates === 0
+                    ? t('batch.completeAll', { count: summary.completed })
+                    : t('batch.completePartial', {
+                        completed: summary.completed,
+                        failed: summary.failed,
+                        skipped: summary.duplicates + invalid + summary.cancelled,
+                      })}
+                </p>
+              </div>
+            )}
           </div>
         )}
 
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={uploading}>
-            Cancel
-          </Button>
-          <Button
-            onClick={handleSubmit}
-            disabled={uploading || (mode === FILE_TAB ? !file : !text.trim())}
-          >
-            {uploading ? 'Processing…' : 'Upload'}
-          </Button>
+          {finished ? (
+            <>
+              {summary.failed > 0 && (
+                <Button variant="outline" onClick={() => void batch.retryFailed()}>
+                  {t('batch.retryFailed')}
+                </Button>
+              )}
+              <Button onClick={() => handleOpenChange(false)}>{t('batch.done')}</Button>
+            </>
+          ) : running ? (
+            <Button variant="outline" onClick={batch.cancelRemaining}>
+              {t('batch.cancelRemaining')}
+            </Button>
+          ) : (
+            <>
+              <Button variant="outline" onClick={() => handleOpenChange(false)}>
+                {t('common.cancel')}
+              </Button>
+              <Button
+                onClick={() => void batch.start()}
+                disabled={summary.queued === 0}
+              >
+                {t('batch.uploadCount', { count: summary.queued })}
+              </Button>
+            </>
+          )}
         </DialogFooter>
       </DialogContent>
     </Dialog>
   )
-}
-
-function detectType(file: File): DocumentType | null {
-  const ext = file.name.toLowerCase().split('.').pop() ?? ''
-  if (file.type === 'application/pdf' || ext === 'pdf') return 'pdf'
-  if (
-    file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
-    ext === 'docx'
-  )
-    return 'docx'
-  if (
-    file.type === 'application/vnd.openxmlformats-officedocument.presentationml.presentation' ||
-    ext === 'pptx'
-  )
-    return 'pptx'
-  if (file.type.startsWith('image/')) return 'image'
-  return null
 }

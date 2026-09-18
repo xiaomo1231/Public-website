@@ -31,7 +31,7 @@ function generated(questions: Array<{ prompt: string; kp: string; answer: string
     data: {
       questions: questions.map((q) => ({
         prompt: q.prompt,
-        type: 'short_answer',
+        type: 'numeric',
         correctAnswer: q.answer,
         solution: '',
         knowledgePoint: q.kp,

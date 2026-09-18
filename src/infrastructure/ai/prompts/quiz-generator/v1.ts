@@ -11,12 +11,7 @@ import { securityFooter, untrustedContentWrapper } from '../security'
 export const VERSION = 'v1' as const
 export const PROMPT_KIND = 'quiz-generator' as const
 
-export type QuizQuestionType =
-  | 'multiple_choice'
-  | 'true_false'
-  | 'short_answer'
-  | 'numeric'
-  | 'math_expr'
+export type QuizQuestionType = 'multiple_choice' | 'true_false' | 'numeric' | 'math_expr'
 
 export interface QuizGenerationInput {
   topicName: string
@@ -53,13 +48,17 @@ export function buildSystemPrompt(): string {
     '  1. Every question must be answerable from the provided source material.',
     '  2. Output strictly valid JSON — no prose, no markdown fences.',
     '  3. Generate exactly as many questions as requested, in the given order, with the given type and difficulty.',
-    '  4. For `multiple_choice`, provide 4 options with exactly one `isCorrect: true` and set `correctAnswer` to the exact label of the correct option.',
+    '  4. For `multiple_choice`, produce exactly 4 options, each an object `{ "label": "...", "isCorrect": false }.`',
+    '     - Every option label must contain the actual answer text. Never emit an empty or blank label.',
+    '     - Never use "A", "B", "C" or "D" as the label text — the app adds its own numbering.',
+    '     - Exactly one option must have `isCorrect: true`; the other three must be false.',
+    '     - Set `correctAnswer` to the exact `label` text of the correct option, character for character.',
+    '     - The options must be plausible and relevant to the question, not filler.',
     '  5. For `true_false`, set `correctAnswer` to "true" or "false".',
     '  6. For `numeric`, `correctAnswer` must be a bare number (no units, no text).',
     '  7. For `math_expr`, `correctAnswer` must be a mathjs-parseable expression (use `^` for powers, `*` for multiplication).',
-    '  8. For `short_answer`, `correctAnswer` should be 1–6 words; use `|` to separate acceptable alternatives.',
-    '  9. Each question needs 1–3 progressive hints that do not reveal the answer.',
-    '  10. `solution` is the full worked answer shown after grading.',
+    '  8. Each question needs 1–3 progressive hints that do not reveal the answer.',
+    '  9. `solution` is the full worked answer shown after grading.',
     '',
     'JSON schema:',
     JSON.stringify(
@@ -67,7 +66,7 @@ export function buildSystemPrompt(): string {
         questions: [
           {
             prompt: 'string',
-            type: 'multiple_choice | true_false | short_answer | numeric | math_expr',
+            type: 'multiple_choice | true_false | numeric | math_expr',
             options: [{ label: 'string', isCorrect: 'boolean' }],
             correctAnswer: 'string',
             solution: 'string',

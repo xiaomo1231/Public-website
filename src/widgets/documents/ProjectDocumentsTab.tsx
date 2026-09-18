@@ -6,26 +6,28 @@ import { Button } from '@/shared/ui/Button'
 import { Plus, Upload } from 'lucide-react'
 import { useDocuments } from '@/features/documents/useDocuments'
 import { toast } from '@/features/toast/toastStore'
+import { useTranslation } from '@/i18n'
 
 export function ProjectDocumentsTab({ projectId }: { projectId: string }): JSX.Element {
+  const { t } = useTranslation()
   const { documents, loading, remove, rename } = useDocuments(projectId)
   const [open, setOpen] = useState(false)
 
   async function handleRename(id: string, name: string) {
     try {
       await rename(id, name)
-      toast({ variant: 'success', title: 'Document renamed' })
+      toast({ variant: 'success', title: t('documents.renamed') })
     } catch (err) {
-      toast({ variant: 'error', title: 'Rename failed', description: (err as Error).message })
+      toast({ variant: 'error', title: t('documents.renameFailed'), description: (err as Error).message })
     }
   }
 
   async function handleDelete(id: string) {
     try {
       await remove(id)
-      toast({ variant: 'success', title: 'Document deleted' })
+      toast({ variant: 'success', title: t('documents.deleted') })
     } catch (err) {
-      toast({ variant: 'error', title: 'Delete failed', description: (err as Error).message })
+      toast({ variant: 'error', title: t('documents.deleteFailed'), description: (err as Error).message })
     }
   }
 
@@ -33,14 +35,14 @@ export function ProjectDocumentsTab({ projectId }: { projectId: string }): JSX.E
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-base font-semibold">Content Library</h2>
+          <h2 className="text-base font-semibold">{t('documents.title')}</h2>
           <p className="text-sm text-muted-foreground">
-            Upload PDFs, slides, images, or paste text. Files are processed locally.
+            {t('documents.subtitle')}
           </p>
         </div>
         <Button onClick={() => setOpen(true)}>
           <Plus className="h-4 w-4" />
-          Upload
+          {t('documents.upload')}
         </Button>
       </div>
 

@@ -30,10 +30,13 @@ import { ProgressiveList } from '@/shared/ui/ProgressiveList'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/shared/ui/Tabs'
 import { formatDate, formatDateTime, relativeTime } from '@/shared/lib/utils'
 import { formatBytes } from '@/shared/lib/format'
+import { useTranslation } from '@/i18n'
+import { PROCESSING_STATUS_LABEL_KEYS } from '@/entities/document/types'
 
 export function DocumentDetailPage(): JSX.Element {
   const { id: projectId, did } = useParams<{ id: string; did: string }>()
   const navigate = useNavigate()
+  const { t } = useTranslation()
   const { document, status, error, refresh } = useDocument(projectId, did)
   const { project } = useProject(projectId)
   const [deleteOpen, setDeleteOpen] = useState(false)
@@ -77,7 +80,7 @@ export function DocumentDetailPage(): JSX.Element {
     return (
       <PageContainer>
         <PageContent>
-          <LoadingState label="Loading document" />
+          <LoadingState label={t('documentDetail.loading')} />
         </PageContent>
       </PageContainer>
     )
@@ -88,17 +91,17 @@ export function DocumentDetailPage(): JSX.Element {
       <PageContainer>
         <PageContent>
           <ErrorState
-            title="Could not load document"
-            description={error ?? 'Something went wrong while reading this document from local storage.'}
+            title={t('documentDetail.loadFailed')}
+            description={error ?? t('documentDetail.loadFailedHint')}
             action={
               <div className="flex items-center gap-2">
                 <Button variant="outline" onClick={() => void refresh()}>
-                  Try again
+                  {t('common.tryAgain')}
                 </Button>
                 <Button asChild>
                   <Link to={`/projects/${projectId}/documents`}>
                     <ArrowLeft className="h-4 w-4" />
-                    Back to library
+                    {t('documentDetail.backToLibrary')}
                   </Link>
                 </Button>
               </div>
@@ -114,13 +117,13 @@ export function DocumentDetailPage(): JSX.Element {
       <PageContainer>
         <PageContent>
           <ErrorState
-            title="Document not found"
-            description="This document may have been deleted, or the link is wrong."
+            title={t('documentDetail.notFound')}
+            description={t('documentDetail.notFoundHint')}
             action={
               <Button asChild>
                 <Link to={`/projects/${projectId}/documents`}>
                   <ArrowLeft className="h-4 w-4" />
-                  Back to library
+                  {t('documentDetail.backToLibrary')}
                 </Link>
               </Button>
             }
@@ -136,10 +139,10 @@ export function DocumentDetailPage(): JSX.Element {
     try {
       await new DocumentRepository(getDb()).delete(document.id)
       setDeleteOpen(false)
-      toast({ variant: 'success', title: 'Document deleted', description: document.name })
+      toast({ variant: 'success', title: t('documentDetail.deleted'), description: document.name })
       navigate(`/projects/${projectId}/documents`, { replace: true })
     } catch (err) {
-      toast({ variant: 'error', title: 'Delete failed', description: (err as Error).message })
+      toast({ variant: 'error', title: t('documentDetail.deleteFailed'), description: (err as Error).message })
     } finally {
       setDeleting(false)
     }
@@ -150,7 +153,7 @@ export function DocumentDetailPage(): JSX.Element {
       <PageHeader
         title={
           <div className="flex flex-wrap items-center gap-2">
-            <Button asChild variant="ghost" size="icon" aria-label="Back">
+            <Button asChild variant="ghost" size="icon" aria-label={t('documentDetail.back')}>
               <Link to={`/projects/${projectId}/documents`}>
                 <ArrowLeft className="h-4 w-4" />
               </Link>
@@ -158,24 +161,24 @@ export function DocumentDetailPage(): JSX.Element {
             <span className="truncate">{document.name}</span>
             <Badge variant="outline">{document.type.toUpperCase()}</Badge>
             <Badge variant={document.status === 'ready' ? 'default' : document.status === 'failed' ? 'destructive' : 'secondary'}>
-              {document.status}
+              {t(PROCESSING_STATUS_LABEL_KEYS[document.status])}
             </Badge>
           </div>
         }
-        description="View parsed content, source references, and chunk preview."
+        description={t('documentDetail.subtitle')}
         actions={
           <Button variant="destructive" onClick={() => setDeleteOpen(true)}>
             <Trash2 className="h-4 w-4" />
-            Delete
+            {t('common.delete')}
           </Button>
         }
       />
       <PageContent>
         <Tabs defaultValue="chunks">
           <TabsList>
-            <TabsTrigger value="chunks">Chunks</TabsTrigger>
-            <TabsTrigger value="overview">Overview</TabsTrigger>
-            <TabsTrigger value="metadata">Metadata</TabsTrigger>
+            <TabsTrigger value="chunks">{t('documentDetail.tab.chunks')}</TabsTrigger>
+            <TabsTrigger value="overview">{t('documentDetail.tab.overview')}</TabsTrigger>
+            <TabsTrigger value="metadata">{t('documentDetail.tab.metadata')}</TabsTrigger>
           </TabsList>
 
           <TabsContent value="chunks" className="space-y-3">
@@ -185,7 +188,7 @@ export function DocumentDetailPage(): JSX.Element {
                 <Input
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
-                  placeholder="Search in chunks"
+                  placeholder={t('documentDetail.searchChunks')}
                   className="pl-9"
                 />
               </div>
@@ -193,23 +196,23 @@ export function DocumentDetailPage(): JSX.Element {
             </div>
 
             {chunksError && (
-              <ErrorState title="Could not load chunks" description={chunksError} />
+              <ErrorState title={t('documentDetail.chunksFailed')} description={chunksError} />
             )}
 
             {!chunksLoading && chunks.length === 0 && (
               <EmptyState
                 icon={<FileText className="h-10 w-10" />}
-                title="No chunks yet"
+                title={t('documentDetail.noChunks')}
                 description={
                   document.status === 'failed'
-                    ? 'Processing failed. Re-upload to retry.'
-                    : 'The document has not been processed yet.'
+                    ? t('documentDetail.processingFailed')
+                    : t('documentDetail.notProcessed')
                 }
               />
             )}
 
             {chunksLoading ? (
-              <LoadingState label="Loading chunks" />
+              <LoadingState label={t('documentDetail.loadingChunks')} />
             ) : (
               <ProgressiveList
                 items={filtered}
@@ -223,20 +226,20 @@ export function DocumentDetailPage(): JSX.Element {
           <TabsContent value="overview">
             <Card>
               <CardHeader>
-                <CardTitle>Summary</CardTitle>
-                <CardDescription>High-level information about this document.</CardDescription>
+                <CardTitle>{t('documentDetail.summary')}</CardTitle>
+                <CardDescription>{t('documentDetail.summaryHint')}</CardDescription>
               </CardHeader>
               <CardContent className="grid gap-3 sm:grid-cols-2">
-                <Meta icon={<Layers className="h-4 w-4" />} label="Type" value={document.type.toUpperCase()} />
-                <Meta icon={<Hash className="h-4 w-4" />} label="Chunks" value={String(chunks.length)} />
+                <Meta icon={<Layers className="h-4 w-4" />} label={t('documentDetail.type')} value={document.type.toUpperCase()} />
+                <Meta icon={<Hash className="h-4 w-4" />} label={t('documentDetail.chunks')} value={String(chunks.length)} />
                 <Meta
                   icon={<FileText className="h-4 w-4" />}
-                  label="Text length"
-                  value={document.textLength ? `${document.textLength.toLocaleString()} chars` : '—'}
+                  label={t('documentDetail.textLength')}
+                  value={document.textLength ? t('documentDetail.chars', { count: document.textLength.toLocaleString() }) : '—'}
                 />
-                <Meta icon={<Calendar className="h-4 w-4" />} label="Uploaded" value={formatDate(document.uploadedAt)} />
+                <Meta icon={<Calendar className="h-4 w-4" />} label={t('documentDetail.uploaded')} value={formatDate(document.uploadedAt)} />
                 {document.processedAt && (
-                  <Meta icon={<Calendar className="h-4 w-4" />} label="Processed" value={formatDateTime(document.processedAt)} />
+                  <Meta icon={<Calendar className="h-4 w-4" />} label={t('documentDetail.processed')} value={formatDateTime(document.processedAt)} />
                 )}
               </CardContent>
               {document.warnings.length > 0 && (
@@ -244,7 +247,7 @@ export function DocumentDetailPage(): JSX.Element {
                   <div className="rounded-md border border-amber-500/30 bg-amber-50/40 p-3 text-sm dark:bg-amber-950/30">
                     <div className="mb-1 flex items-center gap-2 font-medium text-amber-800 dark:text-amber-300">
                       <AlertCircle className="h-4 w-4" />
-                      Warnings ({document.warnings.length})
+                      {t('documentDetail.warnings', { count: document.warnings.length })}
                     </div>
                     <ul className="ml-6 list-disc text-amber-700 dark:text-amber-200/90">
                       {document.warnings.map((w) => (
@@ -267,34 +270,34 @@ export function DocumentDetailPage(): JSX.Element {
           <TabsContent value="metadata">
             <Card>
               <CardHeader>
-                <CardTitle>Metadata</CardTitle>
-                <CardDescription>Information extracted from the file.</CardDescription>
+                <CardTitle>{t('documentDetail.metadata')}</CardTitle>
+                <CardDescription>{t('documentDetail.metadataHint')}</CardDescription>
               </CardHeader>
               <CardContent className="space-y-2 text-sm">
-                <Meta icon={<FileText className="h-4 w-4" />} label="File size" value={formatBytes(document.sizeBytes)} />
-                {document.mimeType && <Meta icon={<FileText className="h-4 w-4" />} label="MIME type" value={document.mimeType} />}
-                {document.metadata.title && <Meta icon={<FileText className="h-4 w-4" />} label="Title" value={document.metadata.title} />}
-                {document.metadata.author && <Meta icon={<FileText className="h-4 w-4" />} label="Author" value={document.metadata.author} />}
-                {document.metadata.subject && <Meta icon={<FileText className="h-4 w-4" />} label="Subject" value={document.metadata.subject} />}
-                {document.metadata.producer && <Meta icon={<FileText className="h-4 w-4" />} label="Producer" value={document.metadata.producer} />}
-                {document.metadata.creator && <Meta icon={<FileText className="h-4 w-4" />} label="Creator" value={document.metadata.creator} />}
+                <Meta icon={<FileText className="h-4 w-4" />} label={t('documentDetail.fileSize')} value={formatBytes(document.sizeBytes)} />
+                {document.mimeType && <Meta icon={<FileText className="h-4 w-4" />} label={t('documentDetail.mimeType')} value={document.mimeType} />}
+                {document.metadata.title && <Meta icon={<FileText className="h-4 w-4" />} label={t('documentDetail.fileTitle')} value={document.metadata.title} />}
+                {document.metadata.author && <Meta icon={<FileText className="h-4 w-4" />} label={t('documentDetail.author')} value={document.metadata.author} />}
+                {document.metadata.subject && <Meta icon={<FileText className="h-4 w-4" />} label={t('documentDetail.subject')} value={document.metadata.subject} />}
+                {document.metadata.producer && <Meta icon={<FileText className="h-4 w-4" />} label={t('documentDetail.producer')} value={document.metadata.producer} />}
+                {document.metadata.creator && <Meta icon={<FileText className="h-4 w-4" />} label={t('documentDetail.creator')} value={document.metadata.creator} />}
                 {document.metadata.pageCount !== undefined && (
-                  <Meta icon={<Hash className="h-4 w-4" />} label="Pages" value={String(document.metadata.pageCount)} />
+                  <Meta icon={<Hash className="h-4 w-4" />} label={t('documentDetail.pages')} value={String(document.metadata.pageCount)} />
                 )}
                 {document.metadata.slideCount !== undefined && (
-                  <Meta icon={<Hash className="h-4 w-4" />} label="Slides" value={String(document.metadata.slideCount)} />
+                  <Meta icon={<Hash className="h-4 w-4" />} label={t('documentDetail.slides')} value={String(document.metadata.slideCount)} />
                 )}
                 {document.metadata.language && (
-                  <Meta icon={<FileText className="h-4 w-4" />} label="Language" value={document.metadata.language} />
+                  <Meta icon={<FileText className="h-4 w-4" />} label={t('documentDetail.language')} value={document.metadata.language} />
                 )}
                 {document.metadata.ocrConfidence !== undefined && (
                   <Meta
                     icon={<FileText className="h-4 w-4" />}
-                    label="OCR confidence"
+                    label={t('documentDetail.ocrConfidence')}
                     value={`${document.metadata.ocrConfidence.toFixed(1)}%`}
                   />
                 )}
-                <p className="mt-4 text-xs text-muted-foreground">Last activity {relativeTime(document.uploadedAt)}.</p>
+                <p className="mt-4 text-xs text-muted-foreground">{t('documentDetail.lastActivity', { time: relativeTime(document.uploadedAt) })}</p>
               </CardContent>
             </Card>
           </TabsContent>
@@ -304,21 +307,21 @@ export function DocumentDetailPage(): JSX.Element {
       <ConfirmDialog
         open={deleteOpen}
         onOpenChange={setDeleteOpen}
-        title="Delete this document?"
-        description="The original file and everything extracted from it are permanently removed from this device. This cannot be undone."
+        title={t('documentDetail.deleteTitle')}
+        description={t('documentDetail.deleteBody')}
         variant="destructive"
-        confirmLabel="Delete document"
+        confirmLabel={t('documents.deleteAction')}
         busy={deleting}
         onConfirm={handleDelete}
         details={
           <dl className="space-y-1.5">
-            <DetailRow label="Document" value={document.name} />
-            <DetailRow label="Type" value={document.type.toUpperCase()} />
-            <DetailRow label="Size" value={formatBytes(document.sizeBytes)} />
-            <DetailRow label="Project" value={project?.name ?? projectId ?? '—'} />
+            <DetailRow label={t('documentDetail.detail.document')} value={document.name} />
+            <DetailRow label={t('documentDetail.detail.type')} value={document.type.toUpperCase()} />
+            <DetailRow label={t('documentDetail.detail.size')} value={formatBytes(document.sizeBytes)} />
+            <DetailRow label={t('documentDetail.detail.project')} value={project?.name ?? projectId ?? '—'} />
             <DetailRow
-              label="Extracted chunks"
-              value={`${chunks.length} chunk${chunks.length === 1 ? '' : 's'} will also be deleted`}
+              label={t('documentDetail.detail.chunks')}
+              value={t('documentDetail.detail.chunksWillDelete', { count: chunks.length })}
             />
           </dl>
         }
@@ -337,6 +340,7 @@ function DetailRow({ label, value }: { label: string; value: string }) {
 }
 
 function ChunkRow({ chunk }: { chunk: DocumentChunk }) {
+  const { t } = useTranslation()
   return (
     <Card>
       <CardHeader className="flex flex-row items-start justify-between gap-3 space-y-0 py-3">
@@ -346,9 +350,9 @@ function ChunkRow({ chunk }: { chunk: DocumentChunk }) {
               {chunk.contentType}
             </Badge>
             {chunk.pageNumber !== undefined && (
-              <span className="text-xs text-muted-foreground">Page {chunk.pageNumber}</span>
+              <span className="text-xs text-muted-foreground">{t('documentDetail.pageLabel', { number: chunk.pageNumber })}</span>
             )}
-            {chunk.section && <span className="text-xs text-muted-foreground">§ {chunk.section}</span>}
+            {chunk.section && <span className="text-xs text-muted-foreground">{t('documentDetail.sectionLabel', { title: chunk.section })}</span>}
           </div>
           <p className="text-xs text-muted-foreground">{chunk.sourceReference}</p>
         </div>

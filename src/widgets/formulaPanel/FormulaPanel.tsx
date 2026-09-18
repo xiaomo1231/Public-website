@@ -5,6 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/sha
 import { Input } from '@/shared/ui/Input'
 import { CourseAnalysisRepository } from '@/entities/courseAnalysis/repository'
 import type { Formula, CourseSymbol } from '@/entities/courseAnalysis/types'
+import { useTranslation } from '@/i18n'
 
 export interface FormulaPanelProps {
   projectId: string
@@ -12,6 +13,7 @@ export interface FormulaPanelProps {
 }
 
 export function FormulaPanel({ projectId, topicId }: FormulaPanelProps): JSX.Element {
+  const { t } = useTranslation()
   const [formulas, setFormulas] = useState<Formula[]>([])
   const [symbols, setSymbols] = useState<CourseSymbol[]>([])
   const [query, setQuery] = useState('')
@@ -54,7 +56,7 @@ export function FormulaPanel({ projectId, topicId }: FormulaPanelProps): JSX.Ele
         <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
         <Input
           className="pl-9"
-          placeholder="Search formulas or symbols"
+          placeholder={t('formula.search')}
           value={query}
           onChange={(e) => setQuery(e.target.value)}
         />
@@ -63,13 +65,13 @@ export function FormulaPanel({ projectId, topicId }: FormulaPanelProps): JSX.Ele
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-base">
-            <Sigma className="h-4 w-4" /> Formulas ({filteredFormulas.length})
+            <Sigma className="h-4 w-4" /> {t('formula.formulas', { count: filteredFormulas.length })}
           </CardTitle>
-          <CardDescription>Click a dot to copy.</CardDescription>
+          <CardDescription>{t('formula.formulasHint')}</CardDescription>
         </CardHeader>
         <CardContent className="space-y-2">
           {filteredFormulas.length === 0 ? (
-            <p className="text-xs text-muted-foreground">No formulas yet.</p>
+            <p className="text-xs text-muted-foreground">{t('formula.noFormulas')}</p>
           ) : (
             filteredFormulas.slice(0, 30).map((f) => (
               <button
@@ -92,13 +94,13 @@ export function FormulaPanel({ projectId, topicId }: FormulaPanelProps): JSX.Ele
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-base">
-            <Tag className="h-4 w-4" /> Symbols ({filteredSymbols.length})
+            <Tag className="h-4 w-4" /> {t('formula.symbols', { count: filteredSymbols.length })}
           </CardTitle>
-          <CardDescription>Different meanings are kept as separate entries.</CardDescription>
+          <CardDescription>{t('formula.symbolsHint')}</CardDescription>
         </CardHeader>
         <CardContent className="grid gap-2 sm:grid-cols-2">
           {filteredSymbols.length === 0 ? (
-            <p className="text-xs text-muted-foreground">No symbols yet.</p>
+            <p className="text-xs text-muted-foreground">{t('formula.noSymbols')}</p>
           ) : (
             filteredSymbols.slice(0, 40).map((s) => (
               <div key={s.id} className="rounded-md border bg-card p-2 text-sm">

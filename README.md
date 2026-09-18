@@ -1,507 +1,343 @@
-# AI Learning Platform
+# AI 学习平台
 
-A **local-first AI-assisted learning platform** for undergraduate STEM courses.
+> 面向理工科大学生的**本地优先（Local-first）AI 学习平台**
 
-Upload your course materials, let an AI provider you control turn them into structured knowledge, then learn through question-driven tutoring, adaptive quizzes, and a mistake book that explains *where* things went wrong — without ever calling you careless.
+把你自己的课程资料（PDF、Word、PPT、图片）导入进来，由你自己配置的 AI 把它整理成结构化知识，
+再通过问答式 AI 导师、自适应测验和错题本来学习。
 
-> **Status: v1.0** — Phases 1–5 shipped, productization review and security hardening complete.
-> 443 tests passing · strict TypeScript · ESLint clean · production build verified.
+课程资料与学习数据默认保存在本机浏览器中；AI 服务由你自行配置。
+
+**当前版本：V1.1（1.1.0）**
 
 ---
 
-## Quick start
+## 项目简介
 
-### Windows — one click
+这是一个**给自己用的**大学课程学习工具，尤其适合数学、物理、计算机、统计等理工科课程。
 
-Double-click **`Start.bat`** in the project folder.
+它解决的核心问题是：**课程资料很多，但没人陪你把它们真正弄懂。**
 
-It checks Node.js, installs dependencies on first run, starts the dev server, and opens the browser. Keep the window open while you work; press `Ctrl+C` to stop.
+传统做法是"看 PDF → 看不懂 → 放弃"。这个项目把流程变成：
 
-### Any platform — manual
-
-```bash
-npm install
-npm run dev          # opens http://localhost:5173
+```text
+导入课程资料
+    ↓
+AI 提取结构化知识（主题 / 概念 / 公式 / 符号 / 例题 / 习题）
+    ↓
+AI 导师用提问的方式带你学（不是直接把答案倒给你）
+    ↓
+做测验 → 错题自动进错题本 → AI 分析你错在哪 → 针对性再练
 ```
 
-On first launch the app seeds two default invite codes into IndexedDB. Use one of these on the `/invite` screen:
+几个设计上的取舍：
 
-| Code |
+- **本地优先**：课程文件、学习记录、错题本都在你自己的浏览器里，不上传到任何服务器。
+- **自带 AI**：项目不提供 AI 服务，你自己填 API Key。用哪家、用哪个模型由你决定。
+- **本地解析**：PDF 解析、OCR、分块全部在浏览器本地完成，只有"分析"和"提问"才会调用 AI。
+- **不评判你**：错题分析只陈述可观察到的模式（如"符号处理"、"概念理解"），**永远不会**给你贴"粗心"这种标签。
+
+---
+
+## 核心功能
+
+### 课程资料管理
+
+- 支持格式：**PDF、DOCX、PPTX、图片（PNG / JPG / WebP / GIF / BMP）、粘贴文本**
+- **批量上传**：一次可选多个文件，每个文件生成一份独立文档（最多 50 个/批，并发处理 2 个）
+- 上传后自动在**本地**完成：文本提取 → 结构识别 → 语义分块
+- 图片走**本地 OCR**（tesseract.js），不联网
+- 每个分块都保留来源引用，例如 `Calculus.pdf · Page 12 · § 导数`
+- 重复文件会被识别并跳过，不会静默创建重复文档
+
+### AI 课程分析
+
+- 一次性提取：**主题、概念、公式、符号、例题、习题、先修知识**
+- 符号会记录"上下文"，因此同一个符号在不同主题下可以有不同的含义
+- 采用**流式请求**，长课程分析不会因为固定超时而中断
+- 分析失败时会明确告诉你原因（如"输出被截断"、"API 密钥无效"），并保留已提取的文档与文本
+
+### AI 导师（AI Tutor）
+
+问答式学习，而不是直接给答案：
+
+```text
+简短讲解 → 提问 → 你作答 → 评价 → 反馈 → 渐进提示 → 下一题
+```
+
+- 回答基于你的课程资料；超出资料范围的内容会明确标注为"补充说明"
+- 提供**渐进提示**（逐步给，不直接给答案）
+- 每次会话都保存在本地，可在"对话记录"里回看
+
+### 公式与符号
+
+- 从课程资料中提取的**公式**（KaTeX 渲染）与**符号**集中展示
+- 支持搜索，点击即可复制
+- 同一个符号的不同含义会作为独立条目保留
+
+### 划词翻译
+
+- 在页面中**选中任意文字**即可弹出翻译
+- 会带上上下文段落，让翻译更准确
+- 翻译目标语言跟随你的设置（中文 / 英文）
+
+### 测验（Quiz）
+
+- 从课程分析结果生成题目，**题目有据可依**（来自你的资料）
+- 五种题型见下方"支持的测验题型"
+- 支持：主题选择、题目数量、起始难度、题型组合
+- 答题后可查看解析、参考答案与"再来一组"（同主题 / 相似 / 更难 / 更简单 / 薄弱点强化）
+
+### 错题本
+
+- 答错的题目**自动收集**，同一道题多次答错会合并
+- 由 AI 分析：**从哪一步开始偏、关键错误是什么、为什么这一步不成立、正确思路**
+- 错题可标记为"已掌握"或归档
+- 提供**薄弱点提示**（"可能需要复习的部分"）
+
+### 自适应练习与掌握度
+
+- 难度根据近期正确率、连对/连错、知识点掌握度动态调整
+- 掌握度是**基于练习记录的估计值**，不是对能力的绝对测量
+- 提供知识点维度的掌握度视图（最薄弱的排在前面）
+
+### 本地优先数据存储
+
+- 所有数据存于浏览器 **IndexedDB**（Dexie，24 张表）
+- 课程原始文件字节同样保存在本地
+- 无需后端、无需注册账号、无遥测
+- 首次启动会预置两个演示邀请码（见下方"首次使用"）
+
+---
+
+## 支持的测验题型
+
+| 题型 | 说明 |
+| --- | --- |
+| **单项选择题** | 4 个选项，选择一个 |
+| **判断题** | 正确 / 错误 |
+| **数值题** | 输入数值，按容差比较 |
+| **数学表达式题** | 输入表达式，按数学等价判断（如 `x^2/2` 与 `0.5x^2` 视为等价） |
+
+> **说明：简答题不包含在 V1.1 中。** 简答题无法可靠地自动判分，为避免给出错误的判定，
+> 该题型已从本版本移除。
+
+数学等价判断使用 `mathjs`：先尝试符号化简，再用数值采样验证，因此**不依赖 AI 判分**，
+结果可复现。无法确定时会明确显示"无法自动判定"，而不是猜测对错。
+
+---
+
+## AI 配置
+
+**本项目不提供 AI 服务，也不会内置任何 API Key。** 你需要配置自己的 AI API。
+
+启动后进入：
+
+```text
+设置 → AI 设置
+```
+
+填写：
+
+| 项 | 说明 |
+| --- | --- |
+| AI 服务商 | 选择预设或"自定义（OpenAI 兼容）" |
+| API Base URL | 服务商接口地址 |
+| API Key | 你自己的密钥 |
+| 模型 | 模型名称 |
+| 温度 / 最大 Token 数 | 采样参数 |
+
+内置预设（均为 **OpenAI 兼容接口**）：
+
+```text
+OpenAI
+Qwen（DashScope）
+DeepSeek
+MiniMax
+MiMo
+自定义（任意 OpenAI 兼容端点）
+```
+
+配置完成后可点「测试连接」验证。API Key 会以 **AES-GCM 加密**保存在本地（密钥为不可导出的设备密钥），
+不会写入日志、不会放进 URL、不会提交到本仓库。
+
+> 也可以直接改用任何兼容 `/chat/completions` 的服务。
+
+---
+
+## 安装与运行
+
+### 环境要求
+
+- **Node.js 20 或更高版本**
+- 现代浏览器（Chrome / Edge / Firefox / Safari）
+
+### Windows：一键启动
+
+双击项目根目录下的 **`Start.bat`**。
+
+它会自动：检查 Node.js 与 npm → 检查端口 5173 是否被占用 → 首次运行自动安装依赖 → 启动并打开浏览器。
+
+### 任意平台：手动启动
+
+```bash
+git clone https://github.com/xiaomo1231/website.git
+cd website
+npm install
+npm run dev
+```
+
+然后打开 **http://localhost:5173**
+
+> **重要**：应用数据（项目、文档、AI 配置）保存在浏览器的 IndexedDB 中，而 IndexedDB 是**按来源（origin）隔离**的。
+> 请始终使用**同一个地址**（`http://localhost:5173`）。
+> 不要使用 Vite 打印的 `Network` 地址，也不要让端口变成 5174/5175 —— 那会被浏览器视为另一个网站，
+> 你会看到一个"空的工作区"。项目已固定端口（`strictPort`）以避免这个问题。
+
+### 首次使用
+
+首次启动会预置两个演示邀请码：
+
+| 邀请码 |
 | --- |
 | `WELCOME-LEARN` |
 | `STUDENT-2026` |
 
-Invite codes are checked **locally only**. They are an access gate for a local-first app — not authentication. There is no UI for managing codes; to change them, edit `SEED_INVITE_CODES` in `src/shared/config/config.ts` and clear the app's IndexedDB to reseed.
+邀请码**仅在本地校验**，它是一个本地应用的访问门，不是账号系统。
 
-### First-run setup inside the app
+### 生产构建
 
-1. Enter an invite code on `/invite`.
-2. Open **Settings → AI Settings**, choose a provider, paste your API key, click **Test connection**, then **Save changes**.
-3. Create a project, upload course material, wait for processing, then open the **Analysis** tab and click **Analyze Course**.
-
----
-
-## Table of contents
-
-1. [Tech stack](#1-tech-stack)
-2. [Project structure](#2-project-structure)
-3. [Data model](#3-data-model)
-4. [AI provider support](#4-ai-provider-support)
-5. [Local data storage](#5-local-data-storage)
-6. [File processing](#6-file-processing)
-7. [AI teaching architecture](#7-ai-teaching-architecture)
-8. [Quiz architecture](#8-quiz-architecture)
-9. [Mistake architecture](#9-mistake-architecture)
-10. [Security model](#10-security-model)
-11. [Known limitations](#11-known-limitations)
-12. [Scripts](#12-scripts)
-13. [Configuring AI](#13-configuring-ai)
-14. [Production build](#14-production-build)
-
----
-
-## 1. Tech stack
-
-| Layer | Choice | Why |
-| --- | --- | --- |
-| Build | **Vite 5** | Fast dev server, native ESM, asset URL handling for the PDF worker |
-| UI | **React 18 + TypeScript 5 (strict)** | `noUnusedLocals`, `noUncheckedSideEffectImports`, no `any` in app code |
-| Routing | **React Router 6** (data router) | Nested routes, `RequireAuth` gate |
-| Styling | **Tailwind CSS 3** + CSS variables | Light/dark via a single `dark` class |
-| Primitives | **Radix UI** (Dialog, Dropdown, Tabs, Toast, Tooltip, Slider, Select, Progress, Label) | Accessible headless components |
-| Icons | **Lucide React** | — |
-| State | **Zustand** | Small stores per feature, no boilerplate |
-| Database | **Dexie 4** (IndexedDB) | Versioned schema, transactions, typed tables |
-| File parsing | **pdfjs-dist**, **mammoth**, **jszip**, **tesseract.js** | PDF / DOCX / PPTX / OCR |
-| Math | **mathjs** | Symbolic + numeric expression equivalence |
-| Testing | **Vitest + Testing Library + fake-indexeddb** | Unit + integration |
-| Lint/format | **ESLint 9 (flat) + Prettier** | `consistent-type-imports`, hooks rules |
-
-No first-party backend. AI calls go directly from the browser to the endpoint you configure.
-
----
-
-## 2. Project structure
-
+```bash
+npm run build     # 输出到 dist/
+npm run preview   # 本地预览构建结果
 ```
+
+---
+
+## 使用流程
+
+```text
+1. 创建项目（选择科目，如"微积分"）
+2. 在「文档」标签页上传课程资料（可批量）
+3. 等待本地处理完成（提取 → 分块）
+4. 到「课程分析」标签页点击「分析课程」
+5. 去「AI 导师」按主题学习，或去「测验」做题
+6. 做错的题自动进「错题本」，可分析、可重练
+7. 在「掌握度」里看知识点的强弱分布
+```
+
+在配置 AI 之前，上传与本地处理都可以正常使用；只有分析、导师、测验生成等需要 AI。
+
+---
+
+## 数据与隐私
+
+- 本项目采用 **Local-first** 设计：课程文件、分块、学习记录、错题本、AI 设置都保存在**本机浏览器**中。
+- 本仓库**不包含**任何用户课程资料、个人 API Key 或学习数据。
+- PDF 解析、OCR、分块等处理**在本地完成**，不联网。
+- 当你配置了 AI API 后，**相关内容会发送给你所配置的 AI 服务商**：
+  - 课程分析：会发送用于分析的分块文本
+  - 导师提问 / 测验生成：会发送相关片段与你的作答
+  - 划词翻译：会发送选中的文本与上下文段落
+  - 请求**只包含完成任务所必需的内容**，不会发送你的整个文档库
+- 数据是否被服务商留存、如何使用，**取决于你所选择的 AI 服务商及其政策**，本项目无法控制。
+- API Key 以 **AES-GCM** 加密存储，密钥为不可导出的设备密钥。
+
+> 换句话说：**在你不使用 AI 功能时，数据不离开本机；一旦调用 AI，相关片段会发送到你自己配置的服务商。**
+
+---
+
+## V1.1 更新
+
+### 新增
+
+- **批量上传课程资料**：一次选择多个文件，各自生成独立文档；受控并发（2），单个文件失败不影响其他文件
+- **上传队列**：每个文件独立状态（等待 / 上传中 / 处理中 / 已完成 / 失败 / 跳过），支持取消剩余、仅重试失败项
+- **重复文件识别**：按文件名 + 大小 + 修改时间判断，重复文件会被跳过而不是静默重复导入
+- **界面中英双语**：支持 English / 简体中文 切换，并持久化保存
+- **数据管理面板**：查看本地数据清单、导出数据、按项目删除、清空 AI 设置
+
+### 修复
+
+- **AI 课程分析超时**：分析改为**流式请求**，超时语义由"总时长"改为"静默时长"，长课程不再被固定超时中断
+- **JSON 解析失败**：修复了引用标记（如 `[p1]`）被误认为 JSON 起始位置导致的解析错误
+- **输出被截断**：分析请求显式使用足够的输出预算；若仍被截断会给出明确提示，而不是伪装成"内容无法解析"
+- **分析结果为空**：AI 返回的结构与预期不符时，现在会明确报错并列出实际字段，而不是静默显示"分析成功：0 个主题"
+- **翻译可读性**：修复翻译弹窗**没有背景色**的问题（原先引用了未定义的样式令牌），并优化了原文与译文的视觉层级
+- **项目可移植性**：移除对开发者本机路径的依赖；`Start.bat` 增加依赖完整性检查、跨平台 `node_modules` 检测与端口占用处理
+
+### Quiz
+
+- **修复单项选择题选项为空**：选项校验过于宽松，空选项被放行并渲染成空白选项行；现在会严格校验
+  （选项文本非空、恰好一个正确答案、正确答案必须对应某个选项）
+- **移除简答题**：无法可靠自动判分，已从题型中删除
+- **保留并回归验证**：判断题、数值题、数学表达式题行为不变
+
+---
+
+## 技术栈
+
+| 类别 | 使用 |
+| --- | --- |
+| 前端框架 | React 18 + TypeScript（strict） |
+| 构建 | Vite 5 |
+| 样式 | Tailwind CSS + Radix UI |
+| 状态 | Zustand |
+| 路由 | React Router |
+| 本地数据库 | Dexie（IndexedDB） |
+| PDF 解析 | pdfjs-dist |
+| DOCX 解析 | mammoth |
+| PPTX 解析 | jszip |
+| 图片 OCR | tesseract.js（本地） |
+| 数学计算 | mathjs |
+| 加密 | Web Crypto（AES-GCM） |
+| 测试 | Vitest + Testing Library |
+
+---
+
+## 项目结构
+
+```text
 src/
-├── app/                    # Router, providers, layout shell, error boundary
-│   ├── router.tsx
-│   ├── providers.tsx       # ErrorBoundary + TooltipProvider + Bootstrap
-│   ├── ErrorBoundary.tsx
-│   ├── RequireAuth.tsx
-│   └── layout/             # AppShell, Sidebar, Header
-├── pages/                  # Route-level views (thin)
-│   ├── InvitePage / DashboardPage / ProjectsPage
-│   ├── ProjectDetailPage / DocumentDetailPage
-│   ├── TutorPage / ChatHistoryPage
-│   ├── QuizLandingPage / QuizPage / QuizResultPage / MasteryPage
-│   ├── MistakeBookPage / SettingsPage
-├── widgets/                # Composite UI blocks
-│   ├── documents/          # DocumentList, DocumentUploadDialog, ProjectDocumentsTab
-│   ├── documentAnalysis/   # CourseAnalysisPanel
-│   ├── tutor/              # TutorPanel
-│   ├── formulaPanel/       # FormulaPanel
-│   ├── quiz/               # QuizConfigDialog, QuestionCard, AnswerInput
-│   ├── mistakes/           # MistakeCard, MistakeAnalysisView, PracticeMoreMenu,
-│   │                       # AddMistakeDialog, WeaknessPanel
-│   ├── translation/        # SelectionTranslator
-│   └── dataManagement/     # DataManagementPanel
-├── features/               # Vertical features: store + hooks
-│   ├── auth/ project/ documents/ settings/ theme/ toast/
-├── entities/               # Domain types + Dexie repositories
-│   ├── project/ user/ settings/ invite/
-│   ├── document/ chunk/ processingJob/
-│   ├── courseAnalysis/ tutorSession/ translation/
-│   ├── question/ questionAttempt/ quiz/ knowledgeMastery/
-│   └── mistake/
-├── services/               # Business logic (composes entities + AI)
-│   ├── aiService.ts              # provider wrapper, JSON parsing, retry
-│   ├── aiServices.ts             # composition root (bundle factory)
-│   ├── documentService.ts / processingService.ts
-│   ├── documentAnalysisService.ts
-│   ├── tutorService.ts / translationService.ts
-│   ├── quizService.ts / answerEvaluationService.ts
-│   ├── adaptiveDifficulty.ts / masteryService.ts
-│   ├── mistakeService.ts / mistakeAnalysisService.ts
-│   ├── weaknessService.ts / reviewSessionService.ts
-│   ├── dataManagementService.ts
-│   ├── sourceContext.ts
-│   └── projectService.ts / userService.ts / settingsService.ts / inviteService.ts
-├── infrastructure/         # Cross-cutting concerns
-│   ├── db/                 # Dexie schema (v1–v5 migrations)
-│   ├── ai/                 # Provider interface, OpenAI-compatible impl, prompts/
-│   ├── files/              # pdfExtractor, docxExtractor, pptxExtractor, ocrExtractor, chunking
-│   ├── math/               # expressionEvaluator (mathjs)
-│   ├── opfs/               # OPFS wrapper (best-effort)
-│   ├── logger/ crypto/ errors/
-└── shared/
-    ├── ui/                 # 18 primitives (Button, Dialog, Card, …)
-    ├── lib/                # utils, format, aiErrors
-    ├── config/             # app constants, seed invite codes
-    └── styles/globals.css
-```
-
-**Layering rule:** UI → feature hooks → services → repositories → IndexedDB.
-Components never touch IndexedDB directly.
-
----
-
-## 3. Data model
-
-Dexie database `ai-learning-platform`, schema version **5**.
-
-| Table | Key | Indexes | Purpose |
-| --- | --- | --- | --- |
-| `projects` | `id` | `name, subject, createdAt, updatedAt` | Study projects |
-| `user` | `id` (`'singleton'`) | — | Local profile |
-| `settings` | `id` (`'singleton'`) | `updatedAt` | AI configuration |
-| `inviteKeys` | `code` | `usedAt` | Local invite whitelist |
-| `documents` | `id` | `projectId, type, status, name, uploadedAt, processedAt, [projectId+status], [projectId+type]` | Uploaded materials |
-| `documentBlobs` | `id` | `projectId` | Raw file bytes (`ArrayBuffer` + mime) |
-| `chunks` | `id` | `documentId, projectId, order, [documentId+order], [projectId+documentId]` | Extracted content blocks |
-| `processingJobs` | `id` | `documentId, projectId, stage, updatedAt, [projectId+updatedAt]` | Pipeline progress |
-| `courseAnalyses` | `id` | `projectId, status, finishedAt` | Analysis run state |
-| `topics` | `id` | `projectId, order` | Course topics |
-| `concepts` | `id` | `projectId, name` | Concepts |
-| `formulas` | `id` | `projectId, name` | LaTeX formulas |
-| `symbols` | `id` | `projectId, symbol` | Symbols with context |
-| `examples` | `id` | `projectId` | Worked examples |
-| `courseExercises` | `id` | `projectId, difficulty` | Extracted exercises |
-| `prerequisites` | `id` | `projectId` | Prerequisite knowledge |
-| `tutorSessions` | `id` | `projectId, status, updatedAt, [projectId+updatedAt]` | Tutor conversations |
-| `translations` | `id` | `projectId, createdAt, [projectId+createdAt]` | Selection translations |
-| `questions` | `id` | `projectId, topicId, knowledgePoint, type, difficulty, createdAt, [projectId+topicId], [projectId+knowledgePoint]` | Quiz questions |
-| `questionAttempts` | `id` | `projectId, questionId, quizId, topicId, knowledgePoint, createdAt, [projectId+createdAt], [quizId+createdAt]` | Answer history |
-| `quizzes` | `id` | `projectId, status, startedAt, [projectId+startedAt]` | Quiz sessions |
-| `knowledgeMastery` | `id` | `projectId, knowledgePoint, [projectId+knowledgePoint]` | Mastery estimates |
-| `mistakes` | `id` | `projectId, questionId, quizId, knowledgePoint, mistakeType, status, source, createdAt, [projectId+status], [projectId+knowledgePoint]` | Mistake book |
-
-Core types (abbreviated):
-
-```ts
-Project        { id, name, subject, description?, createdAt, updatedAt }
-
-Document       { id, projectId, type: 'pdf'|'docx'|'pptx'|'image'|'text',
-                 name, sizeBytes, mimeType?, hasBlob, status, errorMessage?,
-                 warnings[], metadata, textLength?, chunkCount?, uploadedAt, processedAt? }
-
-Chunk          { id, documentId, projectId, pageNumber?, section?, contentType,
-                 text, sourceReference, order, createdAt }
-
-Topic          { id, projectId, name, description, order, sourceRefs[], createdAt }
-Concept        { id, projectId, name, definition, explanation?, topicIds[], sourceRefs[] }
-Formula        { id, projectId, name, latex, description, variables[], topicIds[], sourceRefs[] }
-CourseSymbol   { id, projectId, symbol, meaning, context, unit?, topicIds[], sourceRefs[] }
-
-TutorSession   { id, projectId, topicId?, topicName, language, messages[], turns[],
-                 pendingQuestion?, streakCorrect, streakWrong, currentDifficulty,
-                 hintsRevealed, mastery, status, startedAt, updatedAt }
-
-Question       { id, projectId, topicId?, knowledgePoint, type, difficulty, prompt,
-                 options?, correctAnswer, solution?, hints[], sourceRefs[], promptVersion, createdAt }
-
-QuestionAttempt{ id, projectId, questionId, quizId?, topicId?, knowledgePoint,
-                 questionType, difficulty, userAnswer, evaluation, durationMs?, hintsUsed, createdAt }
-
-QuestionEvaluation { isCorrect: boolean|null, method, confidence, expected?,
-                     normalizedUser?, normalizedExpected?, explanation?, note? }
-
-Quiz           { id, projectId, title, config, questionIds[], status, difficultyPlan[],
-                 score?, startedAt, finishedAt?, promptVersion }
-
-KnowledgeMastery { id, projectId, knowledgePoint, topicId?, mastery, attempts,
-                   correct, observations[], lastUpdated }
-
-Mistake        { id, projectId, questionId?, quizId?, topicId?, knowledgePoint,
-                 difficulty, questionType, question, options?, studentAnswer,
-                 correctAnswer, solution?, mistakeType, analysis?, analysisStatus,
-                 status: 'active'|'understood'|'archived', source: 'auto'|'manual',
-                 attemptIds[], attemptCount, createdAt, updatedAt, resolvedAt?, archivedAt? }
+  app/            应用外壳、路由、启动引导
+  pages/          页面
+  widgets/        功能区块（文档、导师、测验、错题、分析、翻译…）
+  features/       状态与业务钩子
+  services/       业务服务（分析、导师、测验、错题、设置…）
+  entities/       领域模型与数据访问
+  infrastructure/ AI 适配、数据库、文件解析、加密、日志
+  i18n/           界面国际化（en / zh-CN）
+  shared/         UI 组件与工具
+tests/            自动化测试
 ```
 
 ---
 
-## 4. AI provider support
+## 开发命令
 
-```
-AITutor · DocumentAnalysis · Translation · Quiz · MistakeAnalysis
-                          ↓
-                      AIService          JSON extraction · retry · redaction
-                          ↓
-                      AIProvider         interface
-                          ↓
-              OpenAICompatibleProvider
-                          ↓
-   OpenAI · Qwen · DeepSeek · MiniMax · MiMo · Custom
-```
-
-One implementation serves all six presets. Presets differ only in `baseURL`, `defaultModel`, and whether the provider supports `response_format: json_object`.
-
-| Preset | Default base URL | Default model | JSON mode |
-| --- | --- | --- | --- |
-| OpenAI | `https://api.openai.com/v1` | `gpt-4o-mini` | ✅ |
-| Qwen | `https://dashscope.aliyuncs.com/compatible-mode/v1` | `qwen-plus` | ✅ |
-| DeepSeek | `https://api.deepseek.com/v1` | `deepseek-chat` | — |
-| MiniMax | `https://api.MiniMax.com/v1` | `MiniMax-Text-01` | ✅ |
-| MiMo | configurable | `mimo-7b` | ✅ |
-| Custom | your URL | your model | ✅ |
-
-Typed errors: `MISSING_API_KEY`, `MISSING_BASE_URL`, `MISSING_MODEL`, `AUTH_FAILED`, `RATE_LIMITED`, `TIMEOUT`, `PROVIDER_UNAVAILABLE`, `INVALID_RESPONSE`, `INVALID_JSON`, `ABORTED`.
-
-Every error is mapped to plain-language guidance by `shared/lib/aiErrors.ts` — the UI never shows "Something went wrong".
-
----
-
-## 5. Local data storage
-
-- **Structured data** → IndexedDB via Dexie (23 tables, versioned migrations v1→v5).
-- **Raw files** → `documentBlobs` as `ArrayBuffer`, with best-effort mirroring to **OPFS** when the browser supports it.
-- **API key** → IndexedDB only. Never logged, never in a URL, never in analytics or error reports.
-- **Nothing is uploaded to a first-party server.** There is no first-party server.
-
-Export: Settings → Data → **Export data** produces a single JSON file containing every table plus document bytes.
-
----
-
-## 6. File processing
-
-```
-Upload
-  → validate (size ≤ 100 MB, MIME + extension)
-  → store bytes (IndexedDB + OPFS mirror)
-  → extract
-      PDF   → pdfjs-dist (per-page text, heading heuristic)
-      DOCX  → mammoth → HTML → structured blocks
-      PPTX  → jszip → slide XML (title, body, notes, tables)
-      Image → tesseract.js OCR (confidence + math-symbol warning)
-      Text  → direct
-  → chunk (≈800 chars, sentence-aware, page/section anchored)
-  → build sourceReference  ("Calculus.pdf · Page 12 · § Derivatives")
-  → status: uploading → processing → ready | failed
-```
-
-Failures never lose the original file. Each document keeps `warnings[]` and `errorMessage`.
-
----
-
-## 7. AI teaching architecture
-
-**Document analysis** — one JSON call extracts topics, concepts, formulas, symbols, examples, exercises, and prerequisites. Symbols keep a `context` field so `μ` can mean *coefficient of friction* in one topic and *mean* in another.
-
-**Tutor loop** — question-driven, not lecture-driven:
-
-```
-Choose topic → AI introduces (short) → AI asks → student answers
-  → AI evaluates → feedback + grounded explanation → hint (progressive)
-  → next question (adaptive difficulty)
-```
-
-**Source grounding** — the AI receives only the relevant chunks. Answers that go beyond the sources are labelled **Supplementary explanation**.
-
-**Language** — detected from the material (`zh` / `en` / `mixed`); the tutor follows it and the user can switch (English / 中文 / Bilingual).
-
-**Prompts** — every prompt lives in `infrastructure/ai/prompts/<family>/vN.ts`, exports `VERSION`, `buildSystemPrompt()`, `buildUserPrompt(input)`, and is registered in `prompts/index.ts` with `PROMPT_VERSIONS`.
-
-**Prompt-injection defence** — all document content is wrapped with explicit `BEGIN/END (UNTRUSTED CONTENT)` delimiters, and every relevant system prompt carries a `securityFooter()` instructing the model to treat documents as data and ignore embedded instructions.
-
----
-
-## 8. Quiz architecture
-
-Five question types with deterministic grading:
-
-| Type | Grading |
+| 命令 | 作用 |
 | --- | --- |
-| Multiple choice | option id or label, case-insensitive |
-| True / False | `true/false`, `t/f`, `yes/no`, `1/0` |
-| Short answer | exact, `\|`-separated alternatives, or high keyword overlap (low confidence) |
-| Numeric | 1% relative tolerance; parses `3/4`, `1,000`, `2e-3` |
-| Math expression | mathjs symbolic + numeric equivalence |
-
-**Math equivalence** — `x^2 / 2` ≡ `0.5x²`. The evaluator normalises Unicode, parses with mathjs, tries symbolic simplification, then numeric sampling at 16 random points, treats `+ C` as arbitrary, and handles equations. When it cannot decide it returns `null`, the UI shows **"Unable to verify automatically"**, and the answer is excluded from the score rather than guessed.
-
-**Adaptive difficulty** — requires ≥ 2 graded answers before moving. Combines recent accuracy, difficulty-weighted accuracy, knowledge-point mastery, and streaks:
-
-```
-composite = 0.45·recentAccuracy + 0.25·weightedAccuracy
-          + 0.20·mastery + 0.10·streakSignal
-```
-
-**Knowledge mastery** — a recency- and difficulty-weighted estimate, always framed as an estimate.
+| `npm run dev` | 启动开发服务器 |
+| `npm run build` | 类型检查 + 生产构建 |
+| `npm run preview` | 本地预览构建结果 |
+| `npm run typecheck` | TypeScript 类型检查 |
+| `npm run lint` | ESLint |
+| `npm run format` | Prettier 格式化 |
+| `npm test` | 运行全部测试 |
+| `npm run test:watch` | 测试监听模式 |
+| `npm run test:coverage` | 测试覆盖率 |
 
 ---
 
-## 9. Mistake architecture
+## 已知限制
 
-Wrong answers enter the book automatically. Repeat mistakes on the same question merge into one entry with an attempt count.
-
-**AI analysis** returns where the working diverges, the first key error, why it fails, the correct approach, a **possible cause**, one of eight neutral categories, knowledge points to review, a similar example, and an invitation to continue.
-
-Categories: Conceptual · Formula · Calculation · Sign · Unit · Misreading · Incomplete reasoning · Unknown. **There is no "careless" category**, and the prompt + a normaliser + the UI label all enforce that causes are stated as possibilities.
-
-**Weakness detection**:
-
-```
-weaknessScore = 0.45·mistakeWeight + 0.20·activeWeight
-              + 0.15·recencyWeight + 0.20·(1 − mastery)
-```
-
-Rendered as **"Areas that may need review"** with neutral reasons.
-
-**Review sessions** — "Review my recent mistakes" builds an adaptive quiz focused on the weakest knowledge points. Per-mistake practice offers Same concept · Similar · Easier · Harder · Weakness training.
+- **需要自备 AI API**：不配置 API Key 时，AI 相关功能不可用（上传与本地处理仍可用）。
+- **数据绑定浏览器**：清除站点数据 / 更换浏览器 / 更换访问地址，都会导致看不到原有数据。请使用同一地址，并定期用「数据管理 → 导出数据」备份。
+- **数学等价判断有边界**：极复杂的表达式可能返回"无法自动判定"，此时该题不计入成绩，而不会算作答错。
+- **OCR 质量取决于图片清晰度**：低置信度会给出提示。
+- **课程分析为项目级**：一次分析覆盖该项目下所有已处理文档，生成的是课程级知识结构，而非逐文档结果。
 
 ---
 
-## 10. Security model
+## 许可证
 
-| Concern | Measure |
-| --- | --- |
-| API key at rest | **AES-GCM encrypted** with a non-extractable device key (`cryptoKeys` table). Plaintext never reaches IndexedDB. |
-| API key logging | Recursive redactor scrubs `apikey\|api_key\|password\|secret\|token\|authorization\|bearer` at any nesting depth; circular refs become `[CIRCULAR]` |
-| API key in URLs | Sent only in the `Authorization` header; never in a URL or query string (asserted by test) |
-| API key in analytics / error reports | No analytics, no remote error reporting |
-| API key in Git | `.gitignore` covers `.env*`; no key is ever written to a source file |
-| Course material upload | Never uploaded to a first-party server; there is none |
-| What leaves the device | Only the chunks / selection / answer needed for the current AI task, sent to the endpoint you configured |
-| Prompt injection | Document content, student answers, and selections are wrapped in explicit `UNTRUSTED CONTENT` delimiters; every affected system prompt carries a security footer |
-| AI output trust | Every structured response is parsed, validated, and sanitised before it reaches the database |
-| XSS | No `dangerouslySetInnerHTML`; Markdown/LaTeX rendered as text |
-| Project isolation | Every repository query is scoped by `projectId`; unknown project ids fail as `NotFoundError` |
-| Invite codes | Local admission gate, explicitly not a security boundary |
-
-### Key management and its boundary
-
-The device key is a **non-extractable** AES-GCM `CryptoKey` generated per origin and
-stored in IndexedDB. Its raw bytes never exist as a JavaScript value, so they cannot
-be logged, serialised, placed in a URL, or copied out of the browser.
-
-**Protects against:** plaintext secrets in IndexedDB, a disk image, a browser profile
-backup, or an export; secrets leaking into logs, errors, or telemetry; another
-application reading the origin's storage.
-
-**Does not protect against:** script executing on this same origin (XSS or a
-compromised dependency) — such script can call `crypto.subtle.decrypt`. That is an
-inherent limit of a purely client-side app. Stronger protection requires an
-independent user secret (a passphrase-derived key), which is **not implemented**.
-
----
-
-## 11. Known limitations
-
-1. **No independent user secret.** The device key protects the API key at rest but is
-   usable by any script on this origin. A passphrase-derived key would be a real
-   upgrade; it is deliberately not implemented (it would add an unlock step and make
-   a forgotten passphrase unrecoverable).
-2. **Prompt injection is reduced, not eliminated.** Content is isolated in delimiters
-   and the model is instructed to treat it as data, but no client-side prompt can
-   guarantee model behaviour.
-3. **Short-answer grading is conservative** — a paraphrase with no keyword overlap returns "unverified" rather than "wrong". Optional AI fallback is off by default to avoid extra cost.
-4. **Equation equivalence is structural**, not solved: `2x = 4` vs `x = 2` returns "unverified" by design — the three-state verdict (`correct` / `incorrect` / `unverified`) is intentional and will not be replaced by an unreliable solver.
-5. **Numeric tolerance is fixed at 1%**, not per-question.
-6. **PDF tables are not extracted** — pdfjs text content has no table structure.
-7. **OCR is slow on first use** (multi-MB WASM) and struggles with handwritten math.
-8. **No vector retrieval yet.** `sourceContext` picks chunks by document order with a keyword preference. Phase 6 replaces this with a real index.
-9. **Formula rendering is monospace**, not KaTeX (planned).
-10. **Bundle size**: `vendor-math` is 665 KB (192 KB gzip) and `vendor-pdf` 436 KB (130 KB gzip). Split into separate chunks for caching, but not lazy-loaded.
-
----
-
-## 12. Scripts
-
-| Command | Purpose |
-| --- | --- |
-| `Start.bat` | Windows one-click launcher: checks Node, installs deps if needed, runs the dev server, opens the browser |
-| `npm run dev` | Vite dev server on :5173 |
-| `npm run build` | `tsc -b && vite build` → `dist/` |
-| `npm run preview` | Serve the production build |
-| `npm run typecheck` | `tsc -b --noEmit` |
-| `npm run lint` | ESLint over `.` |
-| `npm run format` | Prettier write |
-| `npm test` | Vitest run |
-| `npm run test:watch` | Vitest watch |
-| `npm run test:coverage` | Vitest with coverage |
-
----
-
-## 13. Configuring AI
-
-1. Open **Settings** (sidebar) → **AI Settings**.
-2. Pick a **Provider** preset (or Custom).
-3. Enter **API Base URL**, **API Key**, **Model**.
-4. Adjust **Temperature** and **Max Tokens** if desired.
-5. Click **Test connection** — you get latency, model, or a plain-language error.
-6. Click **Save changes**.
-
-Then: create a project → upload material → wait for processing → **Analysis** tab → **Analyze Course** → open **Tutor** or **Quiz**.
-
----
-
-## 14. Production build
-
-```bash
-npm run build      # type-check + bundle
-npm run preview    # verify locally
-```
-
-Output in `dist/` — static assets, deployable to any static host. Set a SPA fallback so all routes serve `index.html`.
-
-Chunk layout:
-
-```
-index.html                     0.9 kB
-assets/index-*.css            28 kB   (6 kB gzip)
-assets/index-*.js            894 kB   (248 kB gzip)   app shell
-assets/vendor-react-*.js     207 kB   (67 kB gzip)
-assets/vendor-math-*.js      665 kB   (192 kB gzip)   mathjs
-assets/vendor-pdf-*.js       436 kB   (130 kB gzip)   pdfjs
-assets/vendor-db-*.js         96 kB   (32 kB gzip)    dexie
-assets/pdf.worker.min-*.mjs 1265 kB                  pdfjs worker
-```
-
----
-
-## Testing
-
-304 tests across 32 files:
-
-| Area | Files |
-| --- | --- |
-| Foundation | `errors`, `utils`, `format`, `projectService`, `inviteService`, `settingsService` |
-| UI | `dialogs`, `progressiveList`, `useDebouncedValue`, `mistakeBookSearch` |
-| Content | `pdfExtractor`, `docxExtractor`, `pptxExtractor`, `ocrExtractor`, `chunking`, `documents` |
-| AI | `errorsAndParse`, `openaiCompatible`, `aiService`, `failureModes`, `prompts`, `services`, `friendlyErrors`, `promptInjection` |
-| Quiz | `mathEvaluator`, `answerEvaluation`, `adaptiveDifficulty`, `scoring`, `masteryService`, `quizService` |
-| Mistakes | `mistakeService`, `mistakeAnalysis`, `weakness`, `reviewSession`, `dataManagement` |
-| End-to-end | `integration/userFlow` |
-
----
-
-## Roadmap
-
-| Phase | Theme | Status |
-| --- | --- | --- |
-| 1 | Foundation | ✅ |
-| 2 | Local-first Content Library | ✅ |
-| 3 | AI Provider · Course Analysis · Tutor · Translation | ✅ |
-| 4 | Quiz · Adaptive Difficulty · Knowledge Mastery | ✅ |
-| 5 | AI Mistake Book · Weakness Detection · Review Sessions | ✅ |
-| 6 | Knowledge index + retrieval (RAG) | ⏳ |
-| 7 | KaTeX rendering + formula polish | ⏳ |
-| 8 | Dashboard polish | ⏳ |
-| 9 | PWA, offline shell, import/export UI | ⏳ |
-
----
-
-## Phase tags
-
-- `v0.1-init` — Phase 1
-- `v0.2-content-library` — Phase 2
-- `v0.3-ai-tutor` — Phase 3
-- `v0.4-quiz` — Phase 4
-- `v0.5-mistakes` — Phase 5
-
-```bash
-git checkout v0.4-quiz     # inspect a phase
-git checkout master        # back to latest
-```
+本仓库目前未附带开源许可证。

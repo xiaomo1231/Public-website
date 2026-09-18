@@ -1,5 +1,6 @@
 import { useEffect, useId, useState, type ReactNode } from 'react'
 import { Loader2 } from 'lucide-react'
+import { useTranslation } from '@/i18n'
 import { Button } from './Button'
 import {
   Dialog,
@@ -46,15 +47,19 @@ export function ConfirmDialog({
   title,
   description,
   details,
-  confirmLabel = 'Confirm',
-  cancelLabel = 'Cancel',
+  confirmLabel,
+  cancelLabel,
   variant = 'default',
   requireText,
   busy = false,
   onConfirm,
 }: ConfirmDialogProps): JSX.Element {
+  const { t } = useTranslation()
   const inputId = useId()
   const [typed, setTyped] = useState('')
+
+  const resolvedConfirmLabel = confirmLabel ?? t('confirmDialog.confirm')
+  const resolvedCancelLabel = cancelLabel ?? t('common.cancel')
 
   // Reset the typed confirmation whenever the dialog closes.
   useEffect(() => {
@@ -91,7 +96,7 @@ export function ConfirmDialog({
         {needsText && (
           <div className="space-y-2">
             <Label htmlFor={inputId}>
-              Type <span className="font-mono text-foreground">{requireText}</span> to confirm
+              {t('confirmDialog.typeToConfirm', { word: requireText ?? '' })}
             </Label>
             <Input
               id={inputId}
@@ -108,7 +113,7 @@ export function ConfirmDialog({
 
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={busy}>
-            {cancelLabel}
+            {resolvedCancelLabel}
           </Button>
           <Button
             variant={variant === 'destructive' ? 'destructive' : 'default'}
@@ -116,7 +121,7 @@ export function ConfirmDialog({
             disabled={!canConfirm}
           >
             {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-            {confirmLabel}
+            {resolvedConfirmLabel}
           </Button>
         </DialogFooter>
       </DialogContent>

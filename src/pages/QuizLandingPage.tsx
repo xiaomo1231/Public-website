@@ -10,14 +10,16 @@ import { PageContainer, PageContent, PageHeader } from '@/shared/ui/Page'
 import { QuizConfigDialog } from '@/widgets/quiz/QuizConfigDialog'
 import { buildAIServices } from '@/services/aiServices'
 import { QuizRepository } from '@/entities/quiz/repository'
-import type { Quiz, QuizConfig } from '@/entities/quiz/types'
+import { QUIZ_STATUS_LABEL_KEYS, type Quiz, type QuizConfig } from '@/entities/quiz/types'
 import { toast } from '@/features/toast/toastStore'
 import { friendlyAIError } from '@/shared/lib/aiErrors'
 import { formatDateTime } from '@/shared/lib/utils'
+import { useTranslation } from '@/i18n'
 
 export function QuizLandingPage(): JSX.Element {
   const { id: projectId } = useParams<{ id: string }>()
   const navigate = useNavigate()
+  const { t } = useTranslation()
   const [quizzes, setQuizzes] = useState<Quiz[]>([])
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState(false)
@@ -48,8 +50,8 @@ export function QuizLandingPage(): JSX.Element {
       if (!bundle) {
         toast({
           variant: 'error',
-          title: 'Configure AI provider first',
-          description: 'Open Settings → AI Settings to add your API key.',
+          title: t('quiz.noProvider'),
+          description: t('quiz.noProviderHint'),
         })
         return
       }
@@ -57,11 +59,15 @@ export function QuizLandingPage(): JSX.Element {
         onProgress: (stage, value) => setProgress({ stage, progress: value }),
       })
       await bundle.quiz.startQuiz(quiz.id)
-      toast({ variant: 'success', title: 'Quiz ready', description: `${quiz.questionIds.length} questions` })
+      toast({
+        variant: 'success',
+        title: t('quiz.ready'),
+        description: t('quiz.readyBody', { count: quiz.questionIds.length }),
+      })
       navigate(`/projects/${projectId}/quiz/${quiz.id}`)
     } catch (err) {
       const msg = friendlyAIError(err)
-      toast({ variant: 'error', title: 'Could not generate quiz', description: msg })
+      toast({ variant: 'error', title: t('quiz.generateFailed'), description: msg })
     } finally {
       setBusy(false)
       setProgress(null)
@@ -75,21 +81,21 @@ export function QuizLandingPage(): JSX.Element {
       <PageHeader
         title={
           <div className="flex items-center gap-2">
-            <Button asChild variant="ghost" size="icon" aria-label="Back to project">
+            <Button asChild variant="ghost" size="icon" aria-label={t('quiz.backToProject')}>
               <Link to={`/projects/${projectId}`}>
                 <ArrowLeft className="h-4 w-4" />
               </Link>
             </Button>
             <ListChecks className="h-4 w-4" />
-            Quiz
+            {t('quiz.title')}
           </div>
         }
-        description="Practice with AI-generated questions. Difficulty adapts to your performance."
+        description={t('quiz.subtitle')}
         actions={
           <Button variant="outline" asChild>
             <Link to={`/projects/${projectId}/mastery`}>
               <Brain className="h-4 w-4" />
-              Knowledge Mastery
+              {t('quiz.mastery')}
             </Link>
           </Button>
         }
@@ -98,18 +104,18 @@ export function QuizLandingPage(): JSX.Element {
         <QuizConfigDialog projectId={projectId} onStart={handleStart} busy={busy} progress={progress} />
 
         {loading ? (
-          <LoadingState label="Loading quizzes" />
+          <LoadingState label={t('quiz.loading')} />
         ) : quizzes.length === 0 ? (
           <EmptyState
             icon={<Sparkles className="h-10 w-10" />}
-            title="No quizzes yet"
-            description="Generate your first quiz above."
+            title={t('quiz.empty')}
+            description={t('quiz.emptyHint')}
           />
         ) : (
           <Card>
             <CardHeader>
-              <CardTitle className="text-base">Previous quizzes</CardTitle>
-              <CardDescription>{quizzes.length} saved locally.</CardDescription>
+              <CardTitle className="text-base">{t('quiz.previous')}</CardTitle>
+              <CardDescription>{t('quiz.previousCount', { count: quizzes.length })}</CardDescription>
             </CardHeader>
             <CardContent className="space-y-2">
               {quizzes.map((q) => (
@@ -120,7 +126,7 @@ export function QuizLandingPage(): JSX.Element {
                 >
                   <span className="min-w-0 flex-1 truncate font-medium">{q.title}</span>
                   <Badge variant={q.status === 'completed' ? 'default' : q.status === 'failed' ? 'destructive' : 'secondary'}>
-                    {q.status}
+                    {t(QUIZ_STATUS_LABEL_KEYS[q.status])}
                   </Badge>
                   {q.score && <Badge variant="outline">{q.score.percentage}%</Badge>}
                   <span className="flex items-center gap-1 text-xs text-muted-foreground">

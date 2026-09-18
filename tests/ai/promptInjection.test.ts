@@ -52,7 +52,7 @@ describe('Prompt-injection hardening', () => {
       topicName: 'T',
       topicDescription: '',
       knowledgePoints: [],
-      plan: [{ difficulty: 'basic', type: 'short_answer' }],
+      plan: [{ difficulty: 'basic', type: 'numeric' }],
       language: 'en',
       sourceSnippets: [MALICIOUS],
     })
@@ -154,7 +154,7 @@ describe('Prompt-injection hardening', () => {
           topicName: 'T',
           topicDescription: '',
           knowledgePoints: [],
-          plan: [{ difficulty: 'basic', type: 'short_answer' }],
+          plan: [{ difficulty: 'basic', type: 'numeric' }],
           language: 'en',
           sourceSnippets: [MALICIOUS],
         }),

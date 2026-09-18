@@ -1,5 +1,7 @@
 import { create } from 'zustand'
 import type { UserProfile, UserTheme } from '@/entities/user/types'
+import type { UILanguage } from '@/i18n/types'
+import { t } from '@/i18n'
 import { UserService } from '@/services/userService'
 import { InviteService } from '@/services/inviteService'
 import { logger } from '@/infrastructure/logger/logger'
@@ -18,6 +20,7 @@ interface AuthActions {
   setTheme: (theme: UserTheme) => Promise<void>
   setName: (name: string) => Promise<void>
   setLanguage: (language: UserProfile['language']) => Promise<void>
+  setUILanguage: (language: UILanguage) => Promise<void>
 }
 
 export type AuthStore = AuthState & AuthActions
@@ -42,7 +45,7 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
       const profile = await users.get()
       set({ profile, loaded: true, loading: false })
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Failed to load profile'
+      const msg = err instanceof Error ? err.message : t('errors.failedToLoadProfile')
       logger.error('AuthStore.load failed', undefined, err)
       set({ error: msg, loaded: true, loading: false })
     }
@@ -74,6 +77,11 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
 
   async setLanguage(language) {
     const next = await users.update({ language })
+    set({ profile: next })
+  },
+
+  async setUILanguage(uiLanguage) {
+    const next = await users.update({ uiLanguage })
     set({ profile: next })
   },
 }))

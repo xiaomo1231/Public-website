@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { evaluateDeterministic, UNVERIFIED_MESSAGE } from '@/services/answerEvaluationService'
+import { evaluateDeterministic } from '@/services/answerEvaluationService'
 import type { Question, QuestionType } from '@/entities/question/types'
 
 function question(overrides: Partial<Question> & { type: QuestionType }): Question {
@@ -123,39 +123,5 @@ describe('evaluateDeterministic — math expression', () => {
     const r = evaluateDeterministic(q, '¯\\_(ツ)_/¯')
     expect(r.isCorrect).toBeNull()
     expect(r.note).toMatch(/verify/i)
-  })
-})
-
-describe('evaluateDeterministic — short answer', () => {
-  const q = question({ type: 'short_answer', prompt: 'What?', correctAnswer: 'rate of change' })
-
-  it('accepts an exact match', () => {
-    expect(evaluateDeterministic(q, 'rate of change').isCorrect).toBe(true)
-  })
-
-  it('is case-insensitive and trims', () => {
-    expect(evaluateDeterministic(q, '  Rate Of Change  ').isCorrect).toBe(true)
-  })
-
-  it('accepts alternatives separated by |', () => {
-    const q2 = question({ type: 'short_answer', prompt: 'What?', correctAnswer: 'derivative|rate of change' })
-    expect(evaluateDeterministic(q2, 'derivative').isCorrect).toBe(true)
-  })
-
-  it('accepts a high keyword overlap', () => {
-    const q2 = question({ type: 'short_answer', prompt: 'What?', correctAnswer: 'the limit of the difference quotient' })
-    const r = evaluateDeterministic(q2, 'limit of difference quotient')
-    expect(r.isCorrect).toBe(true)
-    expect(r.confidence).toBeLessThan(1)
-  })
-
-  it('returns unverified for an unrelated answer', () => {
-    const r = evaluateDeterministic(q, 'banana')
-    expect(r.isCorrect).toBeNull()
-    expect(r.note).toContain(UNVERIFIED_MESSAGE)
-  })
-
-  it('rejects an empty answer', () => {
-    expect(evaluateDeterministic(q, '').isCorrect).toBe(false)
   })
 })

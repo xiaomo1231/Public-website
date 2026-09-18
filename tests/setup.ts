@@ -5,8 +5,26 @@ import { afterEach, beforeEach } from 'vitest'
 import { cleanup } from '@testing-library/react'
 import { getDb, setDbForTesting } from '@/infrastructure/db/database'
 import { clearCachedDeviceKey } from '@/infrastructure/crypto/deviceKey'
+import { resetUILanguageForTesting } from '@/i18n/store'
 
 ;(globalThis as { indexedDB?: IDBFactory }).indexedDB = new IDBFactory()
+
+// jsdom does not implement ResizeObserver, which Radix primitives (Slider,
+// Select, …) use for layout measurement. A no-op stub is enough for tests.
+if (!('ResizeObserver' in globalThis)) {
+  class ResizeObserverStub {
+    observe(): void {
+      /* no-op */
+    }
+    unobserve(): void {
+      /* no-op */
+    }
+    disconnect(): void {
+      /* no-op */
+    }
+  }
+  ;(globalThis as { ResizeObserver?: unknown }).ResizeObserver = ResizeObserverStub
+}
 
 // jsdom 25's Blob.prototype.arrayBuffer and .text are stubs that return
 // an empty buffer / empty string regardless of the underlying data.
@@ -37,6 +55,9 @@ Object.defineProperty(BlobProto, 'text', {
 })
 
 beforeEach(async () => {
+  // UI language is a module-level singleton; reset it so a test that switches
+  // language cannot leak into the next one.
+  resetUILanguageForTesting()
   // The device key is cached in module memory; the database is wiped below,
   // so the cache must be dropped too or tests would reuse a key that no
   // longer exists in storage.

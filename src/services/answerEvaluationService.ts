@@ -6,27 +6,12 @@ import {
   parseNumeric,
 } from '@/infrastructure/math/expressionEvaluator'
 import { logger } from '@/infrastructure/logger/logger'
+import { t } from '@/i18n'
 
-const UNVERIFIED_NOTE = 'Unable to verify automatically'
+const UNVERIFIED_NOTE = (): string => t('question.unverified')
 
 function norm(text: string): string {
   return text.trim().toLowerCase().replace(/\s+/g, ' ')
-}
-
-function stripArticle(text: string): string {
-  return norm(text).replace(/^(a|an|the)\s+/, '')
-}
-
-const STOP_WORDS = new Set([
-  'the', 'a', 'an', 'of', 'is', 'are', 'to', 'in', 'on', 'at', 'by', 'for',
-  'and', 'or', 'as', 'it', 'its', 'that', 'this', 'with', 'from',
-])
-
-function contentTokens(text: string): string[] {
-  return stripArticle(text)
-    .split(/[\s,;]+/)
-    .map((t) => t.replace(/[^a-z0-9]/g, ''))
-    .filter((t) => t.length > 2 && !STOP_WORDS.has(t))
 }
 
 /**
@@ -43,12 +28,10 @@ export function evaluateDeterministic(question: Question, userAnswer: string): Q
       return evaluateNumeric(question, userAnswer)
     case 'math_expr':
       return evaluateMath(question, userAnswer)
-    case 'short_answer':
-      return evaluateShortAnswer(question, userAnswer)
     default: {
       const exhaustive: never = question.type
       void exhaustive
-      return { isCorrect: null, method: 'unverified', confidence: 0, note: UNVERIFIED_NOTE }
+      return { isCorrect: null, method: 'unverified', confidence: 0, note: UNVERIFIED_NOTE() }
     }
   }
 }
@@ -109,7 +92,7 @@ function evaluateNumeric(question: Question, userAnswer: string): QuestionEvalua
   const given = userAnswer.trim()
   const expected = question.correctAnswer.trim()
   if (!given) {
-    return { isCorrect: false, method: 'numeric', confidence: 1, expected, normalizedUser: '', note: 'Empty answer' }
+    return { isCorrect: false, method: 'numeric', confidence: 1, expected, normalizedUser: '', note: t('errors.emptyAnswer') }
   }
   const result = numericEquivalent(given, expected)
   if (result === null) {
@@ -122,11 +105,11 @@ function evaluateNumeric(question: Question, userAnswer: string): QuestionEvalua
         confidence: 0,
         expected,
         normalizedUser: given,
-        note: `${UNVERIFIED_NOTE} — could not read your number.`,
+        note: t('errors.numberUnreadable', { answer: UNVERIFIED_NOTE() }),
       }
     }
     if (expectedNum === null) {
-      return { isCorrect: null, method: 'unverified', confidence: 0, expected, normalizedUser: given, note: UNVERIFIED_NOTE }
+      return { isCorrect: null, method: 'unverified', confidence: 0, expected, normalizedUser: given, note: UNVERIFIED_NOTE() }
     }
   }
   return {
@@ -152,72 +135,6 @@ function evaluateMath(question: Question, userAnswer: string): QuestionEvaluatio
   }
 }
 
-function evaluateShortAnswer(question: Question, userAnswer: string): QuestionEvaluation {
-  const given = userAnswer.trim()
-  const expected = question.correctAnswer.trim()
-  if (!given) {
-    return { isCorrect: false, method: 'exact', confidence: 1, expected, normalizedUser: '', note: 'Empty answer' }
-  }
-  if (stripArticle(given) === stripArticle(expected)) {
-    return {
-      isCorrect: true,
-      method: 'case_insensitive',
-      confidence: 0.95,
-      expected,
-      normalizedUser: given,
-      normalizedExpected: expected,
-    }
-  }
-
-  // Split the canonical answer on common separators (e.g. "rate of change | derivative").
-  const alternatives = expected
-    .split(/[|;]/)
-    .map((s) => s.trim())
-    .filter(Boolean)
-  for (const alt of alternatives) {
-    if (stripArticle(given) === stripArticle(alt)) {
-      return {
-        isCorrect: true,
-        method: 'case_insensitive',
-        confidence: 0.9,
-        expected,
-        normalizedUser: given,
-        normalizedExpected: alt,
-      }
-    }
-  }
-
-  // Token overlap heuristic — a weak signal we surface with low confidence.
-  const expectedTokens = new Set(contentTokens(expected))
-  const givenTokens = contentTokens(given)
-  if (expectedTokens.size > 0 && givenTokens.length > 0) {
-    const hits = givenTokens.filter((t) => expectedTokens.has(t)).length
-    const recall = hits / expectedTokens.size
-    const precision = hits / givenTokens.length
-    if (recall >= 0.75 && precision >= 0.75) {
-      return {
-        isCorrect: true,
-        method: 'ai',
-        confidence: 0.6,
-        expected,
-        normalizedUser: given,
-        normalizedExpected: expected,
-        note: 'Accepted based on keyword overlap.',
-      }
-    }
-  }
-
-  return {
-    isCorrect: null,
-    method: 'unverified',
-    confidence: 0,
-    expected,
-    normalizedUser: given,
-    normalizedExpected: expected,
-    note: `${UNVERIFIED_NOTE} — this answer needs review.`,
-  }
-}
-
 /**
  * Convert a free-text AI verdict into a `QuestionEvaluation`. Used as a
  * fallback when the deterministic evaluator returns `unverified`.
@@ -234,8 +151,8 @@ export function evaluationFromAI(
     ...(fallback.expected ? { expected: fallback.expected } : {}),
     ...(fallback.normalizedUser ? { normalizedUser: fallback.normalizedUser } : {}),
     ...(verdict.feedback ? { explanation: verdict.feedback } : {}),
-    note: 'Judged by AI.',
+    note: t('errors.judgedByAi'),
   }
 }
 
-export const UNVERIFIED_MESSAGE = UNVERIFIED_NOTE
+export const UNVERIFIED_MESSAGE = t('question.unverified')

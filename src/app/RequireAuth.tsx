@@ -1,6 +1,7 @@
 import { type ReactNode } from 'react'
 import { Navigate, useLocation } from 'react-router-dom'
 import { useAuth } from '@/features/auth/useAuth'
+import { useTranslation } from '@/i18n'
 
 /**
  * Gate that sends unauthenticated users to /invite.
@@ -9,11 +10,12 @@ import { useAuth } from '@/features/auth/useAuth'
 export function RequireAuth({ children }: { children: ReactNode }): JSX.Element {
   const { loaded, isUnlocked } = useAuth()
   const location = useLocation()
+  const { t } = useTranslation()
 
   if (!loaded) {
     return (
       <div className="grid min-h-screen place-items-center bg-background text-sm text-muted-foreground">
-        Loading…
+        {t('common.loading')}
       </div>
     )
   }

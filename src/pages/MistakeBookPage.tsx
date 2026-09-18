@@ -22,16 +22,18 @@ import { WeaknessPanel } from '@/widgets/mistakes/WeaknessPanel'
 import { buildAIServices } from '@/services/aiServices'
 import { MistakeService } from '@/services/mistakeService'
 import type { Mistake, MistakeStats, MistakeStatus, MistakeType } from '@/entities/mistake/types'
-import { MISTAKE_TYPES, MISTAKE_TYPE_LABELS } from '@/entities/mistake/types'
+import { MISTAKE_TYPES, MISTAKE_TYPE_LABEL_KEYS } from '@/entities/mistake/types'
 import type { DifficultyLevel } from '@/infrastructure/ai/prompts/types'
 import { toast } from '@/features/toast/toastStore'
 import { friendlyAIError } from '@/shared/lib/aiErrors'
 import { SEARCH_DEBOUNCE_MS, useDebouncedValue } from '@/shared/lib/useDebouncedValue'
+import { useTranslation } from '@/i18n'
 
 export function MistakeBookPage(): JSX.Element {
   const { id: projectId } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const mistakes = useMemo(() => new MistakeService(), [])
+  const { t } = useTranslation()
 
   const [rows, setRows] = useState<Mistake[]>([])
   const [stats, setStats] = useState<MistakeStats | null>(null)
@@ -100,16 +102,16 @@ export function MistakeBookPage(): JSX.Element {
   async function handleAnalyze(id: string) {
     const bundle = await buildAIServices()
     if (!bundle) {
-      toast({ variant: 'error', title: 'Configure AI provider first' })
+      toast({ variant: 'error', title: t('mistakes.noProvider') })
       return
     }
     try {
       await bundle.mistakeAnalysis.analyze(id)
       await reloadAll()
-      toast({ variant: 'success', title: 'Analysis ready' })
+      toast({ variant: 'success', title: t('mistakes.analysisReady') })
     } catch (err) {
       const msg = friendlyAIError(err)
-      toast({ variant: 'error', title: 'Analysis failed', description: msg })
+      toast({ variant: 'error', title: t('mistakes.analysisFailed'), description: msg })
       await reloadAll()
     }
   }
@@ -129,24 +131,24 @@ export function MistakeBookPage(): JSX.Element {
   async function handleRemove(id: string) {
     await mistakes.remove(id)
     await reloadAll()
-    toast({ variant: 'success', title: 'Mistake removed' })
+    toast({ variant: 'success', title: t('mistakes.removed') })
   }
 
   async function handlePractice(id: string, mode: 'same_concept' | 'similar' | 'easier' | 'harder' | 'weakness') {
     if (!projectId) return
     const bundle = await buildAIServices()
     if (!bundle) {
-      toast({ variant: 'error', title: 'Configure AI provider first' })
+      toast({ variant: 'error', title: t('mistakes.noProvider') })
       return
     }
     try {
       const session = await bundle.reviewSession.practiceMistake(id, mode)
       await bundle.quiz.startQuiz(session.id)
-      toast({ variant: 'success', title: 'Practice ready' })
+      toast({ variant: 'success', title: t('mistakes.practiceReady') })
       navigate(`/projects/${projectId}/quiz/${session.id}`)
     } catch (err) {
       const msg = friendlyAIError(err)
-      toast({ variant: 'error', title: 'Could not create practice', description: msg })
+      toast({ variant: 'error', title: t('mistakes.practiceFailed'), description: msg })
     }
   }
 
@@ -154,18 +156,18 @@ export function MistakeBookPage(): JSX.Element {
     if (!projectId) return
     const bundle = await buildAIServices()
     if (!bundle) {
-      toast({ variant: 'error', title: 'Configure AI provider first' })
+      toast({ variant: 'error', title: t('mistakes.noProvider') })
       return
     }
     setReviewBusy(true)
     try {
       const session = await bundle.reviewSession.createReviewSession(projectId, { count: 10, difficulty: 'adaptive' })
       await bundle.quiz.startQuiz(session.id)
-      toast({ variant: 'success', title: 'Review session ready' })
+      toast({ variant: 'success', title: t('mistakes.reviewReady') })
       navigate(`/projects/${projectId}/quiz/${session.id}`)
     } catch (err) {
       const msg = friendlyAIError(err)
-      toast({ variant: 'error', title: 'Could not create review session', description: msg })
+      toast({ variant: 'error', title: t('mistakes.reviewFailed'), description: msg })
     } finally {
       setReviewBusy(false)
     }
@@ -191,25 +193,25 @@ export function MistakeBookPage(): JSX.Element {
       <PageHeader
         title={
           <div className="flex items-center gap-2">
-            <Button asChild variant="ghost" size="icon" aria-label="Back to project">
+            <Button asChild variant="ghost" size="icon" aria-label={t('mistakes.backToProject')}>
               <Link to={`/projects/${projectId}`}>
                 <ArrowLeft className="h-4 w-4" />
               </Link>
             </Button>
             <BookX className="h-4 w-4" />
-            Mistake Book
+            {t('mistakes.title')}
           </div>
         }
-        description="Wrong answers are collected automatically. Analyse them, practise them, and mark them understood."
+        description={t('mistakes.subtitle')}
         actions={
           <>
             <Button variant="outline" onClick={() => setAddOpen(true)}>
               <Plus className="h-4 w-4" />
-              Add manually
+              {t('mistakes.addManually')}
             </Button>
             <Button onClick={handleReviewSession} disabled={reviewBusy || !stats || stats.active === 0}>
               {reviewBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
-              Review my recent mistakes
+              {t('mistakes.reviewRecent')}
             </Button>
           </>
         }
@@ -218,17 +220,18 @@ export function MistakeBookPage(): JSX.Element {
         {stats && stats.total > 0 && (
           <Card>
             <CardContent className="flex flex-wrap items-center gap-4 p-4 text-sm">
-              <span>
-                <span className="text-2xl font-semibold tabular-nums">{stats.active}</span>{' '}
-                <span className="text-muted-foreground">active</span>
-              </span>
               <span className="text-muted-foreground">
-                {stats.understood} understood · {stats.archived} archived · {stats.total} total
+                {t('mistakes.summary', {
+                  active: stats.active,
+                  understood: stats.understood,
+                  archived: stats.archived,
+                  total: stats.total,
+                })}
               </span>
               <div className="ml-auto flex flex-wrap gap-1">
-                {MISTAKE_TYPES.filter((t) => stats.byType[t] > 0).map((t) => (
-                  <Badge key={t} variant="outline">
-                    {MISTAKE_TYPE_LABELS[t]}: {stats.byType[t]}
+                {MISTAKE_TYPES.filter((type) => stats.byType[type] > 0).map((type) => (
+                  <Badge key={type} variant="outline">
+                    {t(MISTAKE_TYPE_LABEL_KEYS[type])}: {stats.byType[type]}
                   </Badge>
                 ))}
               </div>
@@ -241,7 +244,12 @@ export function MistakeBookPage(): JSX.Element {
         <div className="flex flex-wrap items-center gap-2">
           <div className="relative min-w-[200px] flex-1">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search questions or knowledge points" className="pl-9" />
+            <Input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder={t('mistakes.searchPlaceholder')}
+              className="pl-9"
+            />
           </div>
           <Select value={status} onValueChange={(v) => setStatus(v as MistakeStatus | 'all')}>
             <SelectTrigger className="w-[150px]">
@@ -249,10 +257,10 @@ export function MistakeBookPage(): JSX.Element {
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="active">Active</SelectItem>
-              <SelectItem value="understood">Understood</SelectItem>
-              <SelectItem value="archived">Archived</SelectItem>
-              <SelectItem value="all">All</SelectItem>
+              <SelectItem value="active">{t('mistakes.filter.active')}</SelectItem>
+              <SelectItem value="understood">{t('mistakes.filter.understood')}</SelectItem>
+              <SelectItem value="archived">{t('mistakes.filter.archived')}</SelectItem>
+              <SelectItem value="all">{t('mistakes.filter.all')}</SelectItem>
             </SelectContent>
           </Select>
           <Select value={mistakeType} onValueChange={(v) => setMistakeType(v as MistakeType | 'all')}>
@@ -260,10 +268,10 @@ export function MistakeBookPage(): JSX.Element {
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">All categories</SelectItem>
-              {MISTAKE_TYPES.map((t) => (
-                <SelectItem key={t} value={t}>
-                  {MISTAKE_TYPE_LABELS[t]}
+              <SelectItem value="all">{t('mistakes.allCategories')}</SelectItem>
+              {MISTAKE_TYPES.map((type) => (
+                <SelectItem key={type} value={type}>
+                  {t(MISTAKE_TYPE_LABEL_KEYS[type])}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -271,21 +279,19 @@ export function MistakeBookPage(): JSX.Element {
         </div>
 
         {loading ? (
-          <LoadingState label="Loading mistake book" />
+          <LoadingState label={t('mistakes.loading')} />
         ) : rows.length === 0 ? (
           <EmptyState
             icon={<BookX className="h-10 w-10" />}
-            title={stats && stats.total > 0 ? 'No mistakes match these filters' : 'No mistakes yet'}
+            title={stats && stats.total > 0 ? t('mistakes.emptyFiltered') : t('mistakes.empty')}
             description={
-              stats && stats.total > 0
-                ? 'Try a different status or category.'
-                : 'Wrong answers from quizzes appear here automatically, or you can add one manually.'
+              stats && stats.total > 0 ? t('mistakes.emptyFilteredHint') : t('mistakes.emptyHint')
             }
             action={
               stats && stats.total > 0 ? undefined : (
                 <Button onClick={() => setAddOpen(true)}>
                   <Plus className="h-4 w-4" />
-                  Add a mistake
+                  {t('mistakes.addTitle')}
                 </Button>
               )
             }

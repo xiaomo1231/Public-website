@@ -1,5 +1,6 @@
 import { useState, type ReactNode } from 'react'
 import { ChevronDown } from 'lucide-react'
+import { useTranslation } from '@/i18n'
 import { Button } from './Button'
 import { cn } from '@/shared/lib/utils'
 
@@ -32,6 +33,7 @@ export function ProgressiveList<T>({
   className,
   empty,
 }: ProgressiveListProps<T>): JSX.Element {
+  const { t } = useTranslation()
   const [revealed, setRevealed] = useState(pageSize)
 
   if (items.length === 0 && empty !== undefined) {
@@ -53,8 +55,8 @@ export function ProgressiveList<T>({
             onClick={() => setRevealed((current) => current + pageSize)}
           >
             <ChevronDown className={cn('h-4 w-4')} />
-            Show {Math.min(pageSize, remaining)} more
-            <span className="text-muted-foreground">({remaining} remaining)</span>
+            {t('progressiveList.showMore', { count: Math.min(pageSize, remaining) })}
+            <span className="text-muted-foreground">{t('progressiveList.remaining', { count: remaining })}</span>
           </Button>
         </div>
       )}

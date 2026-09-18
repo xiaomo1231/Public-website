@@ -1,11 +1,13 @@
 import { useEffect, useState } from 'react'
 import { Loader2 } from 'lucide-react'
+import { useTranslation } from '@/i18n'
 
 /**
  * Bootstrap screen shown while we open IndexedDB and seed the default profile.
  * Avoids the page rendering an empty shell.
  */
 export function Bootstrap({ children }: { children: React.ReactNode }): JSX.Element {
+  const { t } = useTranslation()
   const [ready, setReady] = useState(false)
 
   useEffect(() => {
@@ -19,7 +21,7 @@ export function Bootstrap({ children }: { children: React.ReactNode }): JSX.Elem
       <div className="grid min-h-screen place-items-center bg-background">
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
           <Loader2 className="h-4 w-4 animate-spin" />
-          Loading workspace…
+          {t('bootstrap.loading')}
         </div>
       </div>
     )

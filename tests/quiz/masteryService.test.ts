@@ -17,7 +17,7 @@ function attempt(
     projectId,
     questionId: 'q',
     knowledgePoint,
-    questionType: 'short_answer',
+    questionType: 'numeric',
     difficulty: opts.difficulty ?? 'basic',
     userAnswer: 'x',
     evaluation: { isCorrect, method: isCorrect === null ? 'unverified' : 'exact', confidence: 1 },

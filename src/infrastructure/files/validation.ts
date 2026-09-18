@@ -1,5 +1,6 @@
 import type { DocumentType } from '@/entities/document/types'
 import { ValidationError } from '@/infrastructure/errors/AppError'
+import { t } from '@/i18n'
 
 export const MAX_FILE_BYTES = 100 * 1024 * 1024 // 100 MB
 export const MAX_TEXT_BYTES = 1 * 1024 * 1024 // 1 MB pasted text
@@ -21,19 +22,40 @@ export function detectDocumentType(file: File): DocumentType | null {
   return null
 }
 
-export function validateFile(file: File): DocumentType {
-  if (file.size > MAX_FILE_BYTES) {
-    throw new ValidationError(`File is too large (max ${MAX_FILE_BYTES / 1024 / 1024} MB)`)
-  }
+/**
+ * Reason a file cannot be accepted. Used by the batch uploader so it can report
+ * every rejected file individually instead of failing the whole selection.
+ */
+export type FileRejection = 'unsupported' | 'too-large'
+
+export type FileClassification =
+  | { ok: true; type: DocumentType }
+  | { ok: false; reason: FileRejection }
+
+/**
+ * Non-throwing counterpart of `validateFile`. Both share the same rules, so a
+ * file accepted here is always accepted by `validateFile`.
+ */
+export function classifyFile(file: File): FileClassification {
   const type = detectDocumentType(file)
-  if (!type) {
-    throw new ValidationError(`Unsupported file type: ${file.name}`)
+  if (!type) return { ok: false, reason: 'unsupported' }
+  if (file.size > MAX_FILE_BYTES) return { ok: false, reason: 'too-large' }
+  return { ok: true, type }
+}
+
+export function validateFile(file: File): DocumentType {
+  const result = classifyFile(file)
+  if (!result.ok) {
+    if (result.reason === 'too-large') {
+      throw new ValidationError(t('errors.fileTooLarge', { max: MAX_FILE_BYTES / 1024 / 1024 }))
+    }
+    throw new ValidationError(t('errors.unsupportedFileType', { name: file.name }))
   }
-  return type
+  return result.type
 }
 
 export function validateTextInput(text: string): void {
   if (text.length > MAX_TEXT_BYTES) {
-    throw new ValidationError(`Text is too long (max ${MAX_TEXT_BYTES / 1024} KB)`)
+    throw new ValidationError(t('errors.textTooLong', { max: MAX_TEXT_BYTES / 1024 }))
   }
 }

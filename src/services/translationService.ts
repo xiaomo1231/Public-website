@@ -7,6 +7,7 @@ import type { TranslationEntry } from '@/entities/translation/types'
 import { asStringArray, asTrimmedString } from '@/infrastructure/ai/validation'
 import { logger } from '@/infrastructure/logger/logger'
 import { AppError } from '@/infrastructure/errors/AppError'
+import { t } from '@/i18n'
 
 export interface TranslationInput {
   projectId: string
@@ -79,7 +80,7 @@ export function normalizeTranslation(raw: unknown): TranslationOutput {
   const record = (typeof raw === 'object' && raw !== null ? raw : {}) as Record<string, unknown>
   const translation = asTrimmedString(record.translation)
   if (!translation) {
-    throw new AppError('The AI did not return a translation.', 'MALFORMED_TRANSLATION')
+    throw new AppError(t('errors.aiNoTranslation'), 'MALFORMED_TRANSLATION')
   }
   return {
     translation,

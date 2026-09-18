@@ -1,5 +1,6 @@
 import { Loader2 } from 'lucide-react'
 import type { ReactNode } from 'react'
+import { useTranslation } from '@/i18n'
 import { cn } from '@/shared/lib/utils'
 
 export interface LoadingStateProps {
@@ -10,16 +11,19 @@ export interface LoadingStateProps {
 }
 
 export function LoadingState({
-  label = 'Loading…',
+  label,
   description,
   className,
   inline,
 }: LoadingStateProps): JSX.Element {
+  const { t } = useTranslation()
+  const resolvedLabel = label === undefined ? t('common.loading') : label
+
   if (inline) {
     return (
       <span className={cn('inline-flex items-center gap-2 text-sm text-muted-foreground', className)}>
         <Loader2 className="h-4 w-4 animate-spin" />
-        {label}
+        {resolvedLabel}
       </span>
     )
   }
@@ -31,7 +35,7 @@ export function LoadingState({
       )}
     >
       <Loader2 className="h-6 w-6 animate-spin" />
-      {label && <div className="font-medium text-foreground">{label}</div>}
+      {resolvedLabel && <div className="font-medium text-foreground">{resolvedLabel}</div>}
       {description && <div>{description}</div>}
     </div>
   )

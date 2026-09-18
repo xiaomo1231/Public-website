@@ -12,6 +12,7 @@ import type { Question } from '@/entities/question/types'
 import type { QuestionAttempt } from '@/entities/questionAttempt/types'
 import { ValidationError } from '@/infrastructure/errors/AppError'
 import { logger } from '@/infrastructure/logger/logger'
+import { t } from '@/i18n'
 
 export class MistakeService {
   private repo: MistakeRepository
@@ -81,9 +82,9 @@ export class MistakeService {
     questionType?: string
     mistakeType?: MistakeType
   }): Promise<Mistake> {
-    if (!input.question.trim()) throw new ValidationError('Question text is required')
-    if (!input.correctAnswer.trim()) throw new ValidationError('Correct answer is required')
-    if (!input.knowledgePoint.trim()) throw new ValidationError('Knowledge point is required')
+    if (!input.question.trim()) throw new ValidationError(t('errors.mistakeQuestionRequired'))
+    if (!input.correctAnswer.trim()) throw new ValidationError(t('errors.mistakeAnswerRequired'))
+    if (!input.knowledgePoint.trim()) throw new ValidationError(t('errors.mistakeKnowledgePointRequired'))
     const payload: AddMistakeInput = {
       projectId: input.projectId,
       question: input.question.trim(),
@@ -91,7 +92,7 @@ export class MistakeService {
       correctAnswer: input.correctAnswer.trim(),
       knowledgePoint: input.knowledgePoint.trim(),
       difficulty: input.difficulty ?? 'basic',
-      questionType: input.questionType ?? 'short_answer',
+      questionType: input.questionType ?? 'multiple_choice',
       ...(input.mistakeType ? { mistakeType: input.mistakeType } : {}),
     }
     return this.repo.add(payload)

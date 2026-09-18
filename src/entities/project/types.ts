@@ -7,14 +7,16 @@ export type Subject =
   | 'stats'
   | 'other'
 
-export const SUBJECT_LABELS: Record<Subject, string> = {
-  calculus: 'Calculus',
-  linear_algebra: 'Linear Algebra',
-  physics: 'Physics',
-  chemistry: 'Chemistry',
-  cs: 'Computer Science',
-  stats: 'Statistics',
-  other: 'Other',
+import type { TranslationKey } from '@/i18n/types'
+
+export const SUBJECT_LABEL_KEYS: Record<Subject, TranslationKey> = {
+  calculus: 'subject.calculus',
+  linear_algebra: 'subject.linearAlgebra',
+  physics: 'subject.physics',
+  chemistry: 'subject.chemistry',
+  cs: 'subject.computerScience',
+  stats: 'subject.statistics',
+  other: 'subject.other',
 }
 
 export interface Project {

@@ -15,13 +15,17 @@ import { CourseAnalysisRepository } from '@/entities/courseAnalysis/repository'
 import type { AIService } from '@/services/aiService'
 
 function fakeAI(data: unknown): AIService {
+  const result = { data, raw: { content: '{}', model: 'fake' } }
   return {
-    chatJSON: vi.fn().mockResolvedValue({ data, raw: { content: '{}', model: 'fake' } }),
+    chatJSON: vi.fn().mockResolvedValue(result),
+    // The analysis path streams; both are provided so either path works.
+    streamJSON: vi.fn().mockResolvedValue(result),
     chat: vi.fn(),
     streamChat: vi.fn(),
     testConnection: vi.fn(),
     reset: vi.fn(),
     currentProvider: {},
+    maxOutputTokens: 2048,
   } as unknown as AIService
 }
 
@@ -141,7 +145,7 @@ describe('normalizeTutorQuestion', () => {
       difficulty: 'impossible',
       hints: 'not-an-array',
     })
-    expect(q.type).toBe('short_answer')
+    expect(q.type).toBe('multiple_choice')
     expect(q.difficulty).toBe('basic')
     expect(q.hints).toEqual([])
   })

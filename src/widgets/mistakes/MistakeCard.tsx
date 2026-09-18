@@ -10,7 +10,7 @@ import {
   Trash2,
 } from 'lucide-react'
 import type { Mistake } from '@/entities/mistake/types'
-import { MISTAKE_TYPE_LABELS } from '@/entities/mistake/types'
+import { MISTAKE_TYPE_LABEL_KEYS } from '@/entities/mistake/types'
 import { Badge } from '@/shared/ui/Badge'
 import { Button } from '@/shared/ui/Button'
 import { Card, CardContent, CardHeader } from '@/shared/ui/Card'
@@ -18,6 +18,8 @@ import { MistakeAnalysisView, AnalysisPlaceholder } from './MistakeAnalysisView'
 import { PracticeMoreMenu } from './PracticeMoreMenu'
 import { relativeTime } from '@/shared/lib/utils'
 import { cn } from '@/shared/lib/utils'
+import { useTranslation } from '@/i18n'
+import { DIFFICULTY_LABEL_KEYS } from '@/infrastructure/ai/prompts/types'
 
 export interface MistakeCardProps {
   mistake: Mistake
@@ -38,6 +40,7 @@ export function MistakeCard({
   onRemove,
   onPractice,
 }: MistakeCardProps): JSX.Element {
+  const { t } = useTranslation()
   const [expanded, setExpanded] = useState(false)
   const [busy, setBusy] = useState<string | null>(null)
   const [confirmDelete, setConfirmDelete] = useState(false)
@@ -63,26 +66,36 @@ export function MistakeCard({
       <CardHeader className="flex flex-row flex-wrap items-start gap-2 space-y-0 py-3">
         <div className="min-w-0 flex-1 space-y-1">
           <div className="flex flex-wrap items-center gap-2">
-            <Badge variant="outline">{MISTAKE_TYPE_LABELS[mistake.mistakeType]}</Badge>
+            <Badge variant="outline">{t(MISTAKE_TYPE_LABEL_KEYS[mistake.mistakeType])}</Badge>
             <Badge variant="outline">{mistake.knowledgePoint}</Badge>
-            <Badge variant="outline">{mistake.difficulty}</Badge>
+            <Badge variant="outline">{t(DIFFICULTY_LABEL_KEYS[mistake.difficulty])}</Badge>
             {mistake.status === 'understood' && (
               <Badge variant="default">
-                <CheckCircle2 className="mr-1 h-3 w-3" /> Understood
+                <CheckCircle2 className="mr-1 h-3 w-3" /> {t('mistakeCard.understood')}
               </Badge>
             )}
-            {mistake.status === 'archived' && <Badge variant="secondary">Archived</Badge>}
-            {mistake.source === 'manual' && <Badge variant="secondary">Added by you</Badge>}
-            {mistake.attemptCount > 1 && <Badge variant="secondary">×{mistake.attemptCount} attempts</Badge>}
+            {mistake.status === 'archived' && (
+              <Badge variant="secondary">{t('mistakeCard.archived')}</Badge>
+            )}
+            {mistake.source === 'manual' && (
+              <Badge variant="secondary">{t('mistakeCard.addedByYou')}</Badge>
+            )}
+            {mistake.attemptCount > 1 && (
+              <Badge variant="secondary">
+                ×{t('mistakeCard.attempts', { count: mistake.attemptCount })}
+              </Badge>
+            )}
           </div>
           <p className="line-clamp-2 text-sm font-medium">{mistake.question}</p>
           <p className="text-xs text-muted-foreground">
-            Your answer: <span className="font-mono">{mistake.studentAnswer || '(blank)'}</span> · Correct:{' '}
-            <span className="font-mono">{mistake.correctAnswer}</span>
+            {t('mistakeCard.answerLine', {
+              yours: mistake.studentAnswer || t('quizResult.blank'),
+              correct: mistake.correctAnswer,
+            })}
           </p>
         </div>
         <span className="text-xs text-muted-foreground">{relativeTime(mistake.createdAt)}</span>
-        <Button variant="ghost" size="icon" aria-label="Expand" onClick={() => setExpanded((e) => !e)}>
+        <Button variant="ghost" size="icon" aria-label={t('common.expand')} onClick={() => setExpanded((e) => !e)}>
           {expanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
         </Button>
       </CardHeader>
@@ -92,21 +105,23 @@ export function MistakeCard({
           {mistake.analysis ? (
             <MistakeAnalysisView analysis={mistake.analysis} onPractice={() => run('practice', () => onPractice(mistake.id, 'same_concept'))} />
           ) : mistake.analysisStatus === 'analyzing' ? (
-            <AnalysisPlaceholder message="Analysing your answer…" />
+            <AnalysisPlaceholder message={t('mistakeCard.analysing')} />
           ) : mistake.analysisStatus === 'failed' ? (
             <div className="space-y-2">
-              <AnalysisPlaceholder message={mistake.analysisError ?? 'Analysis failed. You can try again.'} />
+              <AnalysisPlaceholder
+                message={mistake.analysisError ?? t('mistakeCard.analysisFailed')}
+              />
               <Button variant="outline" size="sm" onClick={() => run('analyze', () => onAnalyze(mistake.id))} disabled={busy === 'analyze'}>
                 {busy === 'analyze' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
-                Retry analysis
+                {t('mistakeCard.retry')}
               </Button>
             </div>
           ) : (
             <div className="space-y-2">
-              <AnalysisPlaceholder message="Run the AI analysis to see where it went wrong, why, and a similar example." />
+              <AnalysisPlaceholder message={t('mistakeCard.runAnalysis')} />
               <Button size="sm" onClick={() => run('analyze', () => onAnalyze(mistake.id))} disabled={busy === 'analyze'}>
                 {busy === 'analyze' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
-                Explain my mistake
+                {t('mistakeCard.explain')}
               </Button>
             </div>
           )}
@@ -117,28 +132,28 @@ export function MistakeCard({
             {mistake.status === 'active' && (
               <Button variant="outline" size="sm" onClick={() => run('understood', () => onMarkUnderstood(mistake.id))} disabled={busy === 'understood'}>
                 <CheckCircle2 className="h-4 w-4" />
-                Mark as understood
+                {t('mistakeCard.markUnderstood')}
               </Button>
             )}
             {mistake.status !== 'archived' ? (
               <Button variant="outline" size="sm" onClick={() => run('archive', () => onArchive(mistake.id))} disabled={busy === 'archive'}>
                 <Archive className="h-4 w-4" />
-                Archive
+                {t('mistakeCard.archive')}
               </Button>
             ) : (
               <Button variant="outline" size="sm" onClick={() => run('restore', () => onRestore(mistake.id))} disabled={busy === 'restore'}>
                 <ArchiveRestore className="h-4 w-4" />
-                Restore
+                {t('mistakeCard.restore')}
               </Button>
             )}
             {confirmDelete ? (
               <div className="ml-auto flex items-center gap-2">
-                <span className="text-xs text-muted-foreground">Remove permanently?</span>
+                <span className="text-xs text-muted-foreground">{t('mistakeCard.removeConfirm')}</span>
                 <Button variant="destructive" size="sm" onClick={() => run('remove', () => onRemove(mistake.id))} disabled={busy === 'remove'}>
-                  Confirm
+                  {t('common.confirm')}
                 </Button>
                 <Button variant="ghost" size="sm" onClick={() => setConfirmDelete(false)}>
-                  Cancel
+                  {t('common.cancel')}
                 </Button>
               </div>
             ) : (
@@ -149,7 +164,7 @@ export function MistakeCard({
                 onClick={() => setConfirmDelete(true)}
               >
                 <Trash2 className="h-4 w-4" />
-                Remove
+                {t('mistakeCard.remove')}
               </Button>
             )}
           </div>

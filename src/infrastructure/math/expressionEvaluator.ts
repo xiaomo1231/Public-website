@@ -1,4 +1,5 @@
 import { OperatorNode, parse, simplify, type MathNode } from 'mathjs'
+import { t } from '@/i18n'
 
 /**
  * Deterministic mathematical-expression equivalence.
@@ -171,7 +172,7 @@ export function compareMath(userAnswer: string, expectedAnswer: string): MathCom
   const rawUser = userAnswer.trim()
   const rawExpected = expectedAnswer.trim()
   if (!rawUser) {
-    return { equivalent: false, normalizedUser: '', normalizedExpected: normalizeExpression(rawExpected), note: 'Empty answer' }
+    return { equivalent: false, normalizedUser: '', normalizedExpected: normalizeExpression(rawExpected), note: t('errors.emptyAnswer') }
   }
 
   const userNorm = normalizeExpression(rawUser)
@@ -189,7 +190,7 @@ export function compareMath(userAnswer: string, expectedAnswer: string): MathCom
   const expectedForCompare = expectedStripped.expr
   const constantNote =
     userStripped.hadConstant || expectedStripped.hadConstant
-      ? 'Integration constant treated as arbitrary.'
+      ? t('evalNote.integrationConstant')
       : undefined
 
   // Equations: compare each side independently
@@ -220,10 +221,10 @@ export function compareMath(userAnswer: string, expectedAnswer: string): MathCom
         equivalent: null,
         normalizedUser: userNorm,
         normalizedExpected: expectedNorm,
-        note: 'Unable to verify automatically — equations may be rearranged.',
+        note: t('evalNote.equationRearranged'),
       }
     } catch {
-      return { equivalent: null, normalizedUser: userNorm, normalizedExpected: expectedNorm, note: 'Could not parse equation.' }
+      return { equivalent: null, normalizedUser: userNorm, normalizedExpected: expectedNorm, note: t('evalNote.couldNotParse') }
     }
   }
 
@@ -234,14 +235,16 @@ export function compareMath(userAnswer: string, expectedAnswer: string): MathCom
     const equivalent = nodesEquivalent(ua, ea)
     const out: MathComparison = { equivalent, normalizedUser: userNorm, normalizedExpected: expectedNorm }
     if (constantNote) out.note = constantNote
-    if (equivalent === null) out.note = 'Unable to verify automatically.'
+    if (equivalent === null) out.note = t('evalNote.unverified')
     return out
   } catch (err) {
     return {
       equivalent: null,
       normalizedUser: userNorm,
       normalizedExpected: expectedNorm,
-      note: `Unable to verify automatically (${(err as Error).message.slice(0, 80)}).`,
+      note: t('evalNote.unverifiedReason', {
+        reason: (err as Error).message.slice(0, 80),
+      }),
     }
   }
 }

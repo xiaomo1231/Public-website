@@ -3,6 +3,7 @@ import { getDb } from '@/infrastructure/db/database'
 import { DEFAULT_AI_SETTINGS, type AISettingsRow } from './types'
 import { logger } from '@/infrastructure/logger/logger'
 import { StorageError } from '@/infrastructure/errors/AppError'
+import { t } from '@/i18n'
 
 /**
  * Raw storage for AI settings.
@@ -26,7 +27,7 @@ export class SettingsRepository {
       return seed
     } catch (err) {
       logger.error('SettingsRepository.getRow failed', undefined, err)
-      throw new StorageError('Failed to read AI settings', err)
+      throw new StorageError(t('storage.failedToReadSettings'), err)
     }
   }
 
@@ -35,7 +36,7 @@ export class SettingsRepository {
       await this.db.settings.put(row)
       return row
     } catch (err) {
-      throw new StorageError('Failed to save AI settings', err)
+      throw new StorageError(t('storage.failedToSaveSettings'), err)
     }
   }
 

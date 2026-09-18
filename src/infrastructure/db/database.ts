@@ -209,7 +209,13 @@ let _db: AppDatabase | null = null
 export function getDb(): AppDatabase {
   if (!_db) {
     _db = new AppDatabase()
-    logger.info('IndexedDB opened', { name: _db.name, version: _db.verno })
+    // The origin is logged because IndexedDB is origin-scoped: if this value
+    // changes between runs, the app is looking at a different, empty database.
+    logger.info('IndexedDB opened', {
+      name: _db.name,
+      version: _db.verno,
+      origin: typeof window !== 'undefined' ? window.location.origin : 'n/a',
+    })
   }
   return _db
 }

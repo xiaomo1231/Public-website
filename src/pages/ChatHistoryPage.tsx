@@ -8,10 +8,17 @@ import { EmptyState } from '@/shared/ui/EmptyState'
 import { LoadingState } from '@/shared/ui/LoadingState'
 import { PageContainer, PageContent, PageHeader } from '@/shared/ui/Page'
 import { TutorSessionRepository } from '@/entities/tutorSession/repository'
-import type { TutorSession, TutorTurn } from '@/entities/tutorSession/types'
+import {
+  SESSION_STATUS_LABEL_KEYS,
+  TURN_KIND_LABEL_KEYS,
+  type TutorSession,
+  type TutorTurn,
+} from '@/entities/tutorSession/types'
 import { formatDateTime } from '@/shared/lib/utils'
+import { useTranslation } from '@/i18n'
 
 export function ChatHistoryPage(): JSX.Element {
+  const { t } = useTranslation()
   const { id: projectId } = useParams<{ id: string }>()
   const [sessions, setSessions] = useState<TutorSession[]>([])
   const [activeId, setActiveId] = useState<string | null>(null)
@@ -42,7 +49,7 @@ export function ChatHistoryPage(): JSX.Element {
     return (
       <PageContainer>
         <PageContent>
-          <LoadingState label="Loading chat history" />
+          <LoadingState label={t('chatHistory.loading')} />
         </PageContent>
       </PageContainer>
     )
@@ -55,26 +62,26 @@ export function ChatHistoryPage(): JSX.Element {
       <PageHeader
         title={
           <div className="flex items-center gap-2">
-            <Button asChild variant="ghost" size="icon" aria-label="Back to project">
+            <Button asChild variant="ghost" size="icon" aria-label={t('chatHistory.backToProject')}>
               <Link to={`/projects/${projectId}`}>
                 <ArrowLeft className="h-4 w-4" />
               </Link>
             </Button>
             <History className="h-4 w-4" />
-            Chat History
+            {t('chatHistory.title')}
           </div>
         }
-        description="Every tutor session is stored locally with its questions, answers, and feedback."
+        description={t('chatHistory.subtitle')}
       />
       <PageContent>
         {sessions.length === 0 ? (
           <EmptyState
             icon={<MessageSquare className="h-10 w-10" />}
-            title="No tutor sessions yet"
-            description="Start a lesson from the AI Tutor tab and your conversation will appear here."
+            title={t('chatHistory.empty')}
+            description={t('chatHistory.emptyHint')}
             action={
               <Button asChild>
-                <Link to={`/projects/${projectId}/tutor`}>Open Tutor</Link>
+                <Link to={`/projects/${projectId}/tutor`}>{t('chatHistory.openTutor')}</Link>
               </Button>
             }
           />
@@ -96,7 +103,7 @@ export function ChatHistoryPage(): JSX.Element {
                   <div className="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
                     <span>{formatDateTime(s.updatedAt)}</span>
                     <span>·</span>
-                    <span>{s.turns.length} turns</span>
+                    <span>{t('chatHistory.turns', { count: s.turns.length })}</span>
                   </div>
                 </button>
               ))}
@@ -108,11 +115,20 @@ export function ChatHistoryPage(): JSX.Element {
                     <CardHeader>
                       <CardTitle className="flex flex-wrap items-center gap-2 text-base">
                         {active.topicName}
-                        <Badge variant="outline">mastery {Math.round(active.mastery * 100)}%</Badge>
-                        <Badge variant="outline">{active.status}</Badge>
+                        <Badge variant="outline">
+                          {t('chatHistory.mastery', {
+                            value: `${Math.round(active.mastery * 100)}%`,
+                          })}
+                        </Badge>
+                        <Badge variant="outline">
+                          {t(SESSION_STATUS_LABEL_KEYS[active.status])}
+                        </Badge>
                       </CardTitle>
                       <CardDescription>
-                        Started {formatDateTime(active.startedAt)} · {active.turns.length} turns
+                        {t('chatHistory.started', {
+                          date: formatDateTime(active.startedAt),
+                          count: active.turns.length,
+                        })}
                       </CardDescription>
                     </CardHeader>
                   </Card>
@@ -130,6 +146,7 @@ export function ChatHistoryPage(): JSX.Element {
 }
 
 function TurnCard({ turn }: { turn: TutorTurn }) {
+  const { t } = useTranslation()
   const isStudent = turn.role === 'student'
   const isFeedback = turn.kind === 'feedback'
   const correct = turn.evaluation?.isCorrect
@@ -137,9 +154,9 @@ function TurnCard({ turn }: { turn: TutorTurn }) {
     <Card className={isStudent ? 'border-l-4 border-l-primary' : isFeedback && correct === false ? 'border-l-4 border-l-destructive' : 'border-l-4 border-l-muted'}>
       <CardContent className="space-y-2 p-4 text-sm">
         <div className="flex items-center gap-2 text-xs uppercase tracking-wider text-muted-foreground">
-          {isStudent ? 'Student' : 'Tutor'}
+          {isStudent ? t('chatHistory.student') : t('chatHistory.tutor')}
           <span>·</span>
-          <span>{turn.kind}</span>
+          <span>{t(TURN_KIND_LABEL_KEYS[turn.kind])}</span>
           {isFeedback && correct !== undefined && (
             <span className="ml-auto flex items-center gap-1">
               {correct ? (
@@ -147,14 +164,18 @@ function TurnCard({ turn }: { turn: TutorTurn }) {
               ) : (
                 <XCircle className="h-3.5 w-3.5 text-destructive" />
               )}
-              {correct ? 'correct' : 'incorrect'}
+              {correct ? t('chatHistory.correct') : t('chatHistory.incorrect')}
             </span>
           )}
         </div>
         <p className="whitespace-pre-wrap">{turn.content}</p>
         {turn.question?.sourceRefs && turn.question.sourceRefs.length > 0 && (
           <div className="rounded-md bg-muted/40 px-2 py-1 text-[11px] text-muted-foreground">
-            Source: {turn.question.sourceRefs.map((r) => `${r.documentName}${r.page ? ` p${r.page}` : ''}`).join(', ')}
+            {t('chatHistory.source', {
+              value: turn.question.sourceRefs
+                .map((r) => `${r.documentName}${r.page ? ` p${r.page}` : ''}`)
+                .join(', '),
+            })}
           </div>
         )}
       </CardContent>

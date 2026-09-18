@@ -10,10 +10,11 @@ import { WeaknessService } from './weaknessService'
 import { stepDifficulty } from './adaptiveDifficulty'
 import { AppError } from '@/infrastructure/errors/AppError'
 import { logger } from '@/infrastructure/logger/logger'
+import { t } from '@/i18n'
 
 export type PracticeMistakeMode = 'same_concept' | 'similar' | 'easier' | 'harder' | 'weakness'
 
-const DEFAULT_REVIEW_TYPES: QuestionType[] = ['multiple_choice', 'short_answer', 'numeric']
+const DEFAULT_REVIEW_TYPES: QuestionType[] = ['multiple_choice', 'numeric']
 
 export interface ReviewSessionOptions {
   count?: number
@@ -60,7 +61,7 @@ export class ReviewSessionService {
     const cutoff = options.withinDays ? Date.now() - options.withinDays * 86_400_000 : 0
     const candidates = all.filter((m) => m.status !== 'archived' && m.createdAt >= cutoff)
     if (candidates.length === 0) {
-      throw new AppError('No mistakes to review yet. Take a quiz first.', 'NO_MISTAKES')
+      throw new AppError(t('errors.noMistakesToReview'), 'NO_MISTAKES')
     }
 
     const report = await this.weakness.analyze(projectId, { limit: 5 })
@@ -74,7 +75,9 @@ export class ReviewSessionService {
       count: options.count ?? 10,
       difficulty: options.difficulty ?? 'adaptive',
       types: options.types ?? DEFAULT_REVIEW_TYPES,
-      topicName: `Review: ${focus.slice(0, 3).join(', ')}${focus.length > 3 ? '…' : ''}`,
+      topicName: t('mistakes.reviewTopicName', {
+        focus: `${focus.slice(0, 3).join(', ')}${focus.length > 3 ? '…' : ''}`,
+      }),
       focusKnowledgePoints: focus,
     }
     logger.info('Creating review session', { projectId, focus, count: config.count })
@@ -87,7 +90,7 @@ export class ReviewSessionService {
   /** Generate practice focused on a single mistake. */
   async practiceMistake(mistakeId: string, mode: PracticeMistakeMode, options: ReviewSessionOptions = {}): Promise<Quiz> {
     const mistake = await this.mistakes.get(mistakeId)
-    if (!mistake) throw new AppError('Mistake not found', 'NOT_FOUND')
+    if (!mistake) throw new AppError(t('errors.mistakeNotFound'), 'NOT_FOUND')
 
     const baseDifficulty: DifficultyLevel =
       options.difficulty === 'adaptive' || options.difficulty === undefined
@@ -113,14 +116,14 @@ export class ReviewSessionService {
       types: options.types ?? DEFAULT_REVIEW_TYPES,
       topicName:
         mode === 'weakness'
-          ? 'Weakness training'
+          ? t('practiceMore.weakness')
           : mode === 'similar'
-            ? `Similar to: ${mistake.knowledgePoint}`
+            ? t('practiceMore.similarTopicName', { topic: mistake.knowledgePoint })
             : mode === 'same_concept'
-              ? `Practice: ${mistake.knowledgePoint}`
+              ? t('practiceMore.practiceTopicName', { topic: mistake.knowledgePoint })
               : mode === 'harder'
-                ? `Harder: ${mistake.knowledgePoint}`
-                : `Easier: ${mistake.knowledgePoint}`,
+                ? t('practiceMore.harderTopicName', { topic: mistake.knowledgePoint })
+                : t('practiceMore.easierTopicName', { topic: mistake.knowledgePoint }),
       focusKnowledgePoints: focus,
       sourceMistakeId: mistake.id,
     }

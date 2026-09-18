@@ -4,6 +4,7 @@ import type { AddMistakeInput, Mistake, MistakeFilter, MistakeStats, MistakeType
 import { MISTAKE_TYPES } from './types'
 import { logger } from '@/infrastructure/logger/logger'
 import { NotFoundError, StorageError } from '@/infrastructure/errors/AppError'
+import { t } from '@/i18n'
 
 export class MistakeRepository {
   private db: AppDatabase
@@ -60,7 +61,7 @@ export class MistakeRepository {
       logger.debug('Mistake recorded', { id: row.id, kp: row.knowledgePoint })
       return row
     } catch (err) {
-      throw new StorageError('Failed to save mistake', err)
+      throw new StorageError(t('storage.failedToSaveMistake'), err)
     }
   }
 

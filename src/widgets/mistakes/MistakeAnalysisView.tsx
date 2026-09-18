@@ -1,10 +1,11 @@
 import { useState } from 'react'
 import { AlertCircle, ArrowRight, BookOpen, Lightbulb, Sparkles } from 'lucide-react'
 import type { MistakeAnalysis } from '@/entities/mistake/types'
-import { MISTAKE_TYPE_LABELS } from '@/entities/mistake/types'
+import { MISTAKE_TYPE_LABEL_KEYS } from '@/entities/mistake/types'
 import { Badge } from '@/shared/ui/Badge'
 import { Button } from '@/shared/ui/Button'
 import { cn } from '@/shared/lib/utils'
+import { useTranslation, type TranslationKey } from '@/i18n'
 
 export interface MistakeAnalysisViewProps {
   analysis: MistakeAnalysis
@@ -13,7 +14,7 @@ export interface MistakeAnalysisViewProps {
 
 interface Step {
   key: string
-  label: string
+  labelKey: TranslationKey
   content: string
   tone?: 'neutral' | 'warn' | 'good'
 }
@@ -23,12 +24,13 @@ interface Step {
  * with text. Each step is a short card; "Next step" advances.
  */
 export function MistakeAnalysisView({ analysis, onPractice }: MistakeAnalysisViewProps): JSX.Element {
+  const { t } = useTranslation()
   const steps: Step[] = [
-    { key: 'where', label: 'Where it first diverges', content: analysis.whereWrong },
-    { key: 'first', label: 'The key error', content: analysis.firstError, tone: 'warn' },
-    { key: 'why', label: 'Why that step does not hold', content: analysis.whyWrong },
-    { key: 'correct', label: 'Correct approach', content: analysis.correctApproach, tone: 'good' },
-    { key: 'cause', label: 'Possible cause', content: analysis.possibleCause },
+    { key: 'where', labelKey: 'mistakeAnalysis.divergence', content: analysis.whereWrong },
+    { key: 'first', labelKey: 'mistakeAnalysis.keyError', content: analysis.firstError, tone: 'warn' },
+    { key: 'why', labelKey: 'mistakeAnalysis.whyFails', content: analysis.whyWrong },
+    { key: 'correct', labelKey: 'mistakeAnalysis.correctApproach', content: analysis.correctApproach, tone: 'good' },
+    { key: 'cause', labelKey: 'mistakeAnalysis.possibleCause', content: analysis.possibleCause },
   ]
 
   const [revealed, setRevealed] = useState(1)
@@ -37,14 +39,14 @@ export function MistakeAnalysisView({ analysis, onPractice }: MistakeAnalysisVie
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center gap-2">
-        <Badge variant="outline">{MISTAKE_TYPE_LABELS[analysis.mistakeType]}</Badge>
+        <Badge variant="outline">{t(MISTAKE_TYPE_LABEL_KEYS[analysis.mistakeType])}</Badge>
         {analysis.reviewKnowledgePoints.map((kp) => (
           <Badge key={kp} variant="secondary">
             {kp}
           </Badge>
         ))}
         <span className="ml-auto text-xs text-muted-foreground">
-          Step {Math.min(revealed, steps.length)} / {steps.length}
+          {t('mistakeAnalysis.step', { current: Math.min(revealed, steps.length), total: steps.length })}
         </span>
       </div>
 
@@ -62,7 +64,7 @@ export function MistakeAnalysisView({ analysis, onPractice }: MistakeAnalysisVie
               <span className="grid h-5 w-5 place-items-center rounded-full bg-muted text-[10px] text-foreground">
                 {i + 1}
               </span>
-              {step.label}
+              {t(step.labelKey)}
             </div>
             <p className="whitespace-pre-wrap">{step.content}</p>
           </li>
@@ -71,7 +73,7 @@ export function MistakeAnalysisView({ analysis, onPractice }: MistakeAnalysisVie
 
       {!done ? (
         <Button variant="outline" onClick={() => setRevealed((r) => r + 1)}>
-          Next step
+          {t('mistakeAnalysis.nextStep')}
           <ArrowRight className="h-4 w-4" />
         </Button>
       ) : (
@@ -80,11 +82,11 @@ export function MistakeAnalysisView({ analysis, onPractice }: MistakeAnalysisVie
             <div className="rounded-md border border-primary/30 bg-primary/5 p-3 text-sm">
               <div className="mb-1 flex items-center gap-2 font-medium">
                 <Lightbulb className="h-4 w-4" />
-                Try a similar one
+                {t('mistakeAnalysis.trySimilar')}
               </div>
               <p>{analysis.similarExample.prompt}</p>
               <details className="mt-1 text-xs text-muted-foreground">
-                <summary className="cursor-pointer">Show answer</summary>
+                <summary className="cursor-pointer">{t('mistakeAnalysis.showAnswer')}</summary>
                 <p className="mt-1 font-mono">{analysis.similarExample.answer}</p>
                 {analysis.similarExample.explanation && <p className="mt-1">{analysis.similarExample.explanation}</p>}
               </details>
@@ -96,7 +98,7 @@ export function MistakeAnalysisView({ analysis, onPractice }: MistakeAnalysisVie
             <span>{analysis.continuePrompt}</span>
             {onPractice && (
               <Button size="sm" className="ml-auto" onClick={onPractice}>
-                Practice now
+                {t('mistakeAnalysis.practiceNow')}
               </Button>
             )}
           </div>
@@ -104,7 +106,7 @@ export function MistakeAnalysisView({ analysis, onPractice }: MistakeAnalysisVie
           {!analysis.shouldPracticeMore && (
             <p className="flex items-center gap-2 text-xs text-muted-foreground">
               <AlertCircle className="h-3.5 w-3.5" />
-              The analysis suggests more practice is optional for this one.
+              {t('mistakeAnalysis.practiceOptional')}
             </p>
           )}
         </div>

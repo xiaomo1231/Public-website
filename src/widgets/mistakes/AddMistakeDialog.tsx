@@ -20,9 +20,10 @@ import {
   SelectValue,
 } from '@/shared/ui/Select2'
 import type { DifficultyLevel } from '@/infrastructure/ai/prompts/types'
-import { MISTAKE_TYPES, MISTAKE_TYPE_LABELS, type MistakeType } from '@/entities/mistake/types'
+import { MISTAKE_TYPES, MISTAKE_TYPE_LABEL_KEYS, type MistakeType } from '@/entities/mistake/types'
 import { toast } from '@/features/toast/toastStore'
 import { isAppError } from '@/infrastructure/errors/AppError'
+import { useTranslation } from '@/i18n'
 
 export interface AddMistakeDialogProps {
   open: boolean
@@ -40,6 +41,7 @@ export interface AddMistakeDialogProps {
 const DIFFICULTIES: DifficultyLevel[] = ['beginner', 'basic', 'intermediate', 'advanced', 'challenge']
 
 export function AddMistakeDialog({ open, onOpenChange, onSubmit }: AddMistakeDialogProps): JSX.Element {
+  const { t } = useTranslation()
   const [question, setQuestion] = useState('')
   const [studentAnswer, setStudentAnswer] = useState('')
   const [correctAnswer, setCorrectAnswer] = useState('')
@@ -63,10 +65,10 @@ export function AddMistakeDialog({ open, onOpenChange, onSubmit }: AddMistakeDia
       await onSubmit({ question, studentAnswer, correctAnswer, knowledgePoint, difficulty, mistakeType })
       reset()
       onOpenChange(false)
-      toast({ variant: 'success', title: 'Mistake added' })
+      toast({ variant: 'success', title: t('addMistake.added') })
     } catch (err) {
       const msg = isAppError(err) ? err.message : (err as Error).message
-      toast({ variant: 'error', title: 'Could not add mistake', description: msg })
+      toast({ variant: 'error', title: t('addMistake.failed'), description: msg })
     } finally {
       setBusy(false)
     }
@@ -82,39 +84,39 @@ export function AddMistakeDialog({ open, onOpenChange, onSubmit }: AddMistakeDia
     >
       <DialogContent className="max-w-xl">
         <DialogHeader>
-          <DialogTitle>Add a mistake</DialogTitle>
+          <DialogTitle>{t('addMistake.title')}</DialogTitle>
           <DialogDescription>
-            Record a mistake from a textbook, lecture, or your own practice.
+            {t('addMistake.description')}
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="m-question">Question</Label>
+            <Label htmlFor="m-question">{t('addMistake.question')}</Label>
             <Textarea
               id="m-question"
               rows={3}
               value={question}
               onChange={(e) => setQuestion(e.target.value)}
-              placeholder="What was the question?"
+              placeholder={t('addMistake.questionPlaceholder')}
             />
           </div>
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">
-              <Label htmlFor="m-student">Your answer</Label>
-              <Input id="m-student" value={studentAnswer} onChange={(e) => setStudentAnswer(e.target.value)} placeholder="What you wrote" />
+              <Label htmlFor="m-student">{t('addMistake.yourAnswer')}</Label>
+              <Input id="m-student" value={studentAnswer} onChange={(e) => setStudentAnswer(e.target.value)} placeholder={t('addMistake.yourAnswerPlaceholder')} />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="m-correct">Correct answer</Label>
-              <Input id="m-correct" value={correctAnswer} onChange={(e) => setCorrectAnswer(e.target.value)} placeholder="The right answer" />
+              <Label htmlFor="m-correct">{t('addMistake.correctAnswer')}</Label>
+              <Input id="m-correct" value={correctAnswer} onChange={(e) => setCorrectAnswer(e.target.value)} placeholder={t('addMistake.correctAnswerPlaceholder')} />
             </div>
           </div>
           <div className="grid gap-4 sm:grid-cols-3">
             <div className="space-y-2">
-              <Label htmlFor="m-kp">Knowledge point</Label>
-              <Input id="m-kp" value={knowledgePoint} onChange={(e) => setKnowledgePoint(e.target.value)} placeholder="e.g. Chain Rule" />
+              <Label htmlFor="m-kp">{t('addMistake.knowledgePoint')}</Label>
+              <Input id="m-kp" value={knowledgePoint} onChange={(e) => setKnowledgePoint(e.target.value)} placeholder={t('addMistake.knowledgePointPlaceholder')} />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="m-difficulty">Difficulty</Label>
+              <Label htmlFor="m-difficulty">{t('addMistake.difficulty')}</Label>
               <Select value={difficulty} onValueChange={(v) => setDifficulty(v as DifficultyLevel)}>
                 <SelectTrigger id="m-difficulty">
                   <SelectValue />
@@ -122,22 +124,22 @@ export function AddMistakeDialog({ open, onOpenChange, onSubmit }: AddMistakeDia
                 <SelectContent>
                   {DIFFICULTIES.map((d) => (
                     <SelectItem key={d} value={d}>
-                      {d}
+                      {t(`difficulty.${d}`)}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="m-type">Category (optional)</Label>
+              <Label htmlFor="m-type">{t('addMistake.category')}</Label>
               <Select value={mistakeType} onValueChange={(v) => setMistakeType(v as MistakeType)}>
                 <SelectTrigger id="m-type">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {MISTAKE_TYPES.map((t) => (
-                    <SelectItem key={t} value={t}>
-                      {MISTAKE_TYPE_LABELS[t]}
+                  {MISTAKE_TYPES.map((type) => (
+                    <SelectItem key={type} value={type}>
+                      {t(MISTAKE_TYPE_LABEL_KEYS[type])}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -147,11 +149,11 @@ export function AddMistakeDialog({ open, onOpenChange, onSubmit }: AddMistakeDia
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={busy}>
-            Cancel
+            {t('common.cancel')}
           </Button>
           <Button onClick={submit} disabled={busy || !question.trim() || !correctAnswer.trim() || !knowledgePoint.trim()}>
             <Plus className="h-4 w-4" />
-            {busy ? 'Adding…' : 'Add mistake'}
+            {busy ? t('addMistake.adding') : t('addMistake.add')}
           </Button>
         </DialogFooter>
       </DialogContent>

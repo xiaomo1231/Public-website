@@ -156,7 +156,7 @@ describe('computeMastery', () => {
     at: Date.now(),
     isCorrect,
     difficulty,
-    questionType: 'short_answer',
+    questionType: 'numeric',
   })
 
   it('returns 0 with no observations', () => {

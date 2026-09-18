@@ -8,6 +8,7 @@ import { LoadingState } from '@/shared/ui/LoadingState'
 import { EmptyState } from '@/shared/ui/EmptyState'
 import { toast } from '@/features/toast/toastStore'
 import { cn } from '@/shared/lib/utils'
+import { useTranslation } from '@/i18n'
 import { buildAIServices } from '@/services/aiServices'
 import type { DifficultyLevel, TutorEvaluation } from '@/infrastructure/ai/prompts/types'
 import type { TutorQuestion, TutorSession } from '@/entities/tutorSession/types'
@@ -35,6 +36,7 @@ async function buildTutorBundle(): Promise<TutorBundle | null> {
 }
 
 export function TutorPanel(props: TutorPanelProps): JSX.Element {
+  const { t } = useTranslation()
   const [session, setSession] = useState<TutorSession | null>(null)
   const [answer, setAnswer] = useState('')
   const [busy, setBusy] = useState(false)
@@ -51,7 +53,7 @@ export function TutorPanel(props: TutorPanelProps): JSX.Element {
         setBusy(true)
         const bundle = await buildTutorBundle()
         if (!bundle) {
-          setError('Configure AI provider first.')
+          setError(t('tutor.noProvider'))
           return
         }
         const s = await bundle.tutor.startSession({
@@ -115,7 +117,7 @@ export function TutorPanel(props: TutorPanelProps): JSX.Element {
       const { session: next, hint } = await bundle.tutor.requestHint(session.id)
       setSession(next)
       setRevealedHints((c) => c + 1)
-      toast({ variant: 'info', title: 'Hint released', description: hint })
+      toast({ variant: 'info', title: t('tutor.hintReleased'), description: hint })
     } catch (err) {
       setError(friendlyAIError(err))
     } finally {
@@ -126,7 +128,7 @@ export function TutorPanel(props: TutorPanelProps): JSX.Element {
   async function submit() {
     if (!session || !lastQuestion) return
     if (!answer.trim()) {
-      toast({ variant: 'warning', title: 'Please enter an answer first.' })
+      toast({ variant: 'warning', title: t('tutor.enterAnswer') })
       return
     }
     const bundle = await buildTutorBundle()
@@ -149,13 +151,13 @@ export function TutorPanel(props: TutorPanelProps): JSX.Element {
     return (
       <Card>
         <CardHeader>
-          <CardTitle>Tutor unavailable</CardTitle>
+          <CardTitle>{t('tutor.unavailable')}</CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
           <p className="text-sm text-destructive">{error}</p>
           {props.onClose && (
             <Button variant="outline" onClick={props.onClose}>
-              Close
+              {t('common.close')}
             </Button>
           )}
         </CardContent>
@@ -164,7 +166,7 @@ export function TutorPanel(props: TutorPanelProps): JSX.Element {
   }
 
   if (!session) {
-    return <LoadingState label="Preparing tutor session" />
+    return <LoadingState label={t('tutor.preparing')} />
   }
 
   return (
@@ -175,7 +177,9 @@ export function TutorPanel(props: TutorPanelProps): JSX.Element {
             <Sparkles className="h-4 w-4" />
             {props.topicName}
             <Badge variant="outline">{session.currentDifficulty}</Badge>
-            <Badge variant="outline">Mastery {Math.round(session.mastery * 100)}%</Badge>
+            <Badge variant="outline">
+              {t('tutor.mastery', { value: `${Math.round(session.mastery * 100)}%` })}
+            </Badge>
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-3 text-sm">
@@ -184,7 +188,7 @@ export function TutorPanel(props: TutorPanelProps): JSX.Element {
               {intro}
             </div>
           ) : (
-            <div className="text-muted-foreground">Loading introduction…</div>
+            <div className="text-muted-foreground">{t('tutor.loadingIntro')}</div>
           )}
         </CardContent>
       </Card>
@@ -194,7 +198,7 @@ export function TutorPanel(props: TutorPanelProps): JSX.Element {
       {lastQuestion && (
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Question</CardTitle>
+            <CardTitle className="text-base">{t('tutor.question')}</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
             <p className="whitespace-pre-wrap text-sm font-medium">{lastQuestion.prompt}</p>
@@ -209,19 +213,22 @@ export function TutorPanel(props: TutorPanelProps): JSX.Element {
               rows={4}
               value={answer}
               onChange={(e) => setAnswer(e.target.value)}
-              placeholder="Type your answer here…"
+              placeholder={t('tutor.answerPlaceholder')}
             />
             <div className="flex flex-wrap items-center gap-2">
               <Button onClick={submit} disabled={busy}>
                 {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
-                Submit answer
+                {t('tutor.submitAnswer')}
               </Button>
               <Button variant="outline" onClick={revealHint} disabled={busy || revealedHints >= (lastQuestion.hints?.length ?? 0)}>
                 <Lightbulb className="h-4 w-4" />
-                {revealedHints > 0 ? `Hint ${revealedHints + 1}` : 'Hint'}
+                {revealedHints > 0 ? t('tutor.hintLabel', { number: revealedHints + 1 }) : t('tutor.hint')}
               </Button>
               <span className="text-xs text-muted-foreground">
-                {lastQuestion.hints?.length ?? 0} hints available · knowledge point: {lastQuestion.knowledgePoint}
+                {t('tutor.hintsAvailable', {
+                  count: lastQuestion.hints?.length ?? 0,
+                  point: lastQuestion.knowledgePoint,
+                })}
               </span>
             </div>
           </CardContent>
@@ -231,9 +238,9 @@ export function TutorPanel(props: TutorPanelProps): JSX.Element {
       {!lastQuestion && lastEvaluation && (
         <Card>
           <CardContent className="flex items-center justify-between p-4">
-            <div className="text-sm text-muted-foreground">Ready for the next question?</div>
+            <div className="text-sm text-muted-foreground">{t('tutor.readyNext')}</div>
             <Button onClick={nextQuestion} disabled={busy}>
-              Next question
+              {t('tutor.nextQuestion')}
               <ChevronRight className="h-4 w-4" />
             </Button>
           </CardContent>
@@ -243,19 +250,20 @@ export function TutorPanel(props: TutorPanelProps): JSX.Element {
       {!lastQuestion && !lastEvaluation && busy && (
         <Card>
           <CardContent className="flex items-center gap-2 p-4 text-sm text-muted-foreground">
-            <Loader2 className="h-4 w-4 animate-spin" /> Working on your question…
+            <Loader2 className="h-4 w-4 animate-spin" /> {t('tutor.workingOnQuestion')}
           </CardContent>
         </Card>
       )}
 
       {!lastQuestion && !lastEvaluation && !busy && intro && (
-        <EmptyState title="Thinking…" description="Generating your first question." />
+        <EmptyState title={t('tutor.thinking')} description={t('tutor.generatingFirst')} />
       )}
     </div>
   )
 }
 
 function FeedbackCard({ evaluation }: { evaluation: TutorEvaluation }) {
+  const { t } = useTranslation()
   const correct = evaluation.isCorrect
   return (
     <Card
@@ -267,20 +275,22 @@ function FeedbackCard({ evaluation }: { evaluation: TutorEvaluation }) {
       <CardHeader>
         <CardTitle className="flex items-center gap-2 text-base">
           {correct ? <CheckCircle2 className="h-4 w-4 text-emerald-600" /> : <XCircle className="h-4 w-4 text-destructive" />}
-          {correct ? 'Looks good' : 'Not quite'}
+          {correct ? t('tutor.looksGood') : t('tutor.notQuite')}
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-3 text-sm">
         <p>{evaluation.feedback}</p>
         {evaluation.partialCredit && (
-          <p className="text-xs text-muted-foreground">Partial credit: {evaluation.partialCredit}</p>
+          <p className="text-xs text-muted-foreground">
+            {t('tutor.partialCredit', { value: evaluation.partialCredit })}
+          </p>
         )}
         <div className="rounded-md border bg-card p-3 text-sm">
-          <p className="mb-1 font-medium">Explanation</p>
+          <p className="mb-1 font-medium">{t('tutor.explanation')}</p>
           <p className="whitespace-pre-wrap">{evaluation.groundedExplanation}</p>
           {evaluation.isSupplementary && (
             <p className="mt-2 rounded bg-amber-100/60 px-2 py-1 text-[11px] text-amber-800 dark:bg-amber-900/40 dark:text-amber-200">
-              Supplementary explanation — not from your course material.
+              {t('tutor.supplementary')}
             </p>
           )}
         </div>
@@ -291,7 +301,7 @@ function FeedbackCard({ evaluation }: { evaluation: TutorEvaluation }) {
             ))}
           </ul>
         )}
-        <p className="text-xs text-muted-foreground">Next: {evaluation.nextSteps}</p>
+        <p className="text-xs text-muted-foreground">{t('tutor.next', { value: evaluation.nextSteps })}</p>
       </CardContent>
     </Card>
   )

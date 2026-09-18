@@ -3,12 +3,14 @@ import { getDb } from '@/infrastructure/db/database'
 import type { UpdateUserInput, UserProfile } from './types'
 import { logger } from '@/infrastructure/logger/logger'
 import { StorageError } from '@/infrastructure/errors/AppError'
+import { t } from '@/i18n'
 
 const DEFAULT_PROFILE: UserProfile = {
   id: 'singleton',
   name: 'Student',
   language: 'auto',
   theme: 'system',
+  uiLanguage: 'en',
 }
 
 export class UserRepository {
@@ -24,7 +26,7 @@ export class UserRepository {
       return row ?? DEFAULT_PROFILE
     } catch (err) {
       logger.error('UserRepository.get failed', undefined, err)
-      throw new StorageError('Failed to read user profile', err)
+      throw new StorageError(t('storage.failedToReadUserProfile'), err)
     }
   }
 
@@ -35,6 +37,7 @@ export class UserRepository {
       ...(patch.name !== undefined ? { name: patch.name.trim() || current.name } : {}),
       ...(patch.language !== undefined ? { language: patch.language } : {}),
       ...(patch.theme !== undefined ? { theme: patch.theme } : {}),
+      ...(patch.uiLanguage !== undefined ? { uiLanguage: patch.uiLanguage } : {}),
     }
     await this.db.user.put(next)
     logger.info('User profile updated')

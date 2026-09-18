@@ -12,9 +12,44 @@ import type { DocumentAnalysisOutput } from '@/infrastructure/ai/prompts/types'
 import type { SourceReference as CourseSourceRef } from '@/entities/courseAnalysis/types'
 import { logger } from '@/infrastructure/logger/logger'
 import { AppError } from '@/infrastructure/errors/AppError'
+import { asRecord } from '@/infrastructure/ai/validation'
+import { t } from '@/i18n'
 
 const MAX_DOC_CHARS = 50_000
 const MAX_CHUNKS_PER_DOC = 200
+
+/**
+ * The analyzer must return a large structured object (topics, concepts,
+ * formulas, symbols, examples, exercises, prerequisites).
+ *
+ * The user's chat `maxTokens` (default 2048) is far too small for that: even a
+ * minimal analysis needs roughly 2.2k tokens of JSON and a typical one needs
+ * about 8k. Without an explicit budget the provider truncates the response
+ * mid-JSON and parsing fails, which used to surface as a misleading
+ * "the AI returned something unreadable" error.
+ */
+export const ANALYSIS_MIN_OUTPUT_TOKENS = 8_192
+
+/** Top-level collections the analyzer is asked to return. */
+const ANALYSIS_COLLECTION_KEYS = [
+  'topics',
+  'concepts',
+  'formulas',
+  'symbols',
+  'examples',
+  'exercises',
+  'prerequisites',
+] as const
+
+/** Describe one expected collection for diagnostics (never its contents). */
+function describeCollection(record: Record<string, unknown> | null, key: string): string {
+  if (!record) return 'no object'
+  const value = record[key]
+  if (value === undefined) return 'MISSING'
+  if (value === null) return 'null'
+  if (Array.isArray(value)) return `array length=${value.length}`
+  return typeof value
+}
 
 export interface DocumentAnalysisProgress {
   stage: 'collecting' | 'extracting' | 'analyzing' | 'storing' | 'done' | 'failed'
@@ -45,7 +80,6 @@ export class DocumentAnalysisService {
     this.projects = deps.projects
     this.ai = deps.ai
   }
-  // suppress lint</newString>
 
   /**
    * Analyze all processed documents in a project, extracting structured
@@ -54,17 +88,17 @@ export class DocumentAnalysisService {
   async analyzeProject(projectId: string, options: { onProgress?: AnalysisProgressListener; subject?: string; signal?: AbortSignal } = {}): Promise<CourseAnalysisRepository> {
     await this.projects.get(projectId) // verify project exists
     const { onProgress, subject } = options
-    onProgress?.({ stage: 'collecting', progress: 5, message: 'Collecting documents' })
+    onProgress?.({ stage: 'collecting', progress: 5, message: t('stage.collecting') })
 
     const documents = await this.documents.listByProject(projectId)
     const readyDocs = documents.filter((d) => d.status === 'ready')
     if (readyDocs.length === 0) {
-      throw new AppError('No processed documents found. Upload and process documents first.', 'NO_DOCUMENTS')
+      throw new AppError(t('errors.noProcessedDocuments'), 'NO_DOCUMENTS')
     }
 
     const documentText = await this.collectText(projectId, readyDocs.map((d) => d.id), onProgress)
     const language = await this.detectLanguage(documentText)
-    onProgress?.({ stage: 'analyzing', progress: 30, message: 'Asking AI to extract knowledge' })
+    onProgress?.({ stage: 'analyzing', progress: 30, message: t('stage.askingAi') })
 
     const seed = await this.analyses.getByProject(projectId)
     const analysisId = seed?.id ?? crypto.randomUUID()
@@ -97,14 +131,64 @@ export class DocumentAnalysisService {
           }),
         },
       ]
-      const { data, raw } = await this.ai.chatJSON<unknown>(messages, {
+      // Structured output needs far more room than a chat reply.
+      const maxTokens = Math.max(this.ai.maxOutputTokens, ANALYSIS_MIN_OUTPUT_TOKENS)
+      const promptChars = messages.reduce((total, m) => total + m.content.length, 0)
+      const requestStartedAt = Date.now()
+      logger.debug('AI analysis request started', {
+        projectId,
+        documents: readyDocs.length,
+        provider: this.ai.currentProvider.id,
+        streaming: true,
+        promptChars,
+        estimatedTokens: Math.round(promptChars / 3),
+        maxTokens,
+      })
+
+      // Streamed, not buffered: a structured analysis of a whole course can
+      // take minutes to generate, and a non-streaming request must finish
+      // entirely within the request budget.
+      const { data, raw } = await this.ai.streamJSON<unknown>(messages, undefined, {
+        maxTokens,
         ...(options.signal ? { signal: options.signal } : {}),
       })
+
+      // Structured diagnostics. Sizes, keys and short snippets only — never the
+      // API key, and never the full course text.
+      const parsedRecord = asRecord(data)
+      logger.debug('AI analysis response', {
+        projectId,
+        responseChars: raw.content.length,
+        finishReason: raw.finishReason,
+        prefix: raw.content.slice(0, 160),
+        suffix: raw.content.slice(-160),
+        topLevelKeys: parsedRecord ? Object.keys(parsedRecord).slice(0, 20) : null,
+        topics: describeCollection(parsedRecord, 'topics'),
+        concepts: describeCollection(parsedRecord, 'concepts'),
+        formulas: describeCollection(parsedRecord, 'formulas'),
+        symbols: describeCollection(parsedRecord, 'symbols'),
+      })
+
+      // A response that carries none of the expected collections is a schema
+      // mismatch, not an empty analysis. Reporting it beats silently telling
+      // the user "analysis complete: 0 topics".
+      if (parsedRecord && !ANALYSIS_COLLECTION_KEYS.some((key) => key in parsedRecord)) {
+        const found = Object.keys(parsedRecord).slice(0, 8).join(', ')
+        throw new AppError(
+          t('errors.analysisSchemaMismatch', { keys: found || '(none)' }),
+          'MALFORMED_ANALYSIS',
+        )
+      }
+
       // Validate + sanitise before anything reaches the database.
       output = normalizeDocumentAnalysis(data)
       logger.info('Document analysis completed', {
         projectId,
-        tokens: raw.usage?.totalTokens,
+        model: raw.model,
+        durationMs: Date.now() - requestStartedAt,
+        promptTokens: raw.usage?.promptTokens,
+        completionTokens: raw.usage?.completionTokens,
+        finishReason: raw.finishReason,
         topics: output.topics.length,
         formulas: output.formulas.length,
         symbols: output.symbols.length,
@@ -122,12 +206,12 @@ export class DocumentAnalysisService {
         symbolCount: seed?.symbolCount ?? 0,
         startedAt,
         promptVersion: prompts.documentAnalyzer.VERSION,
-        errorMessage: err instanceof Error ? err.message : 'Analysis failed',
+        errorMessage: err instanceof Error ? err.message : t('errors.analysisFailed'),
       })
       throw err
     }
 
-    onProgress?.({ stage: 'storing', progress: 80, message: 'Saving structured knowledge' })
+    onProgress?.({ stage: 'storing', progress: 80, message: t('stage.saving') })
 
     const topicsByName = new Map<string, string>()
     const topicsPayload = output.topics.map((t, idx) => {
@@ -193,7 +277,7 @@ export class DocumentAnalysisService {
       analysisId,
     )
 
-    onProgress?.({ stage: 'done', progress: 100, message: 'Analysis complete' })
+    onProgress?.({ stage: 'done', progress: 100, message: t('analysis.complete') })
     return this.analyses
   }
 
@@ -215,6 +299,12 @@ export class DocumentAnalysisService {
         })
         .join('\n\n')
       lines.push(`${heading}\n${body}`)
+      logger.debug('Analysis input collected', {
+        documentId: id,
+        chunks: chunks.length,
+        usedChunks: sliced.length,
+        chars: body.length,
+      })
       processed++
       onProgress?.({ stage: 'extracting', progress: 5 + Math.floor((processed / docIds.length) * 20) })
     }

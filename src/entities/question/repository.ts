@@ -4,6 +4,7 @@ import type { NewQuestionInput, Question } from './types'
 import { normalizeQuestionOptions } from './types'
 import { logger } from '@/infrastructure/logger/logger'
 import { StorageError, ValidationError } from '@/infrastructure/errors/AppError'
+import { t } from '@/i18n'
 
 export class QuestionRepository {
   private db: AppDatabase
@@ -37,8 +38,8 @@ export class QuestionRepository {
     if (inputs.length === 0) return []
     const now = Date.now()
     const rows: Question[] = inputs.map((input) => {
-      if (!input.prompt.trim()) throw new ValidationError('Question prompt is required')
-      if (!input.correctAnswer.trim()) throw new ValidationError('Question answer is required')
+      if (!input.prompt.trim()) throw new ValidationError(t('errors.questionPromptRequired'))
+      if (!input.correctAnswer.trim()) throw new ValidationError(t('errors.questionAnswerRequired'))
       const options = normalizeQuestionOptions(input.options)
       return {
         id: crypto.randomUUID(),
@@ -62,7 +63,7 @@ export class QuestionRepository {
       logger.debug('Questions added', { count: rows.length, projectId: inputs[0]?.projectId })
       return rows
     } catch (err) {
-      throw new StorageError('Failed to save questions', err)
+      throw new StorageError(t('storage.failedToSaveQuestions'), err)
     }
   }
 

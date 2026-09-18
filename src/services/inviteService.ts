@@ -5,6 +5,7 @@ import { UserRepository } from '@/entities/user/repository'
 import { SEED_INVITE_CODES } from '@/shared/config/config'
 import { logger } from '@/infrastructure/logger/logger'
 import { AuthError, ValidationError } from '@/infrastructure/errors/AppError'
+import { t } from '@/i18n'
 
 /**
  * Local-only invite code verification.
@@ -48,9 +49,9 @@ export class InviteService {
 
   async unlock(rawCode: string): Promise<void> {
     const code = rawCode.trim().toUpperCase()
-    if (!code) throw new ValidationError('Invite code is required')
+    if (!code) throw new ValidationError(t('errors.inviteCodeRequired'))
     const valid = await this.validate(code)
-    if (!valid) throw new AuthError('Invite code is invalid or expired', 'INVALID_INVITE')
+    if (!valid) throw new AuthError(t('errors.inviteCodeInvalid'), 'INVALID_INVITE')
     await this.invites.add({ code, usedAt: Date.now() })
     await this.users.setUnlocked(code)
     logger.info('App unlocked', { code })
@@ -63,7 +64,7 @@ export class InviteService {
 
   async addCode(code: string): Promise<void> {
     const normalised = code.trim().toUpperCase()
-    if (!normalised) throw new ValidationError('Invite code is required')
+    if (!normalised) throw new ValidationError(t('errors.inviteCodeRequired'))
     await this.invites.add({ code: normalised })
   }
 

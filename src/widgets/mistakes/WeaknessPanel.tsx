@@ -6,6 +6,7 @@ import { Badge } from '@/shared/ui/Badge'
 import { LoadingState } from '@/shared/ui/LoadingState'
 import { Progress } from '@/shared/ui/Progress'
 import { WeaknessService, type WeaknessReport } from '@/services/weaknessService'
+import { useTranslation } from '@/i18n'
 
 export interface WeaknessPanelProps {
   projectId: string
@@ -18,6 +19,7 @@ export interface WeaknessPanelProps {
  * "Areas that may need review" — deliberately non-judgemental wording.
  */
 export function WeaknessPanel({ projectId, onReview, compact }: WeaknessPanelProps): JSX.Element {
+  const { t } = useTranslation()
   const [report, setReport] = useState<WeaknessReport | null>(null)
   const [loading, setLoading] = useState(true)
 
@@ -36,7 +38,7 @@ export function WeaknessPanel({ projectId, onReview, compact }: WeaknessPanelPro
     }
   }, [projectId, compact])
 
-  if (loading) return <LoadingState label="Checking for weak areas" inline />
+  if (loading) return <LoadingState label={t('weakness.checking')} inline />
 
   if (!report || report.areas.length === 0) {
     return (
@@ -44,9 +46,9 @@ export function WeaknessPanel({ projectId, onReview, compact }: WeaknessPanelPro
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-base">
             <BookOpenCheck className="h-4 w-4" />
-            Areas that may need review
+            {t('weakness.title')}
           </CardTitle>
-          <CardDescription>No recorded mistakes yet — nothing to flag.</CardDescription>
+          <CardDescription>{t('weakness.none')}</CardDescription>
         </CardHeader>
       </Card>
     )
@@ -58,15 +60,15 @@ export function WeaknessPanel({ projectId, onReview, compact }: WeaknessPanelPro
         <div>
           <CardTitle className="flex items-center gap-2 text-base">
             <BookOpenCheck className="h-4 w-4" />
-            Areas that may need review
+            {t('weakness.title')}
           </CardTitle>
           <CardDescription>
-            Based on {report.totalMistakes} recorded mistake{report.totalMistakes === 1 ? '' : 's'}. A rough signal, not a verdict.
+            {t('weakness.summary', { count: report.totalMistakes })}
           </CardDescription>
         </div>
         {onReview && (
           <Button variant="outline" size="sm" onClick={onReview}>
-            Review now
+            {t('weakness.reviewNow')}
             <ChevronRight className="h-4 w-4" />
           </Button>
         )}
@@ -77,9 +79,13 @@ export function WeaknessPanel({ projectId, onReview, compact }: WeaknessPanelPro
             <div className="flex flex-wrap items-center gap-2 text-sm">
               <span className="font-medium">{area.knowledgePoint}</span>
               <Badge variant="outline">
-                {area.mistakeCount} mistake{area.mistakeCount === 1 ? '' : 's'}
+                {t('weakness.count', { count: area.mistakeCount })}
               </Badge>
-              {area.mastery !== null && <Badge variant="secondary">mastery {Math.round(area.mastery * 100)}%</Badge>}
+              {area.mastery !== null && (
+                <Badge variant="secondary">
+                  {t('weakness.mastery', { value: `${Math.round(area.mastery * 100)}%` })}
+                </Badge>
+              )}
               <span className="ml-auto tabular-nums text-xs text-muted-foreground">
                 {Math.round(area.weaknessScore * 100)}%
               </span>

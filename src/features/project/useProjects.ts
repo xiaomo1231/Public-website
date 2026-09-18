@@ -35,16 +35,20 @@ export function useProject(id: string | undefined): {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    if (!store.loaded && !store.loading) {
-      void store.load()
-    }
     if (!id) {
       setProject(null)
       setLoading(false)
       return
     }
-    const found = store.projects.find((p) => p.id === id) ?? null
-    setProject(found)
+    if (!store.loaded) {
+      if (!store.loading) void store.load()
+      // Stay in the loading state until the list is available. Resolving
+      // `project` to null here would make callers briefly believe the project
+      // does not exist, and they would redirect away from a valid deep link.
+      setLoading(true)
+      return
+    }
+    setProject(store.projects.find((p) => p.id === id) ?? null)
     setLoading(false)
   }, [id, store.projects, store.loaded, store.loading, store])
 

@@ -4,7 +4,22 @@
  * to the repositories that persist them.
  */
 
+import type { TranslationKey } from '@/i18n/types'
+
 export type DifficultyLevel = 'beginner' | 'basic' | 'intermediate' | 'advanced' | 'challenge'
+
+export const DIFFICULTY_LABEL_KEYS: Record<DifficultyLevel, TranslationKey> = {
+  beginner: 'difficulty.beginner',
+  basic: 'difficulty.basic',
+  intermediate: 'difficulty.intermediate',
+  advanced: 'difficulty.advanced',
+  challenge: 'difficulty.challenge',
+}
+
+/** Safe lookup for persisted rows whose `difficulty` is a plain string. */
+export function difficultyLabelKey(value: string): TranslationKey {
+  return (DIFFICULTY_LABEL_KEYS as Record<string, TranslationKey>)[value] ?? 'common.unknown'
+}
 
 export interface SourceReference {
   documentId: string
@@ -41,7 +56,7 @@ export interface DocumentFormula {
 export interface DocumentSymbol {
   symbol: string
   meaning: string
-  /** Course-specific context — e.g. "physics: coefficient of friction" */
+  /** Course-specific context 鈥?e.g. "physics: coefficient of friction" */
   context: string
   unit?: string
   sourceRefs: SourceReference[]
@@ -81,7 +96,7 @@ export interface DocumentAnalysisOutput {
 
 export interface TutorQuestion {
   prompt: string
-  type: 'short_answer' | 'multiple_choice' | 'true_false' | 'numeric' | 'math_expr'
+  type: 'multiple_choice' | 'true_false' | 'numeric' | 'math_expr'
   options?: string[]
   expectedAnswer: string
   explanation: string
@@ -106,7 +121,7 @@ export interface TutorEvaluation {
 
 export interface GeneratedQuestion {
   prompt: string
-  type: 'short_answer' | 'multiple_choice' | 'true_false' | 'numeric' | 'math_expr'
+  type: 'multiple_choice' | 'true_false' | 'numeric' | 'math_expr'
   options?: string[]
   expectedAnswer: string
   explanation: string

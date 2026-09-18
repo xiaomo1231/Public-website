@@ -11,6 +11,12 @@ export default defineConfig({
   },
   server: {
     port: 5173,
+    // Everything this app stores lives in IndexedDB, which the browser scopes
+    // to the origin. Without `strictPort`, Vite silently falls back to 5174,
+    // 5175, … whenever 5173 is taken — a different origin, therefore a
+    // different (empty) database, which looks exactly like "my AI settings
+    // disappeared". Fail loudly instead of moving the origin.
+    strictPort: true,
     host: true,
   },
   build: {

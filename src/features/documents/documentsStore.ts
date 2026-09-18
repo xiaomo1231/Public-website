@@ -6,6 +6,7 @@ import { DocumentRepository } from '@/entities/document/repository'
 import { getDb } from '@/infrastructure/db/database'
 import { NotFoundError } from '@/infrastructure/errors/AppError'
 import { logger } from '@/infrastructure/logger/logger'
+import { t } from '@/i18n'
 
 export type DocumentLoadStatus = 'loading' | 'found' | 'not-found' | 'error'
 
@@ -80,7 +81,7 @@ export const useDocumentsStore = create<DocumentsStore>((set, get) => ({
         loaded: { ...s.loaded, [projectId]: true },
       }))
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Failed to load documents'
+      const msg = err instanceof Error ? err.message : t('errors.failedToLoadDocuments')
       logger.error('DocumentsStore.load failed', { projectId }, err)
       set((s) => ({
         loading: { ...s.loading, [projectId]: false },
@@ -169,7 +170,7 @@ export const useDocumentsStore = create<DocumentsStore>((set, get) => ({
         settle('not-found')
         return
       }
-      const msg = err instanceof Error ? err.message : 'Failed to load document'
+      const msg = err instanceof Error ? err.message : t('errors.failedToLoadDocument')
       logger.error('DocumentsStore.loadOne failed', { projectId, documentId }, err)
       settle('error', msg)
     }

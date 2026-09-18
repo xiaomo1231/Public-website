@@ -7,6 +7,7 @@ import { useAuth } from '@/features/auth/useAuth'
 import { useCurrentProject } from '@/features/project/useCurrentProject'
 import { toast } from '@/features/toast/toastStore'
 import { friendlyAIError } from '@/shared/lib/aiErrors'
+import { useTranslation } from '@/i18n'
 
 interface PopupState {
   x: number
@@ -23,6 +24,7 @@ const MAX_SELECTION = 240
  * topic to the AI for context-aware translation.
  */
 export function SelectionTranslator(): JSX.Element | null {
+  const { t } = useTranslation()
   const [popup, setPopup] = useState<PopupState | null>(null)
   const [result, setResult] = useState<null | { translation: string; contextNote: string; alternatives: string[] }>(null)
   const [busy, setBusy] = useState(false)
@@ -57,12 +59,12 @@ export function SelectionTranslator(): JSX.Element | null {
   async function translate() {
     if (!popup) return
     if (!currentProject) {
-      toast({ variant: 'warning', title: 'Open a project to use translation' })
+      toast({ variant: 'warning', title: t('translate.noProject') })
       return
     }
     const bundle = await buildAIServices()
     if (!bundle) {
-      toast({ variant: 'error', title: 'Configure AI provider first' })
+      toast({ variant: 'error', title: t('translate.noProvider') })
       return
     }
     setBusy(true)
@@ -78,7 +80,7 @@ export function SelectionTranslator(): JSX.Element | null {
       setResult({ translation: entry.translation, contextNote: entry.contextNote, alternatives: entry.alternatives })
     } catch (err) {
       const msg = friendlyAIError(err)
-      toast({ variant: 'error', title: 'Translation failed', description: msg })
+      toast({ variant: 'error', title: t('translate.failed'), description: msg })
     } finally {
       setBusy(false)
     }
@@ -91,33 +93,41 @@ export function SelectionTranslator(): JSX.Element | null {
 
   return (
     <div
-      className="fixed z-50 max-w-sm rounded-md border bg-popover p-3 text-sm shadow-lg"
+      // `bg-card`/`text-card-foreground` are opaque tokens defined for both
+      // themes. (The previous `bg-popover` resolved to nothing: no `popover`
+      // colour exists in the Tailwind config, so the popup had no background
+      // and its text sat directly on top of the page content.)
+      className="fixed z-50 max-w-sm rounded-md border bg-card p-3 text-sm text-card-foreground shadow-xl"
       style={{ left: popup.x, top: popup.y - 8, transform: 'translate(-50%, -100%)' }}
     >
       <div className="mb-2 flex items-center gap-2">
         <Languages className="h-4 w-4 text-muted-foreground" />
-        <span className="font-medium">Translate</span>
+        <span className="font-medium">{t('translate.title')}</span>
         <span className="ml-auto text-xs text-muted-foreground">
           {sourceLang} → {targetLang}
         </span>
-        <Button variant="ghost" size="icon" aria-label="Close" onClick={close} className="h-7 w-7">
+        <Button variant="ghost" size="icon" aria-label={t('common.close')} onClick={close} className="h-7 w-7">
           <X className="h-3 w-3" />
         </Button>
       </div>
-      <p className="line-clamp-2 text-xs text-muted-foreground">“{popup.text}”</p>
+      {/* Original selection — deliberately secondary to the translation. */}
+      <p className="line-clamp-2 rounded bg-muted/60 px-2 py-1 text-xs text-muted-foreground">
+        “{popup.text}”
+      </p>
       {!result && (
         <Button size="sm" className="mt-2 w-full" onClick={translate} disabled={busy}>
           {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Languages className="h-4 w-4" />}
-          Translate with AI
+          {t('translate.action')}
         </Button>
       )}
       {result && (
-        <div className="mt-2 space-y-1">
-          <p className="text-sm font-medium">{result.translation}</p>
+        <div className="mt-2 space-y-1.5">
+          {/* Translation — the primary content, full-contrast and roomy. */}
+          <p className="text-sm font-medium leading-relaxed text-foreground">{result.translation}</p>
           {result.contextNote && <p className="text-xs text-muted-foreground">{result.contextNote}</p>}
           {result.alternatives.length > 0 && (
             <p className="text-[11px] text-muted-foreground">
-              Also: {result.alternatives.join(', ')}
+              {t('translate.also', { value: result.alternatives.join(', ') })}
             </p>
           )}
         </div>

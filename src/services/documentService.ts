@@ -3,6 +3,7 @@ import type { ProjectService } from './projectService'
 import { type CreateDocumentInput, type Document, type UpdateDocumentInput } from '@/entities/document/types'
 import { logger } from '@/infrastructure/logger/logger'
 import { NotFoundError, ValidationError } from '@/infrastructure/errors/AppError'
+import { t } from '@/i18n'
 
 export class DocumentService {
   private repo: DocumentRepository
@@ -27,7 +28,7 @@ export class DocumentService {
   }
 
   async rename(id: string, name: string): Promise<Document> {
-    if (!name.trim()) throw new ValidationError('Document name is required')
+    if (!name.trim()) throw new ValidationError(t('errors.documentNameRequired'))
     return this.repo.update(id, { name: name.trim() })
   }
 

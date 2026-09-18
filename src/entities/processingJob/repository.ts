@@ -3,6 +3,7 @@ import { getDb } from '@/infrastructure/db/database'
 import type { ProcessingJob, ProcessingStage } from './types'
 import { logger } from '@/infrastructure/logger/logger'
 import { StorageError } from '@/infrastructure/errors/AppError'
+import { t } from '@/i18n'
 
 export class ProcessingJobRepository {
   private db: AppDatabase
@@ -39,7 +40,7 @@ export class ProcessingJobRepository {
     patch: Partial<Pick<ProcessingJob, 'stage' | 'progress' | 'message' | 'finishedAt' | 'errorMessage'>>,
   ): Promise<ProcessingJob> {
     const existing = await this.db.processingJobs.get(id)
-    if (!existing) throw new StorageError('Processing job not found')
+    if (!existing) throw new StorageError(t('errors.jobNotFound'))
     const next: ProcessingJob = { ...existing, ...patch, updatedAt: Date.now() }
     await this.db.processingJobs.put(next)
     return next

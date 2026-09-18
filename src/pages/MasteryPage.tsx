@@ -11,16 +11,18 @@ import { PageContainer, PageContent, PageHeader } from '@/shared/ui/Page'
 import { MasteryService } from '@/services/masteryService'
 import type { KnowledgeMastery } from '@/entities/knowledgeMastery/types'
 import { cn, relativeTime } from '@/shared/lib/utils'
+import { useTranslation, type TranslationKey } from '@/i18n'
 
-function toneFor(mastery: number): { label: string; className: string } {
-  if (mastery >= 0.8) return { label: 'Strong', className: 'text-emerald-600' }
-  if (mastery >= 0.6) return { label: 'Solid', className: 'text-foreground' }
-  if (mastery >= 0.4) return { label: 'Developing', className: 'text-amber-600' }
-  return { label: 'Needs work', className: 'text-destructive' }
+function toneFor(mastery: number): { bandKey: TranslationKey; className: string } {
+  if (mastery >= 0.8) return { bandKey: 'mastery.band.strong', className: 'text-emerald-600' }
+  if (mastery >= 0.6) return { bandKey: 'mastery.band.solid', className: 'text-foreground' }
+  if (mastery >= 0.4) return { bandKey: 'mastery.band.developing', className: 'text-amber-600' }
+  return { bandKey: 'mastery.band.needsWork', className: 'text-destructive' }
 }
 
 export function MasteryPage(): JSX.Element {
   const { id: projectId } = useParams<{ id: string }>()
+  const { t } = useTranslation()
   const [rows, setRows] = useState<KnowledgeMastery[]>([])
   const [loading, setLoading] = useState(true)
 
@@ -52,33 +54,33 @@ export function MasteryPage(): JSX.Element {
       <PageHeader
         title={
           <div className="flex items-center gap-2">
-            <Button asChild variant="ghost" size="icon" aria-label="Back to project">
+            <Button asChild variant="ghost" size="icon" aria-label={t('mastery.backToProject')}>
               <Link to={`/projects/${projectId}`}>
                 <ArrowLeft className="h-4 w-4" />
               </Link>
             </Button>
             <Brain className="h-4 w-4" />
-            Knowledge Mastery
+            {t('mastery.title')}
           </div>
         }
-        description="An estimate derived from your practice history — not a measurement of true ability."
+        description={t('mastery.subtitle')}
         actions={
           <Button variant="outline" asChild>
-            <Link to={`/projects/${projectId}/quiz`}>Take a quiz</Link>
+            <Link to={`/projects/${projectId}/quiz`}>{t('mastery.takeQuiz')}</Link>
           </Button>
         }
       />
       <PageContent className="space-y-6">
         {loading ? (
-          <LoadingState label="Loading mastery" />
+          <LoadingState label={t('mastery.loading')} />
         ) : rows.length === 0 ? (
           <EmptyState
             icon={<Brain className="h-10 w-10" />}
-            title="No mastery data yet"
-            description="Complete a quiz and the system will start estimating your knowledge-point mastery."
+            title={t('mastery.empty')}
+            description={t('mastery.emptyHint')}
             action={
               <Button asChild>
-                <Link to={`/projects/${projectId}/quiz`}>Generate a quiz</Link>
+                <Link to={`/projects/${projectId}/quiz`}>{t('mastery.generateQuiz')}</Link>
               </Button>
             }
           />
@@ -88,20 +90,20 @@ export function MasteryPage(): JSX.Element {
               <CardContent className="grid gap-6 p-6 sm:grid-cols-3">
                 <div>
                   <div className="text-3xl font-semibold tabular-nums">{Math.round(average * 100)}%</div>
-                  <div className="text-xs text-muted-foreground">Average mastery estimate</div>
+                  <div className="text-xs text-muted-foreground">{t('mastery.average')}</div>
                 </div>
                 <div>
                   <div className="text-3xl font-semibold tabular-nums">{practiced.length}</div>
-                  <div className="text-xs text-muted-foreground">Knowledge points practised</div>
+                  <div className="text-xs text-muted-foreground">{t('mastery.practised')}</div>
                 </div>
                 <div>
                   <div className="flex items-center gap-2 text-sm">
                     <TrendingDown className="h-4 w-4 text-destructive" />
-                    <span>{practiced.filter((r) => r.mastery < 0.6).length} below 60%</span>
+                    <span>{t('mastery.below', { count: practiced.filter((r) => r.mastery < 0.6).length })}</span>
                   </div>
                   <div className="mt-1 flex items-center gap-2 text-sm">
                     <TrendingUp className="h-4 w-4 text-emerald-600" />
-                    <span>{practiced.filter((r) => r.mastery >= 0.8).length} above 80%</span>
+                    <span>{t('mastery.above', { count: practiced.filter((r) => r.mastery >= 0.8).length })}</span>
                   </div>
                 </div>
               </CardContent>
@@ -109,8 +111,8 @@ export function MasteryPage(): JSX.Element {
 
             <Card>
               <CardHeader>
-                <CardTitle className="text-base">Knowledge points</CardTitle>
-                <CardDescription>Weakest first — focus your study time here.</CardDescription>
+                <CardTitle className="text-base">{t('mastery.knowledgePoints')}</CardTitle>
+                <CardDescription>{t('mastery.knowledgePointsHint')}</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 {rows.map((row) => {
@@ -120,16 +122,16 @@ export function MasteryPage(): JSX.Element {
                     <div key={row.id} className="space-y-1">
                       <div className="flex flex-wrap items-center gap-2 text-sm">
                         <span className="font-medium">{row.knowledgePoint}</span>
-                        <span className={cn('text-xs', tone.className)}>{tone.label}</span>
+                        <span className={cn('text-xs', tone.className)}>{t(tone.bandKey)}</span>
                         <span className="ml-auto tabular-nums text-muted-foreground">{pct}%</span>
                       </div>
                       <Progress value={pct} className="h-1.5" />
                       <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
                         <Badge variant="outline">
-                          {row.correct}/{row.attempts} correct
+                          {t('mastery.correctOf', { correct: row.correct, total: row.attempts })}
                         </Badge>
-                        {row.attempts === 0 && <span>No graded attempts yet</span>}
-                        <span className="ml-auto">Updated {relativeTime(row.lastUpdated)}</span>
+                        {row.attempts === 0 && <span>{t('mastery.noAttempts')}</span>}
+                        <span className="ml-auto">{t('mastery.updatedAt', { date: relativeTime(row.lastUpdated) })}</span>
                       </div>
                     </div>
                   )
@@ -137,10 +139,7 @@ export function MasteryPage(): JSX.Element {
               </CardContent>
             </Card>
 
-            <p className="text-xs text-muted-foreground">
-              Mastery is computed from weighted practice history: recent answers and harder questions count more.
-              Treat it as a rough signal, not an absolute measure.
-            </p>
+            <p className="text-xs text-muted-foreground">{t('mastery.explanation')}</p>
           </>
         )}
       </PageContent>

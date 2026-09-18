@@ -1,14 +1,33 @@
 import type { ChatMessage } from '@/infrastructure/ai/types'
 import type { DifficultyLevel, SourceReference, TutorEvaluation } from '@/infrastructure/ai/prompts/types'
+import type { TranslationKey } from '@/i18n/types'
 
 export type { DifficultyLevel, SourceReference, TutorEvaluation }
+
+export type TutorSessionStatus = 'active' | 'completed' | 'abandoned'
+export type TutorTurnKind = 'introduction' | 'question' | 'answer' | 'feedback' | 'hint' | 'note'
+
+export const SESSION_STATUS_LABEL_KEYS: Record<TutorSessionStatus, TranslationKey> = {
+  active: 'sessionStatus.active',
+  completed: 'sessionStatus.completed',
+  abandoned: 'sessionStatus.abandoned',
+}
+
+export const TURN_KIND_LABEL_KEYS: Record<TutorTurnKind, TranslationKey> = {
+  introduction: 'turnKind.introduction',
+  question: 'turnKind.question',
+  answer: 'turnKind.answer',
+  feedback: 'turnKind.feedback',
+  hint: 'turnKind.hint',
+  note: 'turnKind.note',
+}
 
 export type SourceRef = SourceReference
 
 export interface TutorQuestion {
   id: string
   prompt: string
-  type: 'short_answer' | 'multiple_choice' | 'true_false' | 'numeric' | 'math_expr'
+  type: 'multiple_choice' | 'true_false' | 'numeric' | 'math_expr'
   options?: string[]
   expectedAnswer: string
   explanation: string
@@ -20,7 +39,7 @@ export interface TutorQuestion {
 
 export interface TutorTurn {
   role: 'tutor' | 'student' | 'system'
-  kind: 'introduction' | 'question' | 'answer' | 'feedback' | 'hint' | 'note'
+  kind: TutorTurnKind
   content: string
   question?: TutorQuestion
   evaluation?: TutorEvaluation
@@ -50,7 +69,7 @@ export interface TutorSession {
   hintsRevealed: number
   /** Cumulative performance metric used by the difficulty adjuster. */
   mastery: number
-  status: 'active' | 'completed' | 'abandoned'
+  status: TutorSessionStatus
   startedAt: number
   updatedAt: number
 }

@@ -12,6 +12,7 @@ import {
 import { Input } from '@/shared/ui/Input'
 import { Label } from '@/shared/ui/Label'
 import type { Project } from '@/entities/project/types'
+import { useTranslation } from '@/i18n'
 
 export interface RenameProjectDialogProps {
   open: boolean
@@ -31,6 +32,7 @@ export function RenameProjectDialog({
   project,
   onRename,
 }: RenameProjectDialogProps): JSX.Element {
+  const { t } = useTranslation()
   const inputId = useId()
   const [name, setName] = useState(project.name)
   const [busy, setBusy] = useState(false)
@@ -57,7 +59,7 @@ export function RenameProjectDialog({
       await onRename(trimmed)
       onOpenChange(false)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not rename the project.')
+      setError(err instanceof Error ? err.message : t('renameProject.failed'))
     } finally {
       setBusy(false)
     }
@@ -81,12 +83,12 @@ export function RenameProjectDialog({
       >
         <form onSubmit={submit} className="space-y-4">
           <DialogHeader>
-            <DialogTitle>Rename project</DialogTitle>
-            <DialogDescription>Give this project a new name. Your data is not affected.</DialogDescription>
+            <DialogTitle>{t('renameProject.title')}</DialogTitle>
+            <DialogDescription>{t('renameProject.description')}</DialogDescription>
           </DialogHeader>
 
           <div className="space-y-2">
-            <Label htmlFor={inputId}>Project name</Label>
+            <Label htmlFor={inputId}>{t('renameProject.label')}</Label>
             <Input
               id={inputId}
               value={name}
@@ -101,11 +103,11 @@ export function RenameProjectDialog({
 
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={busy}>
-              Cancel
+              {t('common.cancel')}
             </Button>
             <Button type="submit" disabled={!canSubmit}>
               {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-              Save
+              {t('common.save')}
             </Button>
           </DialogFooter>
         </form>

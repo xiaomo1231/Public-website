@@ -1,5 +1,6 @@
 import { isAppError } from '@/infrastructure/errors/AppError'
 import { AIProviderError } from '@/infrastructure/ai/errors'
+import { t } from '@/i18n'
 
 /**
  * Map a thrown error to a message a student can act on.
@@ -11,57 +12,59 @@ export function friendlyAIError(err: unknown): string {
   if (err instanceof AIProviderError) {
     switch (err.code) {
       case 'MISSING_API_KEY':
-        return 'No API key configured. Open Settings → AI Settings to add one.'
+        return t('friendlyError.missingApiKey')
       case 'MISSING_BASE_URL':
-        return 'No API base URL configured. Open Settings → AI Settings to set one.'
+        return t('friendlyError.missingBaseUrl')
       case 'MISSING_MODEL':
-        return 'No model selected. Open Settings → AI Settings to choose one.'
+        return t('friendlyError.missingModel')
       case 'AUTH_FAILED':
-        return 'The API key was rejected. Check that it is correct and still active.'
+        return t('friendlyError.authFailed')
       case 'RATE_LIMITED':
-        return 'The AI provider is rate limiting requests. Wait a moment and try again.'
+        return t('friendlyError.rateLimited')
       case 'TIMEOUT':
-        return 'The AI took too long to respond. Check your connection or try a smaller request.'
+        return t('friendlyError.timeout')
       case 'PROVIDER_UNAVAILABLE':
-        return 'AI connection unavailable. Check your network and that the base URL is reachable.'
+        return t('friendlyError.providerUnavailable')
       case 'INVALID_JSON':
       case 'INVALID_RESPONSE':
-        return 'The AI returned a response the app could not read. Try again.'
+        return t('friendlyError.invalidResponse')
+      case 'OUTPUT_TRUNCATED':
+        return t('friendlyError.outputTruncated')
       case 'ABORTED':
-        return 'The request was cancelled.'
+        return t('friendlyError.cancelled')
       case 'INVALID_REQUEST':
-        return err.message || 'The AI provider rejected the request.'
+        return err.message || t('friendlyError.invalidRequest')
       default:
-        return ensureUseful(err.message, 'The AI request failed. Check your AI Settings and try again.')
+        return ensureUseful(err.message, t('friendlyError.requestFailed'))
     }
   }
   if (isAppError(err)) {
     switch (err.code) {
       case 'NO_DOCUMENTS':
-        return 'No processed documents found. Upload a document and wait for it to finish processing.'
+        return t('friendlyError.noDocuments')
       case 'NO_ANALYSIS':
-        return 'Run Analyze Course first — the AI needs the structured course knowledge.'
+        return t('friendlyError.noAnalysis')
       case 'NO_MISTAKES':
-        return 'No mistakes to review yet. Take a quiz first.'
+        return t('errors.noMistakesToReview')
       case 'MALFORMED_QUIZ':
       case 'QUIZ_GENERATION_FAILED':
-        return 'The AI could not produce a valid quiz. Try again or reduce the question count.'
+        return t('friendlyError.malformedQuiz')
       case 'NOT_FOUND':
-        return 'That item no longer exists. It may have been deleted.'
+        return t('friendlyError.notFound')
       case 'VALIDATION_ERROR':
-        return ensureUseful(err.message, 'The input was not valid.')
+        return ensureUseful(err.message, t('friendlyError.invalidInput'))
       default:
-        return ensureUseful(err.message, 'The request failed. Please try again.')
+        return ensureUseful(err.message, t('friendlyError.generic'))
     }
   }
   if (err instanceof Error) {
-    if (err.name === 'AbortError') return 'The request was cancelled.'
+    if (err.name === 'AbortError') return t('friendlyError.cancelled')
     if (/failed to fetch|networkerror|network request failed/i.test(err.message)) {
-      return 'AI connection unavailable. Check your network and that the base URL is reachable.'
+      return t('friendlyError.providerUnavailable')
     }
-    return ensureUseful(err.message, 'The request failed. Please try again.')
+    return ensureUseful(err.message, t('friendlyError.generic'))
   }
-  return 'The request failed. Please try again.'
+  return t('friendlyError.generic')
 }
 
 function ensureUseful(message: string | undefined, fallback: string): string {
@@ -75,4 +78,7 @@ export function isOffline(): boolean {
   return navigator.onLine === false
 }
 
-export const OFFLINE_MESSAGE = 'AI connection unavailable. Check your network connection.'
+/** Resolved on demand so it follows the current UI language. */
+export function offlineMessage(): string {
+  return t('friendlyError.offline')
+}

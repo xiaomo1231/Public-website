@@ -32,7 +32,7 @@ function mistake(overrides: Partial<Mistake> = {}): Mistake {
     projectId: 'p1',
     knowledgePoint: 'Chain Rule',
     difficulty: 'basic',
-    questionType: 'short_answer',
+    questionType: 'numeric',
     question: 'Differentiate sin(2x)',
     studentAnswer: 'cos(2x)',
     correctAnswer: '2cos(2x)',

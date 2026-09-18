@@ -1,13 +1,14 @@
 import { ChevronRight, Loader2 } from 'lucide-react'
+import { useTranslation, type TranslationKey } from '@/i18n'
 
 export type PracticeMode = 'same_concept' | 'similar' | 'easier' | 'harder' | 'weakness'
 
-const OPTIONS: Array<{ mode: PracticeMode; label: string; hint: string }> = [
-  { mode: 'same_concept', label: 'Same concept', hint: 'Another question on this knowledge point' },
-  { mode: 'similar', label: 'Similar question', hint: 'A close variant of this one' },
-  { mode: 'easier', label: 'Easier', hint: 'Step down a difficulty level' },
-  { mode: 'harder', label: 'Harder', hint: 'Step up a difficulty level' },
-  { mode: 'weakness', label: 'Weakness training', hint: 'Mix in your other weak points' },
+const OPTIONS: Array<{ mode: PracticeMode; labelKey: TranslationKey; hintKey: TranslationKey }> = [
+  { mode: 'same_concept', labelKey: 'practiceMore.sameConcept', hintKey: 'practiceMore.sameConceptHint' },
+  { mode: 'similar', labelKey: 'practiceMore.similar', hintKey: 'practiceMore.similarHint' },
+  { mode: 'easier', labelKey: 'practiceMore.easier', hintKey: 'practiceMore.easierHint' },
+  { mode: 'harder', labelKey: 'practiceMore.harder', hintKey: 'practiceMore.harderHint' },
+  { mode: 'weakness', labelKey: 'practiceMore.weakness', hintKey: 'practiceMore.weaknessHint' },
 ]
 
 export interface PracticeMoreMenuProps {
@@ -16,9 +17,10 @@ export interface PracticeMoreMenuProps {
 }
 
 export function PracticeMoreMenu({ onSelect, busy }: PracticeMoreMenuProps): JSX.Element {
+  const { t } = useTranslation()
   return (
     <div className="rounded-md border bg-muted/20 p-3">
-      <p className="mb-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">Practice more</p>
+      <p className="mb-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">{t('practiceMore.title')}</p>
       <div className="grid gap-1.5 sm:grid-cols-2">
         {OPTIONS.map((opt) => (
           <button
@@ -29,8 +31,8 @@ export function PracticeMoreMenu({ onSelect, busy }: PracticeMoreMenuProps): JSX
             className="flex items-center gap-2 rounded-md border bg-card px-3 py-2 text-left text-sm transition-colors hover:bg-accent/50 disabled:opacity-60"
           >
             <span className="flex-1">
-              <span className="block font-medium">{opt.label}</span>
-              <span className="block text-xs text-muted-foreground">{opt.hint}</span>
+              <span className="block font-medium">{t(opt.labelKey)}</span>
+              <span className="block text-xs text-muted-foreground">{t(opt.hintKey)}</span>
             </span>
             {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <ChevronRight className="h-4 w-4 text-muted-foreground" />}
           </button>

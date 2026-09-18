@@ -38,11 +38,20 @@ function capturingAI(): { ai: AIService; messages: ChatMessage[][] } {
         raw: { content: '{}', model: 'fake' },
       }
     }),
+    // The analysis path streams; capture its messages too.
+    streamJSON: vi.fn(async (msgs: ChatMessage[]) => {
+      messages.push(msgs)
+      return {
+        data: { language: 'en', topics: [], concepts: [], formulas: [], symbols: [], examples: [], exercises: [], prerequisites: [] },
+        raw: { content: '{}', model: 'fake' },
+      }
+    }),
     chat: vi.fn(),
     streamChat: vi.fn(),
     testConnection: vi.fn(),
     reset: vi.fn(),
     currentProvider: {},
+    maxOutputTokens: 2048,
   } as unknown as AIService
   return { ai, messages }
 }

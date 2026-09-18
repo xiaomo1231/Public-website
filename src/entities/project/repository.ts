@@ -3,6 +3,7 @@ import type { CreateProjectInput, Project, UpdateProjectInput } from './types'
 import { getDb } from '@/infrastructure/db/database'
 import { NotFoundError, StorageError, ValidationError } from '@/infrastructure/errors/AppError'
 import { logger } from '@/infrastructure/logger/logger'
+import { t } from '@/i18n'
 
 function normalizeName(name: string): string {
   return name.trim()
@@ -21,7 +22,7 @@ export class ProjectRepository {
       return rows
     } catch (err) {
       logger.error('ProjectRepository.list failed', undefined, err)
-      throw new StorageError('Failed to list projects', err)
+      throw new StorageError(t('storage.failedToListProjects'), err)
     }
   }
 
@@ -33,8 +34,8 @@ export class ProjectRepository {
 
   async create(input: CreateProjectInput): Promise<Project> {
     const name = normalizeName(input.name)
-    if (!name) throw new ValidationError('Project name is required')
-    if (name.length > 80) throw new ValidationError('Project name is too long (max 80)')
+    if (!name) throw new ValidationError(t('errors.projectNameRequired'))
+    if (name.length > 80) throw new ValidationError(t('errors.projectNameTooLong'))
 
     const now = Date.now()
     const project: Project = {
@@ -56,7 +57,7 @@ export class ProjectRepository {
     const next: Project = { ...existing, updatedAt: Date.now() }
     if (patch.name !== undefined) {
       const name = normalizeName(patch.name)
-      if (!name) throw new ValidationError('Project name is required')
+      if (!name) throw new ValidationError(t('errors.projectNameRequired'))
       next.name = name
     }
     if (patch.subject !== undefined) next.subject = patch.subject

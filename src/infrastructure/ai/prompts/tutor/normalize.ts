@@ -15,14 +15,9 @@ import {
   asTrimmedString,
 } from '@/infrastructure/ai/validation'
 import { AppError } from '@/infrastructure/errors/AppError'
+import { t } from '@/i18n'
 
-const QUESTION_TYPES = [
-  'short_answer',
-  'multiple_choice',
-  'true_false',
-  'numeric',
-  'math_expr',
-] as const
+const QUESTION_TYPES = ['multiple_choice', 'true_false', 'numeric', 'math_expr'] as const
 
 const DIFFICULTIES: readonly DifficultyLevel[] = [
   'beginner',
@@ -38,13 +33,13 @@ export function normalizeTutorQuestion(raw: unknown): TutorQuestion {
   const prompt = asTrimmedString(record.prompt)
   const expectedAnswer = asTrimmedString(record.expectedAnswer)
   if (!prompt || !expectedAnswer) {
-    throw new AppError('The AI did not return a usable question.', 'MALFORMED_QUESTION')
+    throw new AppError(t('errors.aiNoQuestion'), 'MALFORMED_QUESTION')
   }
   const options = asStringArray(record.options)
   return {
     id: '',
     prompt,
-    type: asEnum(record.type, QUESTION_TYPES, 'short_answer'),
+    type: asEnum(record.type, QUESTION_TYPES, 'multiple_choice'),
     ...(options.length > 0 ? { options } : {}),
     expectedAnswer,
     explanation: asTrimmedString(record.explanation),
@@ -61,7 +56,7 @@ export function normalizeTutorEvaluation(raw: unknown): TutorEvaluation {
   const grounded = asTrimmedString(record.groundedExplanation)
   return {
     isCorrect: asBoolean(record.isCorrect, false),
-    feedback: asTrimmedString(record.feedback, 'Your answer has been recorded.'),
+    feedback: asTrimmedString(record.feedback, t('errors.tutorFeedbackFallback')),
     breakdown: asStringArray(record.breakdown),
     nextSteps: asTrimmedString(record.nextSteps),
     groundedExplanation: grounded || asTrimmedString(record.feedback),

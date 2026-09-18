@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import type { Project } from '@/entities/project/types'
 import { ProjectService } from '@/services/projectService'
 import { logger } from '@/infrastructure/logger/logger'
+import { t } from '@/i18n'
 
 interface ProjectStoreState {
   projects: Project[]
@@ -39,7 +40,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
       const projects = await service.list()
       set({ projects, loading: false, loaded: true })
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Failed to load projects'
+      const msg = err instanceof Error ? err.message : t('errors.failedToLoadProjects')
       logger.error('ProjectStore.load failed', undefined, err)
       set({ error: msg, loading: false, loaded: true })
     }

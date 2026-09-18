@@ -13,17 +13,24 @@ describe('utils', () => {
     expect(clamp(11, 0, 10)).toBe(10)
   })
 
-  it('formats dates', () => {
+  it('formats dates for the given locale', () => {
     const ts = Date.UTC(2026, 0, 5, 13, 4)
-    expect(formatDate(ts)).toMatch(/2026-01-05/)
-    expect(formatDateTime(ts)).toMatch(/2026-01-05 \d{2}:04/)
+    expect(formatDate(ts, 'en')).toMatch(/Jan 5, 2026/)
+    expect(formatDate(ts, 'zh-CN')).toMatch(/2026年1月5日/)
+    expect(formatDateTime(ts, 'en')).toMatch(/Jan 5, 2026/)
+    expect(formatDateTime(ts, 'zh-CN')).toMatch(/2026年1月5日/)
   })
 
-  it('produces relative time strings', () => {
+  it('produces relative time strings per locale', () => {
     const now = 1_700_000_000_000
-    expect(relativeTime(now - 10_000, now)).toBe('刚刚')
-    expect(relativeTime(now - 5 * 60_000, now)).toBe('5 分钟前')
-    expect(relativeTime(now - 3 * 3_600_000, now)).toBe('3 小时前')
-    expect(relativeTime(now - 2 * 86_400_000, now)).toBe('2 天前')
+
+    expect(relativeTime(now - 10_000, now, 'en')).toBe('now')
+    expect(relativeTime(now - 5 * 60_000, now, 'en')).toBe('5 minutes ago')
+    expect(relativeTime(now - 3 * 3_600_000, now, 'en')).toBe('3 hours ago')
+    expect(relativeTime(now - 2 * 86_400_000, now, 'en')).toBe('2 days ago')
+
+    expect(relativeTime(now - 10_000, now, 'zh-CN')).toBe('现在')
+    expect(relativeTime(now - 5 * 60_000, now, 'zh-CN')).toBe('5分钟前')
+    expect(relativeTime(now - 3 * 3_600_000, now, 'zh-CN')).toBe('3小时前')
   })
 })

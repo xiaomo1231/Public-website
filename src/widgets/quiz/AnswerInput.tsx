@@ -4,6 +4,7 @@ import type { Question } from '@/entities/question/types'
 import { Input } from '@/shared/ui/Input'
 import { Textarea } from '@/shared/ui/Textarea'
 import { cn } from '@/shared/lib/utils'
+import { useTranslation, type TranslationKey } from '@/i18n'
 
 export interface AnswerInputProps {
   question: Question
@@ -15,6 +16,7 @@ export interface AnswerInputProps {
 }
 
 export function AnswerInput({ question, value, onChange, disabled, revealed }: AnswerInputProps): JSX.Element {
+  const { t } = useTranslation()
   if (question.type === 'multiple_choice') {
     return <MultipleChoiceInput question={question} value={value} onChange={onChange} disabled={disabled} revealed={revealed} />
   }
@@ -28,7 +30,7 @@ export function AnswerInput({ question, value, onChange, disabled, revealed }: A
         inputMode="decimal"
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        placeholder="Enter a number, e.g. 9.81"
+        placeholder={t('answerInput.numberPlaceholder')}
         disabled={disabled}
         className="font-mono"
       />
@@ -41,12 +43,12 @@ export function AnswerInput({ question, value, onChange, disabled, revealed }: A
           type="text"
           value={value}
           onChange={(e) => onChange(e.target.value)}
-          placeholder="e.g. x^3/3 + C"
+          placeholder={t('answerInput.expressionPlaceholder')}
           disabled={disabled}
           className="font-mono"
         />
         <p className="text-xs text-muted-foreground">
-          Use <code className="rounded bg-muted px-1">^</code> for powers, <code className="rounded bg-muted px-1">*</code> for multiplication. Equivalent forms are accepted.
+          {t('answerInput.expressionHint', { power: '^', multiply: '*' })}
         </p>
       </div>
     )
@@ -56,7 +58,7 @@ export function AnswerInput({ question, value, onChange, disabled, revealed }: A
       rows={3}
       value={value}
       onChange={(e) => onChange(e.target.value)}
-      placeholder="Type your answer…"
+      placeholder={t('answerInput.textPlaceholder')}
       disabled={disabled}
     />
   )
@@ -121,28 +123,29 @@ function TrueFalseInput({
   revealed?: boolean
   correctAnswer: string
 }): JSX.Element {
+  const { t } = useTranslation()
   const [local, setLocal] = useState(value)
   useEffect(() => {
     setLocal(value)
   }, [value])
   const correct = correctAnswer.toLowerCase() === 'true' || correctAnswer.toLowerCase() === 'yes'
-  const options: Array<{ label: string; bool: boolean }> = [
-    { label: 'True', bool: true },
-    { label: 'False', bool: false },
+  const options: Array<{ labelKey: TranslationKey; value: string; bool: boolean }> = [
+    { labelKey: 'answerInput.true', value: 'True', bool: true },
+    { labelKey: 'answerInput.false', value: 'False', bool: false },
   ]
   return (
     <div className="flex gap-2">
       {options.map((o) => {
-        const selected = local.toLowerCase() === o.label.toLowerCase()
+        const selected = local.toLowerCase() === o.value.toLowerCase()
         const isCorrect = revealed && correct === o.bool
         return (
           <button
-            key={o.label}
+            key={o.value}
             type="button"
             disabled={disabled}
             onClick={() => {
-              setLocal(o.label)
-              onChange(o.label)
+              setLocal(o.value)
+              onChange(o.value)
             }}
             className={cn(
               'flex-1 rounded-md border px-4 py-2 text-sm transition-colors',
@@ -151,7 +154,7 @@ function TrueFalseInput({
               revealed && selected && !isCorrect && 'border-destructive/60 bg-destructive/5',
             )}
           >
-            {o.label}
+            {t(o.labelKey)}
           </button>
         )
       })}

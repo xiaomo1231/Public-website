@@ -80,7 +80,7 @@ describe('Unauthorized project access', () => {
         mode: 'mixed',
         count: 3,
         difficulty: 'adaptive',
-        types: ['short_answer'],
+        types: ['numeric'],
       }),
     ).rejects.toBeInstanceOf(NotFoundError)
   })
@@ -183,7 +183,7 @@ describe('Cross-project data isolation', () => {
       projectId: a.id,
       questionId: 'q',
       knowledgePoint: 'Shared',
-      questionType: 'short_answer',
+      questionType: 'numeric',
       difficulty: 'basic',
       userAnswer: 'a',
       evaluation: { isCorrect: true, method: 'exact', confidence: 1 },

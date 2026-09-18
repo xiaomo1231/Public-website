@@ -11,6 +11,7 @@ import { buildAIServices } from '@/services/aiServices'
 import type { CourseAnalysis, Formula, Topic, CourseSymbol } from '@/entities/courseAnalysis/types'
 import { CourseAnalysisRepository } from '@/entities/courseAnalysis/repository'
 import { friendlyAIError } from '@/shared/lib/aiErrors'
+import { useTranslation } from '@/i18n'
 
 export interface CourseAnalysisPanelProps {
   projectId: string
@@ -23,6 +24,7 @@ export function CourseAnalysisPanel({
   subject,
   onStartTutor,
 }: CourseAnalysisPanelProps): JSX.Element {
+  const { t } = useTranslation()
   const repo = useMemo(() => new CourseAnalysisRepository(), [])
   const [analysis, setAnalysis] = useState<CourseAnalysis | null>(null)
   const [topics, setTopics] = useState<Topic[]>([])
@@ -57,11 +59,15 @@ export function CourseAnalysisPanel({
   async function analyze() {
     setRunning(true)
     setProgress(0)
-    setMessage('Preparing…')
+    setMessage(t('analysis.preparing'))
     try {
       const bundle = await buildAIServices()
       if (!bundle) {
-        toast({ variant: 'error', title: 'Configure AI provider first', description: 'Open Settings → AI Settings to add your API key.' })
+        toast({
+          variant: 'error',
+          title: t('analysis.noProvider'),
+          description: t('analysis.noProviderHint'),
+        })
         setRunning(false)
         return
       }
@@ -82,29 +88,37 @@ export function CourseAnalysisPanel({
       setTopics(ts)
       setFormulas(fs)
       setSymbols(ss)
-      toast({ variant: 'success', title: 'Analysis complete', description: `${ts.length} topics, ${fs.length} formulas, ${ss.length} symbols` })
+      toast({
+        variant: 'success',
+        title: t('analysis.complete'),
+        description: t('analysis.completeBody', {
+          topics: ts.length,
+          formulas: fs.length,
+          symbols: ss.length,
+        }),
+      })
     } catch (err) {
       const msg = friendlyAIError(err)
-      toast({ variant: 'error', title: 'Analysis failed', description: msg })
+      toast({ variant: 'error', title: t('analysis.failed'), description: msg })
     } finally {
       setRunning(false)
     }
   }
 
   if (loading) {
-    return <LoadingState label="Loading analysis" />
+    return <LoadingState label={t('analysis.loading')} />
   }
 
   if (!analysis && topics.length === 0) {
     return (
       <EmptyState
         icon={<Brain className="h-10 w-10" />}
-        title="Course not analysed yet"
-        description="Let the AI read your documents and extract topics, formulas, symbols, and prerequisites."
+        title={t('analysis.empty')}
+        description={t('analysis.emptyHint')}
         action={
           <Button onClick={analyze} disabled={running}>
             {running ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
-            {running ? 'Analysing…' : 'Analyze Course'}
+            {running ? t('analysis.analyzing') : t('analysis.analyze')}
           </Button>
         }
       />
@@ -116,19 +130,33 @@ export function CourseAnalysisPanel({
       <div className="flex flex-wrap items-center gap-2">
         <Button onClick={analyze} disabled={running}>
           {running ? <Loader2 className="h-4 w-4 animate-spin" /> : <RotateCcw className="h-4 w-4" />}
-          {running ? 'Analysing…' : 'Re-analyze'}
+          {running ? t('analysis.analyzing') : t('analysis.reanalyze')}
         </Button>
         {analysis && (
           <Badge variant="outline">
-            {analysis.language === 'mixed' ? 'Bilingual' : analysis.language.toUpperCase()}
+            {analysis.language === 'mixed' ? t('language.bilingual') : analysis.language.toUpperCase()}
           </Badge>
         )}
-        {analysis?.promptVersion && <Badge variant="outline">prompt {analysis.promptVersion}</Badge>}
+        {analysis?.promptVersion && (
+          <Badge variant="outline">{t('analysis.prompt', { version: analysis.promptVersion })}</Badge>
+        )}
       </div>
       {running && (
         <div className="space-y-1">
           <Progress value={progress} />
-          <p className="text-xs text-muted-foreground">{message ?? `Working… ${progress}%`}</p>
+          <p className="text-xs text-muted-foreground">
+            {message ?? t('analysis.working', { stage: `${progress}%` })}
+          </p>
+        </div>
+      )}
+
+      {analysis?.status === 'failed' && analysis.errorMessage && (
+        <div className="space-y-1 rounded-md border border-destructive/40 bg-destructive/5 px-3 py-2 text-sm">
+          <p className="font-medium text-destructive">{t('analysis.failed')}</p>
+          <p className="text-muted-foreground">
+            {t('analysis.failedReason', { reason: analysis.errorMessage })}
+          </p>
+          <p className="text-xs text-muted-foreground">{t('analysis.failedHint')}</p>
         </div>
       )}
 
@@ -136,23 +164,28 @@ export function CourseAnalysisPanel({
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">
-              <Tag className="h-4 w-4" /> Topics
+              <Tag className="h-4 w-4" /> {t('analysis.topics')}
             </CardTitle>
             <CardDescription>
-              {topics.length} topic{topics.length === 1 ? '' : 's'} identified across your documents.
+              {t('analysis.topicsCount', { count: topics.length })}
             </CardDescription>
           </CardHeader>
           <CardContent className="grid gap-3 sm:grid-cols-2">
-            {topics.map((t) => (
+            {topics.map((topic) => (
               <button
-                key={t.id}
-                onClick={() => onStartTutor?.(t.id)}
+                key={topic.id}
+                onClick={() => onStartTutor?.(topic.id)}
                 className="flex flex-col gap-1 rounded-md border bg-card p-3 text-left transition-colors hover:bg-accent"
               >
-                <span className="text-sm font-medium">{t.name}</span>
-                <span className="line-clamp-2 text-xs text-muted-foreground">{t.description}</span>
+                <span className="text-sm font-medium">{topic.name}</span>
+                <span className="line-clamp-2 text-xs text-muted-foreground">{topic.description}</span>
                 <span className="text-[10px] uppercase tracking-wider text-muted-foreground">
-                  Source: {t.sourceRefs.map((r) => r.documentName + (r.page ? ` p${r.page}` : '')).slice(0, 2).join(', ')}
+                  {t('analysis.source', {
+                    source: topic.sourceRefs
+                      .map((r) => r.documentName + (r.page ? ` p${r.page}` : ''))
+                      .slice(0, 2)
+                      .join(', '),
+                  })}
                 </span>
               </button>
             ))}
@@ -164,9 +197,9 @@ export function CourseAnalysisPanel({
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">
-              <Sigma className="h-4 w-4" /> Formulas
+              <Sigma className="h-4 w-4" /> {t('analysis.formulas')}
             </CardTitle>
-            <CardDescription>{formulas.length} formula{formulas.length === 1 ? '' : 's'} extracted.</CardDescription>
+            <CardDescription>{t('analysis.formulasCount', { count: formulas.length })}</CardDescription>
           </CardHeader>
           <CardContent className="space-y-2 text-sm">
             {formulas.slice(0, 10).map((f) => (
@@ -178,7 +211,9 @@ export function CourseAnalysisPanel({
                 <p className="text-xs text-muted-foreground">{f.description}</p>
                 {f.variables.length > 0 && (
                   <p className="mt-1 text-[11px] text-muted-foreground">
-                    Variables: {f.variables.map((v) => `${v.symbol} = ${v.meaning}`).join(', ')}
+                    {t('analysis.variables', {
+                      variables: f.variables.map((v) => `${v.symbol} = ${v.meaning}`).join(', '),
+                    })}
                   </p>
                 )}
               </div>
@@ -191,9 +226,9 @@ export function CourseAnalysisPanel({
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">
-              <FileText className="h-4 w-4" /> Symbols
+              <FileText className="h-4 w-4" /> {t('analysis.symbols')}
             </CardTitle>
-            <CardDescription>{symbols.length} symbol{symbols.length === 1 ? '' : 's'} recognised.</CardDescription>
+            <CardDescription>{t('analysis.symbolsCount', { count: symbols.length })}</CardDescription>
           </CardHeader>
           <CardContent className="grid gap-2 sm:grid-cols-2">
             {symbols.slice(0, 18).map((s) => (
