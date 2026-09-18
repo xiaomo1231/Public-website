@@ -1,0 +1,53 @@
+/**
+ * Centralised prompt registry. Each entry is callable with the inputs its
+ * `v1` module declares. New versions can be added next to `v1` and switched
+ * here in one place.
+ */
+
+import * as DocumentAnalyzerV1 from './document-analyzer/v1'
+import * as TutorIntroduceV1 from './tutor/v1-introduce'
+import * as TutorQuestionV1 from './tutor/v1-question'
+import * as TutorEvaluateV1 from './tutor/v1-evaluate'
+import * as TranslatorV1 from './translator/v1'
+import * as MistakeAnalyzerV2 from './mistake-analyzer/v2'
+import * as QuizGeneratorV1 from './quiz-generator/v1'
+
+export const PROMPT_VERSIONS = {
+  documentAnalyzer: 'v1',
+  tutorIntroduce: 'v1',
+  tutorQuestion: 'v1',
+  tutorEvaluate: 'v1',
+  translator: 'v1',
+  mistakeAnalyzer: 'v2',
+  quizGenerator: 'v1',
+} as const
+
+export const prompts = {
+  documentAnalyzer: DocumentAnalyzerV1,
+  tutorIntroduce: TutorIntroduceV1,
+  tutorQuestion: TutorQuestionV1,
+  tutorEvaluate: TutorEvaluateV1,
+  translator: TranslatorV1,
+  mistakeAnalyzer: MistakeAnalyzerV2,
+  quizGenerator: QuizGeneratorV1,
+} as const
+
+export type {
+  DocumentAnalyzerInput,
+  DocumentAnalysisOutput,
+} from './document-analyzer/v1'
+export type { IntroduceConceptInput } from './tutor/v1-introduce'
+export type { QuestionGeneratorInput } from './tutor/v1-question'
+export type { GeneratedQuestion } from './types'
+export type { EvaluateAnswerInput } from './tutor/v1-evaluate'
+export type { TranslateInput } from './translator/v1'
+export type {
+  MistakeAnalyzerInput,
+  MistakeAnalyzerOutput,
+} from './mistake-analyzer/v2'
+export type {
+  QuizGenerationInput,
+  QuizGenerationOutput,
+  GeneratedQuizQuestion,
+  QuizQuestionType,
+} from './quiz-generator/v1'

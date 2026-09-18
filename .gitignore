@@ -2,30 +2,44 @@
 .DS_Store
 Thumbs.db
 desktop.ini
+ehthumbs.db
+$RECYCLE.BIN/
 
 # 编辑器 / IDE
 .vscode/
 .idea/
 *.swp
 *.swo
+*.swn
 *~
+*.iml
 
 # 日志
 *.log
 logs/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
 
-# 环境变量
+# 环境变量（绝不能提交 API Key / 密钥）
 .env
 .env.local
+.env.*.local
+.env.development
+.env.production
 
 # 构建产物
 dist/
 build/
 .cache/
+.vite/
+coverage/
 
 # 依赖
 node_modules/
 bower_components/
+jspm_packages/
 
 # 上传 / 临时
 uploads/
@@ -33,3 +47,11 @@ tmp/
 temp/
 *.zip
 *.tar.gz
+
+# 测试
+.nyc_output/
+
+# 系统
+*.pid
+*.seed
+*.pid.lock
