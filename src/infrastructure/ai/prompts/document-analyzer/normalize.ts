@@ -19,6 +19,19 @@ import type {
   SourceReference,
 } from '../types'
 import { asEnum, asNormalizedArray, asRecord, asString, asTrimmedString } from '../../validation'
+import { normalizeMathNotation } from '@/infrastructure/files/mathNotation'
+
+/**
+ * Canonicalise maths in model output before it is stored.
+ *
+ * These fields hold LaTeX source, not prose, so a bare symbol becomes `\cap`
+ * rather than a prose-wrapped `\(\cap\)`. `sourceRefs.quote` is deliberately
+ * excluded: quotes are matched against the lossless stored chunk text, so
+ * rewriting them would break source resolution.
+ */
+function cleanMath(value: string): string {
+  return normalizeMathNotation(value, { wrap: false }).text
+}
 
 const DIFFICULTIES: readonly DifficultyLevel[] = [
   'beginner',
@@ -64,11 +77,11 @@ function normalizeConcept(raw: Record<string, unknown>): DocumentConcept | null 
   if (!name || !definition) return null
   const concept: DocumentConcept = {
     name,
-    definition,
+    definition: cleanMath(definition),
     topicNames: asStringArraySafe(raw.topicNames),
     sourceRefs: normalizeSourceRefs(raw.sourceRefs),
   }
-  const explanation = asTrimmedString(raw.explanation)
+  const explanation = cleanMath(asTrimmedString(raw.explanation))
   if (explanation) concept.explanation = explanation
   return concept
 }
@@ -79,14 +92,14 @@ function normalizeFormula(raw: Record<string, unknown>): DocumentFormula | null 
   if (!name || !latex) return null
   return {
     name,
-    latex,
-    description: asTrimmedString(raw.description),
+    latex: cleanMath(latex),
+    description: cleanMath(asTrimmedString(raw.description)),
     variables: asNormalizedArray(
       raw.variables,
       (v) => {
         const symbol = asTrimmedString(v.symbol)
         if (!symbol) return null
-        return { symbol, meaning: asTrimmedString(v.meaning) }
+        return { symbol: cleanMath(symbol), meaning: cleanMath(asTrimmedString(v.meaning)) }
       },
       40,
     ),
@@ -99,8 +112,8 @@ function normalizeSymbol(raw: Record<string, unknown>): DocumentSymbol | null {
   const meaning = asTrimmedString(raw.meaning)
   if (!symbol || !meaning) return null
   const entry: DocumentSymbol = {
-    symbol,
-    meaning,
+    symbol: cleanMath(symbol),
+    meaning: cleanMath(meaning),
     context: asTrimmedString(raw.context, 'general'),
     sourceRefs: normalizeSourceRefs(raw.sourceRefs),
   }
@@ -115,11 +128,11 @@ function normalizeExample(raw: Record<string, unknown>): DocumentExample | null 
   if (!title || !problem) return null
   const example: DocumentExample = {
     title,
-    problem,
+    problem: cleanMath(problem),
     topicNames: asStringArraySafe(raw.topicNames),
     sourceRefs: normalizeSourceRefs(raw.sourceRefs),
   }
-  const solution = asTrimmedString(raw.solution)
+  const solution = cleanMath(asTrimmedString(raw.solution))
   if (solution) example.solution = solution
   return example
 }
@@ -128,7 +141,7 @@ function normalizeExercise(raw: Record<string, unknown>): DocumentExercise | nul
   const prompt = asTrimmedString(raw.prompt)
   if (!prompt) return null
   return {
-    prompt,
+    prompt: cleanMath(prompt),
     topicNames: asStringArraySafe(raw.topicNames),
     difficulty: asEnum(raw.difficulty, DIFFICULTIES, 'basic'),
     sourceRefs: normalizeSourceRefs(raw.sourceRefs),

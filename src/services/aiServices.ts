@@ -2,6 +2,7 @@ import { AIService } from './aiService'
 import { SettingsService } from './settingsService'
 import { DocumentAnalysisService } from './documentAnalysisService'
 import { TutorService } from './tutorService'
+import { TutorLessonService } from './tutorLessonService'
 import { TranslationService } from './translationService'
 import { QuizService } from './quizService'
 import { MasteryService } from './masteryService'
@@ -15,6 +16,7 @@ import { DocumentRepository } from '@/entities/document/repository'
 import { ChunkRepository } from '@/entities/chunk/repository'
 import { CourseAnalysisRepository } from '@/entities/courseAnalysis/repository'
 import { TutorSessionRepository } from '@/entities/tutorSession/repository'
+import { TutorLessonRepository } from '@/entities/tutorLesson/repository'
 import { TranslationRepository } from '@/entities/translation/repository'
 import { QuestionRepository } from '@/entities/question/repository'
 import { QuestionAttemptRepository } from '@/entities/questionAttempt/repository'
@@ -29,6 +31,8 @@ export interface AIServicesBundle {
   ai: AIService
   documentAnalysis: DocumentAnalysisService
   tutor: TutorService
+  /** Cached Topic teaching lessons (the Topic page's reading material). */
+  tutorLesson: TutorLessonService
   translation: TranslationService
   quiz: QuizService
   mastery: MasteryService
@@ -80,6 +84,13 @@ export async function buildAIServices(): Promise<AIServicesBundle | null> {
       questions: new QuestionRepository(db),
       attempts: new QuestionAttemptRepository(db),
       mistakes,
+    }),
+    tutorLesson: new TutorLessonService({
+      ai,
+      db,
+      lessons: new TutorLessonRepository(db),
+      analyses,
+      chunks,
     }),
     translation: new TranslationService({ ai, repo: new TranslationRepository(db) }),
     quiz,

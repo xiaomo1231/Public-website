@@ -3,6 +3,7 @@
  * and individually unit-testable.
  */
 
+export * as lesson from './v1-lesson'
 export * as introduceConcept from './v1-introduce'
 export * as generateQuestion from './v1-question'
 export * as evaluateAnswer from './v1-evaluate'

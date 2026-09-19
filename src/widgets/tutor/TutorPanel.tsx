@@ -7,6 +7,7 @@ import { Textarea } from '@/shared/ui/Textarea'
 import { LoadingState } from '@/shared/ui/LoadingState'
 import { EmptyState } from '@/shared/ui/EmptyState'
 import { TruncatedText } from '@/shared/ui/TruncatedText'
+import { RichText } from '@/shared/ui/RichText'
 import { toast } from '@/features/toast/toastStore'
 import { cn } from '@/shared/lib/utils'
 import { useTranslation } from '@/i18n'
@@ -60,7 +61,7 @@ export function TutorPanel(props: TutorPanelProps): JSX.Element {
           setError(t('tutor.noProvider'))
           return
         }
-        const s = await bundle.tutor.startSession({
+        const { session: s, resumed } = await bundle.tutor.findOrStartSession({
           projectId: props.projectId,
           topicId: props.topicId,
           topicName: props.topicName,
@@ -70,10 +71,19 @@ export function TutorPanel(props: TutorPanelProps): JSX.Element {
         })
         if (cancelled) return
         setSession(s)
-        // A single AI call: the introduction is streamed to the UI and the
-        // exact same text is persisted as the first turn. The first question is
-        // generated on a best-effort basis — a failure here must not hide the
-        // explanation the student just received.
+
+        if (resumed) {
+          // Continue where the student left off — no AI call, no repeated
+          // introduction.
+          setIntro(s.turns.find((turn) => turn.kind === 'introduction')?.content ?? '')
+          setLastQuestion(s.pendingQuestion)
+          return
+        }
+
+        // First visit for this topic: one AI call. The introduction is streamed
+        // to the UI and the exact same text is persisted as the first turn. The
+        // first question is generated on a best-effort basis — a failure here
+        // must not hide the explanation the student just received.
         const next = await bundle.tutor.beginTopic(s.id, {
           onDelta: (text) => setIntro((prev) => prev + text),
         })
@@ -194,20 +204,27 @@ export function TutorPanel(props: TutorPanelProps): JSX.Element {
             </Badge>
           </CardTitle>
         </CardHeader>
-        <CardContent className="space-y-3 text-sm">
+        <CardContent className="space-y-3">
           {introText ? (
-            <div className="prose prose-sm max-w-none whitespace-pre-wrap break-words text-foreground dark:prose-invert">
-              {introText}
-            </div>
+            // Rendered through the shared reading renderer so paragraphs are
+            // separated, LaTeX typesets, and any Markdown structure the model
+            // wrote becomes real headings/lists instead of one text wall.
+            // The measure and leading make it read like lecture notes.
+            <RichText
+              text={introText}
+              format="markdown"
+              className="space-y-5 [&_ol]:space-y-2 [&_ul]:space-y-2"
+              paragraphClassName="text-[17px] leading-[1.8]"
+            />
           ) : (
-            <div className="text-muted-foreground">{t('tutor.loadingIntro')}</div>
+            <div className="text-[15px] text-muted-foreground">{t('tutor.loadingIntro')}</div>
           )}
         </CardContent>
       </Card>
 
       {actionError && (
         <Card className="border-destructive/40 bg-destructive/5">
-          <CardContent className="flex flex-wrap items-center justify-between gap-2 p-4 text-sm">
+          <CardContent className="flex flex-wrap items-center justify-between gap-2 p-4 text-[15px] leading-[1.7]">
             <span className="min-w-0 break-words text-destructive">{actionError}</span>
             {!lastQuestion && (
               <Button variant="outline" onClick={nextQuestion} disabled={busy}>
@@ -226,9 +243,11 @@ export function TutorPanel(props: TutorPanelProps): JSX.Element {
             <CardTitle className="text-base">{t('tutor.question')}</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
-            <p className="whitespace-pre-wrap text-sm font-medium">{lastQuestion.prompt}</p>
+            <p className="whitespace-pre-wrap text-[17px] font-medium leading-[1.7]">
+              {lastQuestion.prompt}
+            </p>
             {lastQuestion.options && (
-              <ul className="ml-5 list-disc text-sm">
+              <ul className="ml-5 list-disc space-y-2 text-[16px] leading-[1.7]">
                 {lastQuestion.options.map((o) => (
                   <li key={o}>{o}</li>
                 ))}
@@ -236,6 +255,7 @@ export function TutorPanel(props: TutorPanelProps): JSX.Element {
             )}
             <Textarea
               rows={4}
+              className="text-[16px] leading-[1.7]"
               value={answer}
               onChange={(e) => setAnswer(e.target.value)}
               placeholder={t('tutor.answerPlaceholder')}
@@ -263,7 +283,7 @@ export function TutorPanel(props: TutorPanelProps): JSX.Element {
       {!lastQuestion && lastEvaluation && (
         <Card>
           <CardContent className="flex items-center justify-between p-4">
-            <div className="text-sm text-muted-foreground">{t('tutor.readyNext')}</div>
+            <div className="text-[15px] text-muted-foreground">{t('tutor.readyNext')}</div>
             <Button onClick={nextQuestion} disabled={busy}>
               {t('tutor.nextQuestion')}
               <ChevronRight className="h-4 w-4" />
@@ -274,7 +294,7 @@ export function TutorPanel(props: TutorPanelProps): JSX.Element {
 
       {!lastQuestion && !lastEvaluation && busy && (
         <Card>
-          <CardContent className="flex items-center gap-2 p-4 text-sm text-muted-foreground">
+          <CardContent className="flex items-center gap-2 p-4 text-[15px] text-muted-foreground">
             <Loader2 className="h-4 w-4 animate-spin" /> {t('tutor.workingOnQuestion')}
           </CardContent>
         </Card>
@@ -303,30 +323,30 @@ function FeedbackCard({ evaluation }: { evaluation: TutorEvaluation }) {
           {correct ? t('tutor.looksGood') : t('tutor.notQuite')}
         </CardTitle>
       </CardHeader>
-      <CardContent className="space-y-3 text-sm">
+      <CardContent className="space-y-3 text-[16px] leading-[1.8]">
         <p>{evaluation.feedback}</p>
         {evaluation.partialCredit && (
-          <p className="text-xs text-muted-foreground">
+          <p className="text-[15px] text-muted-foreground">
             {t('tutor.partialCredit', { value: evaluation.partialCredit })}
           </p>
         )}
-        <div className="rounded-md border bg-card p-3 text-sm">
-          <p className="mb-1 font-medium">{t('tutor.explanation')}</p>
+        <div className="rounded-md border bg-card p-4">
+          <p className="mb-1.5 font-medium">{t('tutor.explanation')}</p>
           <p className="whitespace-pre-wrap">{evaluation.groundedExplanation}</p>
           {evaluation.isSupplementary && (
-            <p className="mt-2 rounded bg-amber-100/60 px-2 py-1 text-[11px] text-amber-800 dark:bg-amber-900/40 dark:text-amber-200">
+            <p className="mt-2 rounded bg-amber-100/60 px-2 py-1 text-[13px] text-amber-800 dark:bg-amber-900/40 dark:text-amber-200">
               {t('tutor.supplementary')}
             </p>
           )}
         </div>
         {evaluation.breakdown.length > 0 && (
-          <ul className="ml-5 list-disc text-xs text-muted-foreground">
+          <ul className="ml-5 list-disc space-y-2 text-[15px] leading-[1.7] text-muted-foreground">
             {evaluation.breakdown.map((b, i) => (
               <li key={i}>{b}</li>
             ))}
           </ul>
         )}
-        <p className="text-xs text-muted-foreground">{t('tutor.next', { value: evaluation.nextSteps })}</p>
+        <p className="text-[15px] text-muted-foreground">{t('tutor.next', { value: evaluation.nextSteps })}</p>
       </CardContent>
     </Card>
   )

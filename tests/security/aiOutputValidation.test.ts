@@ -203,7 +203,7 @@ describe('DocumentAnalysisService with malformed AI output', () => {
     setDbForTesting(db)
   })
 
-  async function setup() {
+  async function setup(chunkText = 'The power rule states d/dx x^n = n x^(n-1).') {
     const projects = new ProjectService(db)
     const project = await projects.create({ name: 'Calculus', subject: 'calculus' })
     const docs = new DocumentRepository(db)
@@ -216,13 +216,54 @@ describe('DocumentAnalysisService with malformed AI output', () => {
         documentId: doc.id,
         projectId: project.id,
         contentType: 'paragraph',
-        text: 'The power rule states d/dx x^n = n x^(n-1).',
+        text: chunkText,
         sourceReference: 'c.txt',
         order: 0,
       },
     ])
     return { project, docs, chunks, analyses, projects }
   }
+
+  const EMPTY_ANALYSIS = {
+    language: 'en',
+    topics: [],
+    concepts: [],
+    formulas: [],
+    symbols: [],
+    examples: [],
+    exercises: [],
+    prerequisites: [],
+  }
+
+  it('canonicalises Private Use Area maths before it reaches the analyzer', async () => {
+    // A broken PDF font: the triangle as U+25B3, union as Symbol-font PUA, and
+    // an unrecoverable glyph.
+    const { project, docs, chunks, analyses, projects } = await setup(
+      'Symmetric difference: A \u25B3 B, union A \uF0C8 B, stray \uE000.',
+    )
+    const ai = fakeAI(EMPTY_ANALYSIS)
+    const svc = new DocumentAnalysisService({
+      ai,
+      projects,
+      db,
+      documents: docs,
+      chunks,
+      analyses,
+    })
+
+    await svc.analyzeProject(project.id)
+
+    const streamMock = ai.streamJSON as unknown as { mock: { calls: unknown[][] } }
+    const messages = streamMock.mock.calls[0]?.[0] as Array<{ role: string; content: string }>
+    const userPrompt = messages.find((m) => m.role === 'user')?.content ?? ''
+
+    // No opaque glyph may reach the model...
+    expect(userPrompt).not.toMatch(/[\uE000-\uF8FF]/)
+    // ...and the maths is canonical LaTeX.
+    expect(userPrompt).toContain('\\triangle')
+    expect(userPrompt).toContain('\\cup')
+    expect(userPrompt).toContain('[?]')
+  })
 
   it('does not persist garbage when the model returns a non-object', async () => {
     const { project, docs, chunks, analyses, projects } = await setup()

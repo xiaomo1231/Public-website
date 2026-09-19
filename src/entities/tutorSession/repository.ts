@@ -23,6 +23,21 @@ export class TutorSessionRepository {
     return session
   }
 
+  /**
+   * Most recently touched session for a topic, so reopening the Interactive
+   * Tutor continues the existing conversation instead of starting a new one.
+   */
+  async findLatest(projectId: string, topicId: string): Promise<TutorSession | undefined> {
+    const sessions = await this.db
+      .table<TutorSession, string>('tutorSessions')
+      .where('projectId')
+      .equals(projectId)
+      .toArray()
+    return sessions
+      .filter((session) => session.topicId === topicId && session.status !== 'abandoned')
+      .sort((a, b) => b.updatedAt - a.updatedAt)[0]
+  }
+
   async delete(id: string): Promise<void> {
     await this.db.table<TutorSession, string>('tutorSessions').delete(id)
     logger.warn('Tutor session deleted', { id })

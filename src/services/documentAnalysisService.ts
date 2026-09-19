@@ -13,6 +13,7 @@ import type { SourceReference as CourseSourceRef } from '@/entities/courseAnalys
 import { logger } from '@/infrastructure/logger/logger'
 import { AppError } from '@/infrastructure/errors/AppError'
 import { asRecord } from '@/infrastructure/ai/validation'
+import { normalizeMathNotation } from '@/infrastructure/files/mathNotation'
 import { t } from '@/i18n'
 
 const MAX_DOC_CHARS = 50_000
@@ -295,7 +296,11 @@ export class DocumentAnalysisService {
       const body = sliced
         .map((c) => {
           const prefix = c.pageNumber ? `[p${c.pageNumber}${c.section ? ' · ' + c.section : ''}] ` : c.section ? `[§ ${c.section}] ` : ''
-          return prefix + c.text
+          // Canonicalise maths before it reaches the model: recover Symbol-font
+          // Private Use Area glyphs and convert Unicode maths to LaTeX, so the
+          // analyzer never ingests opaque characters it would echo back. The
+          // stored chunk is untouched, so quote matching is unaffected.
+          return prefix + normalizeMathNotation(c.text).text
         })
         .join('\n\n')
       lines.push(`${heading}\n${body}`)

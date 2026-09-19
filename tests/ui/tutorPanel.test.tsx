@@ -62,7 +62,7 @@ describe('TutorPanel', () => {
     }
     vi.mocked(buildAIServices).mockResolvedValue({
       tutor: {
-        startSession: vi.fn().mockResolvedValue(sessionWith('')),
+        findOrStartSession: vi.fn().mockResolvedValue({ session: sessionWith(''), resumed: false }),
         beginTopic: vi.fn().mockImplementation(async (_id, opts) => {
           opts?.onDelta?.(INTRO)
           return { session, turn: session.turns[0]!, finished: false }
@@ -77,13 +77,54 @@ describe('TutorPanel', () => {
     expect(screen.queryByText('Tutor unavailable')).not.toBeInTheDocument()
   })
 
+  it('renders the explanation as readable lecture notes, not a raw text wall', async () => {
+    const richIntro = [
+      '## Element Notation',
+      '',
+      'If an object belongs to a set we write \\(x \\in A\\).',
+      '',
+      '## Key Points',
+      '',
+      '- Sets are unordered.',
+      '- Elements are distinct.',
+    ].join('\n')
+    const session = sessionWith(richIntro)
+    vi.mocked(buildAIServices).mockResolvedValue({
+      tutor: {
+        findOrStartSession: vi.fn().mockResolvedValue({ session: sessionWith(''), resumed: false }),
+        beginTopic: vi.fn().mockImplementation(async (_id, opts) => {
+          opts?.onDelta?.(richIntro)
+          return { session, turn: session.turns[0]!, finished: false }
+        }),
+      },
+    } as never)
+
+    const { container } = renderPanel()
+
+    // Section titles become real HTML headings, not literal "##" lines.
+    expect(await screen.findByRole('heading', { name: 'Element Notation' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Key Points' })).toBeInTheDocument()
+
+    // Body text is at the reading size and leading, not 12–14px.
+    const paragraph = Array.from(container.querySelectorAll('p')).find((p) =>
+      p.textContent?.includes('If an object belongs'),
+    )
+    expect(paragraph?.className).toContain('text-[17px]')
+    expect(paragraph?.className).toContain('leading-[1.8]')
+
+    // The shared LaTeX renderer typesets the inline maths.
+    expect(container.querySelector('.katex')).toBeInTheDocument()
+    // The list is a real list, not run-on text.
+    expect(container.querySelectorAll('li')).toHaveLength(2)
+  })
+
   it('still shows the explanation when only the question half fails', async () => {
     // This is the reported bug: the explanation streamed fine, but a failed
     // question replaced the whole panel with "Tutor unavailable".
     const session = sessionWith(INTRO)
     vi.mocked(buildAIServices).mockResolvedValue({
       tutor: {
-        startSession: vi.fn().mockResolvedValue(sessionWith('')),
+        findOrStartSession: vi.fn().mockResolvedValue({ session: sessionWith(''), resumed: false }),
         beginTopic: vi.fn().mockImplementation(async (_id, opts) => {
           opts?.onDelta?.(INTRO)
           return {
@@ -110,7 +151,7 @@ describe('TutorPanel', () => {
     const { AppError } = await import('@/infrastructure/errors/AppError')
     vi.mocked(buildAIServices).mockResolvedValue({
       tutor: {
-        startSession: vi.fn().mockResolvedValue(sessionWith('')),
+        findOrStartSession: vi.fn().mockResolvedValue({ session: sessionWith(''), resumed: false }),
         beginTopic: vi
           .fn()
           .mockRejectedValue(new AppError('empty', 'EMPTY_TUTOR_RESPONSE')),
@@ -127,7 +168,7 @@ describe('TutorPanel', () => {
     const { AIProviderError } = await import('@/infrastructure/ai/errors')
     vi.mocked(buildAIServices).mockResolvedValue({
       tutor: {
-        startSession: vi.fn().mockResolvedValue(sessionWith('')),
+        findOrStartSession: vi.fn().mockResolvedValue({ session: sessionWith(''), resumed: false }),
         beginTopic: vi
           .fn()
           .mockRejectedValue(new AIProviderError('down', 'PROVIDER_UNAVAILABLE')),
@@ -144,7 +185,7 @@ describe('TutorPanel', () => {
     const { AIProviderError } = await import('@/infrastructure/ai/errors')
     vi.mocked(buildAIServices).mockResolvedValue({
       tutor: {
-        startSession: vi.fn().mockResolvedValue(sessionWith('')),
+        findOrStartSession: vi.fn().mockResolvedValue({ session: sessionWith(''), resumed: false }),
         beginTopic: vi.fn().mockRejectedValue(new AIProviderError('slow', 'TIMEOUT')),
       },
     } as never)
@@ -160,7 +201,7 @@ describe('TutorPanel', () => {
     const session = sessionWith(INTRO)
     vi.mocked(buildAIServices).mockResolvedValue({
       tutor: {
-        startSession: vi.fn().mockResolvedValue(sessionWith('')),
+        findOrStartSession: vi.fn().mockResolvedValue({ session: sessionWith(''), resumed: false }),
         beginTopic: vi.fn().mockImplementation(async (_id, opts) => {
           opts?.onDelta?.(INTRO)
           return {

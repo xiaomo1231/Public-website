@@ -5,6 +5,7 @@
  */
 
 import * as DocumentAnalyzerV1 from './document-analyzer/v1'
+import * as TutorLessonV1 from './tutor/v1-lesson'
 import * as TutorIntroduceV1 from './tutor/v1-introduce'
 import * as TutorQuestionV1 from './tutor/v1-question'
 import * as TutorEvaluateV1 from './tutor/v1-evaluate'
@@ -14,6 +15,7 @@ import * as QuizGeneratorV1 from './quiz-generator/v1'
 
 export const PROMPT_VERSIONS = {
   documentAnalyzer: 'v1',
+  tutorLesson: 'v1',
   tutorIntroduce: 'v1',
   tutorQuestion: 'v1',
   tutorEvaluate: 'v1',
@@ -24,6 +26,7 @@ export const PROMPT_VERSIONS = {
 
 export const prompts = {
   documentAnalyzer: DocumentAnalyzerV1,
+  tutorLesson: TutorLessonV1,
   tutorIntroduce: TutorIntroduceV1,
   tutorQuestion: TutorQuestionV1,
   tutorEvaluate: TutorEvaluateV1,
@@ -36,6 +39,7 @@ export type {
   DocumentAnalyzerInput,
   DocumentAnalysisOutput,
 } from './document-analyzer/v1'
+export type { LessonInput } from './tutor/v1-lesson'
 export type { IntroduceConceptInput } from './tutor/v1-introduce'
 export type { QuestionGeneratorInput } from './tutor/v1-question'
 export type { GeneratedQuestion } from './types'

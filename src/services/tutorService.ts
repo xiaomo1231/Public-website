@@ -2,9 +2,8 @@ import type { AppDatabase } from '@/infrastructure/db/database'
 import { getDb } from '@/infrastructure/db/database'
 import { TutorSessionRepository } from '@/entities/tutorSession/repository'
 import { CourseAnalysisRepository } from '@/entities/courseAnalysis/repository'
-import type { Topic } from '@/entities/courseAnalysis/types'
 import { ChunkRepository } from '@/entities/chunk/repository'
-import type { DocumentChunk } from '@/entities/chunk/types'
+import { collectTopicSources, formatTopicSources } from './topicSources'
 import { QuestionRepository } from '@/entities/question/repository'
 import { QuestionAttemptRepository } from '@/entities/questionAttempt/repository'
 import type { Question, QuestionOption } from '@/entities/question/types'
@@ -30,15 +29,12 @@ import type {
 } from '@/entities/tutorSession/types'
 import { AppError } from '@/infrastructure/errors/AppError'
 import { logger } from '@/infrastructure/logger/logger'
+import { normalizeMathNotation } from '@/infrastructure/files/mathNotation'
 import { friendlyTutorError } from '@/shared/lib/aiErrors'
 import { t } from '@/i18n'
 
 const SOURCE_CHUNK_LIMIT = 6
 const MAX_HINTS = 3
-/** Chunks longer than this are skipped — they would crowd out the whole prompt. */
-const MAX_SOURCE_CHARS = 1000
-/** Shortest quote worth fuzzy-matching against chunk text. */
-const MIN_QUOTE_CHARS = 12
 
 /**
  * The tutor prompt returns option labels as plain strings; the persisted
@@ -85,18 +81,7 @@ function isAbort(err: unknown): boolean {
   return err instanceof Error && err.name === 'AbortError'
 }
 
-/**
- * Loose quote↔chunk match. The analyser stores the excerpt it cited, so a
- * prefix comparison is enough to find the chunk it came from even when the
- * model trimmed or reflowed the tail.
- */
-function quoteMatchesChunk(chunkText: string, quote: string): boolean {
-  const needle = quote.trim().toLowerCase()
-  if (needle.length < MIN_QUOTE_CHARS) return false
-  const haystack = chunkText.toLowerCase()
-  if (haystack.includes(needle)) return true
-  return haystack.includes(needle.slice(0, 60))
-}
+
 
 const DIFFICULTY_ORDER: DifficultyLevel[] = ['beginner', 'basic', 'intermediate', 'advanced', 'challenge']
 
@@ -201,6 +186,23 @@ export class TutorService {
     return session
   }
 
+  /**
+   * Continue the most recent conversation for this topic, or start one.
+   *
+   * Reopening the Interactive Tutor should resume where the student left off —
+   * starting a fresh session every visit would discard their progress and make
+   * the tutor repeat its introduction.
+   */
+  async findOrStartSession(
+    input: TutorStartInput,
+  ): Promise<{ session: TutorSession; resumed: boolean }> {
+    const existing = await this.sessions.findLatest(input.projectId, input.topicId)
+    if (existing && existing.language === input.language && existing.turns.length > 0) {
+      return { session: existing, resumed: true }
+    }
+    return { session: await this.startSession(input), resumed: false }
+  }
+
   async getSession(id: string): Promise<TutorSession> {
     const session = await this.sessions.get(id)
     if (!session) throw new AppError(t('errors.sessionNotFound'), 'NOT_FOUND')
@@ -244,22 +246,26 @@ export class TutorService {
         })
       : await this.ai.chat(introMessages)
 
+    // Canonical maths: recover/convert Unicode maths to LaTeX and make sure no
+    // Private Use Area glyph survives into the stored explanation.
+    const introContent = normalizeMathNotation(introRes.content).text.trim()
+
     // An empty explanation leaves the student with nothing to read, so this is
     // the one case where the tutor genuinely cannot open.
-    if (!introRes.content.trim()) {
+    if (!introContent) {
       throw new AppError(t('tutor.emptyResponse'), 'EMPTY_TUTOR_RESPONSE')
     }
 
     const introTurn: TutorTurn = {
       role: 'tutor',
       kind: 'introduction',
-      content: introRes.content,
+      content: introContent,
       createdAt: Date.now(),
     }
     session.turns.push(introTurn)
     session.messages.push(
       { role: 'user', content: introMessages[1]!.content },
-      { role: 'assistant', content: introRes.content },
+      { role: 'assistant', content: introContent },
     )
     await this.sessions.upsert(session)
 
@@ -556,60 +562,17 @@ export class TutorService {
   /**
    * Gather the course material the tutor should be grounded in.
    *
-   * The topic's own `sourceRefs` are authoritative — they are what the course
-   * analysis cited for this topic. Only when they resolve to nothing do we fall
-   * back to the project's documents, so the tutor still has *some* grounding
-   * rather than silently running on general knowledge.
+   * Delegates to the shared topic-source resolver so the interactive tutor and
+   * the cached lesson are always grounded in exactly the same chunks.
    */
   private async collectSources(session: TutorSession): Promise<string[]> {
     if (!session.topicId) return []
-    const analysis = await this.analyses.getByProject(session.projectId)
-    if (!analysis) return []
-    const topic: Topic | undefined = await this.analyses.getTopic(session.topicId)
-    if (!topic) return []
-
-    const out: string[] = []
-    const seen = new Set<string>()
-    const add = (chunk: DocumentChunk, label: string): boolean => {
-      if (seen.has(chunk.id)) return false
-      if (!chunk.text.trim() || chunk.text.length > MAX_SOURCE_CHARS) return false
-      seen.add(chunk.id)
-      out.push(`[${label}] ${chunk.text}`)
-      return out.length >= SOURCE_CHUNK_LIMIT
-    }
-
-    for (const ref of topic.sourceRefs ?? []) {
-      const label = [topic.name, ref.section, ref.page !== undefined ? `p${ref.page}` : '']
-        .filter(Boolean)
-        .join(' · ')
-
-      // An exact chunk id is the strongest signal (quiz citations carry one).
-      if (ref.chunkId) {
-        const chunk = await this.chunks.get(ref.chunkId)
-        if (chunk && add(chunk, label)) return out
-        continue
-      }
-
-      if (!ref.documentId) continue
-      const docChunks = await this.chunks.listByDocument(ref.documentId)
-      const candidates = ref.quote
-        ? docChunks.filter((c) => quoteMatchesChunk(c.text, ref.quote!))
-        : ref.page !== undefined
-          ? docChunks.filter((c) => c.pageNumber === ref.page)
-          : docChunks.slice(0, 2)
-
-      for (const chunk of candidates) {
-        if (add(chunk, label)) return out
-      }
-    }
-    if (out.length > 0) return out
-
-    for (const id of analysis.documentIds) {
-      const chunks = await this.chunks.listByDocument(id)
-      for (const c of chunks) {
-        if (add(c, topic.name)) return out
-      }
-    }
-    return out
+    const sources = await collectTopicSources(
+      { analyses: this.analyses, chunks: this.chunks },
+      session.projectId,
+      session.topicId,
+      SOURCE_CHUNK_LIMIT,
+    )
+    return formatTopicSources(sources)
   }
 }

@@ -18,6 +18,7 @@ import type {
   Topic,
 } from '@/entities/courseAnalysis/types'
 import type { TutorSession } from '@/entities/tutorSession/types'
+import type { TutorLesson } from '@/entities/tutorLesson/types'
 import type { TranslationEntry } from '@/entities/translation/types'
 import type { Question } from '@/entities/question/types'
 import type { QuestionAttempt } from '@/entities/questionAttempt/types'
@@ -55,6 +56,8 @@ export class AppDatabase extends Dexie {
   prerequisites!: EntityTable<Prerequisite, 'id'>
 
   tutorSessions!: EntityTable<TutorSession, 'id'>
+  /** Cached Topic teaching lessons — one per project + topic + language. */
+  tutorLessons!: EntityTable<TutorLesson, 'id'>
   translations!: EntityTable<TranslationEntry, 'id'>
 
   questions!: EntityTable<Question, 'id'>
@@ -191,6 +194,39 @@ export class AppDatabase extends Dexie {
       courseExercises: 'id, projectId, difficulty',
       prerequisites: 'id, projectId',
       tutorSessions: 'id, projectId, status, updatedAt, [projectId+updatedAt]',
+      translations: 'id, projectId, createdAt, [projectId+createdAt]',
+      questions:
+        'id, projectId, topicId, knowledgePoint, type, difficulty, createdAt, [projectId+topicId], [projectId+knowledgePoint]',
+      questionAttempts:
+        'id, projectId, questionId, quizId, topicId, knowledgePoint, createdAt, [projectId+createdAt], [quizId+createdAt]',
+      quizzes: 'id, projectId, status, startedAt, [projectId+startedAt]',
+      knowledgeMastery: 'id, projectId, knowledgePoint, [projectId+knowledgePoint]',
+      mistakes:
+        'id, projectId, questionId, quizId, knowledgePoint, mistakeType, status, source, createdAt, [projectId+status], [projectId+knowledgePoint]',
+    })
+
+    // Phase 7: cached Topic teaching lessons (one per project+topic+language)
+    this.version(7).stores({
+      projects: 'id, name, subject, createdAt, updatedAt',
+      user: 'id',
+      settings: 'id, updatedAt',
+      inviteKeys: 'code, usedAt',
+      cryptoKeys: 'id',
+      documents:
+        'id, projectId, type, status, name, uploadedAt, processedAt, [projectId+status], [projectId+type]',
+      documentBlobs: 'id, projectId',
+      chunks: 'id, documentId, projectId, order, [documentId+order], [projectId+documentId]',
+      processingJobs: 'id, documentId, projectId, stage, updatedAt, [projectId+updatedAt]',
+      courseAnalyses: 'id, projectId, status, finishedAt',
+      topics: 'id, projectId, order',
+      concepts: 'id, projectId, name',
+      formulas: 'id, projectId, name',
+      symbols: 'id, projectId, symbol',
+      examples: 'id, projectId',
+      courseExercises: 'id, projectId, difficulty',
+      prerequisites: 'id, projectId',
+      tutorSessions: 'id, projectId, status, updatedAt, [projectId+updatedAt]',
+      tutorLessons: 'id, projectId, topicId, generatedAt, [projectId+topicId+language]',
       translations: 'id, projectId, createdAt, [projectId+createdAt]',
       questions:
         'id, projectId, topicId, knowledgePoint, type, difficulty, createdAt, [projectId+topicId], [projectId+knowledgePoint]',

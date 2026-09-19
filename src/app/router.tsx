@@ -7,6 +7,7 @@ import { ProjectsPage } from '@/pages/ProjectsPage'
 import { ProjectDetailPage } from '@/pages/ProjectDetailPage'
 import { DocumentDetailPage } from '@/pages/DocumentDetailPage'
 import { TutorPage } from '@/pages/TutorPage'
+import { InteractiveTutorPage } from '@/pages/InteractiveTutorPage'
 import { ChatHistoryPage } from '@/pages/ChatHistoryPage'
 import { QuizLandingPage } from '@/pages/QuizLandingPage'
 import { QuizPage } from '@/pages/QuizPage'
@@ -32,6 +33,7 @@ export const routes: RouteObject[] = [
       { path: 'projects', element: <ProjectsPage /> },
       { path: 'projects/:id', element: <ProjectDetailPage /> },
       { path: 'projects/:id/tutor/:topicId', element: <TutorPage /> },
+      { path: 'projects/:id/tutor/:topicId/interactive', element: <InteractiveTutorPage /> },
       { path: 'projects/:id/tutor', element: <TutorPage /> },
       { path: 'projects/:id/history', element: <ChatHistoryPage /> },
       { path: 'projects/:id/quiz', element: <QuizLandingPage /> },
