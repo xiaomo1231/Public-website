@@ -24,7 +24,13 @@ import { decideNextDifficulty, nextStreaks, DEFAULT_DIFFICULTY, DIFFICULTY_ORDER
 import { MasteryService } from './masteryService'
 import type { MistakeService } from './mistakeService'
 import type { ProjectService } from './projectService'
-import { collectSourceSnippets } from './sourceContext'
+import {
+  collectSourceSnippetsDetailed,
+  formatSnippetForPrompt,
+  type SourceSnippet,
+} from './sourceContext'
+import { DocumentRepository } from '@/entities/document/repository'
+import type { SourceReference } from '@/entities/courseAnalysis/types'
 import { logger } from '@/infrastructure/logger/logger'
 import { AppError } from '@/infrastructure/errors/AppError'
 import { t } from '@/i18n'
@@ -94,6 +100,72 @@ function normalizeChoiceOptions(
   if (options.length < 2) return null
   if (options.filter((o) => o.isCorrect).length !== 1) return null
   return options
+}
+
+/** How much of a chunk to show when the model's quote cannot be verified. */
+const SOURCE_EXCERPT_CHARS = 320
+
+/**
+ * Text that means the model wrote a summary instead of quoting the source.
+ * Such text is never presented to the user as a course excerpt.
+ */
+const SUMMARY_QUOTE =
+  /^(this question is based|based on the (concept|idea|topic|material)|the question (is|was) (based|derived)|it is based on|derived from the)/i
+
+function normalizeForMatch(text: string): string {
+  return text.replace(/\s+/g, ' ').trim().toLowerCase()
+}
+
+/** True when the quote really occurs in the chunk (whitespace-insensitive). */
+function quoteAppearsIn(chunkText: string, quote: string): boolean {
+  const haystack = normalizeForMatch(chunkText)
+  const needle = normalizeForMatch(quote)
+  if (!needle) return false
+  if (haystack.includes(needle)) return true
+  // The model may have trimmed a long passage — accept a solid prefix.
+  const probe = needle.slice(0, 60)
+  return probe.length >= 24 && haystack.includes(probe)
+}
+
+/** A real excerpt taken straight from the chunk. */
+function excerptFrom(chunkText: string): string {
+  const collapsed = chunkText.replace(/\s+/g, ' ').trim()
+  if (collapsed.length <= SOURCE_EXCERPT_CHARS) return collapsed
+  return `${collapsed.slice(0, SOURCE_EXCERPT_CHARS).trimEnd()}…`
+}
+
+/**
+ * Build a question's citation from **local data only**.
+ *
+ * The model contributes just a chunk id and a quote; both are verified here:
+ *  - an id that was not offered in the prompt is discarded (never invented)
+ *  - a quote that is missing, is a summary, or does not occur in the chunk is
+ *    replaced by a real excerpt, so a made-up "course quote" can never appear
+ *
+ * Returns an empty array when the question cannot be grounded, which the UI
+ * renders as "no source recorded".
+ */
+export function resolveSourceReferences(
+  sourceChunkId: unknown,
+  quote: unknown,
+  index: Map<string, SourceSnippet>,
+): SourceReference[] {
+  if (typeof sourceChunkId !== 'string') return []
+  const snippet = index.get(sourceChunkId.trim())
+  if (!snippet) return []
+
+  const raw = typeof quote === 'string' ? quote.trim() : ''
+  const verified = raw.length > 0 && !SUMMARY_QUOTE.test(raw) && quoteAppearsIn(snippet.text, raw)
+
+  const reference: SourceReference = {
+    documentId: snippet.documentId,
+    documentName: snippet.documentName,
+    quote: verified ? raw : excerptFrom(snippet.text),
+    chunkId: snippet.chunkId,
+  }
+  if (snippet.pageNumber !== undefined) reference.page = snippet.pageNumber
+  if (snippet.section) reference.section = snippet.section
+  return [reference]
 }
 
 export class QuizService {
@@ -206,13 +278,16 @@ export class QuizService {
 
     try {
       options.onProgress?.('collecting', 10)
-      const sources = await collectSourceSnippets({
+      const snippets = await collectSourceSnippetsDetailed({
         documentIds: analysis.documentIds,
         chunks: this.chunks,
+        documents: new DocumentRepository(this.db),
         ...(topic ? { topicName: topic.name } : {}),
         limit: 8,
         ...(knowledgePoints[0] ? { preferKeyword: knowledgePoints[0] } : {}),
       })
+      // Only ids actually offered to the model can ever be cited.
+      const snippetIndex = new Map(snippets.map((s) => [s.chunkId, s]))
 
       options.onProgress?.('generating', 30)
       const generated = await this.generateWithRetry({
@@ -221,7 +296,7 @@ export class QuizService {
         knowledgePoints,
         plan,
         language: analysis.language,
-        sourceSnippets: sources,
+        sourceSnippets: snippets.map(formatSnippetForPrompt),
       }, options.signal)
 
       options.onProgress?.('storing', 80)
@@ -237,12 +312,7 @@ export class QuizService {
           correctAnswer: q.correctAnswer,
           ...(q.solution ? { solution: q.solution } : {}),
           hints: q.hints ?? [],
-          sourceRefs: (q.sourceRefs ?? []).map((r) => ({
-            documentId: analysis.documentIds[0] ?? '',
-            documentName: r.documentName,
-            ...(typeof r.page === 'number' ? { page: r.page } : {}),
-            ...(r.section ? { section: r.section } : {}),
-          })),
+          sourceRefs: resolveSourceReferences(q.sourceChunkId, q.quote, snippetIndex),
           promptVersion: prompts.quizGenerator.VERSION,
         })),
       )
@@ -329,7 +399,11 @@ export class QuizService {
         knowledgePoint: typeof q.knowledgePoint === 'string' && q.knowledgePoint.trim() ? q.knowledgePoint.trim() : 'General',
         difficulty: (q.difficulty ?? 'basic') as DifficultyLevel,
         hints: Array.isArray(q.hints) ? q.hints.filter((h): h is string => typeof h === 'string') : [],
-        ...(Array.isArray(q.sourceRefs) ? { sourceRefs: q.sourceRefs } : {}),
+        // Citation hints from the model — resolved against local chunks later.
+        ...(typeof q.sourceChunkId === 'string' && q.sourceChunkId.trim()
+          ? { sourceChunkId: q.sourceChunkId.trim() }
+          : {}),
+        ...(typeof q.quote === 'string' && q.quote.trim() ? { quote: q.quote.trim() } : {}),
       })
       if (valid.length >= expected) break
     }

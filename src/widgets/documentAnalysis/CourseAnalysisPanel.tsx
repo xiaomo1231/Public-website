@@ -6,6 +6,7 @@ import { Badge } from '@/shared/ui/Badge'
 import { EmptyState } from '@/shared/ui/EmptyState'
 import { LoadingState } from '@/shared/ui/LoadingState'
 import { Progress } from '@/shared/ui/Progress'
+import { TruncatedText } from '@/shared/ui/TruncatedText'
 import { toast } from '@/features/toast/toastStore'
 import { buildAIServices } from '@/services/aiServices'
 import type { CourseAnalysis, Formula, Topic, CourseSymbol } from '@/entities/courseAnalysis/types'
@@ -17,6 +18,17 @@ export interface CourseAnalysisPanelProps {
   projectId: string
   subject?: string
   onStartTutor?: (topicId: string) => void
+}
+
+/**
+ * One readable source line: the primary document with its page, plus a count of
+ * any further citations rather than a comma-joined wall of file names.
+ */
+function describeSources(refs: Topic['sourceRefs']): string {
+  const primary = refs[0]
+  if (!primary) return ''
+  const label = `${primary.documentName}${primary.page !== undefined ? ` p${primary.page}` : ''}`
+  return refs.length > 1 ? `${label} +${refs.length - 1}` : label
 }
 
 export function CourseAnalysisPanel({
@@ -175,18 +187,18 @@ export function CourseAnalysisPanel({
               <button
                 key={topic.id}
                 onClick={() => onStartTutor?.(topic.id)}
-                className="flex flex-col gap-1 rounded-md border bg-card p-3 text-left transition-colors hover:bg-accent"
+                className="flex min-w-0 flex-col gap-1 rounded-md border bg-card p-3 text-left transition-colors hover:bg-accent"
               >
-                <span className="text-sm font-medium">{topic.name}</span>
-                <span className="line-clamp-2 text-xs text-muted-foreground">{topic.description}</span>
-                <span className="text-[10px] uppercase tracking-wider text-muted-foreground">
-                  {t('analysis.source', {
-                    source: topic.sourceRefs
-                      .map((r) => r.documentName + (r.page ? ` p${r.page}` : ''))
-                      .slice(0, 2)
-                      .join(', '),
-                  })}
+                <TruncatedText text={topic.name} className="text-sm font-medium" />
+                <span className="line-clamp-2 break-words text-xs text-muted-foreground">
+                  {topic.description}
                 </span>
+                {topic.sourceRefs.length > 0 && (
+                  <TruncatedText
+                    text={t('analysis.source', { source: describeSources(topic.sourceRefs) })}
+                    className="text-[10px] uppercase tracking-wider text-muted-foreground"
+                  />
+                )}
               </button>
             ))}
           </CardContent>
@@ -203,12 +215,14 @@ export function CourseAnalysisPanel({
           </CardHeader>
           <CardContent className="space-y-2 text-sm">
             {formulas.slice(0, 10).map((f) => (
-              <div key={f.id} className="rounded-md border bg-muted/30 px-3 py-2">
-                <div className="flex items-baseline gap-2">
-                  <span className="font-medium">{f.name}</span>
-                  <code className="rounded bg-background px-1 font-mono text-xs">{f.latex}</code>
+              <div key={f.id} className="min-w-0 rounded-md border bg-muted/30 px-3 py-2">
+                <div className="flex min-w-0 flex-wrap items-baseline gap-2">
+                  <TruncatedText text={f.name} className="font-medium" />
+                  <code className="max-w-full break-all rounded bg-background px-1 font-mono text-xs">
+                    {f.latex}
+                  </code>
                 </div>
-                <p className="text-xs text-muted-foreground">{f.description}</p>
+                <p className="break-words text-xs text-muted-foreground">{f.description}</p>
                 {f.variables.length > 0 && (
                   <p className="mt-1 text-[11px] text-muted-foreground">
                     {t('analysis.variables', {

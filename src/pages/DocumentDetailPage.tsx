@@ -28,6 +28,8 @@ import { LoadingState } from '@/shared/ui/LoadingState'
 import { PageContainer, PageContent, PageHeader } from '@/shared/ui/Page'
 import { ProgressiveList } from '@/shared/ui/ProgressiveList'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/shared/ui/Tabs'
+import { TruncatedText } from '@/shared/ui/TruncatedText'
+import { ChunkPreview } from '@/widgets/documents/ChunkPreview'
 import { formatDate, formatDateTime, relativeTime } from '@/shared/lib/utils'
 import { formatBytes } from '@/shared/lib/format'
 import { useTranslation } from '@/i18n'
@@ -158,7 +160,7 @@ export function DocumentDetailPage(): JSX.Element {
                 <ArrowLeft className="h-4 w-4" />
               </Link>
             </Button>
-            <span className="truncate">{document.name}</span>
+            <TruncatedText text={document.name} className="min-w-0 max-w-full" />
             <Badge variant="outline">{document.type.toUpperCase()}</Badge>
             <Badge variant={document.status === 'ready' ? 'default' : document.status === 'failed' ? 'destructive' : 'secondary'}>
               {t(PROCESSING_STATUS_LABEL_KEYS[document.status])}
@@ -218,7 +220,15 @@ export function DocumentDetailPage(): JSX.Element {
                 items={filtered}
                 pageSize={30}
                 className="space-y-2"
-                renderItem={(chunk) => <ChunkRow key={chunk.id} chunk={chunk} />}
+                renderItem={(chunk) => (
+                  <ChunkPreview
+                    key={chunk.id}
+                    chunk={chunk}
+                    documentName={document.name}
+                    index={chunks.indexOf(chunk) + 1}
+                    documentHref={`/projects/${projectId}/documents/${document.id}`}
+                  />
+                )}
               />
             )}
           </TabsContent>
@@ -339,39 +349,13 @@ function DetailRow({ label, value }: { label: string; value: string }) {
   )
 }
 
-function ChunkRow({ chunk }: { chunk: DocumentChunk }) {
-  const { t } = useTranslation()
-  return (
-    <Card>
-      <CardHeader className="flex flex-row items-start justify-between gap-3 space-y-0 py-3">
-        <div className="min-w-0 space-y-1">
-          <div className="flex items-center gap-2">
-            <Badge variant="outline" className="uppercase">
-              {chunk.contentType}
-            </Badge>
-            {chunk.pageNumber !== undefined && (
-              <span className="text-xs text-muted-foreground">{t('documentDetail.pageLabel', { number: chunk.pageNumber })}</span>
-            )}
-            {chunk.section && <span className="text-xs text-muted-foreground">{t('documentDetail.sectionLabel', { title: chunk.section })}</span>}
-          </div>
-          <p className="text-xs text-muted-foreground">{chunk.sourceReference}</p>
-        </div>
-        <span className="text-xs tabular-nums text-muted-foreground">#{chunk.order + 1}</span>
-      </CardHeader>
-      <CardContent className="pb-4">
-        <p className="whitespace-pre-wrap break-words text-sm leading-relaxed">{chunk.text}</p>
-      </CardContent>
-    </Card>
-  )
-}
-
 function Meta({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {
   return (
-    <div className="flex items-center gap-3 text-muted-foreground">
-      <span className="grid h-7 w-7 place-items-center rounded-md bg-muted">{icon}</span>
-      <div className="flex flex-col">
+    <div className="flex min-w-0 items-center gap-3 text-muted-foreground">
+      <span className="grid h-7 w-7 shrink-0 place-items-center rounded-md bg-muted">{icon}</span>
+      <div className="flex min-w-0 flex-col">
         <span className="text-xs uppercase tracking-wider">{label}</span>
-        <span className="text-sm font-medium text-foreground">{value}</span>
+        <TruncatedText text={value} className="text-sm font-medium text-foreground" />
       </div>
     </div>
   )

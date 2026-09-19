@@ -7,6 +7,11 @@ export interface SourceReference {
   slideNumber?: number
   section?: string
   quote?: string
+  /**
+   * Chunk this reference was resolved from. Always set from local data —
+   * never taken from the model's output.
+   */
+  chunkId?: string
 }
 
 export interface Topic {

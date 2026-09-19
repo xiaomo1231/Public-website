@@ -12,6 +12,7 @@ import {
 import { Input } from '@/shared/ui/Input'
 import { Label } from '@/shared/ui/Label'
 import { Badge } from '@/shared/ui/Badge'
+import { TruncatedText } from '@/shared/ui/TruncatedText'
 import { DataManagementService } from '@/services/dataManagementService'
 import { ProjectService } from '@/services/projectService'
 import type { Project } from '@/entities/project/types'
@@ -162,12 +163,15 @@ export function DeleteProjectDialog({
                           )}
                           aria-hidden
                         />
-                        <span className="truncate font-medium">{project.name}</span>
+                        <TruncatedText
+                          text={project.name}
+                          className="min-w-0 flex-1 font-medium"
+                        />
                         <Badge variant="outline" className="ml-auto shrink-0">
                           {t(SUBJECT_LABEL_KEYS[project.subject])}
                         </Badge>
                       </span>
-                      <span className="pl-6 font-mono text-[11px] text-muted-foreground">
+                      <span className="min-w-0 max-w-full truncate pl-6 font-mono text-[11px] text-muted-foreground">
                         {project.id}
                       </span>
                     </button>
@@ -178,14 +182,14 @@ export function DeleteProjectDialog({
 
             {selected && (
               <div className="space-y-2 rounded-md border border-destructive/40 bg-destructive/5 p-3">
-                <div className="text-sm">
+                <div className="break-words text-sm">
                   {t('deleteProject.project', { name: selected.name })}
                 </div>
                 <div className="break-all font-mono text-xs text-muted-foreground">
                   {t('deleteProject.id', { id: selected.id })}
                 </div>
                 <div className="space-y-2 pt-1">
-                  <Label htmlFor="delete-project-confirm">
+                  <Label htmlFor="delete-project-confirm" className="break-words">
                     {t('deleteProject.typeToConfirm', { word: selected.name })}
                   </Label>
                   <Input

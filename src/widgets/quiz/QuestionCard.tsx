@@ -9,6 +9,7 @@ import { Badge } from '@/shared/ui/Badge'
 import { Button } from '@/shared/ui/Button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/ui/Card'
 import { AnswerInput } from './AnswerInput'
+import { QuestionSource } from './QuestionSource'
 import { cn } from '@/shared/lib/utils'
 import { useTranslation } from '@/i18n'
 
@@ -78,6 +79,10 @@ export function QuestionCard({
         )}
 
         {answered && evaluation && <EvaluationBox evaluation={evaluation} />}
+
+        {answered && (
+          <QuestionSource sourceRefs={question.sourceRefs} projectId={question.projectId} />
+        )}
 
         <div className="flex flex-wrap items-center gap-2">
           {!answered ? (

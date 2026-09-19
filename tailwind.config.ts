@@ -42,6 +42,10 @@ export default {
         sm: 'calc(var(--radius) - 4px)',
       },
       fontFamily: {
+        // Text fonts first, then dedicated symbol / maths fallbacks so that
+        // √ ∞ ∑ ∫ ∂ ≤ ≥ ≠ ≈ → ∈ ∪ ∩ and Greek letters resolve to a font that
+        // actually has them instead of relying on the browser's heuristics.
+        // Order matters: a glyph is taken from the first family that has it.
         sans: [
           'system-ui',
           '-apple-system',
@@ -53,6 +57,16 @@ export default {
           'PingFang SC',
           'Hiragino Sans GB',
           'Microsoft YaHei',
+          'Noto Sans SC',
+          'Noto Sans CJK SC',
+          'Segoe UI Symbol',
+          'Noto Sans Symbols 2',
+          'Noto Sans Math',
+          'Cambria Math',
+          'Apple Symbols',
+          'Segoe UI Emoji',
+          'Apple Color Emoji',
+          'Noto Color Emoji',
           'sans-serif',
         ],
         mono: [
@@ -61,6 +75,12 @@ export default {
           'Menlo',
           'Monaco',
           'Consolas',
+          'Noto Sans Mono',
+          'Segoe UI Symbol',
+          'Noto Sans Symbols 2',
+          'Noto Sans Math',
+          'Cambria Math',
+          'Apple Symbols',
           'monospace',
         ],
       },

@@ -4,6 +4,7 @@ import { TutorSessionRepository } from '@/entities/tutorSession/repository'
 import { CourseAnalysisRepository } from '@/entities/courseAnalysis/repository'
 import type { Topic } from '@/entities/courseAnalysis/types'
 import { ChunkRepository } from '@/entities/chunk/repository'
+import type { DocumentChunk } from '@/entities/chunk/types'
 import { QuestionRepository } from '@/entities/question/repository'
 import { QuestionAttemptRepository } from '@/entities/questionAttempt/repository'
 import type { Question, QuestionOption } from '@/entities/question/types'
@@ -29,10 +30,15 @@ import type {
 } from '@/entities/tutorSession/types'
 import { AppError } from '@/infrastructure/errors/AppError'
 import { logger } from '@/infrastructure/logger/logger'
+import { friendlyTutorError } from '@/shared/lib/aiErrors'
 import { t } from '@/i18n'
 
 const SOURCE_CHUNK_LIMIT = 6
 const MAX_HINTS = 3
+/** Chunks longer than this are skipped — they would crowd out the whole prompt. */
+const MAX_SOURCE_CHARS = 1000
+/** Shortest quote worth fuzzy-matching against chunk text. */
+const MIN_QUOTE_CHARS = 12
 
 /**
  * The tutor prompt returns option labels as plain strings; the persisted
@@ -66,6 +72,30 @@ export interface TutorActionResult {
   session: TutorSession
   turn: TutorTurn
   finished: boolean
+  /**
+   * Set when the lesson itself succeeded but the practice question could not be
+   * generated. This is deliberately non-fatal: the tutor's explanation must not
+   * depend on question generation succeeding.
+   */
+  questionError?: string
+}
+
+/** True when the error is a user/tool cancellation rather than a failure. */
+function isAbort(err: unknown): boolean {
+  return err instanceof Error && err.name === 'AbortError'
+}
+
+/**
+ * Loose quote↔chunk match. The analyser stores the excerpt it cited, so a
+ * prefix comparison is enough to find the chunk it came from even when the
+ * model trimmed or reflowed the tail.
+ */
+function quoteMatchesChunk(chunkText: string, quote: string): boolean {
+  const needle = quote.trim().toLowerCase()
+  if (needle.length < MIN_QUOTE_CHARS) return false
+  const haystack = chunkText.toLowerCase()
+  if (haystack.includes(needle)) return true
+  return haystack.includes(needle.slice(0, 60))
 }
 
 const DIFFICULTY_ORDER: DifficultyLevel[] = ['beginner', 'basic', 'intermediate', 'advanced', 'challenge']
@@ -154,6 +184,7 @@ export class TutorService {
       projectId: input.projectId,
       topicId: input.topicId,
       topicName: input.topicName,
+      ...(input.topicDescription ? { topicDescription: input.topicDescription } : {}),
       language: input.language,
       messages: [],
       turns: [],
@@ -177,8 +208,13 @@ export class TutorService {
   }
 
   /**
-   * First call after `startSession`. Asks the AI to introduce the topic and
-   * then immediately generate the first question.
+   * First call after `startSession`: stream the topic explanation, then try to
+   * generate the first practice question.
+   *
+   * The two halves are independent. The explanation is the tutor's primary
+   * output, so a failure to produce a question is reported through
+   * `questionError` and the lesson still opens. Only a failure to produce the
+   * explanation itself is fatal.
    *
    * When `onDelta` is supplied the introduction is streamed and the streamed
    * text is what gets persisted — the introduction is generated exactly once.
@@ -195,7 +231,7 @@ export class TutorService {
         role: 'user',
         content: prompts.tutorIntroduce.buildUserPrompt({
           topicName: session.topicName,
-          topicDescription: '',
+          topicDescription: session.topicDescription ?? '',
           context: `Project ${session.projectId}.`,
           sourceSnippets: sources,
           language: session.language,
@@ -207,6 +243,13 @@ export class TutorService {
           ...(opts.signal ? { signal: opts.signal } : {}),
         })
       : await this.ai.chat(introMessages)
+
+    // An empty explanation leaves the student with nothing to read, so this is
+    // the one case where the tutor genuinely cannot open.
+    if (!introRes.content.trim()) {
+      throw new AppError(t('tutor.emptyResponse'), 'EMPTY_TUTOR_RESPONSE')
+    }
+
     const introTurn: TutorTurn = {
       role: 'tutor',
       kind: 'introduction',
@@ -220,13 +263,36 @@ export class TutorService {
     )
     await this.sessions.upsert(session)
 
-    return this.askQuestion(session.id)
+    // Best-effort: a question is a follow-up, never a precondition.
+    try {
+      return await this.askQuestion(session.id, opts.signal)
+    } catch (err) {
+      if (isAbort(err)) {
+        return { session: await this.getSession(session.id), turn: introTurn, finished: false }
+      }
+      logger.warn('Tutor question generation failed; continuing with the introduction', {
+        sessionId: session.id,
+        error: (err as Error)?.message,
+      })
+      return {
+        session: await this.getSession(session.id),
+        turn: introTurn,
+        finished: false,
+        questionError: friendlyTutorError(err),
+      }
+    }
   }
 
   /** Generate the next question for the current session. */
   async askQuestion(sessionId: string, signal?: AbortSignal): Promise<TutorActionResult> {
     const session = await this.getSession(sessionId)
     const sources = await this.collectSources(session)
+    // Questions are grounded in the course material by design. Without any
+    // material the honest answer is "this topic has nothing to practise on" —
+    // not a generic "the AI failed" message.
+    if (sources.length === 0) {
+      throw new AppError(t('tutor.noContent'), 'NO_TOPIC_CONTENT')
+    }
     const prior = session.turns
       .filter((t) => t.kind === 'question')
       .map((t) => t.question?.prompt ?? '')
@@ -242,7 +308,7 @@ export class TutorService {
         role: 'user',
         content: prompts.tutorQuestion.buildUserPrompt({
           topicName: session.topicName,
-          topicDescription: '',
+          topicDescription: session.topicDescription ?? '',
           difficulty: session.currentDifficulty,
           language: session.language,
           ...(prior.length > 0 ? { avoidRepeating: prior } : {}),
@@ -309,7 +375,7 @@ export class TutorService {
     }
     session.hintsRevealed = 0
     session.messages.push(
-      { role: 'user', content: prompts.tutorQuestion.buildUserPrompt({ topicName: session.topicName, topicDescription: '', difficulty: session.currentDifficulty, language: session.language, sourceSnippets: sources }) },
+      { role: 'user', content: prompts.tutorQuestion.buildUserPrompt({ topicName: session.topicName, topicDescription: session.topicDescription ?? '', difficulty: session.currentDifficulty, language: session.language, sourceSnippets: sources }) },
       { role: 'assistant', content: JSON.stringify(question) },
     )
     await this.sessions.upsert(session)
@@ -487,20 +553,61 @@ export class TutorService {
     return session
   }
 
+  /**
+   * Gather the course material the tutor should be grounded in.
+   *
+   * The topic's own `sourceRefs` are authoritative — they are what the course
+   * analysis cited for this topic. Only when they resolve to nothing do we fall
+   * back to the project's documents, so the tutor still has *some* grounding
+   * rather than silently running on general knowledge.
+   */
   private async collectSources(session: TutorSession): Promise<string[]> {
     if (!session.topicId) return []
     const analysis = await this.analyses.getByProject(session.projectId)
     if (!analysis) return []
     const topic: Topic | undefined = await this.analyses.getTopic(session.topicId)
     if (!topic) return []
-    const docIds = analysis.documentIds
+
     const out: string[] = []
-    for (const id of docIds) {
+    const seen = new Set<string>()
+    const add = (chunk: DocumentChunk, label: string): boolean => {
+      if (seen.has(chunk.id)) return false
+      if (!chunk.text.trim() || chunk.text.length > MAX_SOURCE_CHARS) return false
+      seen.add(chunk.id)
+      out.push(`[${label}] ${chunk.text}`)
+      return out.length >= SOURCE_CHUNK_LIMIT
+    }
+
+    for (const ref of topic.sourceRefs ?? []) {
+      const label = [topic.name, ref.section, ref.page !== undefined ? `p${ref.page}` : '']
+        .filter(Boolean)
+        .join(' · ')
+
+      // An exact chunk id is the strongest signal (quiz citations carry one).
+      if (ref.chunkId) {
+        const chunk = await this.chunks.get(ref.chunkId)
+        if (chunk && add(chunk, label)) return out
+        continue
+      }
+
+      if (!ref.documentId) continue
+      const docChunks = await this.chunks.listByDocument(ref.documentId)
+      const candidates = ref.quote
+        ? docChunks.filter((c) => quoteMatchesChunk(c.text, ref.quote!))
+        : ref.page !== undefined
+          ? docChunks.filter((c) => c.pageNumber === ref.page)
+          : docChunks.slice(0, 2)
+
+      for (const chunk of candidates) {
+        if (add(chunk, label)) return out
+      }
+    }
+    if (out.length > 0) return out
+
+    for (const id of analysis.documentIds) {
       const chunks = await this.chunks.listByDocument(id)
       for (const c of chunks) {
-        if (c.text.length > 1000) continue
-        out.push(`[${topic.name}${c.pageNumber ? ' · p' + c.pageNumber : ''}${c.section ? ' · ' + c.section : ''}] ${c.text}`)
-        if (out.length >= SOURCE_CHUNK_LIMIT) return out
+        if (add(c, topic.name)) return out
       }
     }
     return out

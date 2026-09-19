@@ -11,6 +11,7 @@ import { ErrorState } from '@/shared/ui/ErrorState'
 import { LoadingState } from '@/shared/ui/LoadingState'
 import { PageContainer, PageContent, PageHeader } from '@/shared/ui/Page'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/shared/ui/Tabs'
+import { TruncatedText } from '@/shared/ui/TruncatedText'
 import { ProjectDocumentsTab } from '@/widgets/documents/ProjectDocumentsTab'
 import { CourseAnalysisPanel } from '@/widgets/documentAnalysis/CourseAnalysisPanel'
 import { RenameProjectDialog } from '@/widgets/project/RenameProjectDialog'
@@ -72,13 +73,13 @@ export function ProjectDetailPage(): JSX.Element {
     <PageContainer>
       <PageHeader
         title={
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
             <Button asChild variant="ghost" size="icon" aria-label={t('projectDetail.backToProjects')}>
               <Link to="/projects">
                 <ArrowLeft className="h-4 w-4" />
               </Link>
             </Button>
-            <span>{project.name}</span>
+            <TruncatedText text={project.name} className="min-w-0 max-w-full" />
             <Badge variant="outline">{t(SUBJECT_LABEL_KEYS[project.subject])}</Badge>
           </div>
         }

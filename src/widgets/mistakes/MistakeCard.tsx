@@ -16,6 +16,7 @@ import { Button } from '@/shared/ui/Button'
 import { Card, CardContent, CardHeader } from '@/shared/ui/Card'
 import { MistakeAnalysisView, AnalysisPlaceholder } from './MistakeAnalysisView'
 import { PracticeMoreMenu } from './PracticeMoreMenu'
+import { QuestionSource } from '@/widgets/quiz/QuestionSource'
 import { relativeTime } from '@/shared/lib/utils'
 import { cn } from '@/shared/lib/utils'
 import { useTranslation } from '@/i18n'
@@ -127,6 +128,8 @@ export function MistakeCard({
           )}
 
           <PracticeMoreMenu onSelect={(mode) => run(`practice-${mode}`, () => onPractice(mistake.id, mode))} busy={busy?.startsWith('practice') ?? false} />
+
+          <QuestionSource sourceRefs={mistake.sourceRefs} projectId={mistake.projectId} />
 
           <div className="flex flex-wrap items-center gap-2 border-t pt-3">
             {mistake.status === 'active' && (

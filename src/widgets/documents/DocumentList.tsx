@@ -36,6 +36,7 @@ import {
   DropdownMenuSeparator,
 } from '@/shared/ui/DropdownMenu'
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogDescription } from '@/shared/ui/Dialog'
+import { TooltipProvider, TooltipWrapper } from '@/shared/ui/Tooltip'
 import { relativeTime } from '@/shared/lib/utils'
 import { formatBytes } from '@/shared/lib/format'
 import { useTranslation, type TranslationKey } from '@/i18n'
@@ -218,13 +219,18 @@ export function DocumentList({
                   key={doc.id}
                   className="flex items-center gap-3 rounded-md border bg-card px-3 py-2 transition-colors hover:bg-accent/50"
                 >
-                  <Icon className="h-4 w-4 text-muted-foreground" />
-                  <Link
-                    to={`/projects/${projectId}/documents/${doc.id}`}
-                    className="min-w-0 flex-1 truncate text-sm font-medium hover:underline"
-                  >
-                    {doc.name}
-                  </Link>
+                  <Icon className="h-4 w-4 shrink-0 text-muted-foreground" />
+                  <TooltipProvider delayDuration={300}>
+                    <TooltipWrapper content={doc.name}>
+                      <Link
+                        to={`/projects/${projectId}/documents/${doc.id}`}
+                        aria-label={doc.name}
+                        className="min-w-0 flex-1 truncate text-sm font-medium hover:underline"
+                      >
+                        {doc.name}
+                      </Link>
+                    </TooltipWrapper>
+                  </TooltipProvider>
                   <Badge variant="outline" className="hidden sm:inline-flex">
                     {t(TYPE_LABEL_KEY[doc.type])}
                   </Badge>

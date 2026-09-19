@@ -22,13 +22,13 @@ export function PageHeader({
         className,
       )}
     >
-      <div className="space-y-1">
-        <h1 className="text-xl font-semibold tracking-tight">{title}</h1>
+      <div className="min-w-0 flex-1 space-y-1">
+        <h1 className="break-words text-xl font-semibold tracking-tight">{title}</h1>
         {description && (
           <p className="text-sm text-muted-foreground text-balance">{description}</p>
         )}
       </div>
-      {actions && <div className="flex items-center gap-2">{actions}</div>}
+      {actions && <div className="flex shrink-0 items-center gap-2">{actions}</div>}
     </header>
   )
 }

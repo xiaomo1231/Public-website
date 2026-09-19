@@ -6,13 +6,14 @@ import { Badge } from '@/shared/ui/Badge'
 import { Textarea } from '@/shared/ui/Textarea'
 import { LoadingState } from '@/shared/ui/LoadingState'
 import { EmptyState } from '@/shared/ui/EmptyState'
+import { TruncatedText } from '@/shared/ui/TruncatedText'
 import { toast } from '@/features/toast/toastStore'
 import { cn } from '@/shared/lib/utils'
 import { useTranslation } from '@/i18n'
 import { buildAIServices } from '@/services/aiServices'
 import type { DifficultyLevel, TutorEvaluation } from '@/infrastructure/ai/prompts/types'
 import type { TutorQuestion, TutorSession } from '@/entities/tutorSession/types'
-import { friendlyAIError } from '@/shared/lib/aiErrors'
+import { friendlyTutorError } from '@/shared/lib/aiErrors'
 import type { TutorService } from '@/services/tutorService'
 
 export interface TutorPanelProps {
@@ -40,7 +41,10 @@ export function TutorPanel(props: TutorPanelProps): JSX.Element {
   const [session, setSession] = useState<TutorSession | null>(null)
   const [answer, setAnswer] = useState('')
   const [busy, setBusy] = useState(false)
+  /** Fatal: the tutor itself could not open. */
   const [error, setError] = useState<string | null>(null)
+  /** Non-fatal: the lesson is open but an action failed. */
+  const [actionError, setActionError] = useState<string | null>(null)
   const [revealedHints, setRevealedHints] = useState(0)
   const [lastQuestion, setLastQuestion] = useState<TutorQuestion | undefined>()
   const [lastEvaluation, setLastEvaluation] = useState<TutorEvaluation | undefined>()
@@ -67,7 +71,9 @@ export function TutorPanel(props: TutorPanelProps): JSX.Element {
         if (cancelled) return
         setSession(s)
         // A single AI call: the introduction is streamed to the UI and the
-        // exact same text is persisted as the first turn.
+        // exact same text is persisted as the first turn. The first question is
+        // generated on a best-effort basis — a failure here must not hide the
+        // explanation the student just received.
         const next = await bundle.tutor.beginTopic(s.id, {
           onDelta: (text) => setIntro((prev) => prev + text),
         })
@@ -76,8 +82,9 @@ export function TutorPanel(props: TutorPanelProps): JSX.Element {
         setLastQuestion(next.session.pendingQuestion)
         setRevealedHints(0)
         setLastEvaluation(undefined)
+        if (next.questionError) setActionError(next.questionError)
       } catch (err) {
-        if (!cancelled) setError(friendlyAIError(err))
+        if (!cancelled) setError(friendlyTutorError(err))
       } finally {
         if (!cancelled) setBusy(false)
       }
@@ -93,7 +100,7 @@ export function TutorPanel(props: TutorPanelProps): JSX.Element {
     const bundle = await buildTutorBundle()
     if (!bundle) return
     setBusy(true)
-    setError(null)
+    setActionError(null)
     setAnswer('')
     setRevealedHints(0)
     setLastEvaluation(undefined)
@@ -102,7 +109,7 @@ export function TutorPanel(props: TutorPanelProps): JSX.Element {
       setSession(result.session)
       setLastQuestion(result.session.pendingQuestion)
     } catch (err) {
-      setError(friendlyAIError(err))
+      setActionError(friendlyTutorError(err))
     } finally {
       setBusy(false)
     }
@@ -119,7 +126,7 @@ export function TutorPanel(props: TutorPanelProps): JSX.Element {
       setRevealedHints((c) => c + 1)
       toast({ variant: 'info', title: t('tutor.hintReleased'), description: hint })
     } catch (err) {
-      setError(friendlyAIError(err))
+      setActionError(friendlyTutorError(err))
     } finally {
       setBusy(false)
     }
@@ -134,14 +141,14 @@ export function TutorPanel(props: TutorPanelProps): JSX.Element {
     const bundle = await buildTutorBundle()
     if (!bundle) return
     setBusy(true)
-    setError(null)
+    setActionError(null)
     try {
       const result = await bundle.tutor.submitAnswer(session.id, answer.trim())
       setSession(result.session)
       setLastEvaluation(result.turn.evaluation as TutorEvaluation | undefined)
       setLastQuestion(undefined)
     } catch (err) {
-      setError(friendlyAIError(err))
+      setActionError(friendlyTutorError(err))
     } finally {
       setBusy(false)
     }
@@ -169,29 +176,47 @@ export function TutorPanel(props: TutorPanelProps): JSX.Element {
     return <LoadingState label={t('tutor.preparing')} />
   }
 
+  // Prefer the streamed text so the explanation appears as it arrives; fall
+  // back to the persisted turn so it survives a remount.
+  const persistedIntro = session.turns.find((turn) => turn.kind === 'introduction')?.content ?? ''
+  const introText = intro || persistedIntro
+
   return (
     <div className="space-y-4">
       <Card>
         <CardHeader>
           <CardTitle className="flex flex-wrap items-center gap-2 text-base">
-            <Sparkles className="h-4 w-4" />
-            {props.topicName}
-            <Badge variant="outline">{session.currentDifficulty}</Badge>
-            <Badge variant="outline">
+            <Sparkles className="h-4 w-4 shrink-0" />
+            <TruncatedText text={props.topicName} className="min-w-0 max-w-full" />
+            <Badge variant="outline" className="shrink-0">{session.currentDifficulty}</Badge>
+            <Badge variant="outline" className="shrink-0">
               {t('tutor.mastery', { value: `${Math.round(session.mastery * 100)}%` })}
             </Badge>
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-3 text-sm">
-          {intro ? (
-            <div className="prose prose-sm max-w-none whitespace-pre-wrap text-foreground dark:prose-invert">
-              {intro}
+          {introText ? (
+            <div className="prose prose-sm max-w-none whitespace-pre-wrap break-words text-foreground dark:prose-invert">
+              {introText}
             </div>
           ) : (
             <div className="text-muted-foreground">{t('tutor.loadingIntro')}</div>
           )}
         </CardContent>
       </Card>
+
+      {actionError && (
+        <Card className="border-destructive/40 bg-destructive/5">
+          <CardContent className="flex flex-wrap items-center justify-between gap-2 p-4 text-sm">
+            <span className="min-w-0 break-words text-destructive">{actionError}</span>
+            {!lastQuestion && (
+              <Button variant="outline" onClick={nextQuestion} disabled={busy}>
+                {t('tutor.retryQuestion')}
+              </Button>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       {lastEvaluation && <FeedbackCard evaluation={lastEvaluation} />}
 
@@ -255,7 +280,7 @@ export function TutorPanel(props: TutorPanelProps): JSX.Element {
         </Card>
       )}
 
-      {!lastQuestion && !lastEvaluation && !busy && intro && (
+      {!lastQuestion && !lastEvaluation && !busy && introText && !actionError && (
         <EmptyState title={t('tutor.thinking')} description={t('tutor.generatingFirst')} />
       )}
     </div>

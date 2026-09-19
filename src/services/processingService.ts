@@ -15,6 +15,11 @@ import {
   chunksFromPptx,
   chunksFromText,
 } from '@/infrastructure/files/chunking'
+import {
+  detectSuspiciousUnicode,
+  normalizeExtractedText,
+  type SuspiciousUnicodeReport,
+} from '@/infrastructure/files/textEncoding'
 import { logger } from '@/infrastructure/logger/logger'
 import { AppError, ValidationError } from '@/infrastructure/errors/AppError'
 import { t } from '@/i18n'
@@ -66,7 +71,7 @@ export class ProcessingService {
       onProgress?.({ stage: 'chunking', progress: 50 })
       await this.jobs.setStage(jobId, 'chunking', 50)
 
-      const newChunks = await this.chunk(document, extraction)
+      const { chunks: newChunks, report } = this.normalizeChunks(await this.chunk(document, extraction))
       onProgress?.({ stage: 'indexing', progress: 80 })
       await this.jobs.setStage(jobId, 'indexing', 80)
 
@@ -76,6 +81,23 @@ export class ProcessingService {
 
       const warnings = (extraction.warnings ?? []).slice()
       if (extraction.lowConfidence) warnings.push(t('errors.ocrLowConfidence', { value: `${extraction.confidence}%` }))
+      if (report.suspicious) {
+        // Characters we cannot decode are kept, never guessed at — the user is
+        // told the source PDF's font encoding is the problem instead.
+        const undecodable = report.privateUse + report.replacement + report.control
+        warnings.push(t('errors.undecodableCharacters', { count: undecodable }))
+        // Safe diagnostics: counts and code points only, never document text.
+        logger.warn('Extracted text contains undecodable characters', {
+          id: document.id,
+          type: document.type,
+          privateUse: report.privateUse,
+          replacement: report.replacement,
+          control: report.control,
+          questionRuns: report.questionRuns,
+          missingGlyphBox: report.missingGlyphBox,
+          codePoints: report.codePoints.map((cp) => `U+${cp.toString(16).toUpperCase().padStart(4, '0')}`),
+        })
+      }
       await this.documents.update(document.id, {
         status: 'ready',
         errorMessage: undefined,
@@ -160,6 +182,20 @@ export class ProcessingService {
         throw new ValidationError(t('errors.unsupportedType', { type: exhaustive as string }))
       }
     }
+  }
+
+  /**
+   * Normalise every chunk's text and summarise what looks wrong.
+   *
+   * Normalisation is deliberately lossless (see `normalizeExtractedText`): it
+   * never rewrites Private Use Area code points, U+FFFD, `?` or maths symbols.
+   * Chunks are normalised *before* storage so that quiz `quote`s — which are
+   * verified against stored chunk text — stay consistent.
+   */
+  private normalizeChunks(chunks: NewChunk[]): { chunks: NewChunk[]; report: SuspiciousUnicodeReport } {
+    const normalized = chunks.map((chunk) => ({ ...chunk, text: normalizeExtractedText(chunk.text) }))
+    const report = detectSuspiciousUnicode(normalized.map((chunk) => chunk.text).join('\n'))
+    return { chunks: normalized, report }
   }
 
   private async chunk(document: Document, extraction: ExtractionOutput): Promise<NewChunk[]> {

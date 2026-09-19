@@ -27,7 +27,7 @@ import {
   SelectItem,
 } from '@/shared/ui/Select2'
 import { Button } from '@/shared/ui/Button'
-import { Card, CardContent, CardHeader, CardTitle } from '@/shared/ui/Card'
+import { Card, CardContent, CardHeader } from '@/shared/ui/Card'
 import { EmptyState } from '@/shared/ui/EmptyState'
 import { Input } from '@/shared/ui/Input'
 import { Label } from '@/shared/ui/Label'
@@ -35,6 +35,7 @@ import { Textarea } from '@/shared/ui/Textarea'
 import { LoadingState } from '@/shared/ui/LoadingState'
 import { PageContainer, PageContent, PageHeader } from '@/shared/ui/Page'
 import { Badge } from '@/shared/ui/Badge'
+import { TruncatedText } from '@/shared/ui/TruncatedText'
 import { relativeTime } from '@/shared/lib/utils'
 import { useTranslation, type TranslationKey } from '@/i18n'
 
@@ -130,7 +131,11 @@ export function ProjectsPage(): JSX.Element {
               <Card key={p.id} className="transition-colors hover:border-foreground/20">
                 <CardHeader className="flex flex-row items-start justify-between gap-2 space-y-0">
                   <div className="min-w-0">
-                    <CardTitle className="truncate">{p.name}</CardTitle>
+                    <TruncatedText
+                      as="h3"
+                      text={p.name}
+                      className="text-base font-semibold leading-none tracking-tight"
+                    />
                     <p className="mt-1 text-xs text-muted-foreground">
                       {t('projects.createdAt', { date: relativeTime(p.createdAt) })}
                     </p>

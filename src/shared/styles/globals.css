@@ -60,6 +60,22 @@
       'calt' 1;
   }
 
+  /*
+   * KaTeX containment: a wide formula scrolls inside its own block, never
+   * sideways-scrolling the whole page. Body text keeps full contrast in both
+   * themes — hierarchy comes from size and colour, never from low opacity.
+   */
+  .katex-host .katex-display {
+    margin: 0;
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding: 0.25rem 0;
+  }
+
+  .katex-host .katex {
+    max-width: 100%;
+  }
+
   ::-webkit-scrollbar {
     width: 10px;
     height: 10px;

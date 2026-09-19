@@ -7,6 +7,7 @@ import { Badge } from '@/shared/ui/Badge'
 import { EmptyState } from '@/shared/ui/EmptyState'
 import { LoadingState } from '@/shared/ui/LoadingState'
 import { PageContainer, PageContent, PageHeader } from '@/shared/ui/Page'
+import { TruncatedText } from '@/shared/ui/TruncatedText'
 import { TutorSessionRepository } from '@/entities/tutorSession/repository'
 import {
   SESSION_STATUS_LABEL_KEYS,
@@ -96,9 +97,9 @@ export function ChatHistoryPage(): JSX.Element {
                     activeId === s.id ? 'border-foreground/30 bg-accent' : 'hover:bg-accent/50'
                   }`}
                 >
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="truncate font-medium">{s.topicName}</span>
-                    <Badge variant="outline">{s.currentDifficulty}</Badge>
+                  <div className="flex min-w-0 items-center justify-between gap-2">
+                    <TruncatedText text={s.topicName} className="min-w-0 flex-1 font-medium" />
+                    <Badge variant="outline" className="shrink-0">{s.currentDifficulty}</Badge>
                   </div>
                   <div className="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
                     <span>{formatDateTime(s.updatedAt)}</span>
@@ -114,8 +115,8 @@ export function ChatHistoryPage(): JSX.Element {
                   <Card>
                     <CardHeader>
                       <CardTitle className="flex flex-wrap items-center gap-2 text-base">
-                        {active.topicName}
-                        <Badge variant="outline">
+                        <TruncatedText text={active.topicName} className="min-w-0 max-w-full" />
+                        <Badge variant="outline" className="shrink-0">
                           {t('chatHistory.mastery', {
                             value: `${Math.round(active.mastery * 100)}%`,
                           })}
@@ -170,7 +171,7 @@ function TurnCard({ turn }: { turn: TutorTurn }) {
         </div>
         <p className="whitespace-pre-wrap">{turn.content}</p>
         {turn.question?.sourceRefs && turn.question.sourceRefs.length > 0 && (
-          <div className="rounded-md bg-muted/40 px-2 py-1 text-[11px] text-muted-foreground">
+          <div className="min-w-0 truncate rounded-md bg-muted/40 px-2 py-1 text-[11px] text-muted-foreground">
             {t('chatHistory.source', {
               value: turn.question.sourceRefs
                 .map((r) => `${r.documentName}${r.page ? ` p${r.page}` : ''}`)

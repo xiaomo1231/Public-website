@@ -53,6 +53,8 @@ export interface TutorSession {
   projectId: string
   topicId?: string
   topicName: string
+  /** Carried so the AI can ground its explanation in the topic's own summary. */
+  topicDescription?: string
   language: 'zh' | 'en' | 'mixed'
   /** Up-to-date conversation context for the AI. */
   messages: ChatMessage[]

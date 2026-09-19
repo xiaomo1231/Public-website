@@ -5,7 +5,7 @@
  * grounded in the provided source material. Returns JSON.
  */
 
-import type { DifficultyLevel, SourceReference } from '../types'
+import type { DifficultyLevel } from '../types'
 import { securityFooter, untrustedContentWrapper } from '../security'
 
 export const VERSION = 'v1' as const
@@ -34,7 +34,14 @@ export interface GeneratedQuizQuestion {
   knowledgePoint: string
   difficulty: DifficultyLevel
   hints: string[]
-  sourceRefs?: SourceReference[]
+  /**
+   * Id of the snippet the question was derived from, exactly as printed in the
+   * prompt's `[chunk:<id>]` tag. The app resolves it against local storage —
+   * an id that was not offered in the prompt is discarded.
+   */
+  sourceChunkId?: string | null
+  /** Verbatim excerpt from that snippet. Never a summary or paraphrase. */
+  quote?: string | null
 }
 
 export interface QuizGenerationOutput {
@@ -59,6 +66,12 @@ export function buildSystemPrompt(): string {
     '  7. For `math_expr`, `correctAnswer` must be a mathjs-parseable expression (use `^` for powers, `*` for multiplication).',
     '  8. Each question needs 1–3 progressive hints that do not reveal the answer.',
     '  9. `solution` is the full worked answer shown after grading.',
+    '  10. Every question must cite the snippet it came from:',
+    '      - Each source snippet is labelled with a `[chunk:<id>]` tag. Set `sourceChunkId` to that exact id.',
+    '      - Set `quote` to 1–3 sentences copied VERBATIM from that snippet. Do not paraphrase, translate or summarise it.',
+    '      - Never write a summary such as "this question is based on the concept of …" — the quote must be the original wording.',
+    '      - If no snippet supports the question, set both `sourceChunkId` and `quote` to null.',
+    '      - Never invent a chunk id, page number, section or file name.',
     '',
     'JSON schema:',
     JSON.stringify(
@@ -73,7 +86,8 @@ export function buildSystemPrompt(): string {
             knowledgePoint: 'string',
             difficulty: 'beginner | basic | intermediate | advanced | challenge',
             hints: ['string'],
-            sourceRefs: [{ documentName: 'string', page: 'number|null', section: 'string|null' }],
+            sourceChunkId: 'string | null',
+            quote: 'string | null',
           },
         ],
       },
@@ -110,10 +124,9 @@ export function buildUserPrompt(input: QuizGenerationInput): string {
     `Generate exactly ${input.plan.length} question(s) in this exact plan:`,
     planText,
     '',
-    untrustedContentWrapper(
-      'SOURCE MATERIAL',
-      input.sourceSnippets.map((s, i) => `[${i + 1}] ${s}`).join('\n'),
-    ),
+    // Each snippet is already tagged with its `[chunk:<id>]` so the model can
+    // cite the exact one it used.
+    untrustedContentWrapper('SOURCE MATERIAL', input.sourceSnippets.join('\n\n')),
     '',
     'Respond with the JSON object only.',
   ]

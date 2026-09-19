@@ -67,6 +67,39 @@ export function friendlyAIError(err: unknown): string {
   return t('friendlyError.generic')
 }
 
+/**
+ * Error text for the AI tutor.
+ *
+ * The tutor has two independent halves — the topic explanation and the practice
+ * question — and the student needs to know which one failed. The generic AI
+ * wording would report a missing explanation when only the question failed.
+ */
+export function friendlyTutorError(err: unknown): string {
+  if (isAppError(err)) {
+    switch (err.code) {
+      case 'NO_TOPIC_CONTENT':
+        return t('tutor.noContent')
+      case 'EMPTY_TUTOR_RESPONSE':
+        return t('tutor.emptyResponse')
+      case 'MALFORMED_QUESTION':
+        return t('tutor.questionUnparsable')
+      default:
+        break
+    }
+  }
+  if (err instanceof AIProviderError) {
+    switch (err.code) {
+      case 'TIMEOUT':
+        return t('tutor.timeout')
+      case 'PROVIDER_UNAVAILABLE':
+        return t('tutor.connectFailed')
+      default:
+        break
+    }
+  }
+  return friendlyAIError(err)
+}
+
 function ensureUseful(message: string | undefined, fallback: string): string {
   const trimmed = (message ?? '').trim()
   if (trimmed.length >= 12) return trimmed

@@ -20,6 +20,7 @@ import { LoadingState } from '@/shared/ui/LoadingState'
 import { Progress } from '@/shared/ui/Progress'
 import { PageContainer, PageContent, PageHeader } from '@/shared/ui/Page'
 import { buildOfflineQuizService, buildAIServices } from '@/services/aiServices'
+import { QuestionSource } from '@/widgets/quiz/QuestionSource'
 import type { Quiz } from '@/entities/quiz/types'
 import type { Question } from '@/entities/question/types'
 import type { QuestionAttempt } from '@/entities/questionAttempt/types'
@@ -304,6 +305,9 @@ export function QuizResultPage(): JSX.Element {
                           {t('quizResult.solution', { value: q.solution })}
                         </p>
                       )}
+                      <div className="mt-2">
+                        <QuestionSource sourceRefs={q.sourceRefs} projectId={q.projectId} />
+                      </div>
                     </div>
                   )
                 })}

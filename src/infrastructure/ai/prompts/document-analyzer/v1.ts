@@ -61,6 +61,8 @@ export function buildSystemPrompt(): string {
   return [
     'You are an expert tutor who extracts structured knowledge from course material.',
     'Always cite the exact page / section for any fact you record.',
+    'Copy any `quote` verbatim from the document. Never rewrite, translate, reword or "clean up" the source text.',
+    'Some documents contain characters that could not be decoded — unassigned symbols, replacement characters or runs of "?". Keep them exactly as they appear and never substitute a guess for them.',
     'When a symbol has different meanings in different contexts, record each meaning under a separate symbol entry with a distinct `context`.',
     'For formulas, prefer LaTeX that renders cleanly with KaTeX (use \\frac, \\sqrt, \\sum, etc.).',
     'Output strictly valid JSON matching the schema below. No prose, no markdown fences.',

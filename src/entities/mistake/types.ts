@@ -1,5 +1,6 @@
 import type { DifficultyLevel } from '@/infrastructure/ai/prompts/types'
 import type { QuestionOption } from '@/entities/question/types'
+import type { SourceReference } from '@/entities/courseAnalysis/types'
 import type { TranslationKey } from '@/i18n/types'
 
 /**
@@ -94,6 +95,12 @@ export interface Mistake {
   studentAnswer: string
   correctAnswer: string
   solution?: string
+  /**
+   * Snapshot of the question's course citation, so the mistake book can show
+   * the original material without re-reading the quiz. Absent for mistakes
+   * recorded before this field existed, and for hand-added ones.
+   */
+  sourceRefs?: SourceReference[]
 
   mistakeType: MistakeType
   analysis?: MistakeAnalysis

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Sigma, Tag, Search } from 'lucide-react'
 import { Badge } from '@/shared/ui/Badge'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/shared/ui/Card'
+import { TruncatedText } from '@/shared/ui/TruncatedText'
 import { Input } from '@/shared/ui/Input'
 import { CourseAnalysisRepository } from '@/entities/courseAnalysis/repository'
 import type { Formula, CourseSymbol } from '@/entities/courseAnalysis/types'
@@ -78,13 +79,15 @@ export function FormulaPanel({ projectId, topicId }: FormulaPanelProps): JSX.Ele
                 key={f.id}
                 type="button"
                 onClick={() => navigator.clipboard?.writeText(f.latex).catch(() => undefined)}
-                className="block w-full rounded-md border bg-card p-2 text-left transition-colors hover:bg-accent"
+                className="block w-full min-w-0 rounded-md border bg-card p-2 text-left transition-colors hover:bg-accent"
               >
-                <div className="flex items-baseline gap-2">
-                  <span className="text-sm font-medium">{f.name}</span>
-                  <code className="rounded bg-muted px-1 font-mono text-xs">{f.latex}</code>
+                <div className="flex min-w-0 flex-wrap items-baseline gap-2">
+                  <TruncatedText text={f.name} className="text-sm font-medium" />
+                  <code className="max-w-full break-all rounded bg-muted px-1 font-mono text-xs">
+                    {f.latex}
+                  </code>
                 </div>
-                <p className="text-xs text-muted-foreground">{f.description}</p>
+                <p className="break-words text-xs text-muted-foreground">{f.description}</p>
               </button>
             ))
           )}

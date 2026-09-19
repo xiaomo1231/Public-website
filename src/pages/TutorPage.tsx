@@ -7,6 +7,7 @@ import { Badge } from '@/shared/ui/Badge'
 import { EmptyState } from '@/shared/ui/EmptyState'
 import { LoadingState } from '@/shared/ui/LoadingState'
 import { PageContainer, PageContent, PageHeader } from '@/shared/ui/Page'
+import { TruncatedText } from '@/shared/ui/TruncatedText'
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -184,12 +185,14 @@ export function TutorPage(): JSX.Element {
                       setActiveTopicId(t.id)
                       navigate(`/projects/${projectId}/tutor/${t.id}`)
                     }}
-                    className={`flex w-full items-start gap-2 rounded-md px-2 py-2 text-left text-sm transition-colors ${
+                    className={`flex w-full min-w-0 items-start gap-2 rounded-md px-2 py-2 text-left text-sm transition-colors ${
                       activeTopic?.id === t.id ? 'bg-accent text-accent-foreground' : 'hover:bg-accent/50'
                     }`}
                   >
-                    <span className="mt-0.5 text-muted-foreground">{topics.indexOf(t) + 1}.</span>
-                    <span className="flex-1">{t.name}</span>
+                    <span className="mt-0.5 shrink-0 text-muted-foreground">
+                      {topics.indexOf(t) + 1}.
+                    </span>
+                    <TruncatedText text={t.name} className="min-w-0 flex-1" />
                   </button>
                 ))}
               </CardContent>

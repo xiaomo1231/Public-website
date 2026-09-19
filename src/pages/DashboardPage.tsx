@@ -18,6 +18,7 @@ import { EmptyState } from '@/shared/ui/EmptyState'
 import { LoadingState } from '@/shared/ui/LoadingState'
 import { PageContainer, PageContent, PageHeader } from '@/shared/ui/Page'
 import { Progress } from '@/shared/ui/Progress'
+import { TruncatedText } from '@/shared/ui/TruncatedText'
 import { WeaknessPanel } from '@/widgets/mistakes/WeaknessPanel'
 import { SUBJECT_LABEL_KEYS } from '@/entities/project/types'
 import { relativeTime } from '@/shared/lib/utils'
@@ -116,16 +117,20 @@ export function DashboardPage(): JSX.Element {
                       <Link
                         key={p.id}
                         to={`/projects/${p.id}`}
-                        className="flex items-center justify-between rounded-md border p-3 transition-colors hover:bg-accent"
+                        className="flex min-w-0 items-center justify-between gap-2 rounded-md border p-3 transition-colors hover:bg-accent"
                       >
                         <div className="min-w-0">
-                          <div className="truncate text-sm font-medium">{p.name}</div>
+                          <TruncatedText
+                            as="div"
+                            text={p.name}
+                            className="text-sm font-medium"
+                          />
                           <div className="text-xs text-muted-foreground">
                             {t(SUBJECT_LABEL_KEYS[p.subject])} ·{' '}
                             {t('dashboard.updatedAt', { date: relativeTime(p.updatedAt) })}
                           </div>
                         </div>
-                        <Badge variant="outline">{p.subject}</Badge>
+                        <Badge variant="outline" className="shrink-0">{p.subject}</Badge>
                       </Link>
                     ))
                   )}

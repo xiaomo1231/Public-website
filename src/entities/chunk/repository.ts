@@ -12,6 +12,14 @@ export class ChunkRepository {
     this.db = db ?? getDb()
   }
 
+  async get(id: string): Promise<DocumentChunk | undefined> {
+    try {
+      return await this.db.chunks.get(id)
+    } catch (err) {
+      throw new StorageError(t('storage.failedToListChunks'), err)
+    }
+  }
+
   async listByDocument(documentId: string): Promise<DocumentChunk[]> {
     try {
       return this.db.chunks

@@ -37,22 +37,22 @@ export function Header({ onOpenMobileNav }: HeaderProps): JSX.Element {
 
   return (
     <header className="flex h-14 items-center justify-between gap-3 border-b bg-background/95 px-4 backdrop-blur supports-[backdrop-filter]:bg-background/80 sm:px-6">
-      <div className="flex items-center gap-2">
+      <div className="flex min-w-0 items-center gap-2">
         <Button
           variant="ghost"
           size="icon"
-          className="lg:hidden"
+          className="shrink-0 lg:hidden"
           aria-label={t('header.openNavigation')}
           onClick={onOpenMobileNav}
         >
           <span className="block h-4 w-4 rounded-sm border" aria-hidden />
         </Button>
-        <div className="text-sm text-muted-foreground">
+        <div className="min-w-0 truncate text-sm text-muted-foreground">
           {profile ? t('header.welcomeNamed', { name: profile.name }) : t('header.welcome')}
         </div>
       </div>
 
-      <div className="flex items-center gap-2">
+      <div className="flex shrink-0 items-center gap-2">
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="ghost" size="icon" aria-label={t('header.changeTheme')}>
@@ -105,11 +105,15 @@ export function Header({ onOpenMobileNav }: HeaderProps): JSX.Element {
               <span className="grid h-7 w-7 place-items-center rounded-full bg-muted text-xs font-semibold uppercase">
                 {profile?.name?.[0] ?? 'S'}
               </span>
-              <span className="hidden sm:inline">{profile?.name ?? t('header.account')}</span>
+              <span className="hidden max-w-[12rem] truncate sm:inline">
+                {profile?.name ?? t('header.account')}
+              </span>
             </Button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <DropdownMenuLabel>{profile?.name ?? t('header.student')}</DropdownMenuLabel>
+          <DropdownMenuContent align="end" className="max-w-[min(90vw,20rem)]">
+            <DropdownMenuLabel className="truncate">
+              {profile?.name ?? t('header.student')}
+            </DropdownMenuLabel>
             <DropdownMenuSeparator />
             <DropdownMenuItem onSelect={() => void lock()}>
               <LogOut className="h-4 w-4" />

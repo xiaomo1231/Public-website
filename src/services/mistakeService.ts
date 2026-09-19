@@ -67,6 +67,8 @@ export class MistakeService {
       studentAnswer: attempt.userAnswer,
       correctAnswer: question.correctAnswer,
       ...(question.solution ? { solution: question.solution } : {}),
+      // Snapshot the citation so the mistake book can show the course excerpt.
+      ...(question.sourceRefs?.length ? { sourceRefs: question.sourceRefs } : {}),
       attemptIds: [attempt.id],
     })
   }
