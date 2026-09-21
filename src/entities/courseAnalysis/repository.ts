@@ -150,7 +150,17 @@ export class CourseAnalysisRepository {
   async reseedProject(
     projectId: string,
     seed: {
-      topics: Array<{ name: string; description: string; sourceRefs: SourceReference[] }>
+      topics: Array<{
+        name: string
+        description: string
+        sourceRefs: SourceReference[]
+        chapterId?: string
+        sectionId?: string
+        chapterNumber?: string
+        sectionNumber?: string
+        chapterTitle?: string
+        sectionTitle?: string
+      }>
       concepts: Array<{ name: string; definition: string; explanation?: string; topicNames: string[]; sourceRefs: SourceReference[] }>
       formulas: Array<{ name: string; latex: string; description: string; variables: Array<{ symbol: string; meaning: string }>; topicNames: string[]; sourceRefs: SourceReference[] }>
       symbols: Array<{ symbol: string; meaning: string; context: string; unit?: string; topicNames: string[]; sourceRefs: SourceReference[] }>
@@ -178,6 +188,12 @@ export class CourseAnalysisRepository {
       order: idx,
       topicIds: [],
       sourceRefs: t.sourceRefs,
+      ...(t.chapterId ? { chapterId: t.chapterId } : {}),
+      ...(t.sectionId ? { sectionId: t.sectionId } : {}),
+      ...(t.chapterNumber ? { chapterNumber: t.chapterNumber } : {}),
+      ...(t.sectionNumber ? { sectionNumber: t.sectionNumber } : {}),
+      ...(t.chapterTitle ? { chapterTitle: t.chapterTitle } : {}),
+      ...(t.sectionTitle ? { sectionTitle: t.sectionTitle } : {}),
       createdAt: now,
     }))
 

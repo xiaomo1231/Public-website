@@ -9,6 +9,25 @@
  * different activities with two different lifecycles.
  */
 
+import type { VisualSourceType } from '../visualSource/types'
+
+/**
+ * A preserved figure referenced by a lesson.
+ *
+ * It points at a stored `VisualSource`; the image bytes are loaded from
+ * IndexedDB on demand by the display component, so the lesson row itself stays
+ * small and the figure is never re-rendered on a cache hit.
+ */
+export interface TutorVisual {
+  id: string
+  documentId: string
+  pageNumber: number
+  type: VisualSourceType
+  caption: string
+  /** False when the page could not be rendered; only provenance is available. */
+  hasImage: boolean
+}
+
 /** A LaTeX symbol discovered in a lesson's own text. */
 export interface TutorSymbol {
   /** The LaTeX command or expression, e.g. `\cap`. Unique within a lesson. */
@@ -33,6 +52,9 @@ export interface TutorLesson {
   /** Extracted from `content`; never generated separately by the model. */
   symbols: TutorSymbol[]
 
+  /** Figures/diagrams the lesson references, preserved from the source. */
+  visuals?: TutorVisual[]
+
   /** Course chunks the lesson was grounded in. */
   sourceChunkIds: string[]
 
@@ -53,8 +75,13 @@ export interface TutorLesson {
   version: number
 }
 
-/** Current `TutorLesson.version`. */
-export const TUTOR_LESSON_VERSION = 1
+/**
+ * Current `TutorLesson.version`.
+ *
+ * v2 added preserved visual sources. A stored lesson with an older version is
+ * regenerated once so figures appear — after that it is cached as usual.
+ */
+export const TUTOR_LESSON_VERSION = 2
 
 /**
  * Cache key for a lesson. Two lessons with the same key are interchangeable,

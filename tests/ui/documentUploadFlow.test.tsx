@@ -57,8 +57,9 @@ function fileInput(): HTMLInputElement {
   return input
 }
 
+/** Opens the batch dialog from the Textbook entrance. */
 async function openDialog(user: ReturnType<typeof userEvent.setup>) {
-  await user.click(await screen.findByRole('button', { name: 'Upload' }))
+  await user.click(await screen.findByRole('button', { name: 'Upload Textbook' }))
   return await screen.findByRole('dialog')
 }
 
@@ -74,34 +75,36 @@ beforeEach(() => {
 })
 
 describe('document upload entry points', () => {
-  it('renders the Upload button when the project list is already loaded (normal app flow)', async () => {
+  it('renders the three material entrances when the project list is loaded', async () => {
     const id = await seedProject()
     await useProjectStore.getState().load()
     renderProjectPage(id)
 
-    expect(await screen.findByRole('button', { name: 'Upload' })).toBeInTheDocument()
+    expect(await screen.findByText('Learning Materials')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Upload Textbook' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Upload Notes' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Upload Transcript' })).toBeInTheDocument()
   })
 
-  it('renders the Upload button on a cold deep link (refresh / bookmark)', async () => {
+  it('renders the entrances on a cold deep link (refresh / bookmark)', async () => {
     const id = await seedProject()
     renderProjectPage(id)
 
-    expect(await screen.findByRole('button', { name: 'Upload' })).toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: 'Upload Textbook' })).toBeInTheDocument()
     expect(screen.queryByText('Projects list')).not.toBeInTheDocument()
   })
 
-  it('shows an empty-state call to action before any document exists', async () => {
+  it('shows each material type as its own section before any document exists', async () => {
     const id = await seedProject()
     await useProjectStore.getState().load()
     renderProjectPage(id)
 
-    expect(await screen.findByText('No content yet')).toBeInTheDocument()
-    expect(
-      screen.getByRole('button', { name: 'Upload your first document' }),
-    ).toBeInTheDocument()
+    expect(await screen.findByText('Textbook / Course Material')).toBeInTheDocument()
+    expect(screen.getByText('My Notes')).toBeInTheDocument()
+    expect(screen.getByText('Professor Lecture Transcript')).toBeInTheDocument()
   })
 
-  it('opens the batch upload dialog from the Upload button', async () => {
+  it('opens the batch upload dialog from the Textbook entrance', async () => {
     const user = userEvent.setup()
     const id = await seedProject()
     await useProjectStore.getState().load()
@@ -112,13 +115,13 @@ describe('document upload entry points', () => {
     expect(within(dialog).getByText('Drop files here or click to browse')).toBeInTheDocument()
   })
 
-  it('opens the dialog from the empty-state button too', async () => {
+  it('opens the dialog from the Notes entrance too', async () => {
     const user = userEvent.setup()
     const id = await seedProject()
     await useProjectStore.getState().load()
     renderProjectPage(id)
 
-    await user.click(await screen.findByRole('button', { name: 'Upload your first document' }))
+    await user.click(await screen.findByRole('button', { name: 'Upload Notes' }))
     expect(await screen.findByText('Upload Documents')).toBeInTheDocument()
   })
 })
@@ -261,6 +264,27 @@ describe('batch upload execution', () => {
     await waitFor(async () => {
       const docs = await new DocumentRepository(getDb()).listByProject(id)
       expect(docs).toHaveLength(3)
+    })
+  })
+
+  it('records the material type chosen at the entrance', async () => {
+    const user = userEvent.setup()
+    const id = await seedProject()
+    await useProjectStore.getState().load()
+    renderProjectPage(id)
+
+    await user.click(await screen.findByRole('button', { name: 'Upload Notes' }))
+    const dialog = await screen.findByRole('dialog')
+    await user.upload(fileInput(), pdfFile('Week 3 notes.pdf'))
+    await within(dialog).findByText('Week 3 notes.pdf')
+    await user.click(within(dialog).getByRole('button', { name: 'Upload 1 file' }))
+    await within(dialog).findByText('Upload Complete')
+    await user.click(within(dialog).getByRole('button', { name: 'Done' }))
+
+    await waitFor(async () => {
+      const docs = await new DocumentRepository(getDb()).listByProject(id)
+      expect(docs).toHaveLength(1)
+      expect(docs[0]?.materialType).toBe('user_notes')
     })
   })
 

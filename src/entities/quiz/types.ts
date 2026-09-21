@@ -17,6 +17,9 @@ export interface QuizConfig {
   count: number
   difficulty: QuizDifficulty
   types: QuestionType[]
+  /** Restrict retrieval to a textbook chapter/section (course structure). */
+  chapterId?: string
+  sectionId?: string
   /** Explicit knowledge points to focus on (review sessions, practice-this-mistake). */
   focusKnowledgePoints?: string[]
   /** When set, the session was launched from a specific mistake. */

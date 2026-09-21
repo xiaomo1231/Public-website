@@ -27,9 +27,12 @@ import type { ProjectService } from './projectService'
 import {
   collectSourceSnippetsDetailed,
   formatSnippetForPrompt,
+  scopeSnippetsByStructure,
   type SourceSnippet,
 } from './sourceContext'
 import { DocumentRepository } from '@/entities/document/repository'
+import { CourseContextRepository } from '@/entities/courseContext/repository'
+import { formatQuestionStyleContext } from './practiceService'
 import type { SourceReference } from '@/entities/courseAnalysis/types'
 import { logger } from '@/infrastructure/logger/logger'
 import { AppError } from '@/infrastructure/errors/AppError'
@@ -48,6 +51,8 @@ export interface QuizServiceDeps {
   mistakes?: MistakeService
   /** When provided, quiz generation verifies the project exists. */
   projects?: ProjectService
+  /** Supplies the professor's question-style profile, when one exists. */
+  contexts?: CourseContextRepository
 }
 
 export interface GenerateQuizOptions {
@@ -176,6 +181,7 @@ export class QuizService {
   private analyses: CourseAnalysisRepository
   private chunks: ChunkRepository
   private mastery: MasteryService
+  private contexts: CourseContextRepository
   private mistakes: MistakeService | null
   private projects: ProjectService | null
   private ai: AIService
@@ -188,6 +194,7 @@ export class QuizService {
     this.analyses = deps.analyses ?? new CourseAnalysisRepository(this.db)
     this.chunks = deps.chunks ?? new ChunkRepository(this.db)
     this.mastery = deps.mastery ?? new MasteryService(this.db)
+    this.contexts = deps.contexts ?? new CourseContextRepository(this.db)
     this.mistakes = deps.mistakes ?? null
     this.projects = deps.projects ?? null
     this.ai = deps.ai
@@ -286,17 +293,30 @@ export class QuizService {
         limit: 8,
         ...(knowledgePoints[0] ? { preferKeyword: knowledgePoints[0] } : {}),
       })
+      // Restrict to the requested chapter/section, so a chapter quiz can never
+      // pull questions from another chapter.
+      const scopedSnippets = scopeSnippetsByStructure(snippets, {
+        ...(config.chapterId ? { chapterId: config.chapterId } : {}),
+        ...(config.sectionId ? { sectionId: config.sectionId } : {}),
+      })
       // Only ids actually offered to the model can ever be cited.
-      const snippetIndex = new Map(snippets.map((s) => [s.chunkId, s]))
+      const snippetIndex = new Map(scopedSnippets.map((s) => [s.chunkId, s]))
 
       options.onProgress?.('generating', 30)
+      // How the professor writes questions (never what is tested). Absent when
+      // no Professor Practice has been imported, so behaviour is unchanged.
+      const courseContext = await this.contexts.get(projectId)
+      const professorStyleContext = courseContext?.questionStyleProfile
+        ? formatQuestionStyleContext(courseContext.questionStyleProfile)
+        : undefined
       const generated = await this.generateWithRetry({
         topicName,
         topicDescription,
         knowledgePoints,
         plan,
         language: analysis.language,
-        sourceSnippets: snippets.map(formatSnippetForPrompt),
+        sourceSnippets: scopedSnippets.map(formatSnippetForPrompt),
+        ...(professorStyleContext ? { professorStyleContext } : {}),
       }, options.signal)
 
       options.onProgress?.('storing', 80)

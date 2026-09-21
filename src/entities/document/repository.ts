@@ -65,6 +65,7 @@ export class DocumentRepository {
       id: crypto.randomUUID(),
       projectId: input.projectId,
       type: input.type,
+      materialType: input.materialType ?? 'textbook',
       name,
       sizeBytes: input.sizeBytes,
       hasBlob: Boolean(input.blob),
@@ -127,17 +128,34 @@ export class DocumentRepository {
 
   async delete(id: string): Promise<void> {
     const doc = await this.get(id)
+    const visualIds = await this.db.visualSources.where('documentId').equals(id).primaryKeys()
+    const structures = await this.db.courseStructures
+      .where('sourceDocumentId')
+      .equals(id)
+      .toArray()
     await this.db.transaction(
       'rw',
-      this.db.documents,
-      this.db.documentBlobs,
-      this.db.chunks,
-      this.db.processingJobs,
+      [
+        this.db.documents,
+        this.db.documentBlobs,
+        this.db.chunks,
+        this.db.processingJobs,
+        this.db.visualSources,
+        this.db.visualSourceImages,
+        this.db.courseStructures,
+        this.db.courseStructureNodes,
+      ],
       async () => {
         await this.db.documents.delete(id)
         await this.db.documentBlobs.delete(id)
         await this.db.chunks.where('documentId').equals(id).delete()
         await this.db.processingJobs.where('documentId').equals(id).delete()
+        await this.db.visualSources.where('documentId').equals(id).delete()
+        if (visualIds.length > 0) await this.db.visualSourceImages.bulkDelete(visualIds)
+        for (const structure of structures) {
+          await this.db.courseStructureNodes.where('structureId').equals(structure.id).delete()
+          await this.db.courseStructures.delete(structure.id)
+        }
       },
     )
     logger.warn('Document deleted', { id, projectId: doc.projectId })
@@ -151,15 +169,25 @@ export class DocumentRepository {
     if (ids.length === 0) return 0
     await this.db.transaction(
       'rw',
-      this.db.documents,
-      this.db.documentBlobs,
-      this.db.chunks,
-      this.db.processingJobs,
+      [
+        this.db.documents,
+        this.db.documentBlobs,
+        this.db.chunks,
+        this.db.processingJobs,
+        this.db.visualSources,
+        this.db.visualSourceImages,
+        this.db.courseStructures,
+        this.db.courseStructureNodes,
+      ],
       async () => {
         await this.db.documents.where('projectId').equals(projectId).delete()
         await this.db.documentBlobs.where('projectId').equals(projectId).delete()
         await this.db.chunks.where('projectId').equals(projectId).delete()
         await this.db.processingJobs.where('projectId').equals(projectId).delete()
+        await this.db.visualSources.where('projectId').equals(projectId).delete()
+        await this.db.visualSourceImages.where('projectId').equals(projectId).delete()
+        await this.db.courseStructureNodes.where('projectId').equals(projectId).delete()
+        await this.db.courseStructures.where('projectId').equals(projectId).delete()
       },
     )
     logger.warn('Documents deleted by project', { projectId, count: ids.length })

@@ -30,7 +30,23 @@ export interface SourceSnippet {
   documentName: string
   pageNumber?: number
   section?: string
+  /** Textbook structure, so retrieval can be scoped to a chapter/section. */
+  chapterId?: string
+  sectionId?: string
   text: string
+}
+
+/** Keep only snippets inside the requested chapter/section. */
+export function scopeSnippetsByStructure(
+  snippets: SourceSnippet[],
+  scope: { chapterId?: string; sectionId?: string },
+): SourceSnippet[] {
+  if (!scope.chapterId && !scope.sectionId) return snippets
+  return snippets.filter((snippet) => {
+    if (scope.chapterId && snippet.chapterId !== scope.chapterId) return false
+    if (scope.sectionId && snippet.sectionId !== scope.sectionId) return false
+    return true
+  })
 }
 
 /**
@@ -70,6 +86,8 @@ export async function collectSourceSnippetsDetailed(
         documentName: names.get(documentId) ?? '',
         ...(chunk.pageNumber !== undefined ? { pageNumber: chunk.pageNumber } : {}),
         ...(chunk.section ? { section: chunk.section } : {}),
+        ...(chunk.chapterId ? { chapterId: chunk.chapterId } : {}),
+        ...(chunk.sectionId ? { sectionId: chunk.sectionId } : {}),
         text: chunk.text,
       }
       if (preferKeyword && chunk.text.toLowerCase().includes(preferKeyword.toLowerCase())) {

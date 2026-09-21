@@ -1,5 +1,6 @@
 import { useCallback, useMemo, useRef, useState } from 'react'
 import { DocumentRepository } from '@/entities/document/repository'
+import type { LearningMaterialType } from '@/entities/document/types'
 import { getDb } from '@/infrastructure/db/database'
 import { toast } from '@/features/toast/toastStore'
 import { t } from '@/i18n'
@@ -20,10 +21,14 @@ export interface UseBatchUploadResult {
   items: UploadQueueItem[]
   summary: ReturnType<typeof summarizeBatch>
   running: boolean
-  addFiles: (files: File[]) => Promise<UploadQueueItem[]>
-  addText: (input: { text: string; name?: string }) => UploadQueueItem
+  addFiles: (files: File[], materialType?: LearningMaterialType) => Promise<UploadQueueItem[]>
+  addText: (input: { text: string; name?: string; materialType?: LearningMaterialType }) => UploadQueueItem
   /** Paste-text path: enqueue and immediately run, as a batch of one. */
-  addTextAndStart: (input: { text: string; name?: string }) => Promise<void>
+  addTextAndStart: (input: {
+    text: string
+    name?: string
+    materialType?: LearningMaterialType
+  }) => Promise<void>
   removeItem: (id: string) => void
   start: () => Promise<void>
   retryFailed: () => Promise<void>
@@ -54,7 +59,10 @@ export function useBatchUpload(projectId: string): UseBatchUploadResult {
   }, [])
 
   const addFiles = useCallback(
-    async (files: File[]): Promise<UploadQueueItem[]> => {
+    async (
+      files: File[],
+      materialType: LearningMaterialType = 'textbook',
+    ): Promise<UploadQueueItem[]> => {
       if (files.length === 0) return []
 
       let accepted = files
@@ -69,18 +77,25 @@ export function useBatchUpload(projectId: string): UseBatchUploadResult {
       }
 
       const documents = await new DocumentRepository(getDb()).listByProject(projectId)
-      const created = createFileQueueItems(accepted, documents.map(identityOfDocument))
+      const created = createFileQueueItems(
+        accepted,
+        documents.map(identityOfDocument),
+        materialType,
+      )
       setItems((prev) => [...prev, ...created])
       return created
     },
     [projectId],
   )
 
-  const addText = useCallback((input: { text: string; name?: string }): UploadQueueItem => {
-    const item = createTextQueueItem(input)
-    setItems((prev) => [...prev, item])
-    return item
-  }, [])
+  const addText = useCallback(
+    (input: { text: string; name?: string; materialType?: LearningMaterialType }): UploadQueueItem => {
+      const item = createTextQueueItem(input)
+      setItems((prev) => [...prev, item])
+      return item
+    },
+    [],
+  )
 
   const removeItem = useCallback((id: string) => {
     setItems((prev) => prev.filter((item) => item.id !== id))
@@ -119,8 +134,20 @@ export function useBatchUpload(projectId: string): UseBatchUploadResult {
 
             const input =
               item.kind === 'text'
-                ? { projectId, type: 'text' as const, text: item.text ?? '', name: item.name }
-                : { projectId, type: item.type ?? 'text', file: item.file, name: item.name }
+                ? {
+                    projectId,
+                    type: 'text' as const,
+                    materialType: item.materialType ?? 'textbook',
+                    text: item.text ?? '',
+                    name: item.name,
+                  }
+                : {
+                    projectId,
+                    type: item.type ?? 'text',
+                    materialType: item.materialType ?? 'textbook',
+                    file: item.file,
+                    name: item.name,
+                  }
 
             await uploadDocument(input, {
               isCancelled,
@@ -139,7 +166,7 @@ export function useBatchUpload(projectId: string): UseBatchUploadResult {
   )
 
   const addTextAndStart = useCallback(
-    async (input: { text: string; name?: string }) => {
+    async (input: { text: string; name?: string; materialType?: LearningMaterialType }) => {
       const item = createTextQueueItem(input)
       const next = [...itemsRef.current, item]
       setItems(next)

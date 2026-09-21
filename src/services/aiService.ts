@@ -8,6 +8,7 @@ import {
   extractJSON,
 } from '@/infrastructure/ai'
 import { InvalidJSONError, OutputTruncatedError } from '@/infrastructure/ai/errors'
+import { ThinkStreamFilter, stripThinkBlocks } from '@/infrastructure/ai/responseText'
 import { logger } from '@/infrastructure/logger/logger'
 
 /**
@@ -59,7 +60,9 @@ export class AIService {
       ...(options?.maxTokens !== undefined ? { maxTokens: options.maxTokens } : {}),
       ...(options?.signal ? { signal: options.signal } : {}),
     }
-    return this.provider.chat(req)
+    // Hidden reasoning never reaches a caller, so no renderer can show it.
+    const res = await this.provider.chat(req)
+    return { ...res, content: stripThinkBlocks(res.content) }
   }
 
   /**
@@ -81,21 +84,23 @@ export class AIService {
 
     const res = await this.provider.chat(req)
     assertNotTruncated(res, maxTokens)
+    const content = stripThinkBlocks(res.content)
     try {
-      const data = extractJSON<T>(res.content)
-      return { data, raw: res }
+      const data = extractJSON<T>(content)
+      return { data, raw: { ...res, content } }
     } catch (err) {
       if (err instanceof InvalidJSONError) {
         logger.warn('AI returned non-JSON despite json mode; falling back to plain text retry', {
           provider: this.provider.id,
-          length: res.content.length,
+          length: content.length,
         })
         // One retry without json mode to coax a parsable result.
         const retry = await this.provider.chat({ ...req, responseFormat: { type: 'text' } })
         assertNotTruncated(retry, maxTokens)
+        const retryContent = stripThinkBlocks(retry.content)
         try {
-          const data = extractJSON<T>(retry.content)
-          return { data, raw: retry }
+          const data = extractJSON<T>(retryContent)
+          return { data, raw: { ...retry, content: retryContent } }
         } catch (err2) {
           throw err2 instanceof InvalidJSONError ? err2 : err
         }
@@ -132,12 +137,15 @@ export class AIService {
       temperature: this.config.temperature,
     }
 
+    const filter = onDelta ? new ThinkStreamFilter(onDelta) : null
     const res = await this.provider.streamChat(req, (chunk) => {
-      if (chunk.delta && onDelta) onDelta(chunk.delta)
+      if (chunk.delta && filter) filter.push(chunk.delta)
     })
+    filter?.flush()
     assertNotTruncated(res, maxTokens)
-    const data = extractJSON<T>(res.content)
-    return { data, raw: res }
+    const content = stripThinkBlocks(res.content)
+    const data = extractJSON<T>(content)
+    return { data, raw: { ...res, content } }
   }
 
   /** The output token cap currently configured by the user. */
@@ -155,9 +163,14 @@ export class AIService {
       ...(options?.model ? { model: options.model } : {}),
       ...(options?.signal ? { signal: options.signal } : {}),
     }
-    return this.provider.streamChat(req, (chunk) => {
-      if (chunk.delta) onDelta(chunk.delta)
+    // Deltas are filtered as they arrive so hidden reasoning can never flash
+    // in the UI, even when a tag is split across chunks.
+    const filter = new ThinkStreamFilter(onDelta)
+    const res = await this.provider.streamChat(req, (chunk) => {
+      if (chunk.delta) filter.push(chunk.delta)
     })
+    filter.flush()
+    return { ...res, content: stripThinkBlocks(res.content) }
   }
 
   async testConnection(): Promise<{ ok: boolean; latencyMs: number; model: string; error?: string }> {

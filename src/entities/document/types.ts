@@ -2,6 +2,36 @@ import type { TranslationKey } from '@/i18n/types'
 
 export type DocumentType = 'pdf' | 'docx' | 'pptx' | 'image' | 'text'
 
+/**
+ * What a piece of learning material *is* in the tutor's world.
+ *
+ * The three roles are genuinely different and must not be merged:
+ *   - `textbook`           — the primary source of course facts
+ *   - `user_notes`         — the learner's own supplementary context
+ *   - `lecture_transcript` — the professor's teaching style + class coverage
+ */
+export type LearningMaterialType =
+  | 'textbook'
+  | 'user_notes'
+  | 'lecture_transcript'
+  | 'professor_practice'
+
+export const LEARNING_MATERIAL_TYPES: readonly LearningMaterialType[] = [
+  'textbook',
+  'user_notes',
+  'lecture_transcript',
+  'professor_practice',
+]
+
+export function isLearningMaterialType(value: unknown): value is LearningMaterialType {
+  return typeof value === 'string' && (LEARNING_MATERIAL_TYPES as readonly string[]).includes(value)
+}
+
+/** Material type with the backward-compatible default (`textbook`). */
+export function resolveMaterialType(value: unknown): LearningMaterialType {
+  return isLearningMaterialType(value) ? value : 'textbook'
+}
+
 export type ProcessingStatus = 'uploading' | 'processing' | 'ready' | 'failed'
 
 export const PROCESSING_STATUS_LABEL_KEYS: Record<ProcessingStatus, TranslationKey> = {
@@ -39,6 +69,8 @@ export interface Document {
   id: string
   projectId: string
   type: DocumentType
+  /** Role in the tutor. Older rows without it are treated as `textbook`. */
+  materialType?: LearningMaterialType
   name: string
   /** Original file size in bytes. 0 for text-only documents. */
   sizeBytes: number
@@ -75,6 +107,8 @@ export interface DocumentBlobRow {
 export interface CreateDocumentInput {
   projectId: string
   type: DocumentType
+  /** Defaults to `textbook` so existing callers keep working. */
+  materialType?: LearningMaterialType
   name: string
   sizeBytes: number
   mimeType?: string

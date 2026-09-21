@@ -23,6 +23,7 @@ import { Progress } from '@/shared/ui/Progress'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/shared/ui/Tabs'
 import { Textarea } from '@/shared/ui/Textarea'
 import { useTranslation, type TranslationKey } from '@/i18n'
+import type { LearningMaterialType } from '@/entities/document/types'
 import { ACCEPTED_TYPES } from '@/infrastructure/files/validation'
 import { formatBytes } from '@/shared/lib/format'
 import { cn } from '@/shared/lib/utils'
@@ -38,6 +39,8 @@ export interface DocumentUploadDialogProps {
   projectId: string
   open: boolean
   onOpenChange: (open: boolean) => void
+  /** Which learning-material role these files belong to. */
+  materialType?: LearningMaterialType
 }
 
 const TEXT_TAB = 'text' as const
@@ -95,6 +98,7 @@ export function DocumentUploadDialog({
   projectId,
   open,
   onOpenChange,
+  materialType = 'textbook',
 }: DocumentUploadDialogProps): JSX.Element {
   const { t } = useTranslation()
   const [mode, setMode] = useState<Mode>(FILE_TAB)
@@ -125,14 +129,14 @@ export function DocumentUploadDialog({
     const files = Array.from(event.target.files ?? [])
     // Reset so picking the same file again still fires `change`.
     event.target.value = ''
-    if (files.length > 0) await batch.addFiles(files)
+    if (files.length > 0) await batch.addFiles(files, materialType)
   }
 
   async function handleDrop(event: React.DragEvent<HTMLLabelElement>) {
     event.preventDefault()
     setDragOver(false)
     const files = Array.from(event.dataTransfer.files ?? [])
-    if (files.length > 0) await batch.addFiles(files)
+    if (files.length > 0) await batch.addFiles(files, materialType)
   }
 
   async function handleUploadText() {
@@ -141,7 +145,11 @@ export function DocumentUploadDialog({
     const name = textName
     setText('')
     setTextName('')
-    await batch.addTextAndStart({ text: body, ...(name.trim() ? { name: name.trim() } : {}) })
+    await batch.addTextAndStart({
+      text: body,
+      materialType,
+      ...(name.trim() ? { name: name.trim() } : {}),
+    })
   }
 
   function handleOpenChange(next: boolean) {

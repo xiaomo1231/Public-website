@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { ArrowLeft, Brain, Clock, ListChecks, Sparkles } from 'lucide-react'
+import { ArrowLeft, Brain, ClipboardList, Clock, ListChecks, Sparkles, Upload } from 'lucide-react'
 import { Button } from '@/shared/ui/Button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/shared/ui/Card'
 import { Badge } from '@/shared/ui/Badge'
@@ -101,6 +101,24 @@ export function QuizLandingPage(): JSX.Element {
         }
       />
       <PageContent className="space-y-6">
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <ClipboardList className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
+              {t('practice.title')}
+            </CardTitle>
+            <CardDescription>{t('practice.subtitle')}</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Button asChild variant="outline" size="sm">
+              <Link to={`/projects/${projectId}/practice`}>
+                <Upload className="h-4 w-4" />
+                {t('practice.upload')}
+              </Link>
+            </Button>
+          </CardContent>
+        </Card>
+
         <QuizConfigDialog projectId={projectId} onStart={handleStart} busy={busy} progress={progress} />
 
         {loading ? (

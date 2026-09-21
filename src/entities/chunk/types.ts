@@ -1,9 +1,11 @@
-import type { ChunkContentType } from '../document/types'
+import type { ChunkContentType, LearningMaterialType } from '../document/types'
 
 export interface DocumentChunk {
   id: string
   documentId: string
   projectId: string
+  /** Denormalised from the document so retrieval can filter without a join. */
+  materialType?: LearningMaterialType
   pageNumber?: number
   section?: string
   contentType: ChunkContentType
@@ -16,18 +18,32 @@ export interface DocumentChunk {
   sourceReference: string
   /** Position in the document; lower = earlier. */
   order: number
+  /** Textbook structure the chunk belongs to (textbook documents only). */
+  chapterId?: string
+  sectionId?: string
+  chapterNumber?: string
+  sectionNumber?: string
+  chapterTitle?: string
+  sectionTitle?: string
   createdAt: number
 }
 
 export interface NewChunkInput {
   documentId: string
   projectId: string
+  materialType?: LearningMaterialType
   pageNumber?: number
   section?: string
   contentType: ChunkContentType
   text: string
   sourceReference: string
   order: number
+  chapterId?: string
+  sectionId?: string
+  chapterNumber?: string
+  sectionNumber?: string
+  chapterTitle?: string
+  sectionTitle?: string
 }
 
 export function buildSourceReference(input: {

@@ -5,6 +5,7 @@ import { Card, CardContent } from '@/shared/ui/Card'
 import { ConfirmDialog } from '@/shared/ui/ConfirmDialog'
 import { LoadingState } from '@/shared/ui/LoadingState'
 import { RichText } from '@/shared/ui/RichText'
+import { VisualSourceFigure } from '@/widgets/source/VisualSourceFigure'
 import { stripDuplicateTitle } from '@/shared/lib/lessonDocument'
 import { useTranslation } from '@/i18n'
 import type { UseTutorLessonState } from '@/features/tutor/useTutorLesson'
@@ -98,6 +99,18 @@ export function TutorLessonView({
           format="markdown"
           paragraphClassName="text-[16.5px] leading-[1.8]"
         />
+
+        {/* Figures preserved from the source, shown as the original image. */}
+        {lesson.visuals && lesson.visuals.length > 0 && (
+          <section className="space-y-2" aria-label={t('tutor.visualSources')}>
+            <h2 className="text-[22px] font-semibold leading-snug tracking-tight text-foreground">
+              {t('tutor.visualSources')}
+            </h2>
+            {lesson.visuals.map((visual) => (
+              <VisualSourceFigure key={visual.id} visual={visual} />
+            ))}
+          </section>
+        )}
 
         <div className="flex flex-wrap items-center gap-2 border-t border-border/60 pt-4">
           <Button

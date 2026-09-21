@@ -12,6 +12,7 @@ import { ChatHistoryPage } from '@/pages/ChatHistoryPage'
 import { QuizLandingPage } from '@/pages/QuizLandingPage'
 import { QuizPage } from '@/pages/QuizPage'
 import { QuizResultPage } from '@/pages/QuizResultPage'
+import { PracticePage } from '@/pages/PracticePage'
 import { MasteryPage } from '@/pages/MasteryPage'
 import { MistakeBookPage } from '@/pages/MistakeBookPage'
 import { SettingsPage } from '@/pages/SettingsPage'
@@ -39,6 +40,7 @@ export const routes: RouteObject[] = [
       { path: 'projects/:id/quiz', element: <QuizLandingPage /> },
       { path: 'projects/:id/quiz/:quizId', element: <QuizPage /> },
       { path: 'projects/:id/quiz/:quizId/result', element: <QuizResultPage /> },
+      { path: 'projects/:id/practice', element: <PracticePage /> },
       { path: 'projects/:id/mastery', element: <MasteryPage /> },
       { path: 'projects/:id/mistakes', element: <MistakeBookPage /> },
       { path: 'projects/:id/documents/:did', element: <DocumentDetailPage /> },

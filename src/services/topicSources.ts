@@ -1,7 +1,9 @@
 import type { CourseAnalysisRepository } from '@/entities/courseAnalysis/repository'
 import type { ChunkRepository } from '@/entities/chunk/repository'
 import type { DocumentChunk } from '@/entities/chunk/types'
+import { resolveMaterialType, type LearningMaterialType } from '@/entities/document/types'
 import { normalizeMathNotation } from '@/infrastructure/files/mathNotation'
+import { overlapScore } from './classProgressService'
 
 /**
  * Resolving a topic's grounding material.
@@ -20,6 +22,8 @@ const MIN_QUOTE_CHARS = 12
 export interface TopicSource {
   chunkId: string
   documentId: string
+  /** Which learning material the chunk came from — drives prompt layering. */
+  materialType: LearningMaterialType
   pageNumber?: number
   section?: string
   text: string
@@ -67,6 +71,7 @@ export async function collectTopicSources(
     out.push({
       chunkId: chunk.id,
       documentId: chunk.documentId,
+      materialType: resolveMaterialType(chunk.materialType),
       ...(chunk.pageNumber !== undefined ? { pageNumber: chunk.pageNumber } : {}),
       ...(chunk.section ? { section: chunk.section } : {}),
       text: chunk.text,
@@ -110,6 +115,29 @@ export async function collectTopicSources(
     }
   }
   return out
+}
+
+/**
+ * Pick the chunks of a given material type that are most relevant to a topic.
+ *
+ * Used for notes and transcripts, which are not tied to a topic's citations
+ * the way the textbook is. Ranking is token overlap — deterministic and
+ * explainable, with no embeddings (there are none in this project yet).
+ */
+export function rankContextChunks(
+  chunks: DocumentChunk[],
+  topicName: string,
+  topicDescription: string,
+  limit: number,
+): DocumentChunk[] {
+  if (chunks.length === 0 || limit <= 0) return []
+  const query = `${topicName} ${topicDescription}`
+  return chunks
+    .map((chunk) => ({ chunk, score: overlapScore(query, chunk.text) }))
+    .filter((entry) => entry.score > 0)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, limit)
+    .map((entry) => entry.chunk)
 }
 
 /**

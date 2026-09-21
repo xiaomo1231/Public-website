@@ -17,8 +17,15 @@ export interface LessonInput {
   topicName: string
   topicDescription: string
   language: 'zh' | 'en' | 'mixed'
-  /** Grounding material from the course, already trimmed. */
+  /** Primary course material (textbook), already trimmed. */
   sourceSnippets: string[]
+  /** Supplementary learner notes, matched to this topic. */
+  notesSnippets?: string[]
+  /** Lecture transcript excerpts — teaching style / class context. */
+  transcriptSnippets?: string[]
+  /** Where this topic sits in the textbook structure, e.g. "3 — Derivatives". */
+  chapterLabel?: string
+  sectionLabel?: string
 }
 
 export function buildSystemPrompt(): string {
@@ -57,9 +64,27 @@ export function buildSystemPrompt(): string {
     '  - For the symmetric difference of two sets the standard notation is \\triangle, NOT \\oplus. Write \\[A \\triangle B = (A \\setminus B) \\cup (B \\setminus A)\\], and do not transcribe a recovered circled-plus glyph as \\oplus when the context is set symmetric difference.',
     '  - If you cannot determine the mathematical meaning reliably, omit the expression. Do not guess at a complex formula and do not leave a placeholder in the lesson.',
     '',
+    'VISUAL SOURCE MATERIAL:',
+    '  - Some source material may contain diagrams, figures, charts, Venn diagrams, screenshots, or mathematical content embedded as images.',
+    '  - A snippet marked as a preserved figure is shown to the student as the original image. Refer to it (for example "Consider the following Venn diagram") instead of reproducing or reconstructing its text.',
+    '  - Do not invent or reconstruct a mathematical expression from uncertain OCR text. If the exact symbolic meaning is uncertain, explain the idea in words or omit it.',
+    '  - Prefer the original visual source over an uncertain transcription.',
+    '',
+    'COURSE STRUCTURE:',
+    '  - The textbook chapter and section hierarchy is authoritative. Explain the material within its original textbook context.',
+    '  - Do not move content to another chapter, invent chapter numbers, or rename the chapter/section.',
+    '',
+    'LEARNING MATERIAL ROLES:',
+    '  - The course material (textbook) is the PRIMARY source of course facts. Base definitions and results on it.',
+    '  - User notes are SUPPLEMENTARY learner context: they show what the learner found important, their own explanations, examples and questions. They may contain mistakes. Use them to target the explanation; never silently treat a note as authoritative when it conflicts with the course material.',
+    '  - The lecture transcript shows HOW the professor teaches (intuition, analogies, emphasis, sequence). Use it for explanation style and class context — not to replace the textbook\'s formal definitions.',
+    '  - When sources disagree, state each position instead of deciding which is "correct": e.g. "The course material states X. Your notes mention Y."',
+    '  - If a note says something like "the professor said this will be on the exam", phrase it as a possibility from the notes ("Your notes indicate the professor emphasised this"), never as a certainty.',
+    '',
     'GROUNDING:',
     '  - Base the lesson on the supplied source material. You may add standard background knowledge, but mark it clearly as supplementary.',
     '  - Never present your own words as a quotation from the course material.',
+    '  - Do not invent source citations.',
     '',
     'Respond in the requested language. Output Markdown with LaTeX; no code fences around the whole answer.',
     '',
@@ -80,9 +105,28 @@ export function buildUserPrompt(input: LessonInput): string {
     input.topicDescription ? `Topic summary: ${input.topicDescription}.` : '',
     `Write in: ${language}.`,
     '',
+    input.chapterLabel || input.sectionLabel
+      ? [
+          'CURRENT MATERIAL (textbook position — authoritative):',
+          input.chapterLabel ? `Chapter: ${input.chapterLabel}` : '',
+          input.sectionLabel ? `Section: ${input.sectionLabel}` : '',
+        ]
+          .filter(Boolean)
+          .join('\n')
+      : '',
+    '',
     input.sourceSnippets.length > 0
-      ? untrustedContentWrapper('COURSE SOURCE MATERIAL', input.sourceSnippets.join('\n\n'))
+      ? untrustedContentWrapper('PRIMARY COURSE MATERIAL (TEXTBOOK)', input.sourceSnippets.join('\n\n'))
       : 'No course source material was available for this topic; rely on standard textbook knowledge and mark it as supplementary.',
+    input.notesSnippets && input.notesSnippets.length > 0
+      ? untrustedContentWrapper('SUPPLEMENTARY LEARNER NOTES', input.notesSnippets.join('\n\n'))
+      : '',
+    input.transcriptSnippets && input.transcriptSnippets.length > 0
+      ? untrustedContentWrapper(
+          'LECTURE TRANSCRIPT (TEACHING STYLE AND CLASS CONTEXT)',
+          input.transcriptSnippets.join('\n\n'),
+        )
+      : '',
     '',
     'Remember: teaching text only. Do not ask the student anything and do not end with an exercise.',
   ]

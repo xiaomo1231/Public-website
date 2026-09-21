@@ -21,6 +21,17 @@ export interface Topic {
   description: string
   order: number
   sourceRefs: SourceReference[]
+  /**
+   * Where this teaching topic sits in the textbook structure. Topics may
+   * regroup sections for teaching, but they must not override the textbook's
+   * own chapters/sections.
+   */
+  chapterId?: string
+  sectionId?: string
+  chapterNumber?: string
+  sectionNumber?: string
+  chapterTitle?: string
+  sectionTitle?: string
   createdAt: number
 }
 

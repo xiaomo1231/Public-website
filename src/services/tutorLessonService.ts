@@ -3,21 +3,27 @@ import { getDb } from '@/infrastructure/db/database'
 import { CourseAnalysisRepository } from '@/entities/courseAnalysis/repository'
 import type { Topic } from '@/entities/courseAnalysis/types'
 import { ChunkRepository } from '@/entities/chunk/repository'
+import type { DocumentChunk } from '@/entities/chunk/types'
 import { TutorLessonRepository } from '@/entities/tutorLesson/repository'
-import type { TutorLesson, TutorLessonKey } from '@/entities/tutorLesson/types'
+import type { TutorLesson, TutorLessonKey, TutorVisual } from '@/entities/tutorLesson/types'
 import { TUTOR_LESSON_VERSION } from '@/entities/tutorLesson/types'
-import { collectTopicSources, formatTopicSources } from './topicSources'
+import { VisualSourceRepository } from '@/entities/visualSource/repository'
+import { collectTopicSources, rankContextChunks, type TopicSource } from './topicSources'
+import { resolveMaterialType } from '@/entities/document/types'
 import type { AIService } from './aiService'
 import type { ChatMessage } from '@/infrastructure/ai/types'
 import { prompts } from '@/infrastructure/ai/prompts'
 import { extractSymbolsFromMarkdown } from '@/shared/lib/latexSymbols'
 import { normalizeExtractedText } from '@/infrastructure/files/textEncoding'
 import { normalizeMathNotation } from '@/infrastructure/files/mathNotation'
+import { looksLikeUnreliableVisualText } from '@/infrastructure/files/visualDetection'
 import { AppError } from '@/infrastructure/errors/AppError'
 import { logger } from '@/infrastructure/logger/logger'
 import { t } from '@/i18n'
 
 const MAX_LESSON_SOURCES = 8
+/** Notes / transcript excerpts pulled in alongside the textbook for a topic. */
+const MAX_CONTEXT_SOURCES = 4
 
 /**
  * Concurrent callers for the same lesson share one request.
@@ -61,13 +67,22 @@ export interface TutorLessonOptions {
  * folded in so a prompt change also invalidates.
  */
 export function computeLessonContentHash(
-  topic: Pick<Topic, 'name' | 'description' | 'sourceRefs'>,
+  topic: Pick<Topic, 'name' | 'description' | 'sourceRefs'> & {
+    chapterId?: string
+    sectionId?: string
+  },
   promptVersion: string,
+  /** Hash of the notes/transcript context actually used for this topic. */
+  contextHash = '',
 ): string {
   const payload = JSON.stringify({
     promptVersion,
+    contextHash,
     name: topic.name,
     description: topic.description,
+    // A structure change must invalidate the affected lesson, not all of them.
+    chapterId: topic.chapterId ?? '',
+    sectionId: topic.sectionId ?? '',
     refs: (topic.sourceRefs ?? []).map((ref) => [
       ref.documentId,
       ref.page,
@@ -105,6 +120,7 @@ export class TutorLessonService {
   private lessons: TutorLessonRepository
   private analyses: CourseAnalysisRepository
   private chunks: ChunkRepository
+  private visuals: VisualSourceRepository
   private ai: AIService
 
   constructor(deps: {
@@ -113,11 +129,13 @@ export class TutorLessonService {
     lessons?: TutorLessonRepository
     analyses?: CourseAnalysisRepository
     chunks?: ChunkRepository
+    visuals?: VisualSourceRepository
   }) {
     this.db = deps.db ?? getDb()
     this.lessons = deps.lessons ?? new TutorLessonRepository(this.db)
     this.analyses = deps.analyses ?? new CourseAnalysisRepository(this.db)
     this.chunks = deps.chunks ?? new ChunkRepository(this.db)
+    this.visuals = deps.visuals ?? new VisualSourceRepository(this.db)
     this.ai = deps.ai
   }
 
@@ -162,11 +180,15 @@ export class TutorLessonService {
     if (!topic) throw new AppError(t('errors.topicNotFound'), 'NOT_FOUND')
 
     const promptVersion = prompts.tutorLesson.VERSION
-    const contentHash = computeLessonContentHash(topic, promptVersion)
+    // The hash must include the notes/transcript context this topic would use,
+    // otherwise a stored lesson could never match.
+    const { contextHash } = await this.topicContext(input, topic)
+    const contentHash = computeLessonContentHash(topic, promptVersion, contextHash)
 
     const stored = await this.lessons.find(input)
     if (
       stored &&
+      stored.version === TUTOR_LESSON_VERSION &&
       stored.contentHash === contentHash &&
       stored.promptVersion === promptVersion &&
       stored.content.trim().length > 0
@@ -209,6 +231,23 @@ export class TutorLessonService {
       MAX_LESSON_SOURCES,
     )
 
+    // Figures are attached to the lesson as visual sources. Where a source
+    // chunk is an unreliable transcription of one of those figures, the model
+    // is told to reference the figure instead of reproducing the broken text.
+    const visuals = await this.collectVisuals(sources)
+
+    // Textbook is the primary source; notes and transcript are retrieved
+    // separately, ranked by relevance to this topic only.
+    const textbookSources = sources.filter((source) => source.materialType === 'textbook')
+    const { notesChunks, transcriptChunks, contextHash } = await this.topicContext(input, topic)
+
+    const notesSnippets = notesChunks.map(
+      (chunk) => `[${chunk.sourceReference}] ${normalizeMathNotation(chunk.text).text}`,
+    )
+    const transcriptSnippets = transcriptChunks.map(
+      (chunk) => `[${chunk.sourceReference}] ${normalizeMathNotation(chunk.text).text}`,
+    )
+
     const messages: ChatMessage[] = [
       { role: 'system', content: prompts.tutorLesson.buildSystemPrompt() },
       {
@@ -217,7 +256,15 @@ export class TutorLessonService {
           topicName: input.topicName,
           topicDescription: input.topicDescription,
           language: input.language,
-          sourceSnippets: formatTopicSources(sources),
+          sourceSnippets: this.buildSourceSnippets(textbookSources, visuals),
+          ...(notesSnippets.length > 0 ? { notesSnippets } : {}),
+          ...(transcriptSnippets.length > 0 ? { transcriptSnippets } : {}),
+          ...(topic.chapterNumber || topic.chapterTitle
+            ? { chapterLabel: [topic.chapterNumber, topic.chapterTitle].filter(Boolean).join(' — ') }
+            : {}),
+          ...(topic.sectionNumber || topic.sectionTitle
+            ? { sectionLabel: [topic.sectionNumber, topic.sectionTitle].filter(Boolean).join(' — ') }
+            : {}),
         }),
       },
     ]
@@ -265,8 +312,13 @@ export class TutorLessonService {
       // disagree with what the student read. Only real maths is scanned, so
       // code samples and prose cannot inject fake symbols.
       symbols: extractSymbolsFromMarkdown(content),
-      sourceChunkIds: sources.map((source) => source.chunkId),
-      contentHash: computeLessonContentHash(topic, prompts.tutorLesson.VERSION),
+      ...(visuals.length > 0 ? { visuals } : {}),
+      sourceChunkIds: [
+        ...sources.map((source) => source.chunkId),
+        ...notesChunks.map((chunk) => chunk.id),
+        ...transcriptChunks.map((chunk) => chunk.id),
+      ],
+      contentHash: computeLessonContentHash(topic, prompts.tutorLesson.VERSION, contextHash),
       promptVersion: prompts.tutorLesson.VERSION,
       ...(response.model ? { model: response.model } : {}),
       generatedAt: now,
@@ -284,8 +336,89 @@ export class TutorLessonService {
       language: input.language,
       chars: content.length,
       symbols: lesson.symbols.length,
+      visuals: visuals.length,
     })
 
     return { lesson, fromCache: false }
+  }
+
+  /**
+   * Notes and transcript excerpts relevant to one topic, plus a hash of that
+   * context. Shared by the cache check and generation so the two always agree,
+   * and so changing a note about a *different* topic cannot invalidate this
+   * lesson.
+   */
+  private async topicContext(
+    input: TutorLessonInput,
+    topic: Pick<Topic, 'name' | 'description'>,
+  ): Promise<{
+    notesChunks: DocumentChunk[]
+    transcriptChunks: DocumentChunk[]
+    contextHash: string
+  }> {
+    const allChunks = await this.chunks.listByProject(input.projectId)
+    const notesChunks = rankContextChunks(
+      allChunks.filter((chunk) => resolveMaterialType(chunk.materialType) === 'user_notes'),
+      topic.name,
+      topic.description ?? '',
+      MAX_CONTEXT_SOURCES,
+    )
+    const transcriptChunks = rankContextChunks(
+      allChunks.filter((chunk) => resolveMaterialType(chunk.materialType) === 'lecture_transcript'),
+      topic.name,
+      topic.description ?? '',
+      MAX_CONTEXT_SOURCES,
+    )
+    const contextHash = fnv1a([...notesChunks, ...transcriptChunks].map((c) => c.id).join('|'))
+    return { notesChunks, transcriptChunks, contextHash }
+  }
+
+  /**
+   * Figures that belong to the topic's source pages.
+   *
+   * Only provenance is read here — the image bytes stay in IndexedDB and are
+   * loaded by the display component, so a cache hit costs no rendering.
+   */
+  private async collectVisuals(sources: TopicSource[]): Promise<TutorVisual[]> {
+    const found = new Map<string, TutorVisual>()
+    for (const source of sources) {
+      if (source.pageNumber === undefined) continue
+      const visuals = await this.visuals.listByDocumentPage(source.documentId, source.pageNumber)
+      for (const visual of visuals) {
+        if (found.has(visual.id)) continue
+        found.set(visual.id, {
+          id: visual.id,
+          documentId: visual.documentId,
+          pageNumber: visual.pageNumber,
+          type: visual.type,
+          caption: visual.caption,
+          hasImage: visual.imageMimeType.length > 0,
+        })
+      }
+    }
+    return [...found.values()]
+  }
+
+  /**
+   * Prompt snippets. A chunk whose text is an unreliable transcription of a
+   * figure that we have preserved is replaced by a pointer to that figure, so
+   * the model neither reads nor echoes the broken glyphs. Normal text is
+   * canonicalised as before.
+   */
+  private buildSourceSnippets(sources: TopicSource[], visuals: TutorVisual[]): string[] {
+    return sources.map((source) => {
+      const coveredByVisual =
+        source.pageNumber !== undefined &&
+        visuals.some(
+          (visual) =>
+            visual.documentId === source.documentId && visual.pageNumber === source.pageNumber,
+        )
+
+      if (coveredByVisual && looksLikeUnreliableVisualText(source.text)) {
+        return `[${source.label}] [Figure preserved as a visual source on page ${source.pageNumber}; the original image is shown to the student. Do not reproduce or reconstruct its text.]`
+      }
+
+      return `[${source.label}] ${normalizeMathNotation(source.text).text}`
+    })
   }
 }

@@ -53,6 +53,96 @@ export interface ExtractedPage {
   headings: Array<{ text: string; level: number }>
   tables: string[][][]
   hasContent: boolean
+  /**
+   * Number of image-painting operators on the page. A non-zero count means the
+   * page carries an embedded picture (a Venn diagram, a chart, an image-based
+   * formula), which is a signal to preserve the visual rather than trust the
+   * extracted text.
+   */
+  imageCount: number
+}
+
+export interface RenderedPageImage {
+  bytes: ArrayBuffer
+  mimeType: string
+  width: number
+  height: number
+}
+
+let imageOperatorsCache: ReadonlySet<number> | null = null
+
+/**
+ * pdf.js image-painting operators, resolved lazily.
+ *
+ * Lazy + guarded on purpose: tests replace `pdfjs-dist` with a partial mock
+ * that has no `OPS`, and touching a missing export throws. A missing enum must
+ * degrade to "no image detection", never crash the page.
+ */
+function imageOperators(): ReadonlySet<number> {
+  if (imageOperatorsCache) return imageOperatorsCache
+  let operators = new Set<number>()
+  try {
+    const ops = (pdfjsLib as unknown as { OPS?: Record<string, number> }).OPS
+    if (ops) {
+      operators = new Set(
+        [
+          ops.paintImageXObject,
+          ops.paintInlineImageXObject,
+          ops.paintImageMaskXObject,
+          ops.paintImageXObjectRepeat,
+          ops.paintImageMaskXObjectRepeat,
+          ops.paintSolidColorImageMask,
+        ].filter((op): op is number => typeof op === 'number'),
+      )
+    }
+  } catch {
+    /* mocked pdfjs without OPS */
+  }
+  imageOperatorsCache = operators
+  return operators
+}
+
+/**
+ * Render one page to a PNG. Browser-only: it needs a real 2D canvas, so it
+ * returns `null` in environments without one (including jsdom) and callers must
+ * treat that as "no image available", never as an error.
+ */
+export async function renderPdfPageImage(
+  blob: Blob,
+  pageNumber: number,
+  scale = 2,
+): Promise<RenderedPageImage | null> {
+  if (typeof document === 'undefined') return null
+  try {
+    ensureWorker()
+    const arrayBuffer = await blob.arrayBuffer()
+    const pdf = await pdfjsLib.getDocument({
+      data: arrayBuffer,
+      ...(isTestEnvironment() ? { disableWorker: true } : {}),
+    }).promise
+    try {
+      const page = await pdf.getPage(pageNumber)
+      const viewport = page.getViewport({ scale })
+      const canvas = document.createElement('canvas')
+      canvas.width = Math.max(1, Math.ceil(viewport.width))
+      canvas.height = Math.max(1, Math.ceil(viewport.height))
+      const context = canvas.getContext('2d')
+      if (!context) return null
+      await page.render({ canvas, canvasContext: context, viewport }).promise
+      const rendered = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/png'))
+      if (!rendered) return null
+      return {
+        bytes: await rendered.arrayBuffer(),
+        mimeType: 'image/png',
+        width: canvas.width,
+        height: canvas.height,
+      }
+    } finally {
+      await pdf.cleanup()
+    }
+  } catch {
+    return null
+  }
 }
 
 export interface PdfExtractionResult {
@@ -136,6 +226,20 @@ export async function extractPdf(blob: Blob): Promise<PdfExtractionResult> {
   for (let i = 1; i <= pageCount; i++) {
     try {
       const page = await pdf.getPage(i)
+      // Best-effort image detection. A failure here must not fail the page:
+      // the text extraction below is what the pipeline depends on.
+      let imageCount = 0
+      try {
+        const operators = imageOperators()
+        if (operators.size > 0) {
+          const ops = await page.getOperatorList()
+          for (const fn of ops.fnArray) {
+            if (operators.has(fn)) imageCount++
+          }
+        }
+      } catch {
+        /* image detection is optional */
+      }
       const textContent = await page.getTextContent()
       const items = (textContent.items as unknown[]).filter(isTextItem)
       const lines = groupTextItemsIntoLines(items)
@@ -156,11 +260,19 @@ export async function extractPdf(blob: Blob): Promise<PdfExtractionResult> {
         headings,
         tables: [],
         hasContent: pageText.trim().length > 0,
+        imageCount,
       })
       page.cleanup()
     } catch (err) {
       warnings.push(`Page ${i} extraction failed: ${(err as Error).message}`)
-      pages.push({ pageNumber: i, text: '', headings: [], tables: [], hasContent: false })
+      pages.push({
+        pageNumber: i,
+        text: '',
+        headings: [],
+        tables: [],
+        hasContent: false,
+        imageCount: 0,
+      })
     }
   }
 

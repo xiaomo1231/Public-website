@@ -13,6 +13,9 @@ import type { SourceReference as CourseSourceRef } from '@/entities/courseAnalys
 import { logger } from '@/infrastructure/logger/logger'
 import { AppError } from '@/infrastructure/errors/AppError'
 import { asRecord } from '@/infrastructure/ai/validation'
+import type { DocumentChunk } from '@/entities/chunk/types'
+import { overlapScore } from './classProgressService'
+import { resolveMaterialType } from '@/entities/document/types'
 import { normalizeMathNotation } from '@/infrastructure/files/mathNotation'
 import { t } from '@/i18n'
 
@@ -97,7 +100,20 @@ export class DocumentAnalysisService {
       throw new AppError(t('errors.noProcessedDocuments'), 'NO_DOCUMENTS')
     }
 
-    const documentText = await this.collectText(projectId, readyDocs.map((d) => d.id), onProgress)
+    // The textbook is the primary source of course facts. Notes and lecture
+    // transcripts are context for the tutor, not the basis of the analysis —
+    // unless there is no textbook at all.
+    const textbookDocs = readyDocs.filter(
+      (d) => resolveMaterialType(d.materialType) === 'textbook',
+    )
+    const analysisDocs = textbookDocs.length > 0 ? textbookDocs : readyDocs
+    // Chunks carry the textbook chapter/section they came from; the analysis is
+    // grounded in that structure instead of re-inventing an outline.
+    const analysisChunks = (
+      await Promise.all(analysisDocs.map((doc) => this.chunks.listByDocument(doc.id)))
+    ).flat()
+
+    const documentText = await this.collectText(projectId, analysisDocs.map((d) => d.id), onProgress)
     const language = await this.detectLanguage(documentText)
     onProgress?.({ stage: 'analyzing', progress: 30, message: t('stage.askingAi') })
 
@@ -110,7 +126,7 @@ export class DocumentAnalysisService {
       status: 'analyzing',
       language,
       progress: 30,
-      documentIds: readyDocs.map((d) => d.id),
+      documentIds: analysisDocs.map((d) => d.id),
       topicCount: 0,
       formulaCount: 0,
       symbolCount: 0,
@@ -125,7 +141,7 @@ export class DocumentAnalysisService {
         {
           role: 'user',
           content: prompts.documentAnalyzer.buildUserPrompt({
-            documentName: readyDocs.map((d) => d.name).join(', '),
+            documentName: analysisDocs.map((d) => d.name).join(', '),
             documentText: documentText.slice(0, MAX_DOC_CHARS),
             language,
             subject,
@@ -201,7 +217,7 @@ export class DocumentAnalysisService {
         status: 'failed',
         language,
         progress: 60,
-        documentIds: readyDocs.map((d) => d.id),
+        documentIds: analysisDocs.map((d) => d.id),
         topicCount: seed?.topicCount ?? 0,
         formulaCount: seed?.formulaCount ?? 0,
         symbolCount: seed?.symbolCount ?? 0,
@@ -222,7 +238,8 @@ export class DocumentAnalysisService {
         name: t.name,
         description: t.description,
         order: idx,
-        sourceRefs: normalizeSourceRefs(t.sourceRefs, readyDocs),
+        sourceRefs: normalizeSourceRefs(t.sourceRefs, analysisDocs),
+        ...bestStructureRef(`${t.name} ${t.description}`, analysisChunks),
       }
     })
 
@@ -235,7 +252,7 @@ export class DocumentAnalysisService {
           definition: c.definition,
           ...(c.explanation ? { explanation: c.explanation } : {}),
           topicNames: c.topicNames,
-          sourceRefs: normalizeSourceRefs(c.sourceRefs, readyDocs),
+          sourceRefs: normalizeSourceRefs(c.sourceRefs, analysisDocs),
         })),
         formulas: output.formulas.map((f) => ({
           name: f.name,
@@ -243,7 +260,7 @@ export class DocumentAnalysisService {
           description: f.description,
           variables: f.variables,
           topicNames: [],
-          sourceRefs: normalizeSourceRefs(f.sourceRefs, readyDocs),
+          sourceRefs: normalizeSourceRefs(f.sourceRefs, analysisDocs),
         })),
         symbols: output.symbols.map((s) => ({
           symbol: s.symbol,
@@ -251,20 +268,20 @@ export class DocumentAnalysisService {
           context: s.context,
           ...(s.unit ? { unit: s.unit } : {}),
           topicNames: [],
-          sourceRefs: normalizeSourceRefs(s.sourceRefs, readyDocs),
+          sourceRefs: normalizeSourceRefs(s.sourceRefs, analysisDocs),
         })),
         examples: output.examples.map((e) => ({
           title: e.title,
           problem: e.problem,
           ...(e.solution ? { solution: e.solution } : {}),
           topicNames: e.topicNames,
-          sourceRefs: normalizeSourceRefs(e.sourceRefs, readyDocs),
+          sourceRefs: normalizeSourceRefs(e.sourceRefs, analysisDocs),
         })),
         exercises: output.exercises.map((ex) => ({
           prompt: ex.prompt,
           difficulty: ex.difficulty,
           topicNames: ex.topicNames,
-          sourceRefs: normalizeSourceRefs(ex.sourceRefs, readyDocs),
+          sourceRefs: normalizeSourceRefs(ex.sourceRefs, analysisDocs),
         })),
         prerequisites: output.prerequisites.map((p) => ({
           name: p.name,
@@ -272,7 +289,7 @@ export class DocumentAnalysisService {
           topicNames: p.topicNames,
         })),
         topicsByName,
-        documentIds: readyDocs.map((d) => d.id),
+        documentIds: analysisDocs.map((d) => d.id),
       },
       output.language ?? language,
       analysisId,
@@ -295,7 +312,14 @@ export class DocumentAnalysisService {
       const heading = `=== ${id} ===`
       const body = sliced
         .map((c) => {
-          const prefix = c.pageNumber ? `[p${c.pageNumber}${c.section ? ' · ' + c.section : ''}] ` : c.section ? `[§ ${c.section}] ` : ''
+          // Carry the textbook chapter/section into the prompt so the model can
+          // place each passage in the book's own outline.
+          const parts = [
+            c.chapterNumber ? `Ch ${c.chapterNumber}` : c.chapterTitle,
+            c.sectionNumber ?? (c.section || undefined),
+            c.pageNumber !== undefined ? `p${c.pageNumber}` : undefined,
+          ].filter((part): part is string => Boolean(part))
+          const prefix = parts.length > 0 ? `[${parts.join(' · ')}] ` : ''
           // Canonicalise maths before it reaches the model: recover Symbol-font
           // Private Use Area glyphs and convert Unicode maths to LaTeX, so the
           // analyzer never ingests opaque characters it would echo back. The
@@ -327,6 +351,38 @@ export class DocumentAnalysisService {
     if (zh > en * 2) return 'zh'
     if (en > zh * 2) return 'en'
     return 'mixed'
+  }
+}
+
+/**
+ * Textbook structure a teaching topic best matches. Deterministic token
+ * overlap — the model never gets to renumber the book.
+ */
+function bestStructureRef(
+  query: string,
+  chunks: DocumentChunk[],
+): {
+  chapterId?: string
+  sectionId?: string
+  chapterNumber?: string
+  sectionNumber?: string
+  chapterTitle?: string
+  sectionTitle?: string
+} {
+  let best: { chunk: DocumentChunk; score: number } | null = null
+  for (const chunk of chunks) {
+    const score = overlapScore(query, chunk.text)
+    if (!best || score > best.score) best = { chunk, score }
+  }
+  if (!best || best.score <= 0) return {}
+  const { chunk } = best
+  return {
+    ...(chunk.chapterId ? { chapterId: chunk.chapterId } : {}),
+    ...(chunk.sectionId ? { sectionId: chunk.sectionId } : {}),
+    ...(chunk.chapterNumber ? { chapterNumber: chunk.chapterNumber } : {}),
+    ...(chunk.sectionNumber ? { sectionNumber: chunk.sectionNumber } : {}),
+    ...(chunk.chapterTitle ? { chapterTitle: chunk.chapterTitle } : {}),
+    ...(chunk.sectionTitle ? { sectionTitle: chunk.sectionTitle } : {}),
   }
 }
 

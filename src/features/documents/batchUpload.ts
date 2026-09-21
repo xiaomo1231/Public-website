@@ -1,5 +1,5 @@
 import { classifyFile } from '@/infrastructure/files/validation'
-import type { DocumentType } from '@/entities/document/types'
+import type { DocumentType, LearningMaterialType } from '@/entities/document/types'
 import { UploadCancelledError } from './uploadPipeline'
 
 /**
@@ -29,6 +29,8 @@ export interface UploadQueueItem {
   name: string
   sizeBytes: number
   type: DocumentType | null
+  /** Role in the tutor; carried into the document row. */
+  materialType?: LearningMaterialType
   status: UploadStatus
   issue?: FileIssue
   /** Raw pipeline stage name while processing. */
@@ -88,6 +90,7 @@ export function isSameFile(a: FileIdentity, b: FileIdentity): boolean {
 export function createFileQueueItems(
   files: File[],
   existing: FileIdentity[] = [],
+  materialType: LearningMaterialType = 'textbook',
 ): UploadQueueItem[] {
   const known = existing.slice()
   return files.map((file) => {
@@ -99,6 +102,7 @@ export function createFileQueueItems(
       name: file.name,
       sizeBytes: file.size,
       type: classification.ok ? classification.type : null,
+      materialType,
       status: 'queued',
     }
     if (!classification.ok) {
@@ -113,7 +117,11 @@ export function createFileQueueItems(
   })
 }
 
-export function createTextQueueItem(input: { text: string; name?: string }): UploadQueueItem {
+export function createTextQueueItem(input: {
+  text: string
+  name?: string
+  materialType?: LearningMaterialType
+}): UploadQueueItem {
   const text = input.text
   return {
     id: crypto.randomUUID(),
@@ -122,6 +130,7 @@ export function createTextQueueItem(input: { text: string; name?: string }): Upl
     name: input.name?.trim() || '',
     sizeBytes: new Blob([text]).size,
     type: 'text',
+    materialType: input.materialType ?? 'textbook',
     status: 'queued',
   }
 }

@@ -23,6 +23,11 @@ export interface QuizGenerationInput {
   sourceSnippets: string[]
   /** Questions to avoid repeating. */
   avoidRepeating?: string[]
+  /**
+   * Evidence-based description of how the professor writes questions. It
+   * shapes *how* questions are written, never *what* is tested.
+   */
+  professorStyleContext?: string
 }
 
 export interface GeneratedQuizQuestion {
@@ -121,6 +126,16 @@ export function buildUserPrompt(input: QuizGenerationInput): string {
           : 'English with key Chinese terms in parentheses'
     }.`,
     avoid,
+    input.professorStyleContext
+      ? [
+          'PROFESSOR QUESTION STYLE CONTEXT (how the instructor writes questions):',
+          input.professorStyleContext,
+          'Generate NEW questions. Do not copy or lightly reword any uploaded question.',
+          'Match the observed assessment style and difficulty pattern only where the evidence supports it.',
+          'The learner’s explicit request always wins over the style context.',
+          '',
+        ].join('\n')
+      : '',
     `Generate exactly ${input.plan.length} question(s) in this exact plan:`,
     planText,
     '',

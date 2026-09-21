@@ -17,8 +17,12 @@ import {
 } from '@/shared/ui/DropdownMenu'
 import { TutorLessonView } from '@/widgets/tutor/TutorLessonView'
 import { TutorSymbolsPanel } from '@/widgets/tutor/TutorSymbolsPanel'
+import { ClassProgressCard } from '@/widgets/tutor/ClassProgressCard'
+import { CourseStructurePanel } from '@/widgets/courseStructure/CourseStructurePanel'
 import { useProjectTopics } from '@/features/tutor/useProjectTopics'
 import { useTutorLesson } from '@/features/tutor/useTutorLesson'
+import { useCourseContext } from '@/features/tutor/useCourseContext'
+import type { CourseStructureNode } from '@/entities/courseStructure/types'
 import { useTranslation, type TranslationKey } from '@/i18n'
 
 const LANGUAGES: Array<{ value: 'zh' | 'en' | 'mixed'; labelKey: TranslationKey }> = [
@@ -39,7 +43,10 @@ export function TutorPage(): JSX.Element {
   const navigate = useNavigate()
   const { t } = useTranslation()
   const { loading, analysis, topics } = useProjectTopics(projectId)
+  const { context: courseContext } = useCourseContext(projectId)
   const [activeTopicId, setActiveTopicId] = useState<string | undefined>(topicId)
+  /** When set, only topics inside this chapter/section are shown. */
+  const [structureFilter, setStructureFilter] = useState<CourseStructureNode | null>(null)
   const [language, setLanguage] = useState<'zh' | 'en' | 'mixed'>('en')
 
   useEffect(() => {
@@ -50,7 +57,15 @@ export function TutorPage(): JSX.Element {
     if (analysis?.language) setLanguage(analysis.language)
   }, [analysis?.language])
 
-  const activeTopic = topics.find((topic) => topic.id === activeTopicId) ?? topics[0]
+  const visibleTopics = structureFilter
+    ? topics.filter((topic) =>
+        structureFilter.type === 'section'
+          ? topic.sectionId === structureFilter.id
+          : topic.chapterId === structureFilter.id,
+      )
+    : topics
+  const activeTopic =
+    visibleTopics.find((topic) => topic.id === activeTopicId) ?? visibleTopics[0]
 
   const lessonState = useTutorLesson({
     projectId: projectId ?? '',
@@ -140,13 +155,20 @@ export function TutorPage(): JSX.Element {
         */}
         <div className="grid gap-8 lg:grid-cols-[200px_minmax(0,1fr)] xl:grid-cols-[200px_minmax(0,1fr)_220px]">
           <aside className="space-y-3">
+            <CourseStructurePanel
+              projectId={projectId}
+              {...(structureFilter ? { selectedId: structureFilter.id } : {})}
+              onSelect={(node) =>
+                setStructureFilter((current) => (current?.id === node.id ? null : node))
+              }
+            />
             <Card>
               <CardHeader>
                 <CardTitle className="text-base">{t('tutor.topics')}</CardTitle>
                 <CardDescription>{t('tutor.pickTopic')}</CardDescription>
               </CardHeader>
               <CardContent className="space-y-1">
-                {topics.map((topic, index) => (
+                {visibleTopics.map((topic, index) => (
                   <button
                     key={topic.id}
                     onClick={() => {
@@ -168,6 +190,7 @@ export function TutorPage(): JSX.Element {
           </aside>
 
           <section className="min-w-0">
+            <ClassProgressCard topics={topics} context={courseContext} />
             {activeTopic ? (
               <TutorLessonView
                 topicName={activeTopic.name}

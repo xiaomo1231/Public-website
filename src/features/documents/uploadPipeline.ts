@@ -8,11 +8,13 @@ import { getDb } from '@/infrastructure/db/database'
 import { validateFile, validateTextInput } from '@/infrastructure/files/validation'
 import { logger } from '@/infrastructure/logger/logger'
 import { t } from '@/i18n'
-import type { Document, DocumentType } from '@/entities/document/types'
+import type { Document, DocumentType, LearningMaterialType } from '@/entities/document/types'
 
 export interface UploadDocumentInput {
   projectId: string
   type: DocumentType
+  /** Role in the tutor. Defaults to `textbook`. */
+  materialType?: LearningMaterialType
   file?: File
   text?: string
   name?: string
@@ -122,6 +124,7 @@ export async function uploadDocument(
   const document = await documentService.create({
     projectId: input.projectId,
     type,
+    materialType: input.materialType ?? 'textbook',
     name,
     sizeBytes,
     ...(mimeType !== undefined ? { mimeType } : {}),

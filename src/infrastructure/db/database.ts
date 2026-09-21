@@ -19,6 +19,10 @@ import type {
 } from '@/entities/courseAnalysis/types'
 import type { TutorSession } from '@/entities/tutorSession/types'
 import type { TutorLesson } from '@/entities/tutorLesson/types'
+import type { VisualSource, VisualSourceImageRow } from '@/entities/visualSource/types'
+import type { CourseContext } from '@/entities/courseContext/types'
+import type { PracticeAttempt, PracticeQuestion, PracticeSet } from '@/entities/practice/types'
+import type { CourseStructure, CourseStructureNode } from '@/entities/courseStructure/types'
 import type { TranslationEntry } from '@/entities/translation/types'
 import type { Question } from '@/entities/question/types'
 import type { QuestionAttempt } from '@/entities/questionAttempt/types'
@@ -58,6 +62,18 @@ export class AppDatabase extends Dexie {
   tutorSessions!: EntityTable<TutorSession, 'id'>
   /** Cached Topic teaching lessons — one per project + topic + language. */
   tutorLessons!: EntityTable<TutorLesson, 'id'>
+  /** Preserved figures/diagrams from the original course material. */
+  visualSources!: EntityTable<VisualSource, 'id'>
+  visualSourceImages!: EntityTable<VisualSourceImageRow, 'id'>
+  /** Derived per-project context: professor style, class progress, links. */
+  courseContexts!: EntityTable<CourseContext, 'id'>
+  /** Professor Practice: imported question bank + attempts. */
+  practiceSets!: EntityTable<PracticeSet, 'id'>
+  practiceQuestions!: EntityTable<PracticeQuestion, 'id'>
+  practiceAttempts!: EntityTable<PracticeAttempt, 'id'>
+  /** Detected textbook chapter/section hierarchy (structural source of truth). */
+  courseStructures!: EntityTable<CourseStructure, 'id'>
+  courseStructureNodes!: EntityTable<CourseStructureNode, 'id'>
   translations!: EntityTable<TranslationEntry, 'id'>
 
   questions!: EntityTable<Question, 'id'>
@@ -227,6 +243,167 @@ export class AppDatabase extends Dexie {
       prerequisites: 'id, projectId',
       tutorSessions: 'id, projectId, status, updatedAt, [projectId+updatedAt]',
       tutorLessons: 'id, projectId, topicId, generatedAt, [projectId+topicId+language]',
+      translations: 'id, projectId, createdAt, [projectId+createdAt]',
+      questions:
+        'id, projectId, topicId, knowledgePoint, type, difficulty, createdAt, [projectId+topicId], [projectId+knowledgePoint]',
+      questionAttempts:
+        'id, projectId, questionId, quizId, topicId, knowledgePoint, createdAt, [projectId+createdAt], [quizId+createdAt]',
+      quizzes: 'id, projectId, status, startedAt, [projectId+startedAt]',
+      knowledgeMastery: 'id, projectId, knowledgePoint, [projectId+knowledgePoint]',
+      mistakes:
+        'id, projectId, questionId, quizId, knowledgePoint, mistakeType, status, source, createdAt, [projectId+status], [projectId+knowledgePoint]',
+    })
+
+    // Phase 7b: preserved visual sources (figures / diagrams / image formulas).
+    // Additive only — no existing table or row is transformed.
+    this.version(8).stores({
+      projects: 'id, name, subject, createdAt, updatedAt',
+      user: 'id',
+      settings: 'id, updatedAt',
+      inviteKeys: 'code, usedAt',
+      cryptoKeys: 'id',
+      documents:
+        'id, projectId, type, status, name, uploadedAt, processedAt, [projectId+status], [projectId+type]',
+      documentBlobs: 'id, projectId',
+      chunks: 'id, documentId, projectId, order, [documentId+order], [projectId+documentId]',
+      processingJobs: 'id, documentId, projectId, stage, updatedAt, [projectId+updatedAt]',
+      courseAnalyses: 'id, projectId, status, finishedAt',
+      topics: 'id, projectId, order',
+      concepts: 'id, projectId, name',
+      formulas: 'id, projectId, name',
+      symbols: 'id, projectId, symbol',
+      examples: 'id, projectId',
+      courseExercises: 'id, projectId, difficulty',
+      prerequisites: 'id, projectId',
+      tutorSessions: 'id, projectId, status, updatedAt, [projectId+updatedAt]',
+      tutorLessons: 'id, projectId, topicId, generatedAt, [projectId+topicId+language]',
+      visualSources:
+        'id, projectId, documentId, pageNumber, createdAt, [documentId+pageNumber], [projectId+documentId]',
+      visualSourceImages: 'id, projectId',
+      translations: 'id, projectId, createdAt, [projectId+createdAt]',
+      questions:
+        'id, projectId, topicId, knowledgePoint, type, difficulty, createdAt, [projectId+topicId], [projectId+knowledgePoint]',
+      questionAttempts:
+        'id, projectId, questionId, quizId, topicId, knowledgePoint, createdAt, [projectId+createdAt], [quizId+createdAt]',
+      quizzes: 'id, projectId, status, startedAt, [projectId+startedAt]',
+      knowledgeMastery: 'id, projectId, knowledgePoint, [projectId+knowledgePoint]',
+      mistakes:
+        'id, projectId, questionId, quizId, knowledgePoint, mistakeType, status, source, createdAt, [projectId+status], [projectId+knowledgePoint]',
+    })
+
+    // Phase 7c: learning-material roles + derived course context.
+    // Additive only — `documents.materialType` is optional on old rows and read
+    // as `textbook` when absent.
+    this.version(9).stores({
+      projects: 'id, name, subject, createdAt, updatedAt',
+      user: 'id',
+      settings: 'id, updatedAt',
+      inviteKeys: 'code, usedAt',
+      cryptoKeys: 'id',
+      documents:
+        'id, projectId, type, status, materialType, name, uploadedAt, processedAt, [projectId+status], [projectId+type], [projectId+materialType]',
+      documentBlobs: 'id, projectId',
+      chunks: 'id, documentId, projectId, order, [documentId+order], [projectId+documentId]',
+      processingJobs: 'id, documentId, projectId, stage, updatedAt, [projectId+updatedAt]',
+      courseAnalyses: 'id, projectId, status, finishedAt',
+      topics: 'id, projectId, order',
+      concepts: 'id, projectId, name',
+      formulas: 'id, projectId, name',
+      symbols: 'id, projectId, symbol',
+      examples: 'id, projectId',
+      courseExercises: 'id, projectId, difficulty',
+      prerequisites: 'id, projectId',
+      tutorSessions: 'id, projectId, status, updatedAt, [projectId+updatedAt]',
+      tutorLessons: 'id, projectId, topicId, generatedAt, [projectId+topicId+language]',
+      visualSources:
+        'id, projectId, documentId, pageNumber, createdAt, [documentId+pageNumber], [projectId+documentId]',
+      visualSourceImages: 'id, projectId',
+      courseContexts: 'id, projectId',
+      translations: 'id, projectId, createdAt, [projectId+createdAt]',
+      questions:
+        'id, projectId, topicId, knowledgePoint, type, difficulty, createdAt, [projectId+topicId], [projectId+knowledgePoint]',
+      questionAttempts:
+        'id, projectId, questionId, quizId, topicId, knowledgePoint, createdAt, [projectId+createdAt], [quizId+createdAt]',
+      quizzes: 'id, projectId, status, startedAt, [projectId+startedAt]',
+      knowledgeMastery: 'id, projectId, knowledgePoint, [projectId+knowledgePoint]',
+      mistakes:
+        'id, projectId, questionId, quizId, knowledgePoint, mistakeType, status, source, createdAt, [projectId+status], [projectId+knowledgePoint]',
+    })
+
+    // Phase 7d: Professor Practice question bank + attempts.
+    // Additive only.
+    this.version(10).stores({
+      projects: 'id, name, subject, createdAt, updatedAt',
+      user: 'id',
+      settings: 'id, updatedAt',
+      inviteKeys: 'code, usedAt',
+      cryptoKeys: 'id',
+      documents:
+        'id, projectId, type, status, materialType, name, uploadedAt, processedAt, [projectId+status], [projectId+type], [projectId+materialType]',
+      documentBlobs: 'id, projectId',
+      chunks: 'id, documentId, projectId, order, [documentId+order], [projectId+documentId]',
+      processingJobs: 'id, documentId, projectId, stage, updatedAt, [projectId+updatedAt]',
+      courseAnalyses: 'id, projectId, status, finishedAt',
+      topics: 'id, projectId, order',
+      concepts: 'id, projectId, name',
+      formulas: 'id, projectId, name',
+      symbols: 'id, projectId, symbol',
+      examples: 'id, projectId',
+      courseExercises: 'id, projectId, difficulty',
+      prerequisites: 'id, projectId',
+      tutorSessions: 'id, projectId, status, updatedAt, [projectId+updatedAt]',
+      tutorLessons: 'id, projectId, topicId, generatedAt, [projectId+topicId+language]',
+      visualSources:
+        'id, projectId, documentId, pageNumber, createdAt, [documentId+pageNumber], [projectId+documentId]',
+      visualSourceImages: 'id, projectId',
+      courseContexts: 'id, projectId',
+      practiceSets: 'id, projectId, documentId, createdAt, [projectId+documentId]',
+      practiceQuestions: 'id, projectId, setId, topicId, status, [setId+status]',
+      practiceAttempts: 'id, projectId, questionId, setId, submittedAt, [projectId+setId]',
+      translations: 'id, projectId, createdAt, [projectId+createdAt]',
+      questions:
+        'id, projectId, topicId, knowledgePoint, type, difficulty, createdAt, [projectId+topicId], [projectId+knowledgePoint]',
+      questionAttempts:
+        'id, projectId, questionId, quizId, topicId, knowledgePoint, createdAt, [projectId+createdAt], [quizId+createdAt]',
+      quizzes: 'id, projectId, status, startedAt, [projectId+startedAt]',
+      knowledgeMastery: 'id, projectId, knowledgePoint, [projectId+knowledgePoint]',
+      mistakes:
+        'id, projectId, questionId, quizId, knowledgePoint, mistakeType, status, source, createdAt, [projectId+status], [projectId+knowledgePoint]',
+    })
+
+    // Phase 7e: course structure (chapter/section hierarchy) as the structural
+    // source of truth. Additive only.
+    this.version(11).stores({
+      projects: 'id, name, subject, createdAt, updatedAt',
+      user: 'id',
+      settings: 'id, updatedAt',
+      inviteKeys: 'code, usedAt',
+      cryptoKeys: 'id',
+      documents:
+        'id, projectId, type, status, materialType, name, uploadedAt, processedAt, [projectId+status], [projectId+type], [projectId+materialType]',
+      documentBlobs: 'id, projectId',
+      chunks:
+        'id, documentId, projectId, order, chapterId, sectionId, [documentId+order], [projectId+documentId], [projectId+chapterId]',
+      processingJobs: 'id, documentId, projectId, stage, updatedAt, [projectId+updatedAt]',
+      courseAnalyses: 'id, projectId, status, finishedAt',
+      topics: 'id, projectId, order',
+      concepts: 'id, projectId, name',
+      formulas: 'id, projectId, name',
+      symbols: 'id, projectId, symbol',
+      examples: 'id, projectId',
+      courseExercises: 'id, projectId, difficulty',
+      prerequisites: 'id, projectId',
+      tutorSessions: 'id, projectId, status, updatedAt, [projectId+updatedAt]',
+      tutorLessons: 'id, projectId, topicId, generatedAt, [projectId+topicId+language]',
+      visualSources:
+        'id, projectId, documentId, pageNumber, createdAt, [documentId+pageNumber], [projectId+documentId]',
+      visualSourceImages: 'id, projectId',
+      courseContexts: 'id, projectId',
+      practiceSets: 'id, projectId, documentId, createdAt, [projectId+documentId]',
+      practiceQuestions: 'id, projectId, setId, topicId, status, [setId+status]',
+      practiceAttempts: 'id, projectId, questionId, setId, submittedAt, [projectId+setId]',
+      courseStructures: 'id, projectId, sourceDocumentId, [projectId+sourceDocumentId]',
+      courseStructureNodes: 'id, structureId, projectId, parentId, order, [structureId+order]',
       translations: 'id, projectId, createdAt, [projectId+createdAt]',
       questions:
         'id, projectId, topicId, knowledgePoint, type, difficulty, createdAt, [projectId+topicId], [projectId+knowledgePoint]',

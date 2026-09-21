@@ -8,6 +8,9 @@ import { MistakeService } from '@/services/mistakeService'
 import { QuizRepository } from '@/entities/quiz/repository'
 import { QuestionAttemptRepository } from '@/entities/questionAttempt/repository'
 import { TutorSessionRepository } from '@/entities/tutorSession/repository'
+import { VisualSourceRepository } from '@/entities/visualSource/repository'
+import { CourseContextRepository } from '@/entities/courseContext/repository'
+import { CourseStructureRepository } from '@/entities/courseStructure/repository'
 import { TranslationRepository } from '@/entities/translation/repository'
 import { QuestionRepository } from '@/entities/question/repository'
 import { SettingsService } from './settingsService'
@@ -26,6 +29,7 @@ export interface DataInventory {
   questionAttempts: number
   quizzes: number
   tutorSessions: number
+  visualSources: number
   translations: number
   mistakes: number
   knowledgeMastery: number
@@ -53,6 +57,7 @@ export class DataManagementService {
       questionAttempts,
       quizzes,
       tutorSessions,
+      visualSources,
       translations,
       mistakes,
       knowledgeMastery,
@@ -68,6 +73,7 @@ export class DataManagementService {
       db.table('questionAttempts').count(),
       db.table('quizzes').count(),
       db.table('tutorSessions').count(),
+      db.table('visualSources').count(),
       db.table('translations').count(),
       db.table('mistakes').count(),
       db.table('knowledgeMastery').count(),
@@ -86,6 +92,7 @@ export class DataManagementService {
       questionAttempts,
       quizzes,
       tutorSessions,
+      visualSources,
       translations,
       mistakes,
       knowledgeMastery,
@@ -105,7 +112,8 @@ export class DataManagementService {
     const tables = [
       'projects', 'documents', 'documentBlobs', 'chunks', 'processingJobs',
       'courseAnalyses', 'topics', 'concepts', 'formulas', 'symbols', 'examples',
-      'courseExercises', 'prerequisites', 'tutorSessions', 'translations',
+      'courseExercises', 'prerequisites', 'tutorSessions', 'tutorLessons',
+      'visualSources', 'courseContexts', 'courseStructures', 'translations',
       'questions', 'questionAttempts', 'quizzes', 'knowledgeMastery', 'mistakes',
       'inviteKeys', 'user', 'settings',
     ] as const
@@ -119,9 +127,17 @@ export class DataManagementService {
       json[name] = await (db as any).table(name).toArray()
     }
     const blobs = await db.table('documentBlobs').toArray()
+    const visualImages = await db.table('visualSourceImages').toArray()
     return {
       json,
-      blobs: blobs.map((b) => ({ id: b.id as string, bytes: b.bytes, mimeType: b.mimeType as string })),
+      blobs: [
+        ...blobs.map((b) => ({ id: b.id as string, bytes: b.bytes, mimeType: b.mimeType as string })),
+        ...visualImages.map((b) => ({
+          id: b.id as string,
+          bytes: b.bytes,
+          mimeType: b.mimeType as string,
+        })),
+      ],
     }
   }
 
@@ -137,8 +153,14 @@ export class DataManagementService {
     const mastery = new MasteryService(this.db)
     const sessionRepo = new TutorSessionRepository(this.db)
     const translationRepo = new TranslationRepository(this.db)
+    const visualRepo = new VisualSourceRepository(this.db)
+    const contextRepo = new CourseContextRepository(this.db)
+    const structureRepo = new CourseStructureRepository(this.db)
 
     await docRepo.deleteByProject(projectId)
+    await visualRepo.deleteByProject(projectId)
+    await contextRepo.deleteByProject(projectId)
+    await structureRepo.deleteByProject(projectId)
     await this.db.table('chunks').where('projectId').equals(projectId).delete()
     await analysesRepo.deleteByProject(projectId)
     await mastery.deleteByProject(projectId)

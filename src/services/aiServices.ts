@@ -4,6 +4,7 @@ import { DocumentAnalysisService } from './documentAnalysisService'
 import { TutorService } from './tutorService'
 import { TutorLessonService } from './tutorLessonService'
 import { TranslationService } from './translationService'
+import { ContextualTutorService } from './contextualTutorService'
 import { QuizService } from './quizService'
 import { MasteryService } from './masteryService'
 import { MistakeService } from './mistakeService'
@@ -17,6 +18,7 @@ import { ChunkRepository } from '@/entities/chunk/repository'
 import { CourseAnalysisRepository } from '@/entities/courseAnalysis/repository'
 import { TutorSessionRepository } from '@/entities/tutorSession/repository'
 import { TutorLessonRepository } from '@/entities/tutorLesson/repository'
+import { VisualSourceRepository } from '@/entities/visualSource/repository'
 import { TranslationRepository } from '@/entities/translation/repository'
 import { QuestionRepository } from '@/entities/question/repository'
 import { QuestionAttemptRepository } from '@/entities/questionAttempt/repository'
@@ -34,6 +36,8 @@ export interface AIServicesBundle {
   /** Cached Topic teaching lessons (the Topic page's reading material). */
   tutorLesson: TutorLessonService
   translation: TranslationService
+  /** Ephemeral Q&A about a passage the learner selected. Never persisted. */
+  contextualTutor: ContextualTutorService
   quiz: QuizService
   mastery: MasteryService
   mistakes: MistakeService
@@ -91,8 +95,10 @@ export async function buildAIServices(): Promise<AIServicesBundle | null> {
       lessons: new TutorLessonRepository(db),
       analyses,
       chunks,
+      visuals: new VisualSourceRepository(db),
     }),
     translation: new TranslationService({ ai, repo: new TranslationRepository(db) }),
+    contextualTutor: new ContextualTutorService({ ai }),
     quiz,
     mastery,
     mistakes,

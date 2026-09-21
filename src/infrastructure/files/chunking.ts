@@ -1,4 +1,4 @@
-import type { ChunkContentType, DocumentType } from '@/entities/document/types'
+import type { ChunkContentType, DocumentType, LearningMaterialType } from '@/entities/document/types'
 import type { DocumentChunk, NewChunkInput } from '@/entities/chunk/types'
 import { buildSourceReference } from '@/entities/chunk/types'
 
@@ -72,6 +72,8 @@ export interface ChunkerContext {
   projectId: string
   documentName: string
   type: DocumentType
+  /** Carried onto every chunk so retrieval can separate the three roles. */
+  materialType?: LearningMaterialType
 }
 
 export function chunksFromPdf(
@@ -81,11 +83,12 @@ export function chunksFromPdf(
   const lines: ChunkLine[] = []
   let section: string | undefined
   for (const page of pages) {
-    // Set section from the first heading on the page (or keep last)
-    if (page.headings.length > 0) section = page.headings[0]!.text
     const rawLines = page.text.split(/\n+/).map((s) => s.trim()).filter(Boolean)
     for (const raw of rawLines) {
       const isHeading = page.headings.some((h) => h.text === raw)
+      // A heading updates the running section *as it is encountered*, so the
+      // packer never merges a section's tail with the next section's body.
+      if (isHeading) section = raw
       lines.push({
         contentType: isHeading ? 'heading' : 'paragraph',
         text: raw,
@@ -98,6 +101,7 @@ export function chunksFromPdf(
   return packed.map((line, idx) => ({
     documentId: ctx.documentId,
     projectId: ctx.projectId,
+    materialType: ctx.materialType,
     ...(line.pageNumber !== undefined ? { pageNumber: line.pageNumber } : {}),
     ...(line.section !== undefined ? { section: line.section } : {}),
     contentType: line.contentType,
@@ -132,6 +136,7 @@ export function chunksFromDocx(
   return packed.map((line, idx) => ({
     documentId: ctx.documentId,
     projectId: ctx.projectId,
+    materialType: ctx.materialType,
     ...(line.pageNumber !== undefined ? { pageNumber: line.pageNumber } : {}),
     ...(line.section !== undefined ? { section: line.section } : {}),
     contentType: line.contentType,
@@ -166,6 +171,7 @@ export function chunksFromPptx(
   return packed.map((line, idx) => ({
     documentId: ctx.documentId,
     projectId: ctx.projectId,
+    materialType: ctx.materialType,
     ...(line.pageNumber !== undefined ? { pageNumber: line.pageNumber } : {}),
     ...(line.section !== undefined ? { section: line.section } : {}),
     contentType: line.contentType,
@@ -192,6 +198,7 @@ export function chunksFromOcr(
   return packed.map((line, idx) => ({
     documentId: ctx.documentId,
     projectId: ctx.projectId,
+    materialType: ctx.materialType,
     contentType: 'ocr',
     text: line.text,
     sourceReference: buildSourceReference({ documentName: ctx.documentName }),
@@ -209,6 +216,7 @@ export function chunksFromText(ctx: ChunkerContext, text: string): NewChunkInput
   return packed.map((line, idx) => ({
     documentId: ctx.documentId,
     projectId: ctx.projectId,
+    materialType: ctx.materialType,
     contentType: line.contentType,
     text: line.text,
     sourceReference: buildSourceReference({ documentName: ctx.documentName }),
