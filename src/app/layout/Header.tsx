@@ -1,7 +1,7 @@
 import { Monitor, Moon, Sun, LogOut, Languages } from 'lucide-react'
 import type { UserTheme } from '@/entities/user/types'
 import { useAuth } from '@/features/auth/useAuth'
-import { useThemeStore } from '@/features/theme/themeStore'
+import { useThemePreference } from '@/features/theme/useAppearance'
 import { useUILanguage } from '@/features/settings/useUILanguage'
 import { LANGUAGE_LABELS, UI_LANGUAGES, useTranslation, type TranslationKey } from '@/i18n'
 import { Button } from '@/shared/ui/Button'
@@ -29,14 +29,13 @@ export function Header({ onOpenMobileNav }: HeaderProps): JSX.Element {
   const { profile, lock } = useAuth()
   const { t } = useTranslation()
   const { language, setLanguage } = useUILanguage()
-  const preference = useThemeStore((s) => s.preference)
-  const setPreference = useThemeStore((s) => s.setPreference)
+  const { preference, setPreference } = useThemePreference()
 
   const ThemeIcon =
     preference === 'light' ? Sun : preference === 'dark' ? Moon : Monitor
 
   return (
-    <header className="flex h-14 items-center justify-between gap-3 border-b bg-background/95 px-4 backdrop-blur supports-[backdrop-filter]:bg-background/80 sm:px-6">
+    <header className="app-surface-tint flex h-14 items-center justify-between gap-3 border-b px-4 backdrop-blur sm:px-6">
       <div className="flex min-w-0 items-center gap-2">
         <Button
           variant="ghost"

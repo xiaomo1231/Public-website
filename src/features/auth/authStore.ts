@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import type { UserProfile, UserTheme } from '@/entities/user/types'
+import type { ColorThemeId } from '@/features/theme/colorThemes'
 import type { UILanguage } from '@/i18n/types'
 import { t } from '@/i18n'
 import { UserService } from '@/services/userService'
@@ -18,6 +19,7 @@ interface AuthActions {
   unlock: (code: string) => Promise<void>
   lock: () => Promise<void>
   setTheme: (theme: UserTheme) => Promise<void>
+  setColorTheme: (theme: ColorThemeId) => Promise<void>
   setName: (name: string) => Promise<void>
   setLanguage: (language: UserProfile['language']) => Promise<void>
   setUILanguage: (language: UILanguage) => Promise<void>
@@ -67,6 +69,11 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
 
   async setTheme(theme) {
     const next = await users.update({ theme })
+    set({ profile: next })
+  },
+
+  async setColorTheme(colorTheme) {
+    const next = await users.update({ colorTheme })
     set({ profile: next })
   },
 

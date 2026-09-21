@@ -21,6 +21,7 @@ export function useAuth() {
     unlock: store.unlock,
     lock: store.lock,
     setTheme: store.setTheme,
+    setColorTheme: store.setColorTheme,
     setName: store.setName,
     setLanguage: store.setLanguage,
     setUILanguage: store.setUILanguage,

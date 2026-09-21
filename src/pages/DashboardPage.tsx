@@ -20,6 +20,7 @@ import { PageContainer, PageContent, PageHeader } from '@/shared/ui/Page'
 import { Progress } from '@/shared/ui/Progress'
 import { TruncatedText } from '@/shared/ui/TruncatedText'
 import { WeaknessPanel } from '@/widgets/mistakes/WeaknessPanel'
+import { ThemePicker } from '@/widgets/theme/ThemePicker'
 import { SUBJECT_LABEL_KEYS } from '@/entities/project/types'
 import { relativeTime } from '@/shared/lib/utils'
 import { useTranslation } from '@/i18n'
@@ -55,7 +56,9 @@ export function DashboardPage(): JSX.Element {
           </Button>
         }
       />
-      <PageContent>
+      {/* Restrained theme wash — the dashboard shell only. Reading surfaces
+          (cards, the tutor article) stay on solid backgrounds. */}
+      <PageContent className="app-gradient">
         {!loaded && loading ? (
           <LoadingState label={t('dashboard.loading')} />
         ) : (
@@ -170,6 +173,10 @@ export function DashboardPage(): JSX.Element {
                   />
                 </CardContent>
               </Card>
+            </section>
+
+            <section>
+              <ThemePicker />
             </section>
 
             {recent[0] && (

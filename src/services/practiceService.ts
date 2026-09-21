@@ -23,6 +23,7 @@ import { matchChunkToTopic, overlapScore } from './classProgressService'
 import { AppError } from '@/infrastructure/errors/AppError'
 import { logger } from '@/infrastructure/logger/logger'
 import { t } from '@/i18n'
+import { fnv1a } from '@/shared/lib/hash'
 
 /** Extraction confidence at or above this is imported without a review step. */
 const AUTO_VERIFY_CONFIDENCE = 0.6
@@ -42,15 +43,6 @@ const INSTRUCTION_VERBS = [
   'simplify',
   'classify',
 ]
-
-function fnv1a(input: string): string {
-  let hash = 0x811c9dc5
-  for (let i = 0; i < input.length; i++) {
-    hash ^= input.charCodeAt(i)
-    hash = Math.imul(hash, 0x01000193)
-  }
-  return (hash >>> 0).toString(16).padStart(8, '0')
-}
 
 function normalizeAnswer(value: string): string {
   return value.trim().toLowerCase().replace(/\s+/g, ' ')

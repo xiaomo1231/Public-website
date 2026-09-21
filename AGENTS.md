@@ -19,7 +19,7 @@
 
 **这不是"AI PDF 总结工具"。** 教学以题目为主要载体，而不是长篇总结。
 
-当前版本：**V0.2.4（0.2.4）**。
+当前版本：**V0.2.5（0.2.5）**。
 
 ---
 
@@ -46,14 +46,19 @@
 
 ## 3. 架构总览
 
-### 存储三层
+### 存储两层 + 内存
 
 ```text
-┌─ OPFS ──────────────────────────┐  原始文件字节（大二进制、流式）
-├─ IndexedDB (Dexie) ─────────────┤  结构化元数据 + 学习数据（24 张表，schema v7）
+┌─ IndexedDB (Dexie) ─────────────┐  结构化元数据 + 学习数据 + 原始文件字节
+│                                 │  33 张表，schema v11
+├─ localStorage ──────────────────┤  仅 UI 语言镜像（避免首帧语言闪烁）
 ├─ 浏览器内存 ────────────────────┤  仅当前任务文本 → 用户配置的 AI API
 └─────────────────────────────────┘
 ```
+
+- 原始文件字节存在 **IndexedDB 的 `documentBlobs` 表**（`bytes: ArrayBuffer`），不在 OPFS。
+- `src/infrastructure/opfs/opfs.ts` 是一个**未被接线的可选快速路径**（全项目无 import）；`Document.hasBlob` 的注释也写明「OPFS migration can come later」。不要以为文件已落 OPFS。
+- localStorage 只保存 UI 语言（`ai-learning:ui-language`）；外观偏好（明暗模式 + 配色主题）存在 `UserProfile`（IndexedDB）。
 
 ### 分层（铁律：UI 不直接碰 IndexedDB）
 
@@ -66,10 +71,22 @@ Services (services/*)          业务编排、跨实体事务
   ↓
 Repositories (entities/*/repository)
   ↓
-Dexie / OPFS (infrastructure/*)
+Dexie (infrastructure/*)
 ```
 
 `infrastructure` 不含业务规则；跨表操作只走 Service。
+
+**课程内容的统一入口**：`CourseContentRepository`（`entities/courseContent/`）是课程分析实体的**只读聚合 + freshness + manifest** 逻辑层，不拥有任何表、不复制数据。它**不是**万能 repository —— TutorLesson / Practice / Notes / Transcript / Quiz 作答 / 学习进度 / Class Progress / VisualSource 各自保留原有 repository 与 service。
+
+```text
+UI / Feature
+    ↓
+CourseContentRepository / CourseContentService
+    ↓
+existing repositories (courseAnalysis / courseStructure / document / chunk)
+    ↓
+Dexie
+```
 
 ### AI Provider
 
@@ -109,32 +126,76 @@ Dexie / OPFS (infrastructure/*)
 | 项目 | `Project` |
 | 内容 | `Document` `DocumentBlobRow` `DocumentChunk` `ProcessingJob` |
 | 知识结构 | `CourseAnalysis` `Topic` `Concept` `Formula` `CourseSymbol` `Example` `CourseExercise` `Prerequisite` |
+| 教材结构 | `CourseStructure` `CourseStructureNode`（章节唯一真相，扁平 + `parentId`） |
 | 教学 | `TutorLesson`（缓存课时）`TutorSession`（交互会话）`TranslationEntry` |
+| 上下文 | `CourseContext`（教授教学风格、班级进度、note/lecture 关联） |
+| 视觉 | `VisualSource` `VisualSourceImage` |
+| 教授练习 | `PracticeSet` `PracticeQuestion` `PracticeAttempt` |
 | 练习 | `Question` `QuestionAttempt` `Quiz` `KnowledgeMastery` |
 | 错误 | `Mistake` |
 
 关键约定：
 
 - 所有业务表带 `projectId` 与 `[projectId+...]` 复合索引；未知 projectId 抛 `NotFoundError`。
-- `TutorLesson.contentHash` 是主题指纹，课程重析后自动失效重生成。
+- `TutorLesson.contentHash` 是主题指纹（含 `chapterId`/`sectionId`/`promptVersion`/notes+transcript `contextHash`），课程重析后自动失效重生成。
 - `SourceReference` 必带 `chunkId`，引用必须来自**真实分块**，杜绝 AI 编造出处。
+- 章节层级**只有** `CourseStructure`/`CourseStructureNode` 一处；Topic / chunk / NoteLink / LectureChunkLink / PracticeQuestion 只保存 `chapterId`/`sectionId` 引用，不复制章节树。
+
+### 外观（Appearance）——两个独立维度
+
+```text
+mode:       light | dark | system      （themeStore 解析 → <html>.dark + color-scheme）
+colorTheme: default | pinkAqua | warmOrange | academic
+                                       （<html data-color-theme=…> → globals.css 变量块）
+```
+
+- 两者都存在 `UserProfile`（`theme` / `colorTheme`），经 `useThemePreference()` / `useColorTheme()` 即时应用 + 持久化；**不是**第二套 localStorage key。
+- 颜色定义集中在 `features/theme/colorThemes.ts`（原始 hex，仅供预览）+ `shared/styles/globals.css`（每套主题 light/dark 各一块，共 21 个变量）。**组件不得硬编码颜色。**
+- 填色且承载文字的表面（Button default / Badge default / Tooltip / 品牌标记）用 `--primary-strong`；`--primary` 留给 icon、链接、进度条、柔和状态、focus ring。
+- 主题切换是纯 presentation：**不触发 AI、不使 CourseAnalysis / TutorLesson / CourseContext 失效**。
+- 对比度由 `tests/themeContrast.test.ts` 从真实 CSS 计算并断言（正文 ≥4.5:1，填色按钮 ≥3:1）。
 
 ---
 
 ## 5. 内容处理流水线
 
 ```text
-Upload → validation → (blob 落 OPFS) → processingJob
+Upload → validation → (blob 落 IndexedDB `documentBlobs`) → processingJob
       → 提取 (pdf / docx / pptx / ocr / text)
       → textEncoding 异常检测（保留原字符，绝不猜测替换）
-      → 结构识别 (headings / paragraphs / tables / equations)
-      → 分块 (chunking) → 元数据 → chunk 落库 → Ready for AI
+      → 分块 (chunking)
+      → 教材结构识别 + 持久化（`CourseStructure`/`CourseStructureNode`；chunk 绑定 chapterId/sectionId）
+      → 视觉来源保留（`VisualSource`/`VisualSourceImage`）
+      → chunk 落库 → Ready for AI
 ```
 
-- Chunk 字段：`documentId projectId pageNumber section content contentType sourceReference(chunkId)`。
-- `contentType ∈ {definition, theorem, formula, example, exercise, explanation, table, note}`。
+- Chunk 字段：`documentId projectId materialType pageNumber section contentType text sourceReference order chapterId sectionId chapterNumber sectionNumber chapterTitle sectionTitle createdAt`。
+- `contentType ∈ {heading, paragraph, table, list, formula, caption, note, ocr, other}`。
 - 图片走**本地 OCR**（tesseract.js），不联网。
 - 批处理并发 2，单文件错误隔离。
+- 结构识别只在 `materialType === 'textbook'` 时执行；无信号时退化为单个 `General Course Material`（`confidence: 'low'`），**不发明章节**。
+
+### 课程内容持久化与 freshness（`CourseContent`）
+
+**没有 `content/` 目录、没有 JSON 内容文件、没有第二套数据库。** 课程分析结果本来就持久化在 Dexie（`courseAnalyses` + `topics/concepts/formulas/symbols/examples/courseExercises/prerequisites`），`CourseContentRepository` 只是其上的逻辑聚合层。
+
+四个版本概念**不可合并**：
+
+| 概念 | 含义 | 存放 |
+| --- | --- | --- |
+| Dexie `verno` | 数据库结构 | `infrastructure/db/database.ts` |
+| `CourseAnalysis.promptVersion` | 产出该结果的 prompt 版本 | 分析行 |
+| `CourseAnalysis.schemaVersion` | 分析结果的**数据形状**版本（`COURSE_ANALYSIS_SCHEMA_VERSION`） | 分析行 |
+| `CourseStructure.version` | 教材结构修订号（粗粒度） | 结构行 |
+| `CourseAnalysis.derivedFromStructureVersion/Hash` | 该结果派生自哪个结构修订 | 分析行 |
+| `CourseAnalysis.sourceHash` | 分析**输入内容**指纹 | 分析行 |
+
+- `sourceHash` 是**内容指纹**（chunk 文本 + order + 页码 + chapterId/sectionId + document id/name/size），**不含 `processedAt`、不含 chunk id**。因此「原样重处理」不会误判为内容变化。
+- freshness 判定（`evaluateFreshness`，纯函数）只看：`sourceHash` / `promptVersion` / `schemaVersion` / 结构（优先 `structureHash`，旧行回退 `structureVersion`）/ `status`。**明暗模式、配色主题、UI 语言、Class Progress、练习记录都不参与。**
+- `staleReason` / `staleAt` **只是注释**，不是 freshness 输入；`markStale()` 不会单独把结果变成 stale。
+- `reseedProject` 是**单事务原子替换**：AI 失败时旧分析原样保留。
+- **`DocumentAnalysisService.analyzeProject()` 仍是项目级**。`AnalysisScope` / `detectAffectedStructure` / `planIncrementalUpdate` / `planContentDependencies` 只是**规划层**（`mode: 'incremental'` 不代表已实现增量生成）；`analyzeScope` 对 chapter/section 直接拒绝（`ANALYSIS_SCOPE_UNSUPPORTED`）。
+- 只有 **upload / processing 流程**会调用 `CourseContentService.ensureAnalyzed()`（带 module 级 in-flight 去重）；**打开任何页面都不会触发课程分析**。未配置 API Key 时是 `no-provider`，**不**标记为 failed。
 
 ---
 
@@ -152,6 +213,7 @@ Topic
 - 取材料优先级：主题 `sourceRefs` 精确分块 → 引用匹配 → 页码 → 文档开头 → 项目回退。
 - 内容三态标注：Document Content / AI Supplementary / AI Generated Exercise。
 - 导师难度：轻量规则（2 连对升，2 连错或补充说明降）。
+- **缓存失效输入只有**：主题本身（name/description/`chapterId`/`sectionId`/`sourceRefs`）、`promptVersion`、notes/transcript `contextHash`。换主题配色、明暗模式、UI 语言、Class Progress、练习记录**都不会**让课时失效。`TutorLessonService` 与 `CourseContentService` 都有 in-flight 去重（同一 key 并发只发一次请求）。
 
 ### Quiz
 
@@ -192,11 +254,11 @@ Topic
 src/
   app/            外壳、路由、Bootstrap、RequireAuth、providers
   pages/          页面（含 InteractiveTutorPage）
-  widgets/        功能区块（documents/tutor/quiz/mistakes/formulaPanel/source/…）
+  widgets/        功能区块（documents/tutor/quiz/mistakes/formulaPanel/source/theme/…）
   features/       状态与业务 hooks（auth/documents/project/settings/tutor/theme/toast）
-  services/       业务编排（analysis/tutor/tutorLesson/quiz/mistake/mastery/adaptive/weakness/…）
-  entities/       领域模型 + repository
-  infrastructure/ ai(provider+prompts) db files crypto logger math opfs errors
+  services/       业务编排（analysis/tutor/tutorLesson/quiz/mistake/mastery/adaptive/weakness/courseContent/…）
+  entities/       领域模型 + repository（含 courseContent：聚合 + freshness）
+  infrastructure/ ai(provider+prompts) db files crypto logger math opfs(未接线) errors
   i18n/           en / zh-CN
   shared/         ui 组件 + lib 工具
 tests/            ai / ui / unit
@@ -234,23 +296,29 @@ docs/             architecture.md
 | 4 | Quiz · 自适应难度 · 掌握度 | 已交付 |
 | 5 | 错题本 · 薄弱点 · 复习 | 已交付 |
 | 6 | 知识索引 + 检索（RAG） | 未开始 |
-| 7 | 课时化导师 + 公式符号 + KaTeX 打磨 | **进行中（工作区未提交）** |
+| 7 | 课时化导师 + 公式符号 + KaTeX 打磨 | 已交付（v0.2.4） |
+| 7b | 教材章节结构 + 课程内容持久化 / freshness | 已交付（v0.2.5） |
+| 7c | 配色主题（Color Themes，4 套）+ 可访问性 | 已交付（v0.2.5） |
 | 8 | Dashboard 强化 | 未开始 |
 | 9 | PWA · a11y · 导入导出打磨 | 未开始 |
 
-**工作区有未提交的 Phase 7 改动**（`entities/tutorLesson`、`features/tutor`、`InteractiveTutorPage`、`TutorLessonView`、`TutorSymbolsPanel`、`Math.tsx`、`TeachingBlock.tsx`、`latexSymbols`、`lessonDocument`、`markdownText`、`teachingBlocks`、`tutorLessonService`、`topicSources` 等）。继续新阶段前，先确认这批改动通过 lint/typecheck/test 并提交。
+**工作区干净**：v0.2.5 已提交并发布（tag `v0.2.5`，两个远程仓库各一份 Release + 源码压缩包）。
 
 ### 待用户拍板的决策点
 
 1. **简答题**：原始需求要求支持，当前已移除。选项：保持移除 / AI 判分并标注低置信 / 仅作不计分练习。
 2. **作答时间**：需求提到「回答时间（如果可获得）」，当前**未采集**。是否加 `QuestionAttempt.durationMs` 并纳入难度模型。
 3. **检索策略**：Phase 6 RAG 是否现在做？当前是「按主题 sourceRefs 取块 + 长上下文」，资料量大时才需要向量检索。
-4. **下一阶段目标**：先收尾并提交 Phase 7，还是先补 RAG / Dashboard。
+4. **增量分析**：`AnalysisScope` / 依赖规划已就绪，但**未实现真正的章节级增量生成**。做之前必须先解决 Topic 跨章节边界（见 `entities/courseContent/dependency.ts` 的说明），不要直接按章节删除重建。
+5. **`#4C1A2`**：Warm Orange 主题的 `deep` 色按用户原文保留，但它不是合法 hex，无法用作 CSS 颜色。当前处理：保留在 palette metadata 里，**不写入任何 CSS 变量**；主题选择器把它渲染成「不可用」虚线 `?` 色块，不伪造颜色。等待正确色值。
+6. **对比度**：浅色主按钮已改用 `--primary-strong`（Pink Aqua `#1E8F9C` = 3.84:1，Warm Orange `#8C3332` = 7.79:1；Default 15.55:1，Academic 4.82:1）。**Pink Aqua 仍为 AA-large，未达 AA-normal（4.5:1）**——因为 `#1E8F9C` 是用户指定值，达标需要改色。暗色模式主按钮 6.67–14.22:1 全部达标。
+7. **数学可视化（Phase 0 已完成检查，Phase 1 未开始）**：仓库**没有任何现成的绘图能力**（无 plot/chart/svg 库、无 SVG 渲染器）；mathjs 可解析求值 `2x+1` / `sin(x)`，但**无法解析 LaTeX，也无法解析两侧都含变量的等式**（`x + y = 6` 解析失败），且没有通用解方程。**Phase 1 的闸门是「结构化可视化数据从哪来」**——建议独立第二次 AI 调用 + JSON schema（照 `quiz-generator` 模式），而**不是**把课时提示词改成 JSON，也**不是**从课时 LaTeX 推导。另：Markdown 管线**没有块级稳定 ID**（`MarkdownBlock`/`LessonSection` 无 id，React key 是下标），因此建议 Phase 1 采用**课时级**放置，与现有 `TutorLesson.visuals` 先例一致。
 
 ### 已知限制
 
-- 需自备 AI API；不配置时仅上传与本地处理可用。
+- 需自备 AI API；不配置时仅上传与本地处理可用（状态是 `no-provider`，不是 failed）。
 - 数据绑定浏览器 origin；换地址/清站点数据会看不到数据，需用「数据管理 → 导出数据」备份。
 - 数学等价判断有边界，极复杂表达式返回「无法自动判定」，不计入成绩。
 - OCR 质量取决于图片清晰度；手写内容提取效果有限。
-- 课程分析为项目级（覆盖该项目全部已处理文档），非逐文档结果。
+- 课程分析为项目级（覆盖该项目全部已处理文档），非逐文档结果，也非章节级。
+- 冷启动时外观偏好（明暗 / 配色）要等 `UserProfile` 读出后才应用，可能有一帧默认配色。

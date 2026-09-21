@@ -2,6 +2,8 @@ import { useCallback, useMemo, useRef, useState } from 'react'
 import { DocumentRepository } from '@/entities/document/repository'
 import type { LearningMaterialType } from '@/entities/document/types'
 import { getDb } from '@/infrastructure/db/database'
+import { CourseContentService } from '@/services/courseContentService'
+import { logger } from '@/infrastructure/logger/logger'
 import { toast } from '@/features/toast/toastStore'
 import { t } from '@/i18n'
 import { useDocumentsStore } from './documentsStore'
@@ -160,6 +162,15 @@ export function useBatchUpload(projectId: string): UseBatchUploadResult {
         setRunning(false)
         // Reuse the existing document store as the single source of truth.
         await refresh(projectId)
+        // Persist the course analysis once the upload has produced ready
+        // material. This is the *processing* flow's job: opening a Tutor page
+        // only ever reads what is already stored. A no-op when the content is
+        // fresh, when no AI provider is configured, or when nothing is ready.
+        void new CourseContentService()
+          .ensureAnalyzed(projectId)
+          .catch((err: unknown) => {
+            logger.debug('Automatic course analysis skipped', { error: String(err) })
+          })
       }
     },
     [projectId, refresh, update],

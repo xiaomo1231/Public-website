@@ -11,10 +11,28 @@ import type {
   SourceReference,
   Topic,
 } from './types'
+import { COURSE_ANALYSIS_SCHEMA_VERSION } from './types'
 import type { DifficultyLevel } from '@/infrastructure/ai/prompts/types'
+import { prompts } from '@/infrastructure/ai/prompts'
 import { logger } from '@/infrastructure/logger/logger'
 import { StorageError } from '@/infrastructure/errors/AppError'
 import { t } from '@/i18n'
+
+/** Provenance recorded alongside a freshly written analysis. */
+export interface ReseedMeta {
+  /** Reuse the in-progress analysis row so we don't leave a stale one behind. */
+  analysisId?: string
+  /** Prompt version that produced this result. Defaults to the registered analyzer. */
+  promptVersion?: string
+  /** Fingerprint of the sources this result was derived from. */
+  sourceHash?: string
+  /** Data-shape version; defaults to the current `COURSE_ANALYSIS_SCHEMA_VERSION`. */
+  schemaVersion?: string
+  /** `CourseStructure.version` this result was derived from. */
+  derivedFromStructureVersion?: number
+  /** Content fingerprint of the structure this result was derived from. */
+  derivedFromStructureHash?: string
+}
 
 export class CourseAnalysisRepository {
   private db: AppDatabase
@@ -172,8 +190,7 @@ export class CourseAnalysisRepository {
       documentIds?: string[]
     },
     language: CourseAnalysis['language'],
-    /** Reuse the in-progress analysis row so we don't leave a stale one behind. */
-    analysisId?: string,
+    meta: ReseedMeta = {},
   ): Promise<void> {
     const now = Date.now()
     const lookup = (names: string[]): string[] =>
@@ -257,29 +274,104 @@ export class CourseAnalysisRepository {
       createdAt: now,
     }))
 
-    await this.deleteByProject(projectId)
-    await this.addTopics(topics)
-    await this.addConcepts(concepts)
-    await this.addFormulas(formulas)
-    await this.addSymbols(symbols)
-    await this.addExamples(examples)
-    await this.addExercises(exercises)
-    await this.addPrerequisites(prerequisites)
+    await this.replaceProjectData(projectId, {
+      topics,
+      concepts,
+      formulas,
+      symbols,
+      examples,
+      exercises,
+      prerequisites,
+      analysis: {
+        id: meta.analysisId ?? crypto.randomUUID(),
+        projectId,
+        status: 'ready',
+        language,
+        progress: 100,
+        documentIds: seed.documentIds ?? [],
+        topicCount: topics.length,
+        formulaCount: formulas.length,
+        symbolCount: symbols.length,
+        startedAt: now,
+        finishedAt: now,
+        // Never hardcode this: the caller knows which prompt actually ran.
+        promptVersion: meta.promptVersion ?? prompts.documentAnalyzer.VERSION,
+        sourceHash: meta.sourceHash ?? '',
+        schemaVersion: meta.schemaVersion ?? COURSE_ANALYSIS_SCHEMA_VERSION,
+        ...(meta.derivedFromStructureVersion !== undefined
+          ? { derivedFromStructureVersion: meta.derivedFromStructureVersion }
+          : {}),
+        ...(meta.derivedFromStructureHash !== undefined
+          ? { derivedFromStructureHash: meta.derivedFromStructureHash }
+          : {}),
+      },
+    })
+  }
 
-    const analysis: CourseAnalysis = {
-      id: analysisId ?? crypto.randomUUID(),
-      projectId,
-      status: 'ready',
-      language,
-      progress: 100,
-      documentIds: seed.documentIds ?? [],
-      topicCount: topics.length,
-      formulaCount: formulas.length,
-      symbolCount: symbols.length,
-      startedAt: now,
-      finishedAt: now,
-      promptVersion: 'v1',
+  /**
+   * Replace every derived record for a project in a single transaction.
+   *
+   * The previous implementation deleted and then re-wrote table by table, so a
+   * failure half way through could leave the project with only part of an
+   * analysis. One Dexie transaction means either the whole new result lands or
+   * the old one is left untouched.
+   */
+  private async replaceProjectData(
+    projectId: string,
+    next: {
+      topics: Topic[]
+      concepts: Concept[]
+      formulas: Formula[]
+      symbols: CourseSymbol[]
+      examples: Example[]
+      exercises: CourseExercise[]
+      prerequisites: Prerequisite[]
+      analysis: CourseAnalysis
+    },
+  ): Promise<void> {
+    const table = (name: string) => this.db.table(name)
+    try {
+      await this.db.transaction(
+        'rw',
+        [
+          table('courseAnalyses'),
+          table('topics'),
+          table('concepts'),
+          table('formulas'),
+          table('symbols'),
+          table('examples'),
+          table('courseExercises'),
+          table('prerequisites'),
+        ],
+        async () => {
+          await Promise.all([
+            table('topics').where('projectId').equals(projectId).delete(),
+            table('concepts').where('projectId').equals(projectId).delete(),
+            table('formulas').where('projectId').equals(projectId).delete(),
+            table('symbols').where('projectId').equals(projectId).delete(),
+            table('examples').where('projectId').equals(projectId).delete(),
+            table('courseExercises').where('projectId').equals(projectId).delete(),
+            table('prerequisites').where('projectId').equals(projectId).delete(),
+          ])
+          await Promise.all([
+            next.topics.length > 0 ? table('topics').bulkPut(next.topics) : Promise.resolve(),
+            next.concepts.length > 0 ? table('concepts').bulkPut(next.concepts) : Promise.resolve(),
+            next.formulas.length > 0 ? table('formulas').bulkPut(next.formulas) : Promise.resolve(),
+            next.symbols.length > 0 ? table('symbols').bulkPut(next.symbols) : Promise.resolve(),
+            next.examples.length > 0 ? table('examples').bulkPut(next.examples) : Promise.resolve(),
+            next.exercises.length > 0
+              ? table('courseExercises').bulkPut(next.exercises)
+              : Promise.resolve(),
+            next.prerequisites.length > 0
+              ? table('prerequisites').bulkPut(next.prerequisites)
+              : Promise.resolve(),
+          ])
+          await table('courseAnalyses').put(next.analysis)
+        },
+      )
+    } catch (err) {
+      logger.error('reseedProject failed; the previous analysis was kept', { projectId }, err)
+      throw new StorageError(t('storage.failedToClearAnalysis'), err)
     }
-    await this.upsert(analysis)
   }
 }

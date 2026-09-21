@@ -10,7 +10,8 @@ import { TruncatedText } from '@/shared/ui/TruncatedText'
 import { toast } from '@/features/toast/toastStore'
 import { buildAIServices } from '@/services/aiServices'
 import type { CourseAnalysis, Formula, Topic, CourseSymbol } from '@/entities/courseAnalysis/types'
-import { CourseAnalysisRepository } from '@/entities/courseAnalysis/repository'
+import { CourseContentRepository } from '@/entities/courseContent/repository'
+import type { CourseContentFreshness } from '@/entities/courseContent/types'
 import { friendlyAIError } from '@/shared/lib/aiErrors'
 import { useTranslation } from '@/i18n'
 
@@ -37,11 +38,12 @@ export function CourseAnalysisPanel({
   onStartTutor,
 }: CourseAnalysisPanelProps): JSX.Element {
   const { t } = useTranslation()
-  const repo = useMemo(() => new CourseAnalysisRepository(), [])
+  const content = useMemo(() => new CourseContentRepository(), [])
   const [analysis, setAnalysis] = useState<CourseAnalysis | null>(null)
   const [topics, setTopics] = useState<Topic[]>([])
   const [formulas, setFormulas] = useState<Formula[]>([])
   const [symbols, setSymbols] = useState<CourseSymbol[]>([])
+  const [freshness, setFreshness] = useState<CourseContentFreshness | null>(null)
   const [loading, setLoading] = useState(true)
   const [running, setRunning] = useState(false)
   const [progress, setProgress] = useState(0)
@@ -51,14 +53,20 @@ export function CourseAnalysisPanel({
     let cancelled = false
     void (async () => {
       try {
-        const a = await repo.getByProject(projectId)
+        const a = await content.getAnalysis(projectId)
         if (cancelled) return
         setAnalysis(a ?? null)
-        const [ts, fs, ss] = await Promise.all([repo.listTopics(projectId), repo.listFormulas(projectId), repo.listSymbols(projectId)])
+        const [ts, fs, ss, fr] = await Promise.all([
+          content.getTopics(projectId),
+          content.getFormulas(projectId),
+          content.getSymbols(projectId),
+          content.isFresh(projectId),
+        ])
         if (cancelled) return
         setTopics(ts)
         setFormulas(fs)
         setSymbols(ss)
+        setFreshness(fr)
       } finally {
         if (!cancelled) setLoading(false)
       }
@@ -66,7 +74,7 @@ export function CourseAnalysisPanel({
     return () => {
       cancelled = true
     }
-  }, [projectId, repo])
+  }, [projectId, content])
 
   async function analyze() {
     setRunning(true)
@@ -90,16 +98,18 @@ export function CourseAnalysisPanel({
           setMessage(p.message)
         },
       })
-      const [a, ts, fs, ss] = await Promise.all([
-        repo.getByProject(projectId),
-        repo.listTopics(projectId),
-        repo.listFormulas(projectId),
-        repo.listSymbols(projectId),
+      const [a, ts, fs, ss, fr] = await Promise.all([
+        content.getAnalysis(projectId),
+        content.getTopics(projectId),
+        content.getFormulas(projectId),
+        content.getSymbols(projectId),
+        content.isFresh(projectId),
       ])
       setAnalysis(a ?? null)
       setTopics(ts)
       setFormulas(fs)
       setSymbols(ss)
+      setFreshness(fr)
       toast({
         variant: 'success',
         title: t('analysis.complete'),
@@ -152,7 +162,21 @@ export function CourseAnalysisPanel({
         {analysis?.promptVersion && (
           <Badge variant="outline">{t('analysis.prompt', { version: analysis.promptVersion })}</Badge>
         )}
+        {analysis && !running && freshness?.fresh && (
+          <Badge variant="outline">{t('analysis.saved')}</Badge>
+        )}
       </div>
+
+      {analysis &&
+        !running &&
+        freshness &&
+        !freshness.fresh &&
+        freshness.reasons.some((reason) => reason !== 'missing') && (
+          <div className="space-y-1 rounded-md border border-amber-500/40 bg-amber-500/5 px-3 py-2 text-sm">
+            <p className="font-medium">{t('analysis.stale')}</p>
+            <p className="text-muted-foreground">{t('analysis.staleHint')}</p>
+          </div>
+        )}
       {running && (
         <div className="space-y-1">
           <Progress value={progress} />

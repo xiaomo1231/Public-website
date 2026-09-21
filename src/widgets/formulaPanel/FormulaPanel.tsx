@@ -4,7 +4,7 @@ import { Badge } from '@/shared/ui/Badge'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/shared/ui/Card'
 import { TruncatedText } from '@/shared/ui/TruncatedText'
 import { Input } from '@/shared/ui/Input'
-import { CourseAnalysisRepository } from '@/entities/courseAnalysis/repository'
+import { CourseContentRepository } from '@/entities/courseContent/repository'
 import type { Formula, CourseSymbol } from '@/entities/courseAnalysis/types'
 import { useTranslation } from '@/i18n'
 
@@ -18,19 +18,25 @@ export function FormulaPanel({ projectId, topicId }: FormulaPanelProps): JSX.Ele
   const [formulas, setFormulas] = useState<Formula[]>([])
   const [symbols, setSymbols] = useState<CourseSymbol[]>([])
   const [query, setQuery] = useState('')
-  const repo = useMemo(() => new CourseAnalysisRepository(), [])
+  const content = useMemo(() => new CourseContentRepository(), [])
 
   useEffect(() => {
     let cancelled = false
     void (async () => {
       try {
         if (topicId) {
-          const [fs, ss] = await Promise.all([repo.listFormulasByTopic(topicId), repo.listSymbolsByTopic(topicId)])
+          const [fs, ss] = await Promise.all([
+            content.getFormulasByTopic(topicId),
+            content.getSymbolsByTopic(topicId),
+          ])
           if (cancelled) return
           setFormulas(fs)
           setSymbols(ss)
         } else {
-          const [fs, ss] = await Promise.all([repo.listFormulas(projectId), repo.listSymbols(projectId)])
+          const [fs, ss] = await Promise.all([
+            content.getFormulas(projectId),
+            content.getSymbols(projectId),
+          ])
           if (cancelled) return
           setFormulas(fs)
           setSymbols(ss)
@@ -45,7 +51,7 @@ export function FormulaPanel({ projectId, topicId }: FormulaPanelProps): JSX.Ele
     return () => {
       cancelled = true
     }
-  }, [projectId, topicId, repo])
+  }, [projectId, topicId, content])
 
   const q = query.trim().toLowerCase()
   const filteredFormulas = q ? formulas.filter((f) => f.name.toLowerCase().includes(q) || f.latex.toLowerCase().includes(q) || f.description.toLowerCase().includes(q)) : formulas

@@ -14,6 +14,8 @@ export default {
         primary: {
           DEFAULT: 'hsl(var(--primary))',
           foreground: 'hsl(var(--primary-foreground))',
+          /** Text-safe variant used by filled, text-bearing surfaces. */
+          strong: 'hsl(var(--primary-strong))',
         },
         secondary: {
           DEFAULT: 'hsl(var(--secondary))',
@@ -34,6 +36,19 @@ export default {
         card: {
           DEFAULT: 'hsl(var(--card))',
           foreground: 'hsl(var(--card-foreground))',
+        },
+        /*
+         * Color-theme tokens. The palette is selected by
+         * `data-color-theme` on <html> (see features/theme). Components use
+         * these instead of a literal colour, so adding a theme needs no
+         * component changes.
+         */
+        theme: {
+          primary: 'hsl(var(--theme-primary))',
+          'primary-soft': 'hsl(var(--theme-primary-soft))',
+          accent: 'hsl(var(--theme-accent))',
+          'accent-soft': 'hsl(var(--theme-accent-soft))',
+          heading: 'hsl(var(--theme-heading))',
         },
       },
       borderRadius: {

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { CourseAnalysisRepository } from '@/entities/courseAnalysis/repository'
+import { CourseContentRepository } from '@/entities/courseContent/repository'
 import type { CourseAnalysis, Topic } from '@/entities/courseAnalysis/types'
 
 export interface ProjectTopicsState {
@@ -28,11 +28,11 @@ export function useProjectTopics(projectId: string | undefined): ProjectTopicsSt
       }
       setLoading(true)
       try {
-        const repo = new CourseAnalysisRepository()
-        const nextAnalysis = await repo.getByProject(projectId)
+        const content = new CourseContentRepository()
+        const nextAnalysis = await content.getAnalysis(projectId)
         if (cancelled) return
         setAnalysis(nextAnalysis ?? null)
-        const nextTopics = await repo.listTopics(projectId)
+        const nextTopics = await content.getTopics(projectId)
         if (cancelled) return
         setTopics(nextTopics)
       } finally {

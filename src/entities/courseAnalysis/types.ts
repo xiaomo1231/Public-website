@@ -102,6 +102,17 @@ export interface Prerequisite {
 
 export type AnalysisStatus = 'pending' | 'analyzing' | 'ready' | 'failed'
 
+/**
+ * Data-shape version of a stored analysis result.
+ *
+ * This is deliberately *not* the Dexie schema version: Dexie describes the
+ * database structure, this describes the shape of the JSON the analyzer
+ * produced. A breaking change to `CourseAnalysis` / `DocumentAnalysisOutput`
+ * bumps this constant, which makes every stored analysis stale and triggers a
+ * re-run instead of loading data the current code cannot read.
+ */
+export const COURSE_ANALYSIS_SCHEMA_VERSION = '1'
+
 export interface CourseAnalysis {
   id: string
   projectId: string
@@ -117,4 +128,36 @@ export interface CourseAnalysis {
   finishedAt?: number
   /** Prompt version that produced this analysis. */
   promptVersion: string
+  /**
+   * Fingerprint of the textbook sources this analysis was derived from
+   * (documents + their chunks). When the material changes, this no longer
+   * matches the freshly computed hash and the analysis is stale.
+   *
+   * Optional for migration-friendliness: rows written before this field
+   * existed simply read as stale.
+   */
+  sourceHash?: string
+  /** Data-shape version — see `COURSE_ANALYSIS_SCHEMA_VERSION`. */
+  schemaVersion?: string
+  /**
+   * `CourseStructure.version` this analysis was derived from. Lets a structure
+   * change invalidate the analysis without comparing the whole tree.
+   *
+   * Superseded by `derivedFromStructureHash` when that is present: the version
+   * number is coarse (it does not distinguish two structures whose revision
+   * numbers collide), whereas the hash compares actual tree content.
+   */
+  derivedFromStructureVersion?: number
+  /**
+   * Content fingerprint of the detected structure this analysis was derived
+   * from. Preferred over the version number when both sides have one.
+   */
+  derivedFromStructureHash?: string
+  /**
+   * Set when the app *knows* something invalidated the analysis (e.g. a source
+   * document was removed). Staleness is normally derived from the fields above;
+   * this records an explicit, out-of-band reason.
+   */
+  staleReason?: string
+  staleAt?: number
 }

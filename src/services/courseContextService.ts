@@ -19,18 +19,10 @@ import { asStringArray, asTrimmedString } from '@/infrastructure/ai/validation'
 import { prompts } from '@/infrastructure/ai/prompts'
 import type { AIService } from './aiService'
 import { logger } from '@/infrastructure/logger/logger'
+import { fnv1a } from '@/shared/lib/hash'
 
 /** Minimum token overlap for a note to be linked to a textbook passage. */
 const NOTE_MATCH_MIN = 0.2
-
-function fnv1a(input: string): string {
-  let hash = 0x811c9dc5
-  for (let i = 0; i < input.length; i++) {
-    hash ^= input.charCodeAt(i)
-    hash = Math.imul(hash, 0x01000193)
-  }
-  return (hash >>> 0).toString(16).padStart(8, '0')
-}
 
 /** Keyword rules for how a note relates to the material. Heuristic, not AI. */
 export function classifyNoteRelation(text: string): NoteRelation {

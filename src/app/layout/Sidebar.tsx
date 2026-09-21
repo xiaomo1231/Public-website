@@ -34,7 +34,7 @@ export function Sidebar({ onNavigate }: SidebarProps): JSX.Element {
   return (
     <aside className="flex h-full w-64 flex-col border-r bg-card/30">
       <div className="flex h-14 items-center gap-2 border-b px-4">
-        <div className="grid h-8 w-8 place-items-center rounded-md bg-primary text-primary-foreground">
+        <div className="grid h-8 w-8 place-items-center rounded-md bg-primary-strong text-primary-foreground">
           <Sparkles className="h-4 w-4" />
         </div>
         <div className="flex flex-col leading-tight">

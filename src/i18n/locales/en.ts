@@ -60,6 +60,24 @@ export const en = {
   'header.lockApp': 'Lock app',
   'header.openNavigation': 'Open navigation',
 
+  'theme.appearance': 'Appearance',
+  'theme.appearanceHint': 'These only change how the app looks — never your course content.',
+  'theme.mode': 'Mode',
+  'theme.mode.light': 'Light',
+  'theme.mode.dark': 'Dark',
+  'theme.mode.system': 'System',
+  'theme.colorTheme': 'Color theme',
+  'theme.colorThemeHint': 'The palette used for buttons, links and highlights.',
+  'theme.default': 'Default',
+  'theme.default.description': 'The original neutral palette.',
+  'theme.pinkAqua': 'Pink Aqua',
+  'theme.pinkAqua.description': 'Soft pink with a clear aqua accent.',
+  'theme.warmOrange': 'Warm Orange',
+  'theme.warmOrange.description': 'Warm orange and burgundy, like an annotated notebook.',
+  'theme.academic': 'Academic',
+  'theme.academic.description': 'Green, blue and yellow, like a university textbook.',
+  'theme.invalidColor': '{value} (not a valid colour — unavailable)',
+
   'bootstrap.loading': 'Loading workspace…',
 
   'dashboard.greeting': 'Welcome, {name}',
@@ -322,6 +340,10 @@ export const en = {
   'analysis.reanalyze': 'Re-analyze',
   'analysis.bilingual': 'Bilingual',
   'analysis.prompt': 'prompt {version}',
+  'analysis.saved': 'Using saved course content',
+  'analysis.stale': 'The source material changed — this analysis may be out of date.',
+  'analysis.staleHint':
+    'Re-analyze to update it. The saved content stays available until then.',
   'analysis.working': 'Working… {stage}',
   'analysis.topics': 'Topics',
   'analysis.topicsCount': '{count} topics identified across your documents.',
@@ -924,6 +946,8 @@ export const en = {
     'The AI returned JSON that does not match the expected analysis structure (top-level keys: {keys}). No topics or formulas could be read.',
   'errors.analysisEmptyResponse':
     'The AI returned a valid JSON value that contains no analysis data.',
+  'errors.analysisScopeUnsupported':
+    'Chapter- or section-scoped analysis is not available yet. The whole project must be analysed instead.',
   'errors.documentContentMissing': 'Document content missing',
   'errors.unsupportedType': 'Unsupported document type: {type}',
   'errors.unsupportedChunking': 'Unsupported chunking for: {type}',
@@ -1100,6 +1124,7 @@ export const en = {
   'storage.failedToReadSettings': 'Failed to read AI settings',
   'storage.failedToSaveSettings': 'Failed to save AI settings',
   'storage.failedToReadUserProfile': 'Failed to read user profile',
+  'storage.failedToSaveUserProfile': 'Failed to save user profile',
   'storage.failedToListInviteKeys': 'Failed to list invite keys',
   'storage.failedToClearAnalysis': 'Failed to clear course analysis',
 

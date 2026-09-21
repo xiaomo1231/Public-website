@@ -3,6 +3,9 @@ import { getDb } from '@/infrastructure/db/database'
 import { DocumentRepository } from '@/entities/document/repository'
 import { ChunkRepository } from '@/entities/chunk/repository'
 import { CourseAnalysisRepository } from '@/entities/courseAnalysis/repository'
+import { COURSE_ANALYSIS_SCHEMA_VERSION } from '@/entities/courseAnalysis/types'
+import { CourseContentRepository } from '@/entities/courseContent/repository'
+import { computeAnalysisSourceHash, toSourceDocumentFingerprint } from '@/entities/courseContent/sourceHash'
 import type { AIService } from './aiService'
 import type { ProjectService } from './projectService'
 import type { ChatMessage } from '@/infrastructure/ai/types'
@@ -74,13 +77,15 @@ export class DocumentAnalysisService {
   private chunks: ChunkRepository
   private analyses: CourseAnalysisRepository
   private projects: ProjectService
+  private content: CourseContentRepository
   private ai: AIService
 
-  constructor(deps: DocumentAnalysisServiceOptions & { db?: AppDatabase; documents?: DocumentRepository; chunks?: ChunkRepository; analyses?: CourseAnalysisRepository; projects: ProjectService }) {
+  constructor(deps: DocumentAnalysisServiceOptions & { db?: AppDatabase; documents?: DocumentRepository; chunks?: ChunkRepository; analyses?: CourseAnalysisRepository; content?: CourseContentRepository; projects: ProjectService }) {
     this.db = deps.db ?? getDb()
     this.documents = deps.documents ?? new DocumentRepository(this.db)
     this.chunks = deps.chunks ?? new ChunkRepository(this.db)
     this.analyses = deps.analyses ?? new CourseAnalysisRepository(this.db)
+    this.content = deps.content ?? new CourseContentRepository({ db: this.db, analyses: this.analyses, chunks: this.chunks, documents: this.documents })
     this.projects = deps.projects
     this.ai = deps.ai
   }
@@ -109,9 +114,25 @@ export class DocumentAnalysisService {
     const analysisDocs = textbookDocs.length > 0 ? textbookDocs : readyDocs
     // Chunks carry the textbook chapter/section they came from; the analysis is
     // grounded in that structure instead of re-inventing an outline.
-    const analysisChunks = (
-      await Promise.all(analysisDocs.map((doc) => this.chunks.listByDocument(doc.id)))
-    ).flat()
+    const chunkLists = await Promise.all(
+      analysisDocs.map((doc) => this.chunks.listByDocument(doc.id)),
+    )
+    const analysisChunks = chunkLists.flat()
+
+    // Fingerprint of the exact analysis *input* this run is based on. Written
+    // with the result so a later visit can tell whether the material changed
+    // without re-running the analyzer. Built from chunk content (not chunk ids
+    // or timestamps), so re-processing identical material is not a change.
+    const sourceHash = computeAnalysisSourceHash(
+      analysisDocs.map((doc, index) => toSourceDocumentFingerprint(doc, chunkLists[index]!)),
+    )
+    // The textbook structure the analysis is grounded in, so a structure change
+    // can invalidate the result. The hash is the precise signal; the revision
+    // number is kept for older rows.
+    const [derivedFromStructureVersion, derivedFromStructureHash] = await Promise.all([
+      this.content.getContentVersion(projectId),
+      this.content.getStructureHash(projectId),
+    ])
 
     const documentText = await this.collectText(projectId, analysisDocs.map((d) => d.id), onProgress)
     const language = await this.detectLanguage(documentText)
@@ -120,6 +141,7 @@ export class DocumentAnalysisService {
     const seed = await this.analyses.getByProject(projectId)
     const analysisId = seed?.id ?? crypto.randomUUID()
     const startedAt = seed?.startedAt ?? Date.now()
+    const promptVersion = prompts.documentAnalyzer.VERSION
     await this.analyses.upsert({
       id: analysisId,
       projectId,
@@ -127,11 +149,15 @@ export class DocumentAnalysisService {
       language,
       progress: 30,
       documentIds: analysisDocs.map((d) => d.id),
-      topicCount: 0,
-      formulaCount: 0,
-      symbolCount: 0,
+      topicCount: seed?.topicCount ?? 0,
+      formulaCount: seed?.formulaCount ?? 0,
+      symbolCount: seed?.symbolCount ?? 0,
       startedAt,
-      promptVersion: prompts.documentAnalyzer.VERSION,
+      promptVersion,
+      sourceHash,
+      schemaVersion: COURSE_ANALYSIS_SCHEMA_VERSION,
+      derivedFromStructureVersion,
+      derivedFromStructureHash,
     })
 
     let output: DocumentAnalysisOutput
@@ -211,20 +237,35 @@ export class DocumentAnalysisService {
         symbols: output.symbols.length,
       })
     } catch (err) {
-      await this.analyses.upsert({
-        id: analysisId,
-        projectId,
-        status: 'failed',
-        language,
-        progress: 60,
-        documentIds: analysisDocs.map((d) => d.id),
-        topicCount: seed?.topicCount ?? 0,
-        formulaCount: seed?.formulaCount ?? 0,
-        symbolCount: seed?.symbolCount ?? 0,
-        startedAt,
-        promptVersion: prompts.documentAnalyzer.VERSION,
-        errorMessage: err instanceof Error ? err.message : t('errors.analysisFailed'),
-      })
+      // A failed refresh must never destroy an analysis that is already usable.
+      // Restore the previous row (the 'analyzing' write above replaced it) and
+      // let the caller surface the error.
+      if (seed && seed.status === 'ready') {
+        await this.analyses.upsert(seed)
+        logger.warn('Course analysis failed; the previously saved analysis is still in use', {
+          projectId,
+          error: err instanceof Error ? err.message : String(err),
+        })
+      } else {
+        await this.analyses.upsert({
+          id: analysisId,
+          projectId,
+          status: 'failed',
+          language,
+          progress: 60,
+          documentIds: analysisDocs.map((d) => d.id),
+          topicCount: 0,
+          formulaCount: 0,
+          symbolCount: 0,
+          startedAt,
+          promptVersion,
+          sourceHash,
+          schemaVersion: COURSE_ANALYSIS_SCHEMA_VERSION,
+          derivedFromStructureVersion,
+          derivedFromStructureHash,
+          errorMessage: err instanceof Error ? err.message : t('errors.analysisFailed'),
+        })
+      }
       throw err
     }
 
@@ -292,7 +333,14 @@ export class DocumentAnalysisService {
         documentIds: analysisDocs.map((d) => d.id),
       },
       output.language ?? language,
-      analysisId,
+      {
+        analysisId,
+        promptVersion,
+        sourceHash,
+        schemaVersion: COURSE_ANALYSIS_SCHEMA_VERSION,
+        derivedFromStructureVersion,
+        derivedFromStructureHash,
+      },
     )
 
     onProgress?.({ stage: 'done', progress: 100, message: t('analysis.complete') })

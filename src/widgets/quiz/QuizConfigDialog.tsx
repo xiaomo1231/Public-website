@@ -4,7 +4,7 @@ import type { CourseAnalysis, Topic } from '@/entities/courseAnalysis/types'
 import type { QuizConfig, QuizDifficulty } from '@/entities/quiz/types'
 import type { QuestionType } from '@/entities/question/types'
 import { QUESTION_TYPES, QUESTION_TYPE_LABEL_KEYS } from '@/entities/question/types'
-import { CourseAnalysisRepository } from '@/entities/courseAnalysis/repository'
+import { CourseContentRepository } from '@/entities/courseContent/repository'
 import { Button } from '@/shared/ui/Button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/shared/ui/Card'
 import { Input } from '@/shared/ui/Input'
@@ -57,8 +57,11 @@ export function QuizConfigDialog({ projectId, onStart, busy, progress }: QuizCon
     let cancelled = false
     void (async () => {
       try {
-        const repo = new CourseAnalysisRepository()
-        const [a, ts] = await Promise.all([repo.getByProject(projectId), repo.listTopics(projectId)])
+        const content = new CourseContentRepository()
+        const [a, ts] = await Promise.all([
+          content.getAnalysis(projectId),
+          content.getTopics(projectId),
+        ])
         if (cancelled) return
         setAnalysis(a ?? null)
         setTopics(ts)

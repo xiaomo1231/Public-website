@@ -62,6 +62,24 @@ export const zhCN: Record<TranslationKey, string> = {
   'header.lockApp': '锁定应用',
   'header.openNavigation': '打开导航',
 
+  'theme.appearance': '外观',
+  'theme.appearanceHint': '这些设置只改变界面外观，不会影响课程内容。',
+  'theme.mode': '明暗模式',
+  'theme.mode.light': '浅色',
+  'theme.mode.dark': '深色',
+  'theme.mode.system': '跟随系统',
+  'theme.colorTheme': '配色主题',
+  'theme.colorThemeHint': '按钮、链接和高亮所使用的色系。',
+  'theme.default': '默认',
+  'theme.default.description': '网站原有的中性配色。',
+  'theme.pinkAqua': '粉樱水蓝',
+  'theme.pinkAqua.description': '柔和粉色搭配清爽水蓝。',
+  'theme.warmOrange': '暖橙酒红',
+  'theme.warmOrange.description': '暖橙与酒红，像批注过的笔记本。',
+  'theme.academic': '学院自然',
+  'theme.academic.description': '绿、蓝、黄，接近大学教材的配色。',
+  'theme.invalidColor': '{value}（不是合法颜色，暂不可用）',
+
   'bootstrap.loading': '正在加载工作区…',
 
   'dashboard.greeting': '欢迎，{name}',
@@ -312,6 +330,9 @@ export const zhCN: Record<TranslationKey, string> = {
   'analysis.reanalyze': '重新分析',
   'analysis.bilingual': '双语',
   'analysis.prompt': '提示词 {version}',
+  'analysis.saved': '正在使用已保存的课程内容',
+  'analysis.stale': '教材来源已变化，此分析结果可能已过期。',
+  'analysis.staleHint': '重新分析即可更新；在更新完成前，已保存的内容仍然可用。',
   'analysis.working': '处理中… {stage}',
   'analysis.topics': '主题',
   'analysis.topicsCount': '在你的文档中共识别出 {count} 个主题。',
@@ -890,6 +911,8 @@ export const zhCN: Record<TranslationKey, string> = {
   'errors.analysisSchemaMismatch':
     'AI 返回的 JSON 结构与预期的课程分析结构不符（顶层字段：{keys}），无法读取任何主题或公式。',
   'errors.analysisEmptyResponse': 'AI 返回了合法 JSON，但其中不含任何分析数据。',
+  'errors.analysisScopeUnsupported':
+    '暂不支持按章节或小节分析，只能对整个项目进行分析。',
   'errors.documentContentMissing': '缺少文档内容',
   'errors.unsupportedType': '不支持的文档类型：{type}',
   'errors.unsupportedChunking': '不支持的分块方式：{type}',
@@ -1049,6 +1072,7 @@ export const zhCN: Record<TranslationKey, string> = {
   'storage.failedToReadSettings': '读取 AI 设置失败',
   'storage.failedToSaveSettings': '保存 AI 设置失败',
   'storage.failedToReadUserProfile': '读取用户资料失败',
+  'storage.failedToSaveUserProfile': '保存用户资料失败',
   'storage.failedToListInviteKeys': '加载邀请码列表失败',
   'storage.failedToClearAnalysis': '清除课程分析失败',
 

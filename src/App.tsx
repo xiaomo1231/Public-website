@@ -18,6 +18,7 @@ export function App(): JSX.Element {
   const loadSettings = useSettingsStore((s) => s.load)
   const profile = useAuthStore((s) => s.profile)
   const setPreference = useThemeStore((s) => s.setPreference)
+  const setColorTheme = useThemeStore((s) => s.setColorTheme)
   const syncUILanguage = useI18nStore((s) => s.syncFromProfile)
 
   // Bootstrap data once on mount
@@ -34,6 +35,11 @@ export function App(): JSX.Element {
   useEffect(() => {
     if (profile?.theme) setPreference(profile.theme)
   }, [profile?.theme, setPreference])
+
+  // Sync the color theme from the user profile (independent of the mode)
+  useEffect(() => {
+    if (profile?.colorTheme) setColorTheme(profile.colorTheme)
+  }, [profile?.colorTheme, setColorTheme])
 
   // The persisted profile is authoritative once it has loaded
   useEffect(() => {

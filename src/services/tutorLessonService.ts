@@ -20,6 +20,7 @@ import { looksLikeUnreliableVisualText } from '@/infrastructure/files/visualDete
 import { AppError } from '@/infrastructure/errors/AppError'
 import { logger } from '@/infrastructure/logger/logger'
 import { t } from '@/i18n'
+import { fnv1a } from '@/shared/lib/hash'
 
 const MAX_LESSON_SOURCES = 8
 /** Notes / transcript excerpts pulled in alongside the textbook for a topic. */
@@ -92,16 +93,6 @@ export function computeLessonContentHash(
     ]),
   })
   return fnv1a(payload)
-}
-
-/** Small, dependency-free, deterministic hash. */
-function fnv1a(input: string): string {
-  let hash = 0x811c9dc5
-  for (let i = 0; i < input.length; i++) {
-    hash ^= input.charCodeAt(i)
-    hash = Math.imul(hash, 0x01000193)
-  }
-  return (hash >>> 0).toString(16).padStart(8, '0')
 }
 
 function keyOf(input: TutorLessonKey): string {

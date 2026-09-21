@@ -10,7 +10,7 @@ export function Badge({
   ...props
 }: BadgeProps): JSX.Element {
   const variants: Record<NonNullable<BadgeProps['variant']>, string> = {
-    default: 'bg-primary text-primary-foreground',
+    default: 'bg-primary-strong text-primary-foreground',
     secondary: 'bg-secondary text-secondary-foreground',
     outline: 'border text-foreground',
     destructive: 'bg-destructive text-destructive-foreground',

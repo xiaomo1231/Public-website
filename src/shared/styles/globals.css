@@ -22,6 +22,37 @@
     --input: 220 13% 91%;
     --ring: 222 47% 17%;
     --radius: 0.5rem;
+
+    /*
+     * Color-theme tokens.
+     *
+     * These alias the semantic tokens above, so the default palette needs no
+     * overrides at all. Each `[data-color-theme='…']` block below redefines
+     * the semantic tokens; the aliases follow automatically because `var()`
+     * is substituted after the cascade. Components reference either the
+     * semantic token (bg-primary, bg-accent, …) or the theme alias
+     * (bg-theme-accent-soft, app-gradient) — never a literal colour.
+     */
+    --theme-primary: var(--primary);
+    --theme-primary-soft: var(--secondary);
+    --theme-accent: var(--accent);
+    --theme-accent-soft: var(--accent);
+    --theme-heading: var(--foreground);
+    --theme-surface-tint: var(--background);
+    --theme-gradient-start: var(--background);
+    --theme-gradient-middle: var(--background);
+    --theme-gradient-end: var(--background);
+
+    /*
+     * Filled surfaces that carry readable text (primary buttons, badges,
+     * tooltips, the brand mark) use `--primary-strong`, not `--primary`.
+     *
+     * `--primary` stays the decorative/accent colour (icons, links, progress
+     * bars, soft tints, focus ring), which may be too light to carry
+     * normal-size text. Where a palette's `primary` already meets WCAG AA the
+     * two are identical (see the Default and Academic themes).
+     */
+    --primary-strong: var(--primary);
   }
 
   .dark {
@@ -42,6 +73,178 @@
     --border: 222 18% 18%;
     --input: 222 18% 18%;
     --ring: 210 20% 96%;
+  }
+
+  /*
+   * ---------------------------------------------------------------------
+   * Color themes
+   * ---------------------------------------------------------------------
+   * One block per palette, in two variants: light and dark. Both variants set
+   * the same properties, so switching Light/Dark never drops a token.
+   *
+   * Dark variants are hand-tuned: the light palette colours would be either
+   * glaring or unreadable on a dark surface, so they are desaturated and
+   * lifted (or darkened) until text contrast holds.
+   *
+   * The light rules are written as `:root[data-color-theme='…']` and the dark
+   * ones as `.dark[data-color-theme='…']`. The dark selector has higher
+   * specificity, so it wins whenever both match — no ordering trap.
+   */
+
+  /* Theme 1 — Pink Aqua */
+  :root[data-color-theme='pinkAqua'] {
+    --background: 192 45% 98%;
+    --foreground: 195 40% 13%;
+    --card: 0 0% 100%;
+    --card-foreground: 195 40% 13%;
+    --primary: 192 63% 44%;
+    /* #1E8F9C — text-safe variant of #2A9BB8 for filled buttons. */
+    --primary-strong: 186.2 67.7% 36.5%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 330 60% 95%;
+    --secondary-foreground: 330 45% 24%;
+    --muted: 192 35% 95%;
+    --muted-foreground: 198 18% 40%;
+    --accent: 195 65% 94%;
+    --accent-foreground: 192 50% 22%;
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 192 32% 88%;
+    --input: 192 32% 88%;
+    --ring: 192 63% 44%;
+    --theme-gradient-start: 192 65% 95%;
+    --theme-gradient-middle: 330 60% 97%;
+    --theme-gradient-end: 195 68% 93%;
+    --theme-surface-tint: 192 55% 99%;
+  }
+
+  .dark[data-color-theme='pinkAqua'] {
+    --background: 195 26% 8%;
+    --foreground: 192 20% 94%;
+    --card: 195 24% 11%;
+    --card-foreground: 192 20% 94%;
+    --primary: 190 58% 62%;
+    /* Dark primaries are already text-safe; keep the pair in sync. */
+    --primary-strong: 190 58% 62%;
+    --primary-foreground: 195 45% 9%;
+    --secondary: 330 20% 18%;
+    --secondary-foreground: 330 30% 92%;
+    --muted: 195 18% 16%;
+    --muted-foreground: 195 14% 66%;
+    --accent: 192 26% 19%;
+    --accent-foreground: 190 35% 90%;
+    --destructive: 0 62% 45%;
+    --destructive-foreground: 210 20% 96%;
+    --border: 195 18% 20%;
+    --input: 195 18% 20%;
+    --ring: 190 58% 62%;
+    --theme-gradient-start: 192 30% 11%;
+    --theme-gradient-middle: 330 22% 12%;
+    --theme-gradient-end: 195 28% 10%;
+    --theme-surface-tint: 195 26% 9%;
+  }
+
+  /* Theme 2 — Warm Orange */
+  :root[data-color-theme='warmOrange'] {
+    --background: 28 55% 98%;
+    --foreground: 15 40% 14%;
+    --card: 30 45% 99%;
+    --card-foreground: 15 40% 14%;
+    --primary: 18 65% 50%;
+    /* #8C3332 — text-safe variant of #D15C2C for filled buttons. */
+    --primary-strong: 0.7 47.4% 37.3%;
+    --primary-foreground: 30 60% 99%;
+    --secondary: 24 75% 93%;
+    --secondary-foreground: 13 55% 26%;
+    --muted: 26 35% 95%;
+    --muted-foreground: 20 18% 40%;
+    --accent: 24 80% 93%;
+    --accent-foreground: 13 55% 24%;
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 22 38% 88%;
+    --input: 22 38% 88%;
+    --ring: 18 65% 50%;
+    --theme-gradient-start: 24 85% 95%;
+    --theme-gradient-middle: 45 70% 97%;
+    --theme-gradient-end: 20 75% 93%;
+    --theme-surface-tint: 28 60% 99%;
+  }
+
+  .dark[data-color-theme='warmOrange'] {
+    --background: 12 24% 9%;
+    --foreground: 28 22% 94%;
+    --card: 12 22% 12%;
+    --card-foreground: 28 22% 94%;
+    --primary: 20 72% 62%;
+    --primary-strong: 20 72% 62%;
+    --primary-foreground: 15 45% 10%;
+    --secondary: 13 24% 19%;
+    --secondary-foreground: 28 35% 92%;
+    --muted: 12 18% 17%;
+    --muted-foreground: 24 15% 66%;
+    --accent: 18 32% 20%;
+    --accent-foreground: 28 40% 92%;
+    --destructive: 0 62% 45%;
+    --destructive-foreground: 210 20% 96%;
+    --border: 12 20% 21%;
+    --input: 12 20% 21%;
+    --ring: 20 72% 62%;
+    --theme-gradient-start: 18 35% 12%;
+    --theme-gradient-middle: 40 25% 12%;
+    --theme-gradient-end: 12 30% 11%;
+    --theme-surface-tint: 12 24% 10%;
+  }
+
+  /* Theme 3 — Academic */
+  :root[data-color-theme='academic'] {
+    --background: 150 32% 98%;
+    --foreground: 189 45% 13%;
+    --card: 48 45% 99%;
+    --card-foreground: 189 45% 13%;
+    /* #2C7F4D already meets AA on white, so `--primary-strong` deliberately
+       keeps aliasing `--primary` here (no override). */
+    --primary: 144 49% 34%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 198 55% 91%;
+    --secondary-foreground: 189 60% 20%;
+    --muted: 150 22% 95%;
+    --muted-foreground: 198 22% 38%;
+    --accent: 45 78% 90%;
+    --accent-foreground: 144 45% 20%;
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 150 22% 87%;
+    --input: 150 22% 87%;
+    --ring: 144 49% 34%;
+    --theme-gradient-start: 198 60% 94%;
+    --theme-gradient-middle: 48 70% 96%;
+    --theme-gradient-end: 144 40% 93%;
+    --theme-surface-tint: 150 35% 99%;
+  }
+
+  .dark[data-color-theme='academic'] {
+    --background: 189 24% 9%;
+    --foreground: 150 18% 94%;
+    --card: 189 22% 12%;
+    --card-foreground: 150 18% 94%;
+    --primary: 144 42% 58%;
+    --primary-foreground: 189 45% 8%;
+    --secondary: 198 22% 19%;
+    --secondary-foreground: 198 30% 91%;
+    --muted: 189 16% 17%;
+    --muted-foreground: 189 14% 66%;
+    --accent: 144 24% 19%;
+    --accent-foreground: 144 30% 89%;
+    --destructive: 0 62% 45%;
+    --destructive-foreground: 210 20% 96%;
+    --border: 189 18% 21%;
+    --input: 189 18% 21%;
+    --ring: 144 42% 58%;
+    --theme-gradient-start: 198 28% 12%;
+    --theme-gradient-middle: 48 20% 12%;
+    --theme-gradient-end: 144 26% 11%;
+    --theme-surface-tint: 189 24% 10%;
   }
 
   * {
@@ -98,6 +301,28 @@
 @layer utilities {
   .text-balance {
     text-wrap: balance;
+  }
+
+  /*
+   * Homepage wash. A deliberately restrained diagonal gradient built from the
+   * theme's soft tokens. Reading surfaces (cards, the tutor article) stay on
+   * solid backgrounds — this is for the dashboard shell only.
+   */
+  .app-gradient {
+    background-image: linear-gradient(
+      135deg,
+      hsl(var(--theme-gradient-start)) 0%,
+      hsl(var(--theme-gradient-middle)) 50%,
+      hsl(var(--theme-gradient-end)) 100%
+    );
+  }
+
+  /*
+   * Translucent theme tint for chrome that sits over content (the app header).
+   * Pairs with `backdrop-blur`; never used for large surfaces.
+   */
+  .app-surface-tint {
+    background-color: hsl(var(--theme-surface-tint) / 0.88);
   }
 
   .focus-ring {

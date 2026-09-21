@@ -49,7 +49,7 @@ export function InvitePage(): JSX.Element {
     <div className="grid min-h-screen place-items-center bg-background p-6">
       <Card className="w-full max-w-md">
         <CardHeader>
-          <div className="mb-2 grid h-10 w-10 place-items-center rounded-md bg-primary text-primary-foreground">
+          <div className="mb-2 grid h-10 w-10 place-items-center rounded-md bg-primary-strong text-primary-foreground">
             <Sparkles className="h-5 w-5" />
           </div>
           <CardTitle>{t('invite.title')}</CardTitle>
