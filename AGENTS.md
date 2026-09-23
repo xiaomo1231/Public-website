@@ -194,8 +194,52 @@ Upload → validation → (blob 落 IndexedDB `documentBlobs`) → processingJob
 - freshness 判定（`evaluateFreshness`，纯函数）只看：`sourceHash` / `promptVersion` / `schemaVersion` / 结构（优先 `structureHash`，旧行回退 `structureVersion`）/ `status`。**明暗模式、配色主题、UI 语言、Class Progress、练习记录都不参与。**
 - `staleReason` / `staleAt` **只是注释**，不是 freshness 输入；`markStale()` 不会单独把结果变成 stale。
 - `reseedProject` 是**单事务原子替换**：AI 失败时旧分析原样保留。
-- **`DocumentAnalysisService.analyzeProject()` 仍是项目级**。`AnalysisScope` / `detectAffectedStructure` / `planIncrementalUpdate` / `planContentDependencies` 只是**规划层**（`mode: 'incremental'` 不代表已实现增量生成）；`analyzeScope` 对 chapter/section 直接拒绝（`ANALYSIS_SCOPE_UNSUPPORTED`）。
+- **`DocumentAnalysisService.analyzeProject()` 仍是项目级**（全量路径不变）。
+- **章节级增量更新已实现**（见 §5.1）：`analyzeScope({type:'chapter'|'section'})` 走**局部**路径，不调用 `analyzeProject`，不调用 `deleteByProject`。
 - 只有 **upload / processing 流程**会调用 `CourseContentService.ensureAnalyzed()`（带 module 级 in-flight 去重）；**打开任何页面都不会触发课程分析**。未配置 API Key 时是 `no-provider`，**不**标记为 failed。
+
+### 5.1 章节级增量更新
+
+**依赖模型（权威来源）**
+
+- `Topic.sourceChunkIds` 是增量依赖的**唯一权威**；`chapterId`/`sectionId` 只是展示与主归属。
+- 依赖由 AI 从**闭集候选**中选择：分析输入给每个 chunk 加 `[c:<chunkId> · 章节 · 页码]` 前缀（`buildCandidateChunkLabel`），AI 只能从这些 id 里选；本地 `validateTopicSourceChunks` 校验（存在性 / 去重 / 稳定排序 / 至少一条），不合法 ⇒ `needsFullReanalysis`，**绝不猜测**。
+- 同时派生 `sourceSectionIds` / `sourceChapterIds` / `dependencyHash` / `sourceChunkFingerprints`（本地计算，不来自 AI）。
+- 分析器提示词已升到 **`document-analyzer/v2`**（旧分析因 `prompt-changed` 自动变 stale）。
+
+**稳定 Topic 身份（`entities/courseAnalysis/topicIdentity.ts`）**
+
+- 全量重析不再重发所有 topic UUID。一对一匹配顺序：`sectionId+归一化name` → `chapterId+归一化name` → **双方都有可信 `sourceChunkIds` 时按来源重叠**；同名但位置与依赖都不明确 ⇒ `ambiguous`，**不复用 id**（新建 topic，旧 topic 保留）；一个旧 id 只被消费一次。
+- 名称**只作匹配键**，不是主键。每次决策都带 machine-readable `reason`。
+
+**分级计划（`IncrementalOp`）**
+
+```text
+unchanged | relinkOnly | regenerateSection | regenerateChapter
+| regenerateTopic | preserveTopic | needsFullReanalysis
+```
+
+- `regenerateSection` / `regenerateChapter` 说明**变化落在哪里**（供 UI/诊断）；实际执行单元是 `regenerateTopic`。
+- 内容证据优先于结构启发式：chunk 按 `sourceChunkFingerprints` **按内容重连**——重处理导致 id 变化但文本相同时只 `relinkOnly`（**不调用 AI**）；重连失败（文本真的变了）才 `regenerateTopic`。
+- 跨章节 Topic 只更新其中一章时**绝不删除**：`inputChunkIds` = 仍有效的声明来源 ∪ 其来源章节/小节的**当前** chunks。
+- 来源章节消失 ⇒ `preserveTopic`；依赖缺失/无有效来源 ⇒ `needsFullReanalysis`。
+
+**执行与原子性**
+
+- `executeIncrementalScope`：内存 staging（逐 topic 调 `topic-analyzer/v1`）→ **预提交重校验**（`sourceHash`/`structureHash` 变了就抛 `CONCURRENT_MODIFICATION`，可重试）→ **单个 Dexie rw 事务**一次性提交。
+- **该事务覆盖 10 张表**：`courseAnalyses` `topics` `concepts` `formulas` `symbols` `examples` `courseExercises` `prerequisites` `practiceQuestions` `courseContexts`。
+- **关联重连也在这个事务里**：PracticeQuestion、NoteLink、LectureChunkLink 的重连先**只读 staging**（`PracticeService.planChunkRelink()` / `CourseContextService.stageDerived()`），再作为 `AtomicSideWrites` 随同一个事务提交。**没有任何 best-effort 的提前写入。**
+- **不调用 `deleteByProject`，不做全量 reseed。** 失败/取消/空响应/并发变化/事务异常 ⇒ 所有表保持提交前状态。
+- 派生行共享时不删：只从 `topicIds` 摘掉被重建的 topic；新行同名合并而非重复插入。
+- `analyzeScope` 只在「所有受影响 topic 都有经本地校验的 `sourceChunkIds` 且结构映射明确」时执行；否则抛 `ANALYSIS_SCOPE_UNSUPPORTED` + `reason ∈ {dependencies-missing, structure-ambiguous, topic-spans-missing-chapter, scope-not-implemented}`，**绝不静默降级为全项目**。
+
+**关联数据**
+
+- 统一的重连原语在 `entities/chunk/relink.ts`：`relinkChunkReference()` 按**内容指纹**把失效的 chunk 引用重指到替代 chunk；无匹配则保留原引用 + `needsRelink` + machine-readable `relinkReason`。原 id 记在 `previousChunkId` / `previousTextbookChunkId`。
+- note/lecture 链接：`CourseContext.sourceHash` **包含教材 chunk id**，并新增 `linkFingerprint`（链接目标指纹，不看数量）。`stageDerived()` 计算 → 增量事务提交；`syncDerived()` 复用它并在导师页打开时持久化（幂等、无 AI）。
+- 教授练习题：`PracticeService.planChunkRelink()` 纯计算，增量事务提交；全量分析路径把它作为 `sideWrites` 传入 `reseedProject` 的同一事务。
+- TutorLesson 只在 topic 行变化时因 `contentHash` 自然失效，**不清空整门课缓存**。
+- Dexie **未升版**；所有新字段都是可选行属性。
 
 ---
 
@@ -299,20 +343,22 @@ docs/             architecture.md
 | 7 | 课时化导师 + 公式符号 + KaTeX 打磨 | 已交付（v0.2.4） |
 | 7b | 教材章节结构 + 课程内容持久化 / freshness | 已交付（v0.2.5） |
 | 7c | 配色主题（Color Themes，4 套）+ 可访问性 | 已交付（v0.2.5） |
+| 7d | 章节级增量内容生成（依赖模型 + 稳定 Topic 身份 + 局部提交） | 已交付（工作区未提交） |
+| 7e | 课时级数学可视化（线性 + 受控非线性显式函数） | 已实现并验证（工作区未提交） |
 | 8 | Dashboard 强化 | 未开始 |
 | 9 | PWA · a11y · 导入导出打磨 | 未开始 |
 
-**工作区干净**：v0.2.5 已提交并发布（tag `v0.2.5`，两个远程仓库各一份 Release + 源码压缩包）。
+**工作区有未提交的改动**（章节级增量更新，7d）：`entities/courseAnalysis/{topicIdentity,types,repository}.ts`、`entities/courseContent/{dependency,incremental,topicDependency,repository,types}.ts`、`entities/courseContext/types.ts`、`entities/practice/types.ts`、`infrastructure/ai/prompts/{index,document-analyzer/v2,document-analyzer/normalize,topic-analyzer/*}`、`services/{documentAnalysisService,courseContentService,courseContextService,practiceService}.ts`、`i18n/locales/*`，以及 `tests/incrementalAnalysis.test.ts`、`tests/ai/prompts.test.ts`。v0.2.5 已提交并发布（tag `v0.2.5`，两个远程仓库各一份 Release + 源码压缩包）。
 
 ### 待用户拍板的决策点
 
 1. **简答题**：原始需求要求支持，当前已移除。选项：保持移除 / AI 判分并标注低置信 / 仅作不计分练习。
 2. **作答时间**：需求提到「回答时间（如果可获得）」，当前**未采集**。是否加 `QuestionAttempt.durationMs` 并纳入难度模型。
 3. **检索策略**：Phase 6 RAG 是否现在做？当前是「按主题 sourceRefs 取块 + 长上下文」，资料量大时才需要向量检索。
-4. **增量分析**：`AnalysisScope` / 依赖规划已就绪，但**未实现真正的章节级增量生成**。做之前必须先解决 Topic 跨章节边界（见 `entities/courseContent/dependency.ts` 的说明），不要直接按章节删除重建。
+4. **增量分析**：**章节级增量生成已实现**（§5.1）。边界：只支持「按章节/小节」的局部更新，且要求受影响 topic 都已有经本地校验的 `sourceChunkIds`；旧数据缺依赖时返回 `ANALYSIS_SCOPE_UNSUPPORTED`（`dependencies-missing`）而非降级。跨章节 Topic 的**多来源扩展**仍是保守策略（只在其自身来源被证明变化时才重建）。
 5. **`#4C1A2`**：Warm Orange 主题的 `deep` 色按用户原文保留，但它不是合法 hex，无法用作 CSS 颜色。当前处理：保留在 palette metadata 里，**不写入任何 CSS 变量**；主题选择器把它渲染成「不可用」虚线 `?` 色块，不伪造颜色。等待正确色值。
 6. **对比度**：浅色主按钮已改用 `--primary-strong`（Pink Aqua `#1E8F9C` = 3.84:1，Warm Orange `#8C3332` = 7.79:1；Default 15.55:1，Academic 4.82:1）。**Pink Aqua 仍为 AA-large，未达 AA-normal（4.5:1）**——因为 `#1E8F9C` 是用户指定值，达标需要改色。暗色模式主按钮 6.67–14.22:1 全部达标。
-7. **数学可视化（Phase 0 已完成检查，Phase 1 未开始）**：仓库**没有任何现成的绘图能力**（无 plot/chart/svg 库、无 SVG 渲染器）；mathjs 可解析求值 `2x+1` / `sin(x)`，但**无法解析 LaTeX，也无法解析两侧都含变量的等式**（`x + y = 6` 解析失败），且没有通用解方程。**Phase 1 的闸门是「结构化可视化数据从哪来」**——建议独立第二次 AI 调用 + JSON schema（照 `quiz-generator` 模式），而**不是**把课时提示词改成 JSON，也**不是**从课时 LaTeX 推导。另：Markdown 管线**没有块级稳定 ID**（`MarkdownBlock`/`LessonSection` 无 id，React key 是下标），因此建议 Phase 1 采用**课时级**放置，与现有 `TutorLesson.visuals` 先例一致。
+7. **数学可视化（Phase 1 / 1.1 / 2 已实现并验证，工作区未提交）**：按 Phase 0 结论实现——独立第二次结构化 JSON AI 调用（`visualization-generator/v1`）+ 本地 mathjs AST 白名单 + 确定性采样 + 确定性 SVG renderer（`TutorVisualizationFigure` / `plotLayout`）。支持线性函数/方程/方程组/不等式/点集/表格，以及受控的非线性显式函数（二次、sin/cos、指数、对数、倒数、平方根）；隐式曲线、参数/极坐标、3D、向量、几何、动画**不支持**，安全回退为普通 LaTeX。放置为课时级（`TutorLesson.visualizations?`）。未新增 Dexie 表/索引；`TUTOR_LESSON_VERSION`=3、`TUTOR_VISUALIZATION_SCHEMA_VERSION`=1、prompt 仍 v1（未 bump）。详见 `README.md` 与 `docs/architecture.md`。
 
 ### 已知限制
 

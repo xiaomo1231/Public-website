@@ -1,16 +1,136 @@
-# Architecture (Phase 0 design)
+# Architecture
 
-> The original architecture brief presented before Phase 1 implementation.
-> For the code-level details of what's been built so far, see `README.md` and the source under `src/`.
+> This document mixes the original **Phase 0 design brief** with the **current
+> implementation**. Read "Current implementation" first; the later sections are
+> the historical brief and are labelled where they differ from the code.
+>
+> Only facts verified by the code and tests are stated here. Unreleased
+> working-tree features are marked **(unreleased)**; planned work is marked
+> **(planned)** and is not implemented.
+
+## Current implementation (V0.2.5 + unreleased working tree)
+
+### Storage — current truth
+
+- **All structured data and raw file bytes live in IndexedDB (Dexie)**, schema
+  **v11**, **33 tables**. Raw file bytes are stored in `documentBlobs.bytes`
+  (`ArrayBuffer`).
+- `src/infrastructure/opfs/opfs.ts` is an **unwired optional fast path** (no
+  import anywhere in the project); it is **not** the current storage. The Phase 0
+  OPFS diagram further down is historical.
+- `localStorage` holds only the UI-language mirror (`ai-learning:ui-language`).
+  Appearance preferences (mode + color theme) live in `UserProfile`.
+
+### Layers
+
+```
+UI → Feature hooks → Services → Repositories → Dexie
+```
+
+UI never touches IndexedDB. The course-content read model is
+`CourseContentRepository` / `CourseContentService` (aggregate + freshness +
+manifest); it owns no table and duplicates no data.
+
+### Course analysis freshness
+
+`evaluateFreshness` (pure) depends only on `sourceHash` / `promptVersion` /
+`schemaVersion` / structure (`structureHash`, falling back to `structureVersion`)
+/ `status`. **Theme, color theme, UI language, class progress and practice
+records never participate.** `reseedProject` replaces the analysis in a single
+transaction, so an AI failure leaves the previous result intact.
+
+### Chapter-level incremental analysis (Phase 7d, unreleased)
+
+- `Topic.sourceChunkIds` is the dependency authority; `chapterId` / `sectionId`
+  are display only. Dependencies are chosen from a **closed candidate set** and
+  validated locally (`validateTopicSourceChunks`); invalid ⇒
+  `needsFullReanalysis`.
+- **Stable Topic identity**: `sectionId + normalized name` → `chapterId +
+  normalized name` → source-chunk overlap; ambiguous ⇒ a new id (never a guess).
+- **`IncrementalOp` plan**: `unchanged | relinkOnly | regenerateSection |
+  regenerateChapter | regenerateTopic | preserveTopic | needsFullReanalysis`.
+  Content evidence wins: an unchanged passage that only changed chunk id is
+  re-pointed by content fingerprint ⇒ `relinkOnly` (**no AI**).
+- `executeIncrementalScope`: in-memory staging → pre-commit re-validation
+  (`CONCURRENT_MODIFICATION`) → **one Dexie read-write transaction** over 10
+  tables (`courseAnalyses`, `topics`, `concepts`, `formulas`, `symbols`,
+  `examples`, `courseExercises`, `prerequisites`, `practiceQuestions`,
+  `courseContexts`). Association re-linking (PracticeQuestion, NoteLink,
+  LectureChunkLink) is staged read-only and committed inside the same
+  transaction — there are no best-effort early writes. No `deleteByProject`.
+- An unsupported scope throws `ANALYSIS_SCOPE_UNSUPPORTED` and never silently
+  degrades to a whole-project analysis.
+- Dexie was **not** bumped; all new fields are optional row properties.
+
+### Tutor lesson ↔ course analysis decoupling
+
+Course analysis never imports or calls the tutor-lesson or visualization
+modules. A topic change invalidates the cached lesson only through the existing
+`TutorLesson.contentHash` (topic fields + prompt version + notes/transcript
+context). Opening any page never triggers a project-level analysis.
+
+### Tutor math visualization (Phase 1 / 1.1 / 2, unreleased)
+
+```
+Tutor Lesson Markdown
+  → local graphable gate (cheap, permissive; only decides whether to call AI)
+  → 2nd, independent structured-JSON AI call (visualization-generator)
+  → normalize / validate
+  → TutorLesson.visualizations?  (optional, additive field)
+  → deterministic SVG renderer (TutorVisualizationFigure + plotLayout)
+```
+
+- The model returns **structured data only** (`latex`, plus an optional
+  plain-syntax `expression` and `domain` for nonlinear curves). It never returns
+  SVG, HTML, JavaScript, CSS or colours.
+- Linear relations are solved exactly. Nonlinear explicit functions are parsed
+  with `mathjs` and walked against a strict **AST whitelist** (variable `x`,
+  named constants, `+ - * /`, constant powers ∈ [0,2], `sin/cos/exp/log/ln/sqrt`)
+  with complexity caps (length 120 / nodes 80 / depth 12 / constant 1e6). There
+  is **no `eval` and no `new Function`**.
+- **Deterministic uniform sampling** (240–1440 points) handles domains,
+  vertical-asymptote splitting, non-finite filtering and extreme-value clamping;
+  the same input always produces the same output.
+- Rendering uses only `--viz-*` theme tokens and a responsive viewBox (labels
+  stay readable at 375px). The renderer never calls AI and never writes course
+  data. A failed or invalid visualization drops only that figure; the lesson
+  still renders.
+
+### Cache & versions
+
+| Concept | Value | Notes |
+| --- | --- | --- |
+| Dexie `verno` | 11 | database shape |
+| `TUTOR_LESSON_VERSION` | 3 | v2 added source figures, v3 added visualizations |
+| `TUTOR_VISUALIZATION_SCHEMA_VERSION` | 1 | visualization data shape |
+| `COURSE_ANALYSIS_SCHEMA_VERSION` | — | independent of Dexie |
+| `visualization-generator` prompt | v1 | extended in place for Phase 2 |
+
+Phase 2 added optional `expression` / `domain` only: no version bump, no Dexie
+migration, no forced lesson regeneration, and no extra AI requests for cached
+lessons.
+
+### Planned (not implemented)
+
+- **Phase 3** (planned): subject-specific visualizations for discrete
+  mathematics and linear algebra. Scope analysis only — no source, prompt or
+  test files exist yet.
+
+---
+
+## Historical Phase 0 design brief
+
+The sections below are the original design brief. Where they differ from the
+current implementation, the "Current implementation" section above wins.
 
 ## Product shape
 
 A **pure-frontend PWA** — no first-party backend in Phase 1. All persistence is browser-side; AI requests go from the browser directly to the user-configured provider.
 
 ```
-┌─ OPFS (raw files, thumbnails) ─┐
-│ projects/{id}/documents/...    │
-└────────────────────────────────┘
+┌─ OPFS (raw files, thumbnails) ─┐   ← HISTORICAL / NOT WIRED
+│ projects/{id}/documents/...    │   Current: raw bytes live in
+└────────────────────────────────┘   IndexedDB `documentBlobs.bytes`
 ┌─ IndexedDB (Dexie) ────────────┐
 │ projects, documents, chunks,   │
 │ lessons, questions, attempts,  │
@@ -19,7 +139,7 @@ A **pure-frontend PWA** — no first-party backend in Phase 1. All persistence i
 └────────────────────────────────┘
 ```
 
-Why OPFS + IndexedDB: OPFS handles large binaries efficiently (streaming, no serialization overhead) while IndexedDB excels at structured queries for metadata.
+Why OPFS + IndexedDB: OPFS handles large binaries efficiently (streaming, no serialization overhead) while IndexedDB excels at structured queries for metadata. *(Historical rationale — OPFS was never wired; the shipped implementation stores raw bytes in IndexedDB.)*
 
 ## Layers
 
@@ -199,10 +319,17 @@ Never "You are bad at…".
 3. AI Provider · Course Analysis · Tutor · Translation — ✅ shipped
 4. Quiz · Adaptive Difficulty · Knowledge Mastery — ✅ shipped
 5. AI Mistake Book · Weakness Detection · Review Sessions — ✅ shipped
-6. Knowledge index + retrieval (RAG) — planned
-7. KaTeX rendering + formula polish — planned
-8. Dashboard — planned
-9. PWA polish, a11y, import/export — planned
+6. Knowledge index + retrieval (RAG) — **planned**
+7. KaTeX rendering + formula polish — ✅ shipped (v0.2.4); course structure /
+   content persistence (7b) and color themes (7c) — ✅ shipped (v0.2.5)
+7d. Chapter-level incremental course analysis — **unreleased** (implemented and
+    verified in the working tree)
+7e. Tutor math visualization Phase 1 / 1.1 / 2 — **unreleased** (implemented and
+    verified in the working tree)
+8. Dashboard — **planned**
+9. PWA polish, a11y, import/export — **planned**
+Phase 3 (subject visualizations for discrete math / linear algebra) — **planned**,
+scope analysis only
 
 ## Security model
 
@@ -213,7 +340,10 @@ Never "You are bad at…".
 - Document content, student answers, and selections are treated as untrusted; prompt-injection defences applied to every prompt that embeds them
 - AI structured output is validated + sanitised before reaching the database
 - Project-scoped queries; unknown project ids fail as `NotFoundError`
-- No `dangerouslySetInnerHTML`; Markdown/LaTeX rendered as text
+- No raw HTML from documents or AI output. Markdown/LaTeX is rendered as React
+  elements. The only `dangerouslySetInnerHTML` use is KaTeX output generated
+  **locally** from a LaTeX string with `trust: false`; AI- or document-supplied
+  HTML strings are never injected.
 - CSP-friendly: no eval, no remote scripts
 
 ### Key management
