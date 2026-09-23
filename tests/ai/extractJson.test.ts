@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { extractJSON } from '@/infrastructure/ai/openaiCompatible'
+import { extractJSON, repairInvalidEscapes } from '@/infrastructure/ai/openaiCompatible'
 import { InvalidJSONError } from '@/infrastructure/ai/errors'
 
 /**
@@ -73,5 +73,56 @@ describe('extractJSON', () => {
 
   it('J. reports the original JSON error when nothing parses', () => {
     expect(() => extractJSON('prefix [p1] suffix')).toThrow(InvalidJSONError)
+  })
+
+  it('K. never returns a fragment nested inside a malformed document', () => {
+    // The outer analysis is invalid (missing colon) but the first topic object
+    // is perfectly parseable. The extractor must NOT hand back that topic.
+    const raw =
+      '{"language":"en","topics":[{"name":"Derivatives","description":"Rates of change","sourceChunkIds":["c:1"],"sourceRefs":[]}],"formulas":[{"name" "broken"}]}'
+    expect(() => extractJSON(raw)).toThrow(InvalidJSONError)
+  })
+
+  it('K2. rejects a topic-shaped fragment when the enclosing array is broken', () => {
+    const raw =
+      '{"language":"en","topics":[{"name":"Derivatives","description":"Rates","sourceChunkIds":["c:1"],"sourceRefs":[]},{"name" "broken"}]}'
+    expect(() => extractJSON(raw)).toThrow(InvalidJSONError)
+  })
+
+  it('L. repairs an unescaped LaTeX backslash and returns the whole document', () => {
+    // `\sqrt` is not a legal JSON escape; without repair the whole payload is
+    // unparseable and a nested topic could be mistaken for the document.
+    const raw =
+      '{"language":"en","topics":[{"name":"Derivatives","description":"Rates","sourceChunkIds":["c:1"],"sourceRefs":[]}],"formulas":[{"name":"Power","latex":"\\sqrt{x}"}]}'
+    const parsed = extractJSON<{ topics: Array<{ name: string }>; formulas: Array<{ latex: string }> }>(
+      raw,
+    )
+    expect(parsed.topics[0]?.name).toBe('Derivatives')
+    expect(parsed.formulas[0]?.latex).toBe('\\sqrt{x}')
+  })
+
+  it('M. prefers the longest fenced block', () => {
+    const raw = [
+      '```json',
+      '{"name":"Example"}',
+      '```',
+      '',
+      '```json',
+      '{"language":"en","topics":[],"concepts":[],"formulas":[],"symbols":[],"examples":[],"exercises":[],"prerequisites":[]}',
+      '```',
+    ].join('\n')
+    const parsed = extractJSON<{ language?: string; name?: string }>(raw)
+    expect(parsed.language).toBe('en')
+  })
+
+  it('N. leaves valid JSON untouched', () => {
+    const valid = '{"a":"line\\nbreak","b":"\\u0041"}'
+    expect(repairInvalidEscapes(valid)).toBe(valid)
+    expect(extractJSON(valid)).toEqual({ a: 'line\nbreak', b: 'A' })
+  })
+
+  it('O. only repairs invalid escapes inside strings', () => {
+    expect(repairInvalidEscapes('{"x":"\\sqrt{2}"}')).toBe('{"x":"\\\\sqrt{2}"}')
+    expect(repairInvalidEscapes('{"x":"\\n"}')).toBe('{"x":"\\n"}')
   })
 })

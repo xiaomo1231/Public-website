@@ -480,36 +480,106 @@ function balancedSlice(text: string, start: number): string | null {
 /** Bounds the scan so pathological prose cannot make parsing quadratic. */
 const MAX_JSON_CANDIDATES = 200
 
+/** The characters that may legally follow a backslash inside a JSON string. */
+const VALID_ESCAPE_CHARS = new Set(['"', '\\', '/', 'b', 'f', 'n', 'r', 't', 'u'])
+
+/**
+ * Repair the most common malformed-JSON defect from a language model: a
+ * backslash inside a string that was never escaped. Course analysis is full of
+ * LaTeX (`\sqrt`, `\cap`, `\le`, …), and `\s`/`\c`/`\l` are not legal JSON
+ * escapes, so a single unescaped command makes the entire document unparseable.
+ *
+ * Inside strings, a backslash not followed by a legal escape character is
+ * doubled (`\sqrt` → `\\sqrt`). Already-valid JSON is returned unchanged, and
+ * text outside strings is never touched.
+ */
+export function repairInvalidEscapes(text: string): string {
+  if (!text.includes('\\')) return text
+  let out = ''
+  let inString = false
+  for (let i = 0; i < text.length; i += 1) {
+    const ch = text[i]!
+    if (!inString) {
+      if (ch === '"') inString = true
+      out += ch
+      continue
+    }
+    if (ch === '\\') {
+      const next = text[i + 1]
+      if (next !== undefined && VALID_ESCAPE_CHARS.has(next)) {
+        out += ch + next
+        i += 1
+      } else {
+        out += '\\\\'
+      }
+      continue
+    }
+    if (ch === '"') inString = false
+    out += ch
+  }
+  return out
+}
+
+/**
+ * Parse `text`, retrying once after repairing unescaped backslashes. Returns a
+ * discriminated result so a legitimate `null` JSON value is never confused with
+ * a parse failure.
+ */
+function parseLenient(text: string): { ok: true; value: unknown } | { ok: false; error: Error } {
+  try {
+    return { ok: true, value: JSON.parse(text) }
+  } catch (error) {
+    const repaired = repairInvalidEscapes(text)
+    if (repaired !== text) {
+      try {
+        return { ok: true, value: JSON.parse(repaired) }
+      } catch {
+        /* keep the original error below */
+      }
+    }
+    return { ok: false, error: error as Error }
+  }
+}
+
 /**
  * Parse a JSON value out of an AI response. Handles:
  *  - clean JSON
  *  - JSON wrapped in ```json fences
  *  - JSON embedded in prose
+ *  - unescaped backslashes inside strings (repaired once)
  *  - fallback: throws InvalidJSONError
  *
  * Candidates are validated by actually parsing them. Merely starting at the
  * first `{` or `[` is not enough: the page markers we send to the model
  * (`[p1]`, `[p2]`, …) are echoed back when it cites sources, and `[p1]` would
  * otherwise be mistaken for the JSON document.
+ *
+ * Only *top-level* candidates are considered. Once a balanced candidate fails
+ * to parse its whole span is skipped, so a fragment nested inside a malformed
+ * document (for example one topic object inside a broken course analysis) can
+ * never be returned in place of the document.
  */
 export function extractJSON<T = unknown>(content: string): T {
   const trimmed = content.trim()
   if (!trimmed) throw new InvalidJSONError('empty response')
 
-  // Strip ```json fences.
-  const fenceMatch = trimmed.match(/```(?:json)?\s*([\s\S]*?)\s*```/i)
-  if (fenceMatch) {
-    return parseStrict(fenceMatch[1]!.trim()) as T
+  // Fenced JSON. A response may contain several fenced blocks — an
+  // illustrative snippet followed by the real payload, say — so the longest is
+  // tried first: a small example cannot be mistaken for the document.
+  const fenced = [...trimmed.matchAll(/```(?:json)?\s*([\s\S]*?)\s*```/gi)].map((match) =>
+    match[1]!.trim(),
+  )
+  for (const block of [...fenced].sort((a, b) => b.length - a.length)) {
+    const parsed = parseLenient(block)
+    if (parsed.ok) return parsed.value as T
   }
 
-  // Try direct parse.
-  try {
-    return JSON.parse(trimmed) as T
-  } catch {
-    /* fall through */
-  }
+  // Try the whole response directly.
+  const direct = parseLenient(trimmed)
+  if (direct.ok) return direct.value as T
 
-  // Scan each bracket that could start a JSON value; take the first that parses.
+  // Scan each bracket that could start a JSON value, skipping the whole span of
+  // a candidate that fails so nested fragments are never accepted.
   let sawBracket = false
   let lastError: Error | null = null
   let attempts = 0
@@ -519,12 +589,13 @@ export function extractJSON<T = unknown>(content: string): T {
     sawBracket = true
     attempts += 1
     const candidate = balancedSlice(trimmed, start)
-    if (!candidate) continue
-    try {
-      return JSON.parse(candidate) as T
-    } catch (err) {
-      lastError = err as Error
-    }
+    // An opener that never closes means the payload is truncated; there is no
+    // complete value to recover.
+    if (!candidate) break
+    const parsed = parseLenient(candidate)
+    if (parsed.ok) return parsed.value as T
+    lastError = parsed.error
+    start += candidate.length - 1
   }
 
   logger.debug('AI JSON extraction failed', {
@@ -536,12 +607,4 @@ export function extractJSON<T = unknown>(content: string): T {
   if (lastError) throw new InvalidJSONError(lastError.message)
   if (sawBracket) throw new InvalidJSONError('unbalanced braces')
   throw new InvalidJSONError('no JSON token found')
-}
-
-function parseStrict(text: string): unknown {
-  try {
-    return JSON.parse(text)
-  } catch (err) {
-    throw new InvalidJSONError((err as Error).message)
-  }
 }
