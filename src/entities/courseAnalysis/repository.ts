@@ -14,6 +14,8 @@ import type {
 import { COURSE_ANALYSIS_SCHEMA_VERSION } from './types'
 import type { DifficultyLevel } from '@/infrastructure/ai/prompts/types'
 import { prompts } from '@/infrastructure/ai/prompts'
+import type { PracticeQuestion } from '../practice/types'
+import type { CourseContext } from '../courseContext/types'
 import { logger } from '@/infrastructure/logger/logger'
 import { StorageError } from '@/infrastructure/errors/AppError'
 import { t } from '@/i18n'
@@ -32,6 +34,25 @@ export interface ReseedMeta {
   derivedFromStructureVersion?: number
   /** Content fingerprint of the structure this result was derived from. */
   derivedFromStructureHash?: string
+  /**
+   * Rows from other tables that must land in the **same** transaction, so a
+   * failure can never leave a half-applied update behind.
+   */
+  sideWrites?: AtomicSideWrites
+}
+
+/**
+ * Rows owned by other entities that participate in a course-content commit.
+ *
+ * They are written inside the *same* Dexie transaction as the topics and the
+ * analysis row. That is the whole point: a chunk reference that was re-pointed
+ * must never become visible unless the content it belongs to did too.
+ */
+export interface AtomicSideWrites {
+  /** Professor-practice rows whose chunk reference was re-pointed. */
+  practiceQuestions?: PracticeQuestion[]
+  /** The project's derived course context, when it actually changed. */
+  courseContext?: CourseContext
 }
 
 export class CourseAnalysisRepository {
@@ -178,6 +199,14 @@ export class CourseAnalysisRepository {
         sectionNumber?: string
         chapterTitle?: string
         sectionTitle?: string
+        /** Validated incremental dependency; absent ⇒ `needsFullReanalysis`. */
+        sourceChunkIds?: string[]
+        sourceChapterIds?: string[]
+        sourceSectionIds?: string[]
+        dependencyHash?: string
+        sourceChunkFingerprints?: Record<string, string>
+        needsFullReanalysis?: boolean
+        promptVersion?: string
       }>
       concepts: Array<{ name: string; definition: string; explanation?: string; topicNames: string[]; sourceRefs: SourceReference[] }>
       formulas: Array<{ name: string; latex: string; description: string; variables: Array<{ symbol: string; meaning: string }>; topicNames: string[]; sourceRefs: SourceReference[] }>
@@ -211,6 +240,13 @@ export class CourseAnalysisRepository {
       ...(t.sectionNumber ? { sectionNumber: t.sectionNumber } : {}),
       ...(t.chapterTitle ? { chapterTitle: t.chapterTitle } : {}),
       ...(t.sectionTitle ? { sectionTitle: t.sectionTitle } : {}),
+      ...(t.sourceChunkIds ? { sourceChunkIds: t.sourceChunkIds } : {}),
+      ...(t.sourceChapterIds ? { sourceChapterIds: t.sourceChapterIds } : {}),
+      ...(t.sourceSectionIds ? { sourceSectionIds: t.sourceSectionIds } : {}),
+      ...(t.dependencyHash ? { dependencyHash: t.dependencyHash } : {}),
+      ...(t.sourceChunkFingerprints ? { sourceChunkFingerprints: t.sourceChunkFingerprints } : {}),
+      ...(t.needsFullReanalysis ? { needsFullReanalysis: true } : {}),
+      ...(t.promptVersion ? { promptVersion: t.promptVersion } : {}),
       createdAt: now,
     }))
 
@@ -274,15 +310,17 @@ export class CourseAnalysisRepository {
       createdAt: now,
     }))
 
-    await this.replaceProjectData(projectId, {
-      topics,
-      concepts,
-      formulas,
-      symbols,
-      examples,
-      exercises,
-      prerequisites,
-      analysis: {
+    await this.replaceProjectData(
+      projectId,
+      {
+        topics,
+        concepts,
+        formulas,
+        symbols,
+        examples,
+        exercises,
+        prerequisites,
+        analysis: {
         id: meta.analysisId ?? crypto.randomUUID(),
         projectId,
         status: 'ready',
@@ -305,7 +343,9 @@ export class CourseAnalysisRepository {
           ? { derivedFromStructureHash: meta.derivedFromStructureHash }
           : {}),
       },
-    })
+      ...(meta.sideWrites ? { sideWrites: meta.sideWrites } : {}),
+      },
+    )
   }
 
   /**
@@ -327,9 +367,11 @@ export class CourseAnalysisRepository {
       exercises: CourseExercise[]
       prerequisites: Prerequisite[]
       analysis: CourseAnalysis
+      sideWrites?: AtomicSideWrites
     },
   ): Promise<void> {
     const table = (name: string) => this.db.table(name)
+    const sideWrites = next.sideWrites
     try {
       await this.db.transaction(
         'rw',
@@ -342,6 +384,7 @@ export class CourseAnalysisRepository {
           table('examples'),
           table('courseExercises'),
           table('prerequisites'),
+          ...(sideWrites ? [table('practiceQuestions'), table('courseContexts')] : []),
         ],
         async () => {
           await Promise.all([
@@ -367,6 +410,7 @@ export class CourseAnalysisRepository {
               : Promise.resolve(),
           ])
           await table('courseAnalyses').put(next.analysis)
+          await this.writeSideWrites(sideWrites)
         },
       )
     } catch (err) {
@@ -374,4 +418,191 @@ export class CourseAnalysisRepository {
       throw new StorageError(t('storage.failedToClearAnalysis'), err)
     }
   }
+
+  /**
+   * Replace only the given topics and their derived rows, in one transaction.
+   *
+   * This is the incremental commit path. It never deletes project-wide data:
+   *
+   *   - rows owned *only* by a regenerated topic are deleted;
+   *   - rows shared with a topic that was **not** regenerated keep their other
+   *     topic ids and simply lose the regenerated one;
+   *   - new rows merge into an existing same-name row instead of duplicating it.
+   *
+   * A failure rolls the whole thing back, so the previous content stays usable.
+   */
+  async applyTopicUpdates(
+    projectId: string,
+    updates: TopicDerivedUpdate[],
+    options: {
+      /** Updated analysis row, written in the same transaction when supplied. */
+      analysis?: CourseAnalysis
+      /**
+       * Topics whose dependency was re-pointed at replacement chunks. Their rows
+       * are written, but their derived content is left alone — nothing changed
+       * except which chunk ids they cite.
+       */
+      relinkedTopics?: Topic[]
+      /**
+       * Practice rows / derived context that were re-pointed. Written in the
+       * **same** transaction so a re-pointed reference can never become visible
+       * without the content it belongs to.
+       */
+      sideWrites?: AtomicSideWrites
+    } = {},
+  ): Promise<void> {
+    const { analysis, relinkedTopics = [], sideWrites } = options
+    if (updates.length === 0 && relinkedTopics.length === 0 && !analysis && !sideWrites) return
+    const table = (name: string) => this.db.table(name)
+    try {
+      await this.db.transaction(
+        'rw',
+        [
+          table('courseAnalyses'),
+          table('topics'),
+          table('concepts'),
+          table('formulas'),
+          table('symbols'),
+          table('examples'),
+          table('courseExercises'),
+          table('prerequisites'),
+          ...(sideWrites ? [table('practiceQuestions'), table('courseContexts')] : []),
+        ],
+        async () => {
+          for (const update of updates) {
+            await table('topics').put(update.topic)
+          }
+          for (const relinked of relinkedTopics) {
+            await table('topics').put(relinked)
+          }
+
+          await this.applyDerivedCollection(
+            'concepts',
+            projectId,
+            updates,
+            (update) => update.concepts,
+            (row) => row.name,
+          )
+          await this.applyDerivedCollection(
+            'formulas',
+            projectId,
+            updates,
+            (update) => update.formulas,
+            (row) => row.name,
+          )
+          await this.applyDerivedCollection(
+            'symbols',
+            projectId,
+            updates,
+            (update) => update.symbols,
+            (row) => row.symbol,
+          )
+          await this.applyDerivedCollection(
+            'examples',
+            projectId,
+            updates,
+            (update) => update.examples,
+            (row) => row.title,
+          )
+          await this.applyDerivedCollection(
+            'courseExercises',
+            projectId,
+            updates,
+            (update) => update.exercises,
+            (row) => row.prompt,
+          )
+          await this.applyDerivedCollection(
+            'prerequisites',
+            projectId,
+            updates,
+            (update) => update.prerequisites,
+            (row) => row.name,
+          )
+          if (analysis) await table('courseAnalyses').put(analysis)
+          await this.writeSideWrites(sideWrites)
+        },
+      )
+    } catch (err) {
+      logger.error('applyTopicUpdates failed; the previous topics were kept', { projectId }, err)
+      throw new StorageError(t('storage.failedToClearAnalysis'), err)
+    }
+  }
+
+  /**
+   * Write the participating rows from other entities.
+   *
+   * Always called from inside an already-open transaction, so it must never
+   * start one of its own — that is what keeps the commit atomic.
+   */
+  private async writeSideWrites(sideWrites: AtomicSideWrites | undefined): Promise<void> {
+    if (!sideWrites) return
+    for (const question of sideWrites.practiceQuestions ?? []) {
+      await this.db.table('practiceQuestions').put(question)
+    }
+    if (sideWrites.courseContext) {
+      await this.db.table('courseContexts').put(sideWrites.courseContext)
+    }
+  }
+
+  private async applyDerivedCollection<T extends { id: string; projectId: string; topicIds: string[] }>(
+    tableName: string,
+    projectId: string,
+    updates: TopicDerivedUpdate[],
+    pick: (update: TopicDerivedUpdate) => T[],
+    nameOf: (row: T) => string,
+  ): Promise<void> {
+    const table = this.db.table<T, string>(tableName)
+    const existing = await table.where('projectId').equals(projectId).toArray()
+    const byName = new Map<string, T>()
+    for (const row of existing) byName.set(normalizeRowName(nameOf(row)), row)
+
+    // Detach the regenerated topics from every existing row.
+    const regenerated = new Set(updates.map((update) => update.topic.id))
+    for (const row of existing) {
+      const owned = row.topicIds.filter((id) => regenerated.has(id))
+      if (owned.length === 0) continue
+      const remaining = row.topicIds.filter((id) => !regenerated.has(id))
+      if (remaining.length > 0) {
+        // Shared with a topic we did not touch — keep the row, drop our link.
+        row.topicIds = remaining
+        await table.put(row)
+        continue
+      }
+      await table.delete(row.id)
+      byName.delete(normalizeRowName(nameOf(row)))
+    }
+
+    for (const update of updates) {
+      for (const row of pick(update)) {
+        const key = normalizeRowName(nameOf(row))
+        const clash = byName.get(key)
+        if (clash && clash.id !== row.id) {
+          const merged: T = {
+            ...clash,
+            topicIds: [...new Set([...clash.topicIds, ...row.topicIds])],
+          }
+          await table.put(merged)
+          byName.set(key, merged)
+          continue
+        }
+        await table.put(row)
+        byName.set(key, row)
+      }
+    }
+  }
+}
+
+/** One topic plus everything derived from it, staged for the incremental commit. */
+export interface TopicDerivedUpdate {
+  topic: Topic
+  concepts: Concept[]
+  formulas: Formula[]
+  symbols: CourseSymbol[]
+  examples: Example[]
+  exercises: CourseExercise[]
+  prerequisites: Prerequisite[]
+}
+
+function normalizeRowName(value: string): string {
+  return (value ?? '').normalize('NFKC').toLowerCase().replace(/\s+/g, ' ').trim()
 }

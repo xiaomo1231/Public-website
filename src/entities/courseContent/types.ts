@@ -1,4 +1,5 @@
 import type { CourseAnalysis } from '../courseAnalysis/types'
+import { AppError } from '@/infrastructure/errors/AppError'
 
 /**
  * Course Content — the *logical* view of a project's persisted AI analysis and
@@ -103,6 +104,32 @@ export const IMPLEMENTED_ANALYSIS_SCOPES = ['project'] as const
 
 export function isAnalysisScopeImplemented(scope: AnalysisScope): boolean {
   return scope.type === 'project'
+}
+
+/** Machine-readable reason a scoped analysis was refused. */
+export type AnalysisScopeReason =
+  /** No topic in scope carries a locally validated `sourceChunkIds`. */
+  | 'dependencies-missing'
+  /** The chapter/section id does not map onto the detected structure. */
+  | 'structure-ambiguous'
+  /** A topic depends on a chapter that no longer exists. */
+  | 'topic-spans-missing-chapter'
+  /** The scope type has no executor at all. */
+  | 'scope-not-implemented'
+
+/**
+ * Refusal of a scoped analysis.
+ *
+ * Carries a `reason` so callers (and the UI) can act on the specific cause
+ * instead of parsing a message. Never a silent fallback to project scope.
+ */
+export class AnalysisScopeUnsupportedError extends AppError {
+  readonly reason: AnalysisScopeReason
+
+  constructor(message: string, reason: AnalysisScopeReason) {
+    super(message, 'ANALYSIS_SCOPE_UNSUPPORTED')
+    this.reason = reason
+  }
 }
 
 type FreshnessInput = Pick<

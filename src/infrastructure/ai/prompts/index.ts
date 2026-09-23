@@ -4,7 +4,8 @@
  * here in one place.
  */
 
-import * as DocumentAnalyzerV1 from './document-analyzer/v1'
+import * as DocumentAnalyzerV2 from './document-analyzer/v2'
+import * as TopicAnalyzerV1 from './topic-analyzer/v1'
 import * as TutorLessonV1 from './tutor/v1-lesson'
 import * as TutorIntroduceV1 from './tutor/v1-introduce'
 import * as TutorQuestionV1 from './tutor/v1-question'
@@ -16,7 +17,8 @@ import * as MistakeAnalyzerV2 from './mistake-analyzer/v2'
 import * as QuizGeneratorV1 from './quiz-generator/v1'
 
 export const PROMPT_VERSIONS = {
-  documentAnalyzer: 'v1',
+  documentAnalyzer: 'v2',
+  topicAnalyzer: 'v1',
   tutorLesson: 'v1',
   tutorIntroduce: 'v1',
   tutorQuestion: 'v1',
@@ -29,7 +31,8 @@ export const PROMPT_VERSIONS = {
 } as const
 
 export const prompts = {
-  documentAnalyzer: DocumentAnalyzerV1,
+  documentAnalyzer: DocumentAnalyzerV2,
+  topicAnalyzer: TopicAnalyzerV1,
   tutorLesson: TutorLessonV1,
   tutorIntroduce: TutorIntroduceV1,
   tutorQuestion: TutorQuestionV1,
@@ -44,7 +47,7 @@ export const prompts = {
 export type {
   DocumentAnalyzerInput,
   DocumentAnalysisOutput,
-} from './document-analyzer/v1'
+} from './document-analyzer/v2'
 export type { LessonInput } from './tutor/v1-lesson'
 export type { IntroduceConceptInput } from './tutor/v1-introduce'
 export type { QuestionGeneratorInput } from './tutor/v1-question'

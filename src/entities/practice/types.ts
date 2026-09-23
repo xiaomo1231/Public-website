@@ -66,6 +66,21 @@ export interface PracticeQuestion {
   /** 0–1 extraction confidence; drives review status, not the UI. */
   confidence: number
   status: PracticeQuestionStatus
+  /**
+   * Content fingerprint of the cited chunk. Lets a re-processed document be
+   * re-pointed at the replacement chunk by content. Absent on rows written
+   * before this field existed.
+   */
+  chunkFingerprint?: string
+  /** The previous `chunkId`, kept when a relink happened. */
+  previousChunkId?: string
+  /**
+   * Set when the cited textbook chunk disappeared and no replacement could be
+   * found. The question is kept — never deleted — and flagged for review.
+   * Distinct from `status`, which is about extraction confidence.
+   */
+  needsRelink?: boolean
+  relinkReason?: string
   createdAt: number
 }
 

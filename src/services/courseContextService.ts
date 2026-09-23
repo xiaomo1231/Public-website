@@ -7,6 +7,7 @@ import { CourseContextRepository } from '@/entities/courseContext/repository'
 import {
   courseContextId,
   type CourseContext,
+  type LectureChunkLink,
   type NoteLink,
   type NoteRelation,
   type ProfessorTeachingProfile,
@@ -14,6 +15,12 @@ import {
 import type { Document } from '@/entities/document/types'
 import { resolveMaterialType } from '@/entities/document/types'
 import type { DocumentChunk } from '@/entities/chunk/types'
+import {
+  buildChunkRelinkIndex,
+  chunkContentFingerprint,
+  relinkChunkReference,
+  type ChunkRelinkIndex,
+} from '@/entities/chunk/relink'
 import { computeClassProgress, overlapScore, type ProgressTopic } from './classProgressService'
 import { asStringArray, asTrimmedString } from '@/infrastructure/ai/validation'
 import { prompts } from '@/infrastructure/ai/prompts'
@@ -23,6 +30,187 @@ import { fnv1a } from '@/shared/lib/hash'
 
 /** Minimum token overlap for a note to be linked to a textbook passage. */
 const NOTE_MATCH_MIN = 0.2
+
+/**
+ * Fingerprint of the derived link set.
+ *
+ * Uses the link *targets* (and their structure position), not just how many
+ * links there are, so a re-pointed link is detected even when the count is
+ * unchanged.
+ */
+export function computeLinkFingerprint(
+  noteLinks: readonly NoteLink[],
+  lectureLinks: readonly LectureChunkLink[],
+): string {
+  const notes = noteLinks
+    .map((link) =>
+      [
+        link.noteChunkId,
+        link.textbookChunkId,
+        link.chapterId ?? '',
+        link.sectionId ?? '',
+        link.needsRelink ? '1' : '0',
+      ].join(':'),
+    )
+    .sort()
+  const lectures = lectureLinks
+    .map((link) =>
+      [
+        link.transcriptChunkId,
+        link.textbookChunkId,
+        link.topicId ?? '',
+        link.chapterId ?? '',
+        link.sectionId ?? '',
+        link.needsRelink ? '1' : '0',
+      ].join(':'),
+    )
+    .sort()
+  return fnv1a([...notes, ...lectures].join('|'))
+}
+
+/**
+ * Record the linked textbook chunk's content fingerprint on every fresh link.
+ *
+ * Without it a later re-process could not tell "the same passage, new chunk id"
+ * from "the passage changed".
+ */
+function withTextbookFingerprints<T extends { textbookChunkId: string; textbookChunkFingerprint?: string }>(
+  links: readonly T[],
+  index: ChunkRelinkIndex,
+): T[] {
+  return links.map((link) => {
+    const chunk = index.live.get(link.textbookChunkId)
+    if (!chunk) return link
+    return { ...link, textbookChunkFingerprint: chunkContentFingerprint(chunk) }
+  })
+}
+
+/**
+ * Resolve a stored link's textbook target.
+ *
+ * Keeps a live target, re-points a dead one at the chunk with the same content
+ * fingerprint, and otherwise keeps the original reference flagged for review.
+ */
+function resolveStoredLink<
+  T extends {
+    textbookChunkId: string
+    textbookChunkFingerprint?: string
+    previousTextbookChunkId?: string
+    needsRelink?: boolean
+    relinkReason?: string
+  },
+>(link: T, index: ChunkRelinkIndex): T {
+  const resolved = relinkChunkReference(
+    {
+      chunkId: link.textbookChunkId,
+      ...(link.textbookChunkFingerprint ? { fingerprint: link.textbookChunkFingerprint } : {}),
+    },
+    index,
+  )
+  if (!resolved) return link
+  if (!resolved.needsRelink) {
+    return {
+      ...link,
+      textbookChunkId: resolved.chunkId,
+      ...(resolved.fingerprint ? { textbookChunkFingerprint: resolved.fingerprint } : {}),
+      ...(resolved.previousChunkId ? { previousTextbookChunkId: resolved.previousChunkId } : {}),
+      needsRelink: false,
+      relinkReason: undefined,
+    }
+  }
+  return {
+    ...link,
+    needsRelink: true,
+    relinkReason: resolved.relinkReason ?? 'no-match-after-source-change',
+  }
+}
+
+/**
+ * Carry a stored lecture link's textbook target onto the fresh link.
+ *
+ * `computeClassProgress` matches transcript chunks to *topics*, so it cannot
+ * produce a textbook target on its own. Without this the stored target would be
+ * overwritten with an empty id on every sync, silently losing the association.
+ */
+function carryOverStoredTargets(
+  fresh: readonly LectureChunkLink[],
+  stored: readonly LectureChunkLink[] | undefined,
+  index: ChunkRelinkIndex,
+): LectureChunkLink[] {
+  if (!stored || stored.length === 0) return [...fresh]
+  const byTranscript = new Map(
+    stored.filter((link) => link.textbookChunkId).map((link) => [link.transcriptChunkId, link]),
+  )
+  return fresh.map((link) => {
+    if (link.textbookChunkId) return link
+    const previous = byTranscript.get(link.transcriptChunkId)
+    if (!previous) return link
+    const resolved = relinkChunkReference(
+      {
+        chunkId: previous.textbookChunkId,
+        ...(previous.textbookChunkFingerprint
+          ? { fingerprint: previous.textbookChunkFingerprint }
+          : {}),
+      },
+      index,
+    )
+    if (!resolved) return link
+    return {
+      ...link,
+      textbookChunkId: resolved.chunkId,
+      ...(resolved.fingerprint ? { textbookChunkFingerprint: resolved.fingerprint } : {}),
+      ...(resolved.previousChunkId ? { previousTextbookChunkId: resolved.previousChunkId } : {}),
+      ...(resolved.needsRelink
+        ? { needsRelink: true, relinkReason: resolved.relinkReason ?? 'source-chunk-missing' }
+        : {}),
+    }
+  })
+}
+
+/**
+ * Keep a previously linked note whose textbook passage can no longer be found.
+ *
+ * If the note chunk itself is gone the link is dropped (the note no longer
+ * exists); if the note still exists but the fresh pass did not match it, the
+ * old link is re-pointed by content when possible and otherwise preserved and
+ * flagged instead of vanishing.
+ */
+export function preserveUnmatchedNoteLinks(
+  fresh: readonly NoteLink[],
+  noteChunks: readonly DocumentChunk[],
+  existing: CourseContext | undefined,
+  index: ChunkRelinkIndex,
+): NoteLink[] {
+  if (!existing) return [...fresh]
+  const matched = new Set(fresh.map((link) => link.noteChunkId))
+  const liveNoteIds = new Set(noteChunks.map((chunk) => chunk.id))
+  const out = [...fresh]
+  for (const previous of existing.noteLinks) {
+    if (matched.has(previous.noteChunkId)) continue
+    if (!liveNoteIds.has(previous.noteChunkId)) continue
+    out.push(resolveStoredLink(previous, index))
+  }
+  return out
+}
+
+/** Lecture-transcript counterpart of `preserveUnmatchedNoteLinks`. */
+export function preserveUnmatchedLectureLinks(
+  fresh: readonly LectureChunkLink[],
+  transcriptChunks: readonly DocumentChunk[],
+  existing: CourseContext | undefined,
+  index: ChunkRelinkIndex,
+): LectureChunkLink[] {
+  if (!existing) return [...fresh]
+  const matched = new Set(fresh.map((link) => link.transcriptChunkId))
+  const liveIds = new Set(transcriptChunks.map((chunk) => chunk.id))
+  const out = [...fresh]
+  for (const previous of existing.lectureLinks) {
+    if (matched.has(previous.transcriptChunkId)) continue
+    if (!liveIds.has(previous.transcriptChunkId)) continue
+    out.push(resolveStoredLink(previous, index))
+  }
+  return out
+}
 
 /** Keyword rules for how a note relates to the material. Heuristic, not AI. */
 export function classifyNoteRelation(text: string): NoteRelation {
@@ -91,6 +279,21 @@ export class CourseContextService {
   }
 
   async syncDerived(projectId: string): Promise<CourseContext> {
+    const staged = await this.stageDerived(projectId)
+    if (!staged.changed) return staged.context
+    await this.contexts.upsert(staged.context)
+    return staged.context
+  }
+
+  /**
+   * Compute the derived context **without writing anything**.
+   *
+   * Returns the row that *should* be stored plus whether it differs from what is
+   * already stored. `syncDerived` persists it on page open; the incremental
+   * commit stages it and writes it inside its own transaction instead, so a
+   * re-pointed link can never land on its own.
+   */
+  async stageDerived(projectId: string): Promise<{ context: CourseContext; changed: boolean }> {
     const ready = (await this.documents.listByProject(projectId)).filter((d) => d.status === 'ready')
     const textbookDocs = ready.filter((d) => resolveMaterialType(d.materialType) === 'textbook')
     const noteDocs = ready.filter((d) => resolveMaterialType(d.materialType) === 'user_notes')
@@ -127,7 +330,7 @@ export class CourseContextService {
       transcriptDocumentIds: transcriptDocs.map((doc) => doc.id),
     })
 
-    const noteLinks = this.computeNoteLinks(noteChunks, textbookChunks)
+    const noteLinksFresh = this.computeNoteLinks(noteChunks, textbookChunks)
     // Bind each lecture link to the chapter/section of the textbook material
     // that its topic maps to, so class progress can name a section.
     const topicStructure = this.topicStructureMap(progressTopics, textbookChunks)
@@ -135,24 +338,58 @@ export class CourseContextService {
       const ref = link.topicId ? topicStructure.get(link.topicId) : undefined
       if (ref?.chapterId) link.chapterId = ref.chapterId
       if (ref?.sectionId) link.sectionId = ref.sectionId
+      // Attach the textbook passage the topic maps to, so a lecture link has a
+      // real, relinkable target instead of an empty one.
+      if (ref?.textbookChunkId) link.textbookChunkId = ref.textbookChunkId
     }
 
-    const sourceHash = fnv1a(
-      [...transcriptChunks.map((c) => c.id), ...noteChunks.map((c) => c.id)].join('|'),
-    )
     const existing = await this.contexts.get(projectId)
+    // One index per pass, so the three reference families never compete for the
+    // same replacement chunk.
+    const index = buildChunkRelinkIndex(textbookChunks)
+
+    // A link whose textbook target disappeared is re-pointed by content when
+    // possible, and KEPT + flagged when it is not — never silently dropped.
+    const noteLinks = preserveUnmatchedNoteLinks(
+      withTextbookFingerprints(noteLinksFresh, index),
+      noteChunks,
+      existing,
+      index,
+    )
+    const preservedLectureLinks = preserveUnmatchedLectureLinks(
+      withTextbookFingerprints(
+        carryOverStoredTargets(lectureLinks, existing?.lectureLinks, index),
+        index,
+      ),
+      transcriptChunks,
+      existing,
+      index,
+    )
+
+    // Freshness covers the **textbook** chunks too. Without them, re-processing
+    // the textbook left every `textbookChunkId` pointing at a deleted chunk
+    // while the stored context was considered up to date.
+    const sourceHash = fnv1a(
+      [
+        ...transcriptChunks.map((c) => c.id),
+        ...noteChunks.map((c) => c.id),
+        ...textbookChunks.map((c) => c.id),
+      ].join('|'),
+    )
+    // Fingerprint of the link set itself, so a target that moved while the link
+    // count stayed the same is still detected.
+    const linkFingerprint = computeLinkFingerprint(noteLinks, preservedLectureLinks)
 
     // Nothing that affects the derived context changed: keep the stored row
     // (and its AI-extracted profile) instead of rewriting it on every visit.
     if (
       existing &&
       existing.sourceHash === sourceHash &&
+      (existing.linkFingerprint ?? '') === linkFingerprint &&
       existing.classProgress?.currentTopicId === progress.currentTopicId &&
-      existing.classProgress?.progressPercent === progress.progressPercent &&
-      existing.noteLinks.length === noteLinks.length &&
-      existing.lectureLinks.length === lectureLinks.length
+      existing.classProgress?.progressPercent === progress.progressPercent
     ) {
-      return existing
+      return { context: existing, changed: false }
     }
 
     const context: CourseContext = {
@@ -166,12 +403,12 @@ export class CourseContextService {
       // No transcript means we genuinely cannot state where the class is.
       ...(transcriptDocs.length > 0 ? { classProgress: progress } : {}),
       noteLinks,
-      lectureLinks,
+      lectureLinks: preservedLectureLinks,
       sourceHash,
+      linkFingerprint,
       updatedAt: Date.now(),
     }
-    await this.contexts.upsert(context)
-    return context
+    return { context, changed: true }
   }
 
   /**
@@ -248,8 +485,11 @@ export class CourseContextService {
   private topicStructureMap(
     topics: ProgressTopic[],
     textbook: DocumentChunk[],
-  ): Map<string, { chapterId?: string; sectionId?: string }> {
-    const map = new Map<string, { chapterId?: string; sectionId?: string }>()
+  ): Map<string, { chapterId?: string; sectionId?: string; textbookChunkId?: string }> {
+    const map = new Map<
+      string,
+      { chapterId?: string; sectionId?: string; textbookChunkId?: string }
+    >()
     for (const topic of topics) {
       const query = `${topic.name} ${topic.description ?? ''}`
       let best: { chunk: DocumentChunk; score: number } | null = null
@@ -261,6 +501,7 @@ export class CourseContextService {
       map.set(topic.id, {
         ...(best.chunk.chapterId ? { chapterId: best.chunk.chapterId } : {}),
         ...(best.chunk.sectionId ? { sectionId: best.chunk.sectionId } : {}),
+        textbookChunkId: best.chunk.id,
       })
     }
     return map

@@ -12,6 +12,7 @@ import { PRACTICE_STYLE_PROMPT_VERSION, styleConfidenceFor } from '@/entities/pr
 import { DocumentRepository } from '@/entities/document/repository'
 import { ChunkRepository } from '@/entities/chunk/repository'
 import type { DocumentChunk } from '@/entities/chunk/types'
+import { buildChunkRelinkIndex, chunkContentFingerprint, relinkChunkReference } from '@/entities/chunk/relink'
 import { CourseAnalysisRepository } from '@/entities/courseAnalysis/repository'
 import { CourseContextRepository } from '@/entities/courseContext/repository'
 import type { CourseContext } from '@/entities/courseContext/types'
@@ -132,6 +133,121 @@ export class PracticeService {
     this.analyses = new CourseAnalysisRepository(this.db)
     this.contexts = new CourseContextRepository(this.db)
     this.visuals = new VisualSourceRepository(this.db)
+  }
+
+  /** Every practice question in a project (read-only). */
+  listQuestionsByProject(projectId: string): Promise<PracticeQuestion[]> {
+    return this.practice.listQuestionsByProject(projectId)
+  }
+
+  /**
+   * Stage the questions whose cited textbook chunk needs re-pointing.
+   *
+   * **Pure with respect to storage**: it reads, computes, and returns the rows
+   * that would change — it writes nothing. The caller commits them inside the
+   * transaction that also writes the content they belong to, so a re-pointed
+   * reference can never become visible on its own.
+   *
+   * Re-processing a document regenerates every chunk id, so a stored `chunkId`
+   * goes stale without the question changing. Resolution order:
+   *
+   *   1. the chunk still exists → keep it (backfill the fingerprint);
+   *   2. a live chunk has the same content fingerprint → re-point at it;
+   *   3. legacy row without a fingerprint → same document + page, best text
+   *      overlap;
+   *   4. nothing matched → keep the old reference and flag `needsRelink`.
+   *
+   * A question is **never deleted**.
+   */
+  async planChunkRelink(projectId: string): Promise<PracticeQuestion[]> {
+    const questions = await this.practice.listQuestionsByProject(projectId)
+    const candidates = questions.filter((question) => question.chunkId !== undefined)
+    if (candidates.length === 0) return []
+
+    const liveChunks = await this.chunks.listByProject(projectId)
+    const index = buildChunkRelinkIndex(liveChunks)
+    const byDocument = new Map<string, DocumentChunk[]>()
+    for (const chunk of liveChunks) {
+      const list = byDocument.get(chunk.documentId) ?? []
+      list.push(chunk)
+      byDocument.set(chunk.documentId, list)
+    }
+
+    const staged: PracticeQuestion[] = []
+    for (const question of candidates) {
+      const resolved = relinkChunkReference(
+        {
+          chunkId: question.chunkId,
+          ...(question.chunkFingerprint ? { fingerprint: question.chunkFingerprint } : {}),
+        },
+        index,
+      )
+      if (!resolved) continue
+
+      if (!resolved.needsRelink) {
+        // Either still live, or re-pointed by an identical fingerprint. Only
+        // stage a write when something actually changes.
+        if (
+          resolved.chunkId === question.chunkId &&
+          resolved.fingerprint === question.chunkFingerprint &&
+          !question.needsRelink
+        ) {
+          continue
+        }
+        staged.push({
+          ...question,
+          chunkId: resolved.chunkId,
+          ...(resolved.fingerprint ? { chunkFingerprint: resolved.fingerprint } : {}),
+          ...(resolved.previousChunkId ? { previousChunkId: resolved.previousChunkId } : {}),
+          needsRelink: false,
+          relinkReason: undefined,
+        })
+        continue
+      }
+
+      // Legacy rows predate the fingerprint: fall back to same-page text
+      // overlap before declaring the reference lost.
+      if (!question.chunkFingerprint) {
+        const pool = byDocument.get(question.documentId) ?? []
+        const samePage =
+          question.pageNumber !== undefined
+            ? pool.filter((chunk) => chunk.pageNumber === question.pageNumber)
+            : []
+        const search = samePage.length > 0 ? samePage : pool
+        let best: { chunk: DocumentChunk; score: number } | null = null
+        for (const chunk of search) {
+          const score = overlapScore(question.prompt, chunk.text)
+          if (!best || score > best.score) best = { chunk, score }
+        }
+        if (best && best.score > 0) {
+          staged.push({
+            ...question,
+            chunkId: best.chunk.id,
+            chunkFingerprint: chunkContentFingerprint(best.chunk),
+            previousChunkId: question.chunkId,
+            needsRelink: false,
+            relinkReason: undefined,
+          })
+          continue
+        }
+      }
+
+      // Keep the original reference; a human can review it.
+      staged.push({
+        ...question,
+        needsRelink: true,
+        relinkReason: resolved.relinkReason ?? 'source-chunk-missing',
+      })
+    }
+
+    if (staged.length > 0) {
+      logger.debug('Professor practice chunk relink staged', {
+        projectId,
+        staged: staged.length,
+        flagged: staged.filter((question) => question.needsRelink).length,
+      })
+    }
+    return staged
   }
 
   listSets(projectId: string): Promise<PracticeSet[]> {

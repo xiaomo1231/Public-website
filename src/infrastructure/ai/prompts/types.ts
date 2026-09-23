@@ -35,6 +35,13 @@ export interface DocumentTopic {
   name: string
   description: string
   sourceRefs: SourceReference[]
+  /**
+   * Chunk ids this topic was derived from, chosen by the model from the
+   * candidate ids shown in the document content. Optional here because the
+   * v1 prompt does not ask for it; the service validates it against the
+   * candidate set before it is ever persisted.
+   */
+  sourceChunkIds?: string[]
 }
 
 export interface DocumentConcept {

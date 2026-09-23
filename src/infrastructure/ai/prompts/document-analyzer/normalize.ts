@@ -64,14 +64,18 @@ function normalizeSourceRefs(value: unknown): SourceReference[] {
 function normalizeTopic(raw: Record<string, unknown>): DocumentTopic | null {
   const name = asTrimmedString(raw.name)
   if (!name) return null
-  return {
+  const topic: DocumentTopic = {
     name,
     description: asTrimmedString(raw.description),
     sourceRefs: normalizeSourceRefs(raw.sourceRefs),
   }
+  // Raw ids only. They are validated against the candidate set by the service â€?  // a model-supplied id is never trusted on its own.
+  const sourceChunkIds = asStringArraySafe(raw.sourceChunkIds)
+  if (sourceChunkIds.length > 0) topic.sourceChunkIds = sourceChunkIds
+  return topic
 }
 
-function normalizeConcept(raw: Record<string, unknown>): DocumentConcept | null {
+export function normalizeConcept(raw: Record<string, unknown>): DocumentConcept | null {
   const name = asTrimmedString(raw.name)
   const definition = asTrimmedString(raw.definition)
   if (!name || !definition) return null
@@ -86,7 +90,7 @@ function normalizeConcept(raw: Record<string, unknown>): DocumentConcept | null 
   return concept
 }
 
-function normalizeFormula(raw: Record<string, unknown>): DocumentFormula | null {
+export function normalizeFormula(raw: Record<string, unknown>): DocumentFormula | null {
   const name = asTrimmedString(raw.name)
   const latex = asTrimmedString(raw.latex)
   if (!name || !latex) return null
@@ -107,7 +111,7 @@ function normalizeFormula(raw: Record<string, unknown>): DocumentFormula | null 
   }
 }
 
-function normalizeSymbol(raw: Record<string, unknown>): DocumentSymbol | null {
+export function normalizeSymbol(raw: Record<string, unknown>): DocumentSymbol | null {
   const symbol = asTrimmedString(raw.symbol)
   const meaning = asTrimmedString(raw.meaning)
   if (!symbol || !meaning) return null
@@ -122,7 +126,7 @@ function normalizeSymbol(raw: Record<string, unknown>): DocumentSymbol | null {
   return entry
 }
 
-function normalizeExample(raw: Record<string, unknown>): DocumentExample | null {
+export function normalizeExample(raw: Record<string, unknown>): DocumentExample | null {
   const title = asTrimmedString(raw.title)
   const problem = asTrimmedString(raw.problem)
   if (!title || !problem) return null
@@ -137,7 +141,7 @@ function normalizeExample(raw: Record<string, unknown>): DocumentExample | null 
   return example
 }
 
-function normalizeExercise(raw: Record<string, unknown>): DocumentExercise | null {
+export function normalizeExercise(raw: Record<string, unknown>): DocumentExercise | null {
   const prompt = asTrimmedString(raw.prompt)
   if (!prompt) return null
   return {
@@ -148,7 +152,7 @@ function normalizeExercise(raw: Record<string, unknown>): DocumentExercise | nul
   }
 }
 
-function normalizePrerequisite(raw: Record<string, unknown>): DocumentPrerequisite | null {
+export function normalizePrerequisite(raw: Record<string, unknown>): DocumentPrerequisite | null {
   const name = asTrimmedString(raw.name)
   if (!name) return null
   return {
@@ -166,7 +170,7 @@ function asStringArraySafe(value: unknown): string[] {
 
 /**
  * Coerce arbitrary model output into a `DocumentAnalysisOutput`.
- * Throws only when the response is not an object at all â€” an empty-but-valid
+ * Throws only when the response is not an object at all â€?an empty-but-valid
  * analysis is preferable to persisting garbage.
  */
 export function normalizeDocumentAnalysis(raw: unknown): DocumentAnalysisOutput {

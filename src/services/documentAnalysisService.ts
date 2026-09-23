@@ -3,9 +3,16 @@ import { getDb } from '@/infrastructure/db/database'
 import { DocumentRepository } from '@/entities/document/repository'
 import { ChunkRepository } from '@/entities/chunk/repository'
 import { CourseAnalysisRepository } from '@/entities/courseAnalysis/repository'
+import type { AtomicSideWrites } from '@/entities/courseAnalysis/repository'
 import { COURSE_ANALYSIS_SCHEMA_VERSION } from '@/entities/courseAnalysis/types'
 import { CourseContentRepository } from '@/entities/courseContent/repository'
 import { computeAnalysisSourceHash, toSourceDocumentFingerprint } from '@/entities/courseContent/sourceHash'
+import {
+  buildCandidateChunkLabel,
+  chunkFingerprintMap,
+  validateTopicSourceChunks,
+} from '@/entities/courseContent/topicDependency'
+import { matchTopicIdentities } from '@/entities/courseAnalysis/topicIdentity'
 import type { AIService } from './aiService'
 import type { ProjectService } from './projectService'
 import type { ChatMessage } from '@/infrastructure/ai/types'
@@ -94,7 +101,7 @@ export class DocumentAnalysisService {
    * Analyze all processed documents in a project, extracting structured
    * knowledge. Re-runs overwrite the previous analysis.
    */
-  async analyzeProject(projectId: string, options: { onProgress?: AnalysisProgressListener; subject?: string; signal?: AbortSignal } = {}): Promise<CourseAnalysisRepository> {
+  async analyzeProject(projectId: string, options: { onProgress?: AnalysisProgressListener; subject?: string; signal?: AbortSignal; sideWrites?: AtomicSideWrites } = {}): Promise<CourseAnalysisRepository> {
     await this.projects.get(projectId) // verify project exists
     const { onProgress, subject } = options
     onProgress?.({ stage: 'collecting', progress: 5, message: t('stage.collecting') })
@@ -271,16 +278,80 @@ export class DocumentAnalysisService {
 
     onProgress?.({ stage: 'storing', progress: 80, message: t('stage.saving') })
 
-    const topicsByName = new Map<string, string>()
-    const topicsPayload = output.topics.map((t, idx) => {
-      const id = crypto.randomUUID()
-      topicsByName.set(t.name, id)
+    // The candidate set the model was allowed to pick from. A `sourceChunkId`
+    // outside this set is discarded — the model never gets to invent a
+    // dependency, and an unverifiable topic is marked instead of guessed at.
+    const candidateChunks = analysisChunks.filter((chunk) => chunk.text.trim().length > 0)
+
+    const previousTopics = await this.analyses.listTopics(projectId)
+    const drafts = output.topics.map((topic, idx) => {
+      const structure = bestStructureRef(`${topic.name} ${topic.description}`, analysisChunks)
       return {
-        name: t.name,
-        description: t.description,
+        name: topic.name,
+        description: topic.description,
         order: idx,
-        sourceRefs: normalizeSourceRefs(t.sourceRefs, analysisDocs),
-        ...bestStructureRef(`${t.name} ${t.description}`, analysisChunks),
+        sourceRefs: normalizeSourceRefs(topic.sourceRefs, analysisDocs),
+        rawSourceChunkIds: topic.sourceChunkIds,
+        ...structure,
+      }
+    })
+
+    // Reuse the stored id when this is recognisably the same teaching topic, so
+    // TutorLesson / TutorSession / Quiz / Practice references survive a
+    // re-analysis. Ambiguous matches deliberately get a NEW id.
+    const identity = matchTopicIdentities(
+      previousTopics.map((topic) => ({
+        id: topic.id,
+        name: topic.name,
+        ...(topic.chapterId ? { chapterId: topic.chapterId } : {}),
+        ...(topic.sectionId ? { sectionId: topic.sectionId } : {}),
+        ...(topic.sourceChunkIds ? { sourceChunkIds: topic.sourceChunkIds } : {}),
+      })),
+      drafts.map((draft) => ({
+        name: draft.name,
+        ...(draft.chapterId ? { chapterId: draft.chapterId } : {}),
+        ...(draft.sectionId ? { sectionId: draft.sectionId } : {}),
+      })),
+    )
+    logger.debug('Topic identity resolved', {
+      projectId,
+      reused: identity.diagnostics.filter((d) => d.matchedTopicId).length,
+      ambiguous: identity.diagnostics.filter((d) => d.reason === 'ambiguous').length,
+      fresh: identity.diagnostics.filter((d) => d.reason === 'new').length,
+    })
+
+    const topicsByName = new Map<string, string>()
+    const topicsPayload = drafts.map((draft, idx) => {
+      const id = identity.ids[idx] ?? crypto.randomUUID()
+      topicsByName.set(draft.name, id)
+      const dependency = validateTopicSourceChunks(draft.rawSourceChunkIds, candidateChunks)
+      return {
+        name: draft.name,
+        description: draft.description,
+        order: draft.order,
+        sourceRefs: draft.sourceRefs,
+        ...(draft.chapterId ? { chapterId: draft.chapterId } : {}),
+        ...(draft.sectionId ? { sectionId: draft.sectionId } : {}),
+        ...(draft.chapterNumber ? { chapterNumber: draft.chapterNumber } : {}),
+        ...(draft.sectionNumber ? { sectionNumber: draft.sectionNumber } : {}),
+        ...(draft.chapterTitle ? { chapterTitle: draft.chapterTitle } : {}),
+        ...(draft.sectionTitle ? { sectionTitle: draft.sectionTitle } : {}),
+        // Per-topic provenance: which prompt produced this row.
+        promptVersion,
+        // A topic whose sources cannot be verified is kept and flagged, never
+        // given an invented dependency.
+        ...(dependency
+          ? {
+              sourceChunkIds: dependency.sourceChunkIds,
+              sourceChapterIds: dependency.sourceChapterIds,
+              sourceSectionIds: dependency.sourceSectionIds,
+              dependencyHash: dependency.dependencyHash,
+              // Lets a later re-process re-point the dependency by content.
+              sourceChunkFingerprints: chunkFingerprintMap(
+                candidateChunks.filter((chunk) => dependency.sourceChunkIds.includes(chunk.id)),
+              ),
+            }
+          : { needsFullReanalysis: true }),
       }
     })
 
@@ -340,6 +411,9 @@ export class DocumentAnalysisService {
         schemaVersion: COURSE_ANALYSIS_SCHEMA_VERSION,
         derivedFromStructureVersion,
         derivedFromStructureHash,
+        // Committed inside the same transaction as the new analysis, so a
+        // re-pointed reference can never land without its content.
+        ...(options.sideWrites ? { sideWrites: options.sideWrites } : {}),
       },
     )
 
@@ -360,14 +434,10 @@ export class DocumentAnalysisService {
       const heading = `=== ${id} ===`
       const body = sliced
         .map((c) => {
-          // Carry the textbook chapter/section into the prompt so the model can
-          // place each passage in the book's own outline.
-          const parts = [
-            c.chapterNumber ? `Ch ${c.chapterNumber}` : c.chapterTitle,
-            c.sectionNumber ?? (c.section || undefined),
-            c.pageNumber !== undefined ? `p${c.pageNumber}` : undefined,
-          ].filter((part): part is string => Boolean(part))
-          const prefix = parts.length > 0 ? `[${parts.join(' · ')}] ` : ''
+          // Every passage is prefixed with its stable chunk id plus human
+          // context. The id is what the model must echo back in each topic's
+          // `sourceChunkIds`, and what makes topic dependencies machine-checkable.
+          const prefix = `[${buildCandidateChunkLabel(c)}] `
           // Canonicalise maths before it reaches the model: recover Symbol-font
           // Private Use Area glyphs and convert Unicode maths to LaTeX, so the
           // analyzer never ingests opaque characters it would echo back. The

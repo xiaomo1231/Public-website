@@ -913,6 +913,8 @@ export const zhCN: Record<TranslationKey, string> = {
   'errors.analysisEmptyResponse': 'AI 返回了合法 JSON，但其中不含任何分析数据。',
   'errors.analysisScopeUnsupported':
     '暂不支持按章节或小节分析，只能对整个项目进行分析。',
+  'errors.incrementalConcurrentChange':
+    '更新过程中课程资料发生了变化，本次未保存任何内容，请重试。',
   'errors.documentContentMissing': '缺少文档内容',
   'errors.unsupportedType': '不支持的文档类型：{type}',
   'errors.unsupportedChunking': '不支持的分块方式：{type}',

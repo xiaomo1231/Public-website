@@ -174,6 +174,16 @@ export class CourseContentRepository {
   }
 
   /**
+   * Every chunk in the project, regardless of material type.
+   *
+   * Topic dependencies may cite any chunk, so the planning layer needs the full
+   * set — not just the structure documents — to tell "still live" from "gone".
+   */
+  listProjectChunks(projectId: string): Promise<DocumentChunk[]> {
+    return this.chunks.listByProject(projectId)
+  }
+
+  /**
    * Content fingerprint of the project's whole detected structure.
    *
    * Unlike the revision number, this is stable across structures and compares

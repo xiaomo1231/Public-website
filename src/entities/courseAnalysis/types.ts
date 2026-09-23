@@ -25,6 +25,9 @@ export interface Topic {
    * Where this teaching topic sits in the textbook structure. Topics may
    * regroup sections for teaching, but they must not override the textbook's
    * own chapters/sections.
+   *
+   * This is the **display / primary-ownership** position. It is NOT the
+   * incremental dependency — see `sourceChunkIds` below.
    */
   chapterId?: string
   sectionId?: string
@@ -32,6 +35,47 @@ export interface Topic {
   sectionNumber?: string
   chapterTitle?: string
   sectionTitle?: string
+  /**
+   * The authoritative incremental dependency: the exact chunks this topic was
+   * derived from, chosen by the model **only** from the candidate ids the
+   * analyzer put in front of it, then validated locally.
+   *
+   * A topic may legitimately span several chapters. Missing on rows written
+   * before this field existed, which is why consumers must treat "absent" as
+   * "unknown, needs a full re-analysis" rather than guessing.
+   */
+  sourceChunkIds?: string[]
+  /** Chapters covered by `sourceChunkIds`, derived locally. */
+  sourceChapterIds?: string[]
+  /** Sections covered by `sourceChunkIds`, derived locally. */
+  sourceSectionIds?: string[]
+  /**
+   * Fingerprint of the ordered `sourceChunkIds` plus their content. Lets an
+   * incremental run tell "the dependency is unchanged" from "the dependency
+   * changed but the ids happen to still exist".
+   */
+  dependencyHash?: string
+  /**
+   * Content fingerprint per source chunk id.
+   *
+   * Re-processing a document regenerates **every** chunk id, so a stored
+   * `sourceChunkIds` entry goes stale even when the text is identical. This map
+   * is what lets the dependency be re-pointed at the replacement chunk by
+   * content instead of forcing a full re-analysis.
+   */
+  sourceChunkFingerprints?: Record<string, string>
+  /**
+   * Set when the dependency could not be established (no valid
+   * `sourceChunkIds`, unmappable sources, or an ambiguous identity match).
+   * Such a topic is kept and shown, but never regenerated incrementally.
+   */
+  needsFullReanalysis?: boolean
+  /**
+   * The prompt that produced *this* topic. A full analysis records the
+   * document-analyzer version; an incremental regeneration records the
+   * topic-analyzer version. Absent on rows written before per-topic versioning.
+   */
+  promptVersion?: string
   createdAt: number
 }
 

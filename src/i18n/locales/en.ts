@@ -948,6 +948,8 @@ export const en = {
     'The AI returned a valid JSON value that contains no analysis data.',
   'errors.analysisScopeUnsupported':
     'Chapter- or section-scoped analysis is not available yet. The whole project must be analysed instead.',
+  'errors.incrementalConcurrentChange':
+    'The course material changed while the update was running. Nothing was saved — please try again.',
   'errors.documentContentMissing': 'Document content missing',
   'errors.unsupportedType': 'Unsupported document type: {type}',
   'errors.unsupportedChunking': 'Unsupported chunking for: {type}',

@@ -3,7 +3,8 @@ import { prompts, PROMPT_VERSIONS } from '@/infrastructure/ai/prompts'
 
 describe('Prompt registry', () => {
   it('exposes versions for every prompt family', () => {
-    expect(PROMPT_VERSIONS.documentAnalyzer).toBe('v1')
+    expect(PROMPT_VERSIONS.documentAnalyzer).toBe('v2')
+    expect(PROMPT_VERSIONS.topicAnalyzer).toBe('v1')
     expect(PROMPT_VERSIONS.tutorIntroduce).toBe('v1')
     expect(PROMPT_VERSIONS.tutorQuestion).toBe('v1')
     expect(PROMPT_VERSIONS.tutorEvaluate).toBe('v1')
@@ -11,9 +12,10 @@ describe('Prompt registry', () => {
     expect(PROMPT_VERSIONS.mistakeAnalyzer).toBe('v2')
   })
 
-  it('document-analyzer v1 emits a JSON-shaped prompt', () => {
+  it('document-analyzer v2 emits a JSON-shaped prompt that requires source chunk ids', () => {
     const sys = prompts.documentAnalyzer.buildSystemPrompt()
     expect(sys).toMatch(/JSON/)
+    expect(sys).toMatch(/sourceChunkIds/)
     const user = prompts.documentAnalyzer.buildUserPrompt({
       documentName: 'doc.pdf',
       documentText: 'hello world',
@@ -22,6 +24,21 @@ describe('Prompt registry', () => {
     expect(user).toContain('doc.pdf')
     expect(user).toContain('hello world')
     expect(user).toContain('English')
+    expect(user).toMatch(/chunk id/)
+  })
+
+  it('topic-analyzer v1 is scoped to one topic and demands chunk ids', () => {
+    const sys = prompts.topicAnalyzer.buildSystemPrompt()
+    expect(sys).toMatch(/ONE topic/)
+    expect(sys).toMatch(/sourceChunkIds/)
+    const user = prompts.topicAnalyzer.buildUserPrompt({
+      topicName: 'Derivatives',
+      topicDescription: 'rate of change',
+      language: 'en',
+      chunks: [{ id: 'c1', label: 'Ch 3 · 3.1 · p12', text: 'the derivative is' }],
+    })
+    expect(user).toContain('Derivatives')
+    expect(user).toContain('[c:c1 · Ch 3 · 3.1 · p12]')
   })
 
   it('tutor introduce v1 produces concise system prompt', () => {

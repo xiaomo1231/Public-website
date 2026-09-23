@@ -38,6 +38,20 @@ export interface NoteLink {
   /** Textbook structure the matched passage belongs to. */
   chapterId?: string
   sectionId?: string
+  /**
+   * Content fingerprint of the linked textbook chunk. Lets a re-processed
+   * textbook be re-pointed at the replacement chunk by content instead of
+   * losing the link. Absent on rows written before this field existed.
+   */
+  textbookChunkFingerprint?: string
+  /** The previous `textbookChunkId`, kept when a relink happened. */
+  previousTextbookChunkId?: string
+  /**
+   * Set when the linked textbook passage disappeared and no replacement could
+   * be found automatically. The link is **kept** so nothing is silently lost.
+   */
+  needsRelink?: boolean
+  relinkReason?: string
 }
 
 export interface LectureChunkLink {
@@ -47,6 +61,12 @@ export interface LectureChunkLink {
   confidence: number
   chapterId?: string
   sectionId?: string
+  /** See `NoteLink.textbookChunkFingerprint`. */
+  textbookChunkFingerprint?: string
+  previousTextbookChunkId?: string
+  /** See `NoteLink.needsRelink`. */
+  needsRelink?: boolean
+  relinkReason?: string
 }
 
 /**
@@ -88,6 +108,13 @@ export interface CourseContext {
    * A mismatch means the derived context is stale and should be recomputed.
    */
   sourceHash: string
+  /**
+   * Fingerprint of the *link set itself* — the textbook chunk each note /
+   * transcript chunk is attached to, plus its chapter/section. Comparing
+   * fingerprints (rather than counting links) is what catches a link whose
+   * target moved while the number of links stayed the same.
+   */
+  linkFingerprint?: string
   updatedAt: number
 }
 
