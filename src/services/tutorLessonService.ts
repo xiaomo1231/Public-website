@@ -7,7 +7,10 @@ import type { DocumentChunk } from '@/entities/chunk/types'
 import { TutorLessonRepository } from '@/entities/tutorLesson/repository'
 import type { TutorLesson, TutorLessonKey, TutorVisual } from '@/entities/tutorLesson/types'
 import { TUTOR_LESSON_VERSION } from '@/entities/tutorLesson/types'
+import { hasGraphableMath } from '@/entities/tutorVisualization/graphable'
+import type { TutorVisualization } from '@/entities/tutorVisualization/types'
 import { VisualSourceRepository } from '@/entities/visualSource/repository'
+import { TutorVisualizationService } from './tutorVisualizationService'
 import { collectTopicSources, rankContextChunks, type TopicSource } from './topicSources'
 import { resolveMaterialType } from '@/entities/document/types'
 import type { AIService } from './aiService'
@@ -112,6 +115,7 @@ export class TutorLessonService {
   private analyses: CourseAnalysisRepository
   private chunks: ChunkRepository
   private visuals: VisualSourceRepository
+  private visualizationService: TutorVisualizationService
   private ai: AIService
 
   constructor(deps: {
@@ -121,12 +125,15 @@ export class TutorLessonService {
     analyses?: CourseAnalysisRepository
     chunks?: ChunkRepository
     visuals?: VisualSourceRepository
+    visualizationService?: TutorVisualizationService
   }) {
     this.db = deps.db ?? getDb()
     this.lessons = deps.lessons ?? new TutorLessonRepository(this.db)
     this.analyses = deps.analyses ?? new CourseAnalysisRepository(this.db)
     this.chunks = deps.chunks ?? new ChunkRepository(this.db)
     this.visuals = deps.visuals ?? new VisualSourceRepository(this.db)
+    this.visualizationService =
+      deps.visualizationService ?? new TutorVisualizationService({ ai: deps.ai })
     this.ai = deps.ai
   }
 
@@ -292,6 +299,11 @@ export class TutorLessonService {
       })
     }
 
+    // Structured 2D visualizations come from a second, isolated AI call. The
+    // local gate skips it entirely when the lesson has nothing plottable, so
+    // set theory and prose lessons cost no extra tokens.
+    const visualizations = await this.generateVisualizations(content, input, topic)
+
     const now = Date.now()
     const lesson: TutorLesson = {
       id: crypto.randomUUID(),
@@ -304,6 +316,7 @@ export class TutorLessonService {
       // code samples and prose cannot inject fake symbols.
       symbols: extractSymbolsFromMarkdown(content),
       ...(visuals.length > 0 ? { visuals } : {}),
+      ...(visualizations.length > 0 ? { visualizations } : {}),
       sourceChunkIds: [
         ...sources.map((source) => source.chunkId),
         ...notesChunks.map((chunk) => chunk.id),
@@ -331,6 +344,27 @@ export class TutorLessonService {
     })
 
     return { lesson, fromCache: false }
+  }
+
+  /**
+   * Optional 2D visualizations for a finished lesson.
+   *
+   * The cheap local gate avoids a wasted AI call when the lesson has no
+   * plottable relation. The service itself never throws: any failure yields an
+   * empty list, so the lesson is stored and rendered exactly as before.
+   */
+  private async generateVisualizations(
+    content: string,
+    input: TutorLessonInput,
+    topic: Pick<Topic, 'name' | 'description'>,
+  ): Promise<TutorVisualization[]> {
+    if (!hasGraphableMath(content)) return []
+    return this.visualizationService.generate({
+      topicName: input.topicName,
+      topicDescription: input.topicDescription || topic.description || '',
+      language: input.language,
+      lessonContent: content,
+    })
   }
 
   /**

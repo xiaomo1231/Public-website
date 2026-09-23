@@ -6,6 +6,7 @@ import { ConfirmDialog } from '@/shared/ui/ConfirmDialog'
 import { LoadingState } from '@/shared/ui/LoadingState'
 import { RichText } from '@/shared/ui/RichText'
 import { VisualSourceFigure } from '@/widgets/source/VisualSourceFigure'
+import { TutorVisualizationFigure } from '@/widgets/tutor/TutorVisualizationFigure'
 import { stripDuplicateTitle } from '@/shared/lib/lessonDocument'
 import { useTranslation } from '@/i18n'
 import type { UseTutorLessonState } from '@/features/tutor/useTutorLesson'
@@ -99,6 +100,18 @@ export function TutorLessonView({
           format="markdown"
           paragraphClassName="text-[16.5px] leading-[1.8]"
         />
+
+        {/* Structured 2D visualizations generated with the lesson and cached. */}
+        {lesson.visualizations && lesson.visualizations.length > 0 && (
+          <section className="space-y-3" aria-label={t('tutor.visualizations')}>
+            <h2 className="text-[22px] font-semibold leading-snug tracking-tight text-foreground">
+              {t('tutor.visualizations')}
+            </h2>
+            {lesson.visualizations.map((visualization) => (
+              <TutorVisualizationFigure key={visualization.id} visualization={visualization} />
+            ))}
+          </section>
+        )}
 
         {/* Figures preserved from the source, shown as the original image. */}
         {lesson.visuals && lesson.visuals.length > 0 && (

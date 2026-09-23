@@ -1125,6 +1125,12 @@ export const zhCN: Record<TranslationKey, string> = {
 
   'tutor.visualSources': '来自课程资料的图片',
   'tutor.visualUnavailable': '无法显示原始图片。',
+  'tutor.visualizations': '数学可视化',
+  'viz.ariaGraph': '{expressions} 的图像',
+  'viz.ariaInequality': '{expressions} 的区域',
+  'viz.ariaPoints': '包含点 {points} 的图',
+  'viz.ariaTable': '数值表',
+  'viz.legend': '图例',
 
   'materials.title': '学习资料',
   'materials.subtitle': '上传教材、你自己的笔记和课堂文字稿。AI 导师对三者的使用方式不同。',

@@ -1177,6 +1177,12 @@ export const en = {
 
   'tutor.visualSources': 'Figures from the source',
   'tutor.visualUnavailable': 'The original figure could not be displayed.',
+  'tutor.visualizations': 'Visualizations',
+  'viz.ariaGraph': 'Graph of {expressions}',
+  'viz.ariaInequality': 'Shaded region for {expressions}',
+  'viz.ariaPoints': 'Plot of the points {points}',
+  'viz.ariaTable': 'Table of values',
+  'viz.legend': 'Graph legend',
 
   'materials.title': 'Learning Materials',
   'materials.subtitle':

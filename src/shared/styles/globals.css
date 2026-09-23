@@ -53,6 +53,23 @@
      * two are identical (see the Default and Academic themes).
      */
     --primary-strong: var(--primary);
+
+    /*
+     * Math-visualization tokens (2D graph renderer only).
+     *
+     * Grid / axis / label colours follow the semantic tokens, so the four
+     * colour themes apply automatically. Series colours are tuned per
+     * light/dark so lines stay legible on either surface. No component ever
+     * hardcodes a graph colour.
+     */
+    --viz-grid: var(--border);
+    --viz-axis: 220 9% 46%;
+    --viz-label: 220 9% 46%;
+    --viz-fill: 222 70% 45%;
+    --viz-series-1: 222 70% 45%;
+    --viz-series-2: 0 65% 48%;
+    --viz-series-3: 145 55% 33%;
+    --viz-series-4: 280 55% 48%;
   }
 
   .dark {
@@ -73,6 +90,16 @@
     --border: 222 18% 18%;
     --input: 222 18% 18%;
     --ring: 210 20% 96%;
+
+    /* Math-visualization tokens — dark variants. */
+    --viz-grid: var(--border);
+    --viz-axis: 220 9% 65%;
+    --viz-label: 220 9% 65%;
+    --viz-fill: 215 85% 70%;
+    --viz-series-1: 215 85% 70%;
+    --viz-series-2: 0 75% 68%;
+    --viz-series-3: 145 55% 60%;
+    --viz-series-4: 280 70% 72%;
   }
 
   /*

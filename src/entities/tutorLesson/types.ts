@@ -10,6 +10,7 @@
  */
 
 import type { VisualSourceType } from '../visualSource/types'
+import type { TutorVisualization } from '../tutorVisualization/types'
 
 /**
  * A preserved figure referenced by a lesson.
@@ -55,6 +56,14 @@ export interface TutorLesson {
   /** Figures/diagrams the lesson references, preserved from the source. */
   visuals?: TutorVisual[]
 
+  /**
+   * Structured 2D mathematical visualizations generated for this lesson.
+   *
+   * Stored alongside the lesson so a theme change, a resize or a revisit never
+   * triggers another AI call. Older cached lessons simply have none.
+   */
+  visualizations?: TutorVisualization[]
+
   /** Course chunks the lesson was grounded in. */
   sourceChunkIds: string[]
 
@@ -78,10 +87,12 @@ export interface TutorLesson {
 /**
  * Current `TutorLesson.version`.
  *
- * v2 added preserved visual sources. A stored lesson with an older version is
- * regenerated once so figures appear — after that it is cached as usual.
+ * v2 added preserved visual sources. v3 adds structured 2D visualizations.
+ * A stored lesson with an older version is regenerated once so the new shape
+ * appears — after that it is cached as usual. Old rows always load defensively,
+ * so nothing has to be cleared by hand.
  */
-export const TUTOR_LESSON_VERSION = 2
+export const TUTOR_LESSON_VERSION = 3
 
 /**
  * Cache key for a lesson. Two lessons with the same key are interchangeable,

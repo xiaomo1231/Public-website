@@ -3,6 +3,7 @@ import { SettingsService } from './settingsService'
 import { DocumentAnalysisService } from './documentAnalysisService'
 import { TutorService } from './tutorService'
 import { TutorLessonService } from './tutorLessonService'
+import { TutorVisualizationService } from './tutorVisualizationService'
 import { TranslationService } from './translationService'
 import { ContextualTutorService } from './contextualTutorService'
 import { QuizService } from './quizService'
@@ -96,6 +97,7 @@ export async function buildAIServices(): Promise<AIServicesBundle | null> {
       analyses,
       chunks,
       visuals: new VisualSourceRepository(db),
+      visualizationService: new TutorVisualizationService({ ai }),
     }),
     translation: new TranslationService({ ai, repo: new TranslationRepository(db) }),
     contextualTutor: new ContextualTutorService({ ai }),
