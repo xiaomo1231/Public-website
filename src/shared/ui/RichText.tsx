@@ -1,8 +1,10 @@
-import { useMemo } from 'react'
+import { Fragment, useMemo, type ReactNode } from 'react'
 import { cn } from '@/shared/lib/utils'
 import { splitMathSegments, splitParagraphs } from '@/shared/lib/mathText'
-import type { InlineSpan, MarkdownBlock } from '@/shared/lib/markdownText'
+import type { InlineSpan, MarkdownBlock, TableBlock } from '@/shared/lib/markdownText'
+import type { TableAlignment } from '@/shared/lib/markdownTable'
 import { parseLessonSections, type LessonSection } from '@/shared/lib/lessonDocument'
+import { useTranslation } from '@/i18n'
 import { Math } from './Math'
 import { TeachingBlock } from './TeachingBlock'
 
@@ -34,6 +36,13 @@ const HEADING_CLASS: Record<number, string> = {
   2: 'text-[24px] font-semibold leading-snug tracking-tight',
   3: 'text-[20px] font-semibold leading-snug',
   4: 'text-[17px] font-semibold leading-snug',
+}
+
+/** Alignment is a controlled enum, never an arbitrary CSS value. */
+const ALIGN_CLASS: Record<TableAlignment, string> = {
+  left: 'text-left',
+  center: 'text-center',
+  right: 'text-right',
 }
 
 function Inline({ spans }: { spans: InlineSpan[] }): JSX.Element {
@@ -127,6 +136,8 @@ function Block({
       )
     case 'math':
       return <Math latex={block.value} display />
+    case 'table':
+      return <Table block={block} />
     default:
       return (
         <p
@@ -139,6 +150,57 @@ function Block({
         </p>
       )
   }
+}
+
+function Table({ block }: { block: TableBlock }): JSX.Element {
+  const { t } = useTranslation()
+  return (
+    // The wrapper owns the only horizontal scroll; the page itself never
+    // scrolls sideways. It is keyboard-focusable so a wide table can be
+    // scrolled without a mouse, and it has an accessible name.
+    <div
+      role="region"
+      aria-label={t('common.table')}
+      tabIndex={0}
+      className="max-w-full overflow-x-auto focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+    >
+      <table className="border-collapse text-[15px]">
+        <thead>
+          <tr>
+            {block.header.map((cell, column) => (
+              <th
+                key={column}
+                scope="col"
+                className={cn(
+                  'border-b border-border px-3 py-2 align-top font-semibold text-foreground',
+                  ALIGN_CLASS[block.align[column] ?? 'left'],
+                )}
+              >
+                <Inline spans={cell} />
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {block.rows.map((row, rowIndex) => (
+            <tr key={rowIndex} className="border-b border-border/60 last:border-0">
+              {row.map((cell, column) => (
+                <td
+                  key={column}
+                  className={cn(
+                    'break-words px-3 py-2 align-top',
+                    ALIGN_CLASS[block.align[column] ?? 'left'],
+                  )}
+                >
+                  <Inline spans={cell} />
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
 }
 
 function Section({
@@ -168,6 +230,12 @@ export interface RichTextProps {
   paragraphClassName?: string
   /** `plain` for extracted source, `markdown` for AI-authored lessons. */
   format?: 'plain' | 'markdown'
+  /**
+   * Optional content rendered immediately after a section. Used to place a
+   * lesson's visualizations next to the teaching block they illustrate; the
+   * caller owns the decision, RichText stays generic.
+   */
+  renderAfterSection?: (section: LessonSection, index: number) => ReactNode
 }
 
 export function RichText({
@@ -175,6 +243,7 @@ export function RichText({
   className,
   paragraphClassName,
   format = 'plain',
+  renderAfterSection,
 }: RichTextProps): JSX.Element {
   const bodyClass = cn('text-[16px] leading-[1.8] text-foreground', paragraphClassName)
 
@@ -199,7 +268,10 @@ export function RichText({
   return (
     <div className={cn('space-y-4', className)}>
       {sections.map((section, index) => (
-        <Section key={index} section={section} paragraphClassName={bodyClass} />
+        <Fragment key={index}>
+          <Section section={section} paragraphClassName={bodyClass} />
+          {renderAfterSection?.(section, index)}
+        </Fragment>
       ))}
     </div>
   )

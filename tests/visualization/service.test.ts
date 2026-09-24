@@ -22,7 +22,7 @@ const GRAPH_LESSON = [
 const PROSE_LESSON = [
   '## Definition',
   '',
-  'The intersection of two sets is \\(X \\cap Y = \\{c\\}\\).',
+  'The fundamental theorem of arithmetic states that every integer has a unique prime factorisation.',
 ].join('\n')
 
 const FUNCTION_DRAFT = {
@@ -257,6 +257,177 @@ describe('TutorVisualizationService — nonlinear (Phase 2)', () => {
         visualizations: [
           { type: 'function_2d', expressions: [{ latex: 'y = tan(x)', expression: 'tan(x)' }] },
         ],
+      }),
+    )
+    expect(visualizations).toEqual([])
+  })
+})
+
+describe('TutorVisualizationService — vectors & graphs (Phase 3.0)', () => {
+  function serviceWith(data: unknown) {
+    const chatJSON = vi.fn().mockResolvedValue({ data, raw: { content: '{}', model: 'fake' } })
+    return new TutorVisualizationService({ ai: { chatJSON } as unknown as AIService })
+  }
+
+  const generate = (service: TutorVisualizationService) =>
+    service.generate({
+      topicName: 'Graphs and vectors',
+      topicDescription: '',
+      language: 'en',
+      lessonContent: 'A graph has vertices and edges. A vector has components.',
+    })
+
+  it('normalizes a vectors_2d draft', async () => {
+    const visualizations = await generate(
+      serviceWith({
+        visualizations: [
+          { type: 'vectors_2d', operation: 'display', vectors: [{ x: 1, y: 2, label: 'v' }] },
+        ],
+      }),
+    )
+    expect(visualizations).toHaveLength(1)
+    expect(visualizations[0]?.type).toBe('vectors_2d')
+  })
+
+  it('normalizes a graph_2d draft', async () => {
+    const visualizations = await generate(
+      serviceWith({
+        visualizations: [
+          {
+            type: 'graph_2d',
+            graphKind: 'directed',
+            nodes: [{ id: 'a', label: 'A' }],
+            edges: [],
+          },
+        ],
+      }),
+    )
+    expect(visualizations).toHaveLength(1)
+    expect(visualizations[0]?.type).toBe('graph_2d')
+  })
+
+  it('keeps the valid diagram and drops the invalid one', async () => {
+    const visualizations = await generate(
+      serviceWith({
+        visualizations: [
+          { type: 'graph_2d', nodes: [{ id: 'a', label: 'A' }], edges: [] },
+          { type: 'vectors_2d', vectors: [] },
+        ],
+      }),
+    )
+    expect(visualizations).toHaveLength(1)
+    expect(visualizations[0]?.type).toBe('graph_2d')
+  })
+
+  it('returns an empty list when every diagram is invalid', async () => {
+    const visualizations = await generate(
+      serviceWith({ visualizations: [{ type: 'vectors_2d', vectors: [] }] }),
+    )
+    expect(visualizations).toEqual([])
+  })
+})
+
+describe('TutorVisualizationService — transforms & sets (Phase 3.1)', () => {
+  function serviceWith(data: unknown) {
+    const chatJSON = vi.fn().mockResolvedValue({ data, raw: { content: '{}', model: 'fake' } })
+    return new TutorVisualizationService({ ai: { chatJSON } as unknown as AIService })
+  }
+
+  const generate = (service: TutorVisualizationService) =>
+    service.generate({
+      topicName: 'Linear transformations and sets',
+      topicDescription: '',
+      language: 'en',
+      lessonContent: 'Let A = [[2,0],[0,1]] and v = (1,1). A = {1,2,3}, B = {3,4,5}.',
+    })
+
+  it('normalizes a transform_2d draft', async () => {
+    const visualizations = await generate(
+      serviceWith({
+        visualizations: [
+          { type: 'transform_2d', matrix: { a: 2, b: 0, c: 0, d: 1 }, vectors: [{ x: 1, y: 1 }] },
+        ],
+      }),
+    )
+    expect(visualizations).toHaveLength(1)
+    expect(visualizations[0]?.type).toBe('transform_2d')
+  })
+
+  it('normalizes a venn_2d draft', async () => {
+    const visualizations = await generate(
+      serviceWith({
+        visualizations: [
+          {
+            type: 'venn_2d',
+            operation: 'intersection',
+            operands: ['a', 'b'],
+            sets: [
+              { id: 'a', label: 'A', elements: ['1', '2', '3'] },
+              { id: 'b', label: 'B', elements: ['3', '4', '5'] },
+            ],
+          },
+        ],
+      }),
+    )
+    expect(visualizations).toHaveLength(1)
+    expect(visualizations[0]?.type).toBe('venn_2d')
+  })
+
+  it('keeps the valid diagram and drops the invalid one', async () => {
+    const visualizations = await generate(
+      serviceWith({
+        visualizations: [
+          { type: 'transform_2d', matrix: { a: 1, b: 0, c: 0, d: 1 } },
+          { type: 'venn_2d', operation: 'union', sets: [{ id: 'a', label: 'A', elements: [] }] },
+        ],
+      }),
+    )
+    expect(visualizations).toHaveLength(1)
+    expect(visualizations[0]?.type).toBe('transform_2d')
+  })
+
+  it('returns an empty list when every diagram is invalid', async () => {
+    const visualizations = await generate(
+      serviceWith({ visualizations: [{ type: 'transform_2d' }] }),
+    )
+    expect(visualizations).toEqual([])
+  })
+})
+
+describe('TutorVisualizationService — eigenvectors (Phase 3.2)', () => {
+  function serviceWith(data: unknown) {
+    const chatJSON = vi.fn().mockResolvedValue({ data, raw: { content: '{}', model: 'fake' } })
+    return new TutorVisualizationService({ ai: { chatJSON } as unknown as AIService })
+  }
+
+  const generate = (service: TutorVisualizationService) =>
+    service.generate({
+      topicName: 'Eigenvalues and eigenvectors',
+      topicDescription: '',
+      language: 'en',
+      lessonContent: 'Let A = [[2, 1], [1, 2]] with eigenvalues 3 and 1 and eigenvector (1, 1).',
+    })
+
+  it('normalizes an eigen_2d draft', async () => {
+    const visualizations = await generate(
+      serviceWith({
+        visualizations: [
+          {
+            type: 'eigen_2d',
+            matrix: { a: 2, b: 1, c: 1, d: 2 },
+            eigenpairs: [{ value: 3, vector: { x: 1, y: 1 }, label: 'v1' }],
+          },
+        ],
+      }),
+    )
+    expect(visualizations).toHaveLength(1)
+    expect(visualizations[0]?.type).toBe('eigen_2d')
+  })
+
+  it('drops an eigen_2d draft whose matrix has complex eigenvalues', async () => {
+    const visualizations = await generate(
+      serviceWith({
+        visualizations: [{ type: 'eigen_2d', matrix: { a: 0, b: -1, c: 1, d: 0 } }],
       }),
     )
     expect(visualizations).toEqual([])

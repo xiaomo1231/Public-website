@@ -7,7 +7,8 @@ import { LoadingState } from '@/shared/ui/LoadingState'
 import { RichText } from '@/shared/ui/RichText'
 import { VisualSourceFigure } from '@/widgets/source/VisualSourceFigure'
 import { TutorVisualizationFigure } from '@/widgets/tutor/TutorVisualizationFigure'
-import { stripDuplicateTitle } from '@/shared/lib/lessonDocument'
+import { stripDuplicateTitle, parseLessonSections } from '@/shared/lib/lessonDocument'
+import { anchorVisualizations } from '@/entities/tutorVisualization/placement'
 import { useTranslation } from '@/i18n'
 import type { UseTutorLessonState } from '@/features/tutor/useTutorLesson'
 
@@ -66,6 +67,13 @@ export function TutorLessonView({
   }
 
   const { lesson } = state
+  const lessonContent = stripDuplicateTitle(lesson.content, topicName)
+  // Place each figure next to the teaching block it illustrates; anything
+  // without a resolvable anchor stays in the trailing section.
+  const { bySection, trailing } = anchorVisualizations(
+    lesson.visualizations,
+    parseLessonSections(lessonContent),
+  )
 
   return (
     <div className="mx-auto w-full max-w-[46rem]">
@@ -96,18 +104,29 @@ export function TutorLessonView({
 
         {/* The lesson is the visual subject: constrained measure, generous leading. */}
         <RichText
-          text={stripDuplicateTitle(lesson.content, topicName)}
+          text={lessonContent}
           format="markdown"
           paragraphClassName="text-[16.5px] leading-[1.8]"
+          renderAfterSection={(_section, index) => {
+            const list = bySection.get(index)
+            if (!list || list.length === 0) return null
+            return (
+              <div className="space-y-3">
+                {list.map((visualization) => (
+                  <TutorVisualizationFigure key={visualization.id} visualization={visualization} />
+                ))}
+              </div>
+            )
+          }}
         />
 
-        {/* Structured 2D visualizations generated with the lesson and cached. */}
-        {lesson.visualizations && lesson.visualizations.length > 0 && (
+        {/* Lesson-level figures, or figures whose anchor did not resolve. */}
+        {trailing.length > 0 && (
           <section className="space-y-3" aria-label={t('tutor.visualizations')}>
             <h2 className="text-[22px] font-semibold leading-snug tracking-tight text-foreground">
               {t('tutor.visualizations')}
             </h2>
-            {lesson.visualizations.map((visualization) => (
+            {trailing.map((visualization) => (
               <TutorVisualizationFigure key={visualization.id} visualization={visualization} />
             ))}
           </section>

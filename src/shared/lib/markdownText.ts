@@ -8,11 +8,14 @@
  *   - unordered / ordered lists
  *   - blockquotes
  *   - fenced code blocks
+ *   - GitHub-style pipe tables
  *   - `**bold**`, `*italic*`, `` `code` ``
  *
  * Math (`\(…\)`, `\[…\]`, `$…$`, `$$…$$`) is parsed alongside markdown so the
  * two can be mixed freely.
  */
+
+import { TABLE_LIMITS, tryParseTable, type TableAlignment } from './markdownTable'
 
 export type InlineSpan =
   | { kind: 'text'; value: string }
@@ -20,6 +23,13 @@ export type InlineSpan =
   | { kind: 'strong'; value: string }
   | { kind: 'em'; value: string }
   | { kind: 'code'; value: string }
+
+export interface TableBlock {
+  kind: 'table'
+  align: TableAlignment[]
+  header: InlineSpan[][]
+  rows: InlineSpan[][][]
+}
 
 export type MarkdownBlock =
   | { kind: 'heading'; level: number; spans: InlineSpan[] }
@@ -29,6 +39,7 @@ export type MarkdownBlock =
   | { kind: 'code'; value: string }
   /** A line that is nothing but display math. */
   | { kind: 'math'; value: string }
+  | TableBlock
 
 /**
  * Order matters: code spans first (so LaTeX inside them is left alone), then
@@ -96,6 +107,14 @@ function closerFor(opener: string): string {
   return opener.startsWith('\\') ? '\\]' : '$$'
 }
 
+/** A line that starts a different block also ends any open table. */
+const isTableTerminator = (line: string): boolean =>
+  FENCE.test(line) ||
+  HEADING.test(line) ||
+  QUOTE.test(line) ||
+  UNORDERED.test(line) ||
+  ORDERED.test(line)
+
 export function parseMarkdownBlocks(text: string): MarkdownBlock[] {
   const lines = (text ?? '').replace(/\r\n?/g, '\n').split('\n')
   const blocks: MarkdownBlock[] = []
@@ -103,6 +122,7 @@ export function parseMarkdownBlocks(text: string): MarkdownBlock[] {
   let paragraph: string[] = []
   let list: { ordered: boolean; items: string[] } | null = null
   let quote: string[] = []
+  let tableCount = 0
 
   const flushParagraph = () => {
     if (paragraph.length === 0) return
@@ -216,6 +236,25 @@ export function parseMarkdownBlocks(text: string): MarkdownBlock[] {
 
     flushList()
     flushQuote()
+
+    // A table is only recognised when the header is followed by a valid
+    // delimiter row; a lone `|` in prose therefore stays a paragraph.
+    if (tableCount < TABLE_LIMITS.maxTables) {
+      const table = tryParseTable(lines, i, isTableTerminator)
+      if (table) {
+        flushAll()
+        blocks.push({
+          kind: 'table',
+          align: table.align,
+          header: table.header.map((cell) => splitInline(cell)),
+          rows: table.rows.map((row) => row.map((cell) => splitInline(cell))),
+        })
+        tableCount += 1
+        i = table.nextIndex - 1
+        continue
+      }
+    }
+
     paragraph.push(line)
   }
 

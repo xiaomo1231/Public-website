@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type CSSProperties } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { Languages, Lightbulb, Loader2, Sparkles, X } from 'lucide-react'
 import { Button } from '@/shared/ui/Button'
 import { ContextualTutorPopup, type ContextualTutorContext } from '@/widgets/tutor/ContextualTutorPopup'
@@ -8,6 +8,12 @@ import { useCurrentProject } from '@/features/project/useCurrentProject'
 import { toast } from '@/features/toast/toastStore'
 import { friendlyAIError } from '@/shared/lib/aiErrors'
 import { useTranslation } from '@/i18n'
+import {
+  computeSelectionPopupPosition,
+  isPopupAnchorVisible,
+  type PopupAnchor,
+  type PopupPosition,
+} from '@/shared/lib/popupPosition'
 
 /** Which action the learner chose for the current selection. */
 type SelectionAction = 'translate' | 'explain' | 'ask'
@@ -24,7 +30,9 @@ interface SelectionState {
   language: string
   fromVisual: boolean
   tooLong: boolean
-  style: CSSProperties
+  /** The selection's viewport rectangle; the anchor for every re-position. */
+  anchor: PopupAnchor
+  mobile: boolean
 }
 
 interface TranslationResult {
@@ -35,7 +43,22 @@ interface TranslationResult {
 
 /** Longest selection worth sending; beyond this the learner is told to narrow it. */
 const MAX_SELECTION = 600
-const MIN_DESKTOP_MARGIN = 150
+
+/** The current visual viewport, falling back to the layout viewport. */
+function readViewport(): {
+  width: number
+  height: number
+  offsetTop: number
+  offsetLeft: number
+} {
+  const vv = window.visualViewport
+  return {
+    width: vv?.width ?? window.innerWidth,
+    height: vv?.height ?? window.innerHeight,
+    offsetTop: vv?.offsetTop ?? 0,
+    offsetLeft: vv?.offsetLeft ?? 0,
+  }
+}
 
 /**
  * Selection toolbar for the reading surfaces.
@@ -54,6 +77,7 @@ export function SelectionTranslator(): JSX.Element | null {
   const [action, setAction] = useState<SelectionAction | null>(null)
   const [translation, setTranslation] = useState<TranslationResult | null>(null)
   const [translating, setTranslating] = useState(false)
+  const [position, setPosition] = useState<PopupPosition | null>(null)
   const { profile } = useAuth()
   const currentProject = useCurrentProject()
   const containerRef = useRef<HTMLDivElement>(null)
@@ -63,6 +87,13 @@ export function SelectionTranslator(): JSX.Element | null {
   useEffect(() => {
     translatingRef.current = translating
   }, [translating])
+
+  const closeAll = useCallback((): void => {
+    setSelection(null)
+    setAction(null)
+    setTranslation(null)
+    setPosition(null)
+  }, [])
 
   useEffect(() => {
     function onSelectionChange(): void {
@@ -87,13 +118,12 @@ export function SelectionTranslator(): JSX.Element | null {
           : { left: 0, top: 0, width: 0, height: 0 }
       const route = parseTopicRoute(window.location.pathname)
       const mobile = window.innerWidth < 640
-      const style: CSSProperties = mobile
-        ? { left: '50%', bottom: 12, transform: 'translateX(-50%)' }
-        : {
-            left: clamp(rect.left + rect.width / 2, MIN_DESKTOP_MARGIN, window.innerWidth - MIN_DESKTOP_MARGIN),
-            top: rect.top - 8,
-            transform: 'translate(-50%, -100%)',
-          }
+      const anchor: PopupAnchor = {
+        left: rect.left,
+        top: rect.top,
+        width: rect.width,
+        height: rect.height,
+      }
 
       const canonicalLatex = extractCanonicalLatex(range)
       const surrounding = getSurroundingParagraph(range)
@@ -112,18 +142,28 @@ export function SelectionTranslator(): JSX.Element | null {
         language: detectLanguage(`${text} ${surrounding}`),
         fromVisual: isInsideVisual(range),
         tooLong: text.length > MAX_SELECTION,
-        style,
+        anchor,
+        mobile,
       })
+      // Provisional placement with an unknown size; the layout effect below
+      // measures the real popup and refines it before the first paint.
+      const viewport = readViewport()
+      setPosition(
+        computeSelectionPopupPosition({
+          anchor,
+          popupWidth: 0,
+          popupHeight: 0,
+          viewportWidth: viewport.width,
+          viewportHeight: viewport.height,
+          viewportOffsetTop: viewport.offsetTop,
+          viewportOffsetLeft: viewport.offsetLeft,
+          mobile,
+        }),
+      )
     }
     document.addEventListener('selectionchange', onSelectionChange)
     return () => document.removeEventListener('selectionchange', onSelectionChange)
   }, [])
-
-  function closeAll(): void {
-    setSelection(null)
-    setAction(null)
-    setTranslation(null)
-  }
 
   useEffect(() => {
     if (!selection) return
@@ -140,7 +180,79 @@ export function SelectionTranslator(): JSX.Element | null {
       document.removeEventListener('mousedown', onPointerDown)
       document.removeEventListener('keydown', onKeyDown)
     }
-  }, [selection])
+  }, [selection, closeAll])
+
+  // Keep the popup inside the visual viewport: recompute from the real anchor
+  // and the real popup size whenever the content, viewport or scroll changes.
+  const reposition = useCallback((): void => {
+    if (!selection) return
+    const element = containerRef.current
+    // Prefer the *live* selection so scrolling the page keeps the popup next to
+    // the text; fall back to the stored rectangle when the selection is gone
+    // (e.g. the browser collapsed it) or the rect is not measurable.
+    const anchor = resolveLiveAnchor(selection, element)
+    const viewport = readViewport()
+    if (
+      !isPopupAnchorVisible({
+        anchor,
+        viewportWidth: viewport.width,
+        viewportHeight: viewport.height,
+        viewportOffsetTop: viewport.offsetTop,
+        viewportOffsetLeft: viewport.offsetLeft,
+      })
+    ) {
+      closeAll()
+      return
+    }
+    const rect = element?.getBoundingClientRect()
+    const popupWidth = rect?.width ?? 0
+    // `scrollHeight` is the natural content height even while a previous
+    // `maxHeight` clamps the element, so measuring it cannot oscillate.
+    const popupHeight = element ? element.scrollHeight || rect?.height || 0 : 0
+    const next = computeSelectionPopupPosition({
+      anchor,
+      popupWidth,
+      popupHeight,
+      viewportWidth: viewport.width,
+      viewportHeight: viewport.height,
+      viewportOffsetTop: viewport.offsetTop,
+      viewportOffsetLeft: viewport.offsetLeft,
+      mobile: selection.mobile,
+    })
+    setPosition((previous) =>
+      previous &&
+      previous.left === next.left &&
+      previous.top === next.top &&
+      previous.side === next.side &&
+      previous.maxHeight === next.maxHeight
+        ? previous
+        : next,
+    )
+  }, [selection, closeAll])
+
+  useLayoutEffect(() => {
+    if (!selection) return
+    reposition()
+    const element = containerRef.current
+    const observer =
+      element && typeof ResizeObserver !== 'undefined'
+        ? new ResizeObserver(() => reposition())
+        : null
+    if (element) observer?.observe(element)
+    window.addEventListener('resize', reposition)
+    // Capture-phase scroll catches scrolling containers, not just the window.
+    window.addEventListener('scroll', reposition, true)
+    const vv = window.visualViewport
+    vv?.addEventListener('resize', reposition)
+    vv?.addEventListener('scroll', reposition)
+    return () => {
+      observer?.disconnect()
+      window.removeEventListener('resize', reposition)
+      window.removeEventListener('scroll', reposition, true)
+      vv?.removeEventListener('resize', reposition)
+      vv?.removeEventListener('scroll', reposition)
+    }
+  }, [selection, action, translation, translating, reposition])
 
   async function translate(): Promise<void> {
     if (!selection || selection.tooLong) return
@@ -209,7 +321,13 @@ export function SelectionTranslator(): JSX.Element | null {
   return (
     <div
       ref={containerRef}
-      style={selection.style}
+      style={{
+        left: position?.left ?? 0,
+        top: position?.top ?? 0,
+        ...(position?.maxHeight !== undefined
+          ? { maxHeight: position.maxHeight, overflowY: 'auto' as const }
+          : {}),
+      }}
       className="fixed z-50 max-w-[calc(100vw-1.5rem)]"
     >
       {selection.tooLong ? (
@@ -282,8 +400,27 @@ export function SelectionTranslator(): JSX.Element | null {
   )
 }
 
-function clamp(value: number, min: number, max: number): number {
-  return Math.min(Math.max(value, min), max)
+/**
+ * The selection's current viewport rectangle.
+ *
+ * Uses the live browser selection so the popup follows the text while the page
+ * scrolls; falls back to the stored rectangle when the selection no longer
+ * exists, is inside our own popup, or has no measurable rect.
+ */
+function resolveLiveAnchor(selection: SelectionState, container: HTMLElement | null): PopupAnchor {
+  const sel = window.getSelection()
+  if (sel && !sel.isCollapsed && sel.rangeCount > 0) {
+    const range = sel.getRangeAt(0)
+    if (!container || !container.contains(range.commonAncestorContainer)) {
+      if (typeof range.getBoundingClientRect === 'function') {
+        const rect = range.getBoundingClientRect()
+        if (rect.width || rect.height || rect.top || rect.left) {
+          return { left: rect.left, top: rect.top, width: rect.width, height: rect.height }
+        }
+      }
+    }
+  }
+  return selection.anchor
 }
 
 /** `/projects/:projectId/tutor/:topicId[/interactive]` → ids, else null. */

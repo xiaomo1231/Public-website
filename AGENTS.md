@@ -19,7 +19,7 @@
 
 **这不是"AI PDF 总结工具"。** 教学以题目为主要载体，而不是长篇总结。
 
-当前版本：**V0.2.5（0.2.5）**。
+当前版本：**V0.2.6（0.2.6）**。
 
 ---
 
@@ -343,12 +343,13 @@ docs/             architecture.md
 | 7 | 课时化导师 + 公式符号 + KaTeX 打磨 | 已交付（v0.2.4） |
 | 7b | 教材章节结构 + 课程内容持久化 / freshness | 已交付（v0.2.5） |
 | 7c | 配色主题（Color Themes，4 套）+ 可访问性 | 已交付（v0.2.5） |
-| 7d | 章节级增量内容生成（依赖模型 + 稳定 Topic 身份 + 局部提交） | 已交付（工作区未提交） |
-| 7e | 课时级数学可视化（线性 + 受控非线性显式函数） | 已实现并验证（工作区未提交） |
+| 7d | 章节级增量内容生成（依赖模型 + 稳定 Topic 身份 + 局部提交） | 已交付（v0.2.6） |
+| 7e | 课时级数学可视化（线性/非线性 + 向量/图 + 线性变换/维恩图/特征值 + 教学区块放置） | 已交付（v0.2.6） |
+| 7f | 划词浮层定位修复（真实尺寸 flip/clamp + ResizeObserver/visualViewport） | 已交付（v0.2.6） |
 | 8 | Dashboard 强化 | 未开始 |
 | 9 | PWA · a11y · 导入导出打磨 | 未开始 |
 
-**工作区有未提交的改动**（章节级增量更新，7d）：`entities/courseAnalysis/{topicIdentity,types,repository}.ts`、`entities/courseContent/{dependency,incremental,topicDependency,repository,types}.ts`、`entities/courseContext/types.ts`、`entities/practice/types.ts`、`infrastructure/ai/prompts/{index,document-analyzer/v2,document-analyzer/normalize,topic-analyzer/*}`、`services/{documentAnalysisService,courseContentService,courseContextService,practiceService}.ts`、`i18n/locales/*`，以及 `tests/incrementalAnalysis.test.ts`、`tests/ai/prompts.test.ts`。v0.2.5 已提交并发布（tag `v0.2.5`，两个远程仓库各一份 Release + 源码压缩包）。
+**V0.2.6 已提交并发布**（tag `v0.2.6`，两个远程仓库各一份 Release + 源码压缩包）。本版包含：Phase 7d 章节级增量分析、导师数学可视化 Phase 1 / 1.1 / 2 / 3.0 / 3.1 / 3.2（含 `eigen_2d`）、Markdown 表格渲染、划词浮层定位修复，以及课程分析 JSON 提取加固。v0.2.5 已发布（tag `v0.2.5`）。
 
 ### 待用户拍板的决策点
 
@@ -358,7 +359,11 @@ docs/             architecture.md
 4. **增量分析**：**章节级增量生成已实现**（§5.1）。边界：只支持「按章节/小节」的局部更新，且要求受影响 topic 都已有经本地校验的 `sourceChunkIds`；旧数据缺依赖时返回 `ANALYSIS_SCOPE_UNSUPPORTED`（`dependencies-missing`）而非降级。跨章节 Topic 的**多来源扩展**仍是保守策略（只在其自身来源被证明变化时才重建）。
 5. **`#4C1A2`**：Warm Orange 主题的 `deep` 色按用户原文保留，但它不是合法 hex，无法用作 CSS 颜色。当前处理：保留在 palette metadata 里，**不写入任何 CSS 变量**；主题选择器把它渲染成「不可用」虚线 `?` 色块，不伪造颜色。等待正确色值。
 6. **对比度**：浅色主按钮已改用 `--primary-strong`（Pink Aqua `#1E8F9C` = 3.84:1，Warm Orange `#8C3332` = 7.79:1；Default 15.55:1，Academic 4.82:1）。**Pink Aqua 仍为 AA-large，未达 AA-normal（4.5:1）**——因为 `#1E8F9C` 是用户指定值，达标需要改色。暗色模式主按钮 6.67–14.22:1 全部达标。
-7. **数学可视化（Phase 1 / 1.1 / 2 已实现并验证，工作区未提交）**：按 Phase 0 结论实现——独立第二次结构化 JSON AI 调用（`visualization-generator/v1`）+ 本地 mathjs AST 白名单 + 确定性采样 + 确定性 SVG renderer（`TutorVisualizationFigure` / `plotLayout`）。支持线性函数/方程/方程组/不等式/点集/表格，以及受控的非线性显式函数（二次、sin/cos、指数、对数、倒数、平方根）；隐式曲线、参数/极坐标、3D、向量、几何、动画**不支持**，安全回退为普通 LaTeX。放置为课时级（`TutorLesson.visualizations?`）。未新增 Dexie 表/索引；`TUTOR_LESSON_VERSION`=3、`TUTOR_VISUALIZATION_SCHEMA_VERSION`=1、prompt 仍 v1（未 bump）。详见 `README.md` 与 `docs/architecture.md`。
+7. **数学可视化（Phase 1 / 1.1 / 2 / 3.0 / 3.1 / 3.2 已实现并验证，随 v0.2.6 发布）**：按 Phase 0 结论实现——独立第二次结构化 JSON AI 调用（`visualization-generator/v4`）+ 本地 mathjs AST 白名单 + 确定性采样 / 矩阵与集合运算 / 特征求解 / 图布局 + 确定性 SVG renderer（`TutorVisualizationFigure` / `TutorGraphFigure` / `TutorVennFigure` / `plotLayout`）。支持线性函数/方程/方程组/不等式/点集/表格，受控非线性显式函数，`vectors_2d`，`graph_2d`（≤12 节点），`transform_2d`，`venn_2d`，以及 **Phase 3.2 的 `eigen_2d`（2×2 实矩阵的实特征值/特征向量，本地闭式求解 + `Av ≈ λv` 验证；支持不同实特征值、重复特征值（标量矩阵/缺陷矩阵）、零/负特征值；复特征值安全回退不绘图）**。**教学联动**：Tutor Lesson Prompt 升 v4，在适合主题中给出明确可验证的数值例子；可视化只复用 Lesson 中的矩阵/向量/集合/运算；`placement` 支持把图形锚定到 `Example` 等教学区块（`{ scope:'section', block, index }`），无法解析则回退课时末尾。AI 只提供语义数据，**不提供坐标、变换结果、特征值或 determinant**（AI 提供的 eigenpair 仅作候选，本地重算并校验；全部不一致则不绘图）。未新增 Dexie 表/索引；`TUTOR_LESSON_VERSION`=3（未变）、`TUTOR_VISUALIZATION_SCHEMA_VERSION`=4、可视化 prompt v4、Tutor Lesson Prompt v4（v1–v3 保留）。注意：**Tutor Lesson Prompt 升 v4 会经 `contentHash` 使旧课时在下次打开时自然重生成一次**。详见 `README.md` 与 `docs/architecture.md`。
+
+8. **Markdown 表格渲染（Phase 3.1.1 已实现并验证，随 v0.2.6 发布）**：共享 `RichText` 新增 GFM pipe table block（`shared/lib/markdownTable.ts` 纯解析 + `markdownText.ts` block + `RichText` 语义化渲染）；cell 复用现有 inline 文本/code/LaTeX；宽表仅在容器内横向滚动；普通 `|x|` 不误判；code fence / block math 内不解析表格。Tutor Lesson Prompt 升 **v3**（保留 v1/v2）规范表格输出。旧缓存中的多行 Markdown 表格**无需重新调用 AI 即可正确显示**；Prompt v3 经 `contentHash` 使旧课时自然重生成一次。未改 `TUTOR_LESSON_VERSION` / Visualization schema / Dexie。
+
+9. **划词浮层定位修复（Phase 3.2 已实现并验证，随 v0.2.6 发布）**：`SelectionTranslator` 不再一次性写入 `top: rect.top - 8` + `translate(-50%,-100%)`，改为纯函数 `computeSelectionPopupPosition`（`shared/lib/popupPosition.ts`）按**真实浮层尺寸**优先上方、空间不足翻转下方、上下都不足取较大侧并给出 `maxHeight`，左右 clamp 到视口；用 `ResizeObserver` + `useLayoutEffect` + `window.resize` + 捕获阶段 `scroll` + `visualViewport`（resize/scroll）在内容/视口/滚动变化后重新定位，监听器与 observer 在卸载时清理；滚动使选区完全离开视口时关闭浮层。移动端仍为底部浮层但以 `visualViewport` 为界。未引入新依赖、未改 Portal、未改动全站其它浮层。
 
 ### 已知限制
 
@@ -367,4 +372,5 @@ docs/             architecture.md
 - 数学等价判断有边界，极复杂表达式返回「无法自动判定」，不计入成绩。
 - OCR 质量取决于图片清晰度；手写内容提取效果有限。
 - 课程分析为项目级（覆盖该项目全部已处理文档），非逐文档结果，也非章节级。
+- 数学可视化范围受控：`eigen_2d` 只支持 2×2 实矩阵的**实**特征值/特征向量；复特征值、3×3、Jordan 形、动画、拖拽均不支持，会安全回退为普通 LaTeX，不绘制误导性的实特征方向。
 - 冷启动时外观偏好（明暗 / 配色）要等 `UserProfile` 读出后才应用，可能有一帧默认配色。
