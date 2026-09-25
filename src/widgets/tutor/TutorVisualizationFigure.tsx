@@ -37,6 +37,7 @@ import { Math as MathView } from '@/shared/ui/Math'
 import { layoutForWidth } from './plotLayout'
 import { TutorGraphSvg } from './TutorGraphFigure'
 import { TutorVennSvg } from './TutorVennFigure'
+import { TutorHasseSvg } from './TutorHasseFigure'
 
 /**
  * The single deterministic renderer for structured 2D visualizations.
@@ -140,7 +141,7 @@ interface PlotGeometry {
 
 function buildGeometry(visualization: TutorVisualization, aspect: number): PlotGeometry | null {
   // graph_2d and venn_2d have their own content renderers.
-  if (visualization.type === 'graph_2d' || visualization.type === 'venn_2d') return null
+  if (visualization.type === 'graph_2d' || visualization.type === 'venn_2d' || visualization.type === 'hasse_2d') return null
 
   if (visualization.type === 'transform_2d') {
     const viewport =
@@ -375,7 +376,7 @@ function buildAriaLabel(visualization: TutorVisualization, t: UseTranslationResu
     return t('viz.vectorsAria', { count: visualization.vectors.length })
   }
   // graph_2d / venn_2d build their own accessible labels.
-  if (visualization.type === 'graph_2d' || visualization.type === 'venn_2d') return ''
+  if (visualization.type === 'graph_2d' || visualization.type === 'venn_2d' || visualization.type === 'hasse_2d') return ''
   if (visualization.type === 'transform_2d') return t('viz.transformAria')
   if (visualization.type === 'eigen_2d') return t('viz.eigenAria')
   const expressions = visualization.expressions.map((expression) => expression.latex).join(', ')
@@ -403,7 +404,7 @@ export function TutorVisualizationFigure({
   const plotH = layout.height - layout.pad.top - layout.pad.bottom
   const aspect = plotW / plotH
 
-  const hasOwnRenderer = visualization.type === 'graph_2d' || visualization.type === 'venn_2d'
+  const hasOwnRenderer = visualization.type === 'graph_2d' || visualization.type === 'venn_2d' || visualization.type === 'hasse_2d'
   const geometry = useMemo(
     () => (hasOwnRenderer ? null : buildGeometry(visualization, aspect)),
     [visualization, aspect, hasOwnRenderer],
@@ -446,6 +447,17 @@ export function TutorVisualizationFigure({
             {visualization.caption}
           </figcaption>
         )}
+      </figure>
+    )
+  }
+
+  if (visualization.type === 'hasse_2d') {
+    return (
+      <figure data-tutor-visualization={visualization.id} className="my-5 min-w-0 space-y-2">
+        <div ref={cardRef} className="w-full max-w-full overflow-hidden rounded-md border border-border/70 bg-card p-2">
+          <TutorHasseSvg visualization={visualization} layout={layout} t={t} />
+        </div>
+        {visualization.caption && <figcaption className="text-center text-[13px] text-muted-foreground">{visualization.caption}</figcaption>}
       </figure>
     )
   }

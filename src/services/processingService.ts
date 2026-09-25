@@ -6,6 +6,7 @@ import { resolveMaterialType, type Document, type DocumentType } from '@/entitie
 import { CourseStructureService, type PreparedStructure } from './courseStructureService'
 import type { DocumentChunk, NewChunkInput } from '@/entities/chunk/types'
 import type { VisualSource } from '@/entities/visualSource/types'
+import { getDb, type AppDatabase } from '@/infrastructure/db/database'
 import { VisualSourceRepository } from '@/entities/visualSource/repository'
 import { fallbackVisualCaption } from '@/entities/visualSource/types'
 import {
@@ -56,6 +57,11 @@ export interface PageImageRenderInput {
 /** Renders one page to an image. Injected so tests can supply a fake. */
 export type PageImageRenderer = (input: PageImageRenderInput) => Promise<RenderedPageImage | null>
 
+interface PreparedVisualSource {
+  source: VisualSource
+  image?: RenderedPageImage
+}
+
 const defaultPageImageRenderer: PageImageRenderer = async (input) => {
   if (input.type !== 'pdf') return null
   return renderPdfPageImage(new Blob([input.bytes], { type: input.mimeType }), input.pageNumber, 2)
@@ -65,6 +71,7 @@ const defaultPageImageRenderer: PageImageRenderer = async (input) => {
 const FIGURE_PAGE_MAX_CHARS = 40
 
 export class ProcessingService {
+  private db: AppDatabase
   private documents: DocumentRepository
   private chunks: ChunkRepository
   private jobs: ProcessingJobRepository
@@ -81,7 +88,9 @@ export class ProcessingService {
     visuals?: VisualSourceRepository
     renderPageImage?: PageImageRenderer
     structure?: CourseStructureService
+    db?: AppDatabase
   }) {
+    this.db = deps.db ?? getDb()
     this.documents = deps.documents
     this.chunks = deps.chunks
     this.jobs = deps.jobs
@@ -112,9 +121,6 @@ export class ProcessingService {
       onProgress?.({ stage: 'indexing', progress: 80 })
       await this.jobs.setStage(jobId, 'indexing', 80)
 
-      // wipe any existing chunks first (re-processing scenario)
-      await this.chunks.deleteByDocument(document.id)
-
       // Detect the textbook's own chapter/section hierarchy and bind every
       // chunk to it *before* storing, so retrieval can respect chapter
       // boundaries. Notes / transcripts / practice have no course structure.
@@ -135,6 +141,7 @@ export class ProcessingService {
             if (ref) Object.assign(newChunks[index]!, ref)
           })
         } catch (err) {
+          if (document.status === 'ready') throw err
           logger.warn('Course structure detection failed', {
             id: document.id,
             error: (err as Error)?.message,
@@ -142,27 +149,15 @@ export class ProcessingService {
         }
       }
 
-      const storedChunks = await this.chunks.addMany(newChunks)
+      const storedChunks = this.chunks.prepareMany(newChunks)
 
-      if (prepared) {
-        try {
-          await this.structure.persist(
-            prepared,
-            storedChunks.map((chunk) => chunk.id),
-          )
-        } catch (err) {
-          logger.warn('Course structure persist failed', {
-            id: document.id,
-            error: (err as Error)?.message,
-          })
-        }
-      }
-
-      // Preserve figures/diagrams as visual sources. Best-effort: a failure
-      // here must not fail the document — text search and the tutor still work.
+      // New documents tolerate a figure-rendering failure. Re-processing
+      // keeps the previous complete result when figure preparation fails.
+      let visualSources: PreparedVisualSource[] = []
       try {
-        await this.syncVisualSources(document, extraction, storedChunks)
+        visualSources = await this.prepareVisualSources(document, extraction, storedChunks)
       } catch (err) {
+        if (document.status === 'ready') throw err
         logger.warn('Visual source preservation failed', {
           id: document.id,
           error: (err as Error)?.message,
@@ -188,24 +183,44 @@ export class ProcessingService {
           codePoints: report.codePoints.map((cp) => `U+${cp.toString(16).toUpperCase().padStart(4, '0')}`),
         })
       }
-      await this.documents.update(document.id, {
-        status: 'ready',
-        errorMessage: undefined,
-        warnings,
-        textLength: extraction.textLength,
-        chunkCount: newChunks.length,
-        processedAt: Date.now(),
-        metadata: extraction.metadata,
+      await this.db.transaction('rw', [
+        this.db.chunks,
+        this.db.courseStructures,
+        this.db.courseStructureNodes,
+        this.db.visualSources,
+        this.db.visualSourceImages,
+        this.db.documents,
+        this.db.processingJobs,
+      ], async () => {
+        await this.chunks.deleteByDocument(document.id)
+        await this.chunks.addPrepared(storedChunks)
+        if (prepared) {
+          await this.structure.persist(prepared, storedChunks.map((chunk) => chunk.id))
+        }
+        await this.visuals.deleteByDocument(document.id)
+        for (const { source, image } of visualSources) {
+          await this.visuals.upsert(source)
+          if (image) await this.visuals.putImage(source, image.bytes, image.mimeType)
+        }
+        await this.documents.update(document.id, {
+          status: 'ready',
+          errorMessage: '',
+          warnings,
+          textLength: extraction.textLength,
+          chunkCount: newChunks.length,
+          processedAt: Date.now(),
+          metadata: extraction.metadata,
+        })
+        await this.jobs.setStage(jobId, 'done', 100)
       })
 
       onProgress?.({ stage: 'done', progress: 100 })
-      await this.jobs.setStage(jobId, 'done', 100)
       logger.info('Document processed', { id: document.id, chunks: newChunks.length })
     } catch (err) {
       const message = err instanceof Error ? err.message : t('upload.processingFailed')
       logger.error('Document processing failed', { id: document.id }, err)
       await this.documents.update(document.id, {
-        status: 'failed',
+        status: document.status === 'ready' ? 'ready' : 'failed',
         errorMessage: message,
       })
       await this.jobs.update(jobId, { stage: 'failed', progress: 100, errorMessage: message, finishedAt: Date.now() })
@@ -297,17 +312,15 @@ export class ProcessingService {
    * student then sees the original picture instead of a broken transcription.
    * OCR text is kept for search/indexing — it just stops being the thing shown.
    */
-  private async syncVisualSources(
+  private async prepareVisualSources(
     document: Document,
     extraction: ExtractionOutput,
     storedChunks: DocumentChunk[],
-  ): Promise<void> {
-    // Re-processing replaces the previous figures for this document.
-    await this.visuals.deleteByDocument(document.id)
-    if (document.type !== 'pdf') return
+  ): Promise<PreparedVisualSource[]> {
+    if (document.type !== 'pdf') return []
 
     const pages = extraction.raw.pages ?? []
-    if (pages.length === 0) return
+    if (pages.length === 0) return []
 
     const chunksByPage = new Map<number, DocumentChunk[]>()
     for (const chunk of storedChunks) {
@@ -318,7 +331,8 @@ export class ProcessingService {
     }
 
     const stored = await this.documents.getBytes(document.id)
-    if (!stored) return
+    if (!stored) return []
+    const result: PreparedVisualSource[] = []
 
     for (const page of pages) {
       if (!page.imageCount || page.imageCount <= 0) continue
@@ -356,15 +370,15 @@ export class ProcessingService {
         source.imageMimeType = rendered.mimeType
         source.width = rendered.width
         source.height = rendered.height
-        await this.visuals.upsert(source)
-        await this.visuals.putImage(source, rendered.bytes, rendered.mimeType)
+        result.push({ source, image: rendered })
       } else {
         // No renderer available (e.g. no canvas). Keep the provenance so the
         // unreliable text is still suppressed and the source is disclosed.
         source.imageMimeType = ''
-        await this.visuals.upsert(source)
+        result.push({ source })
       }
     }
+    return result
   }
 
   private async chunk(document: Document, extraction: ExtractionOutput): Promise<NewChunk[]> {

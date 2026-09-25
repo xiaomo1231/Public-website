@@ -4,13 +4,13 @@
 
 @layer base {
   :root {
-    --background: 0 0% 100%;
+    --background: 250 35% 98%;
     --foreground: 222 22% 11%;
     --card: 0 0% 100%;
     --card-foreground: 222 22% 11%;
-    --primary: 222 47% 17%;
+    --primary: 250 60% 48%;
     --primary-foreground: 0 0% 100%;
-    --secondary: 220 14% 96%;
+    --secondary: 250 65% 95%;
     --secondary-foreground: 222 22% 11%;
     --muted: 220 14% 96%;
     --muted-foreground: 220 9% 46%;
@@ -20,8 +20,8 @@
     --destructive-foreground: 0 0% 100%;
     --border: 220 13% 91%;
     --input: 220 13% 91%;
-    --ring: 222 47% 17%;
-    --radius: 0.5rem;
+    --ring: 250 60% 48%;
+    --radius: 0.9rem;
 
     /*
      * Color-theme tokens.
@@ -35,13 +35,13 @@
      */
     --theme-primary: var(--primary);
     --theme-primary-soft: var(--secondary);
-    --theme-accent: var(--accent);
-    --theme-accent-soft: var(--accent);
+    --theme-accent: 164 45% 55%;
+    --theme-accent-soft: 164 55% 90%;
     --theme-heading: var(--foreground);
     --theme-surface-tint: var(--background);
-    --theme-gradient-start: var(--background);
-    --theme-gradient-middle: var(--background);
-    --theme-gradient-end: var(--background);
+    --theme-gradient-start: 250 80% 94%;
+    --theme-gradient-middle: 270 60% 97%;
+    --theme-gradient-end: 164 65% 93%;
 
     /*
      * Filled surfaces that carry readable text (primary buttons, badges,
@@ -53,6 +53,18 @@
      * two are identical (see the Default and Academic themes).
      */
     --primary-strong: var(--primary);
+
+    /*
+     * Elevation tokens. Shadows are built from `--shadow-color` so dark mode
+     * can use a true black shadow instead of a light one. Components use
+     * `shadow-soft` / `shadow-lift` (see tailwind.config.ts) and never a raw
+     * shadow value.
+     */
+    --shadow-color: 222 22% 11%;
+    --shadow-soft:
+      0 3px 5px hsl(var(--shadow-color) / 0.025), 0 12px 30px -10px hsl(var(--shadow-color) / 0.09);
+    --shadow-lift:
+      0 20px 45px -18px hsl(var(--shadow-color) / 0.18), 0 4px 10px hsl(var(--shadow-color) / 0.035);
 
     /*
      * Math-visualization tokens (2D graph renderer only).
@@ -77,7 +89,7 @@
     --foreground: 210 20% 96%;
     --card: 222 22% 11%;
     --card-foreground: 210 20% 96%;
-    --primary: 210 20% 96%;
+    --primary: 250 80% 80%;
     --primary-foreground: 222 47% 17%;
     --secondary: 222 18% 16%;
     --secondary-foreground: 210 20% 96%;
@@ -90,6 +102,17 @@
     --border: 222 18% 18%;
     --input: 222 18% 18%;
     --ring: 210 20% 96%;
+    --theme-gradient-start: 250 30% 18%;
+    --theme-gradient-middle: 250 22% 13%;
+    --theme-gradient-end: 164 25% 15%;
+    --theme-accent-soft: 164 25% 19%;
+
+    /* Elevation tokens — dark variants use a true black shadow. */
+    --shadow-color: 0 0% 0%;
+    --shadow-soft:
+      0 1px 2px hsl(var(--shadow-color) / 0.4), 0 2px 12px hsl(var(--shadow-color) / 0.28);
+    --shadow-lift:
+      0 10px 28px hsl(var(--shadow-color) / 0.5), 0 2px 8px hsl(var(--shadow-color) / 0.32);
 
     /* Math-visualization tokens — dark variants. */
     --viz-grid: var(--border);
@@ -352,7 +375,410 @@
     background-color: hsl(var(--theme-surface-tint) / 0.88);
   }
 
+  /*
+   * A very light corner wash for the app shell. Reading surfaces (cards, the
+   * tutor article) stay on solid backgrounds — this only tints the chrome
+   * behind them, so long-form text contrast is unaffected.
+   */
+  .app-shell-wash {
+    background-image: radial-gradient(
+      48rem 32rem at 100% -8%,
+      hsl(var(--theme-gradient-start) / 0.5),
+      transparent 62%
+    );
+  }
+
+  /*
+   * Decorative aurora: two large, blurred theme-tinted blobs that drift very
+   * slowly behind content. Purely presentational — `pointer-events: none`, no
+   * text, and it never sits on a reading surface (cards are opaque). The
+   * strength is tuned per placement and per light/dark so it never competes
+   * with body text.
+   */
+  .aurora {
+    --aurora-strength: 0.12;
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    overflow: hidden;
+    pointer-events: none;
+  }
+
+  .dark .aurora {
+    --aurora-strength: 0.24;
+  }
+
+  .aurora--subtle {
+    --aurora-strength: 0.07;
+  }
+
+  .dark .aurora--subtle {
+    --aurora-strength: 0.14;
+  }
+
+  .aurora::before,
+  .aurora::after {
+    content: '';
+    position: absolute;
+    width: 58%;
+    aspect-ratio: 1 / 1;
+    border-radius: 9999px;
+    filter: blur(56px);
+    opacity: var(--aurora-strength);
+    will-change: transform;
+  }
+
+  .aurora::before {
+    top: -34%;
+    left: -12%;
+    background: radial-gradient(circle at center, hsl(var(--theme-primary) / 0.9), transparent 68%);
+    animation: aurora-drift 30s ease-in-out infinite;
+  }
+
+  .aurora::after {
+    right: -14%;
+    bottom: -40%;
+    background: radial-gradient(circle at center, hsl(var(--theme-accent) / 0.85), transparent 68%);
+    animation: aurora-drift 40s ease-in-out infinite reverse;
+  }
+
+  /* A quiet divider for lists that should not become a stack of cards. */
+  .hairline-list > * + * {
+    border-top: 1px solid hsl(var(--border) / 0.7);
+  }
+
+  /* Progress fill reveals once on mount; the value itself stays authoritative. */
+  .progress-reveal {
+    animation: progress-reveal 0.9s cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+
+  /*
+   * Brand mark: a filled, text-bearing surface, so it uses the text-safe
+   * primary pair. A slow sheen sweeps across it every few seconds — purely
+   * decorative and disabled under reduced motion.
+   */
+  .brand-mark {
+    position: relative;
+    overflow: hidden;
+    background-image: linear-gradient(135deg, hsl(var(--primary-strong)), hsl(var(--primary)));
+    color: hsl(var(--primary-foreground));
+  }
+
+  .brand-mark::after {
+    content: '';
+    position: absolute;
+    inset: -40% -130%;
+    background: linear-gradient(
+      115deg,
+      transparent 42%,
+      hsl(var(--primary-foreground) / 0.28) 50%,
+      transparent 58%
+    );
+    transform: translateX(-70%);
+    animation: brand-sheen 8s ease-in-out infinite;
+    pointer-events: none;
+  }
+
   .focus-ring {
     @apply focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background;
+  }
+
+  .floating-sidebar {
+    border: 1px solid hsl(var(--border) / 0.45);
+    box-shadow: var(--shadow-lift);
+  }
+  .sidebar-link {
+    transition:
+      transform 200ms ease,
+      background-color 200ms ease;
+  }
+  .sidebar-link--active {
+    box-shadow: 0 4px 14px -8px hsl(var(--primary) / 0.4);
+  }
+  .sidebar-orbit {
+    position: relative;
+    display: grid;
+    place-items: center;
+    width: 110px;
+    height: 110px;
+    margin: 24px auto;
+    border: 1px dashed hsl(var(--primary) / 0.25);
+    border-radius: 50%;
+    color: hsl(var(--primary));
+    transform: rotate(-12deg);
+  }
+  .sidebar-orbit > svg {
+    width: 38px;
+    height: 38px;
+    stroke-width: 1.2;
+  }
+  .sidebar-orbit > span {
+    position: absolute;
+    right: -5px;
+    top: 10px;
+    font-size: 28px;
+  }
+  .page-icon {
+    transform: rotate(-6deg);
+    box-shadow: var(--shadow-soft);
+  }
+  .study-hero {
+    border-radius: 32px;
+    box-shadow: var(--shadow-lift);
+  }
+  .study-orbit {
+    position: relative;
+    height: 290px;
+    width: 100%;
+    max-width: 410px;
+    margin: auto;
+  }
+  .study-orbit__ring {
+    position: absolute;
+    inset: 20px 30px;
+    border: 1px solid hsl(var(--primary) / 0.15);
+    border-radius: 50%;
+    transform: rotate(-25deg) scaleY(0.8);
+  }
+  .study-orbit__planet {
+    position: absolute;
+    width: 176px;
+    height: 176px;
+    left: calc(50% - 88px);
+    top: 50px;
+    display: grid;
+    place-items: center;
+    border-radius: 45%;
+    transform: rotate(-12deg);
+    background: linear-gradient(145deg, hsl(var(--card)), hsl(var(--theme-primary-soft)));
+    box-shadow:
+      12px 24px 45px -15px hsl(var(--primary) / 0.22),
+      inset 0 2px 1px hsl(var(--card));
+    color: hsl(var(--primary));
+  }
+  .study-orbit__planet > svg {
+    width: 84px;
+    height: 84px;
+  }
+  .study-note {
+    position: absolute;
+    background: hsl(var(--card));
+    color: hsl(var(--foreground));
+    border: 1px solid hsl(var(--border) / 0.5);
+    box-shadow: var(--shadow-lift);
+    animation: note-float 7s ease-in-out infinite;
+    border-radius: 20px;
+  }
+  .study-note--math {
+    left: 2%;
+    top: 20px;
+    width: 136px;
+    padding: 18px;
+    --note-tilt: -10deg;
+    font-family: Georgia, serif;
+    font-size: 21px;
+  }
+  .study-note__dot {
+    display: block;
+    width: 22px;
+    height: 6px;
+    border-radius: 8px;
+    background: hsl(var(--theme-accent));
+    margin-bottom: 10px;
+  }
+  .study-note__line {
+    display: block;
+    height: 4px;
+    background: hsl(var(--border));
+    border-radius: 4px;
+    margin-top: 12px;
+  }
+  .study-note__line--short {
+    width: 65%;
+    margin-top: 7px;
+  }
+  .study-note--idea {
+    right: 0;
+    top: 38px;
+    display: flex;
+    gap: 9px;
+    align-items: center;
+    padding: 14px 18px;
+    --note-tilt: 9deg;
+    animation-delay: -2s;
+    font-size: 20px;
+    font-weight: 700;
+    background: hsl(var(--theme-accent-soft));
+  }
+  .study-note--idea svg {
+    width: 20px;
+  }
+  .study-note--graph {
+    right: 8%;
+    bottom: 12px;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 18px 22px;
+    --note-tilt: 7deg;
+    animation-delay: -4s;
+    font-family: Georgia, serif;
+    font-size: 20px;
+  }
+  .study-note--graph svg {
+    width: 42px;
+    height: 42px;
+    color: hsl(var(--primary));
+  }
+  .orbit-spark {
+    position: absolute;
+    color: hsl(var(--primary));
+  }
+  .orbit-spark--one {
+    right: 16%;
+    top: 0;
+    font-size: 32px;
+  }
+  .orbit-spark--two {
+    left: 15%;
+    bottom: 30px;
+    font-size: 40px;
+  }
+  .orbit-dot {
+    position: absolute;
+    right: 5%;
+    bottom: 105px;
+    width: 11px;
+    height: 11px;
+    background: hsl(var(--theme-accent));
+    border-radius: 50%;
+  }
+  .floating-course {
+    transition:
+      transform 220ms ease,
+      box-shadow 220ms ease;
+  }
+  .course-cover__art {
+    height: 104px;
+    margin: 10px 10px 0;
+    padding: 24px;
+    border-radius: 18px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: linear-gradient(
+      120deg,
+      hsl(var(--theme-primary-soft)),
+      hsl(var(--theme-gradient-end))
+    );
+    color: hsl(var(--primary));
+  }
+  .course-cover__art > svg {
+    width: 38px;
+    height: 38px;
+    stroke-width: 1.4;
+    transform: rotate(-9deg);
+  }
+  .course-cover__art > span {
+    font-size: 35px;
+  }
+  .course-cover:nth-child(2n) .course-cover__art {
+    background: hsl(var(--theme-accent-soft));
+  }
+  @media (min-width: 1024px) {
+    .floating-sidebar {
+      border-radius: 28px;
+    }
+  }
+  @media (max-width: 767px) {
+    .study-orbit {
+      height: 240px;
+      max-width: 340px;
+    }
+    .study-hero {
+      border-radius: 24px;
+    }
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .floating-course:hover {
+      transform: translateY(-4px);
+    }
+    .sidebar-link:hover {
+      transform: translateX(3px);
+    }
+  }
+}
+
+@keyframes note-float {
+  0%,
+  100% {
+    transform: translateY(0) rotate(var(--note-tilt, 0deg));
+  }
+  50% {
+    transform: translateY(-9px) rotate(calc(var(--note-tilt, 0deg) + 2deg));
+  }
+}
+
+/* A slow highlight that sweeps across the brand mark. */
+@keyframes brand-sheen {
+  0%,
+  55% {
+    transform: translateX(-70%);
+  }
+  75%,
+  100% {
+    transform: translateX(70%);
+  }
+}
+
+/* Reveal a progress fill from the left, without touching its real value. */
+@keyframes progress-reveal {
+  from {
+    clip-path: inset(0 100% 0 0);
+  }
+  to {
+    clip-path: inset(0 0 0 0);
+  }
+}
+
+/* Slow, low-amplitude drift for the decorative aurora blobs. */
+@keyframes aurora-drift {
+  0% {
+    transform: translate3d(-6%, -3%, 0) scale(1);
+  }
+  50% {
+    transform: translate3d(5%, 4%, 0) scale(1.12);
+  }
+  100% {
+    transform: translate3d(-6%, -3%, 0) scale(1);
+  }
+}
+
+/*
+ * Motion safety net: honour the OS "reduce motion" preference for every
+ * transition and animation in the app, including ones added by libraries.
+ * Decorative entrance animations are also defined with `motion-safe:` in
+ * Tailwind, but this guarantees the preference is never ignored — and the
+ * explicitly-listed decorative effects are switched off entirely (not merely
+ * sped up) so nothing is left mid-animation.
+ */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  .animate-rise,
+  .animate-fade,
+  .progress-reveal,
+  .study-note,
+  .brand-mark::after,
+  .aurora::before,
+  .aurora::after {
+    animation: none !important;
   }
 }

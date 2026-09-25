@@ -1,4 +1,4 @@
-import { Monitor, Moon, Sun, LogOut, Languages } from 'lucide-react'
+import { Monitor, Moon, Sun, LogOut, Languages, Menu } from 'lucide-react'
 import type { UserTheme } from '@/entities/user/types'
 import { useAuth } from '@/features/auth/useAuth'
 import { useThemePreference } from '@/features/theme/useAppearance'
@@ -31,11 +31,10 @@ export function Header({ onOpenMobileNav }: HeaderProps): JSX.Element {
   const { language, setLanguage } = useUILanguage()
   const { preference, setPreference } = useThemePreference()
 
-  const ThemeIcon =
-    preference === 'light' ? Sun : preference === 'dark' ? Moon : Monitor
+  const ThemeIcon = preference === 'light' ? Sun : preference === 'dark' ? Moon : Monitor
 
   return (
-    <header className="app-surface-tint flex h-14 items-center justify-between gap-3 border-b px-4 backdrop-blur sm:px-6">
+    <header className="flex h-16 shrink-0 items-center justify-between gap-3 px-4 sm:px-6 lg:px-8">
       <div className="flex min-w-0 items-center gap-2">
         <Button
           variant="ghost"
@@ -44,14 +43,14 @@ export function Header({ onOpenMobileNav }: HeaderProps): JSX.Element {
           aria-label={t('header.openNavigation')}
           onClick={onOpenMobileNav}
         >
-          <span className="block h-4 w-4 rounded-sm border" aria-hidden />
+          <Menu className="h-5 w-5" />
         </Button>
         <div className="min-w-0 truncate text-sm text-muted-foreground">
           {profile ? t('header.welcomeNamed', { name: profile.name }) : t('header.welcome')}
         </div>
       </div>
 
-      <div className="flex shrink-0 items-center gap-2">
+      <div className="header-controls flex shrink-0 items-center gap-1 rounded-full border border-border/50 bg-card/90 p-1 shadow-soft">
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="ghost" size="icon" aria-label={t('header.changeTheme')}>

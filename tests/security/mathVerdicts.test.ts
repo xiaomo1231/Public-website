@@ -85,6 +85,12 @@ describe('Mathematical verdicts are three-valued', () => {
     }
   })
 
+  it('does not prove a variable identity from agreement at sampled points', () => {
+    const expression = 'floor((x+100)/1000)'
+    expect(compareMath(expression, '0').equivalent).toBeNull()
+    expect(compareMath(expression, '0').equivalent).toBeNull()
+  })
+
   it('propagates the three-state verdict through answer evaluation', () => {
     const q = mathQuestion('x^3/3 + C')
     expect(evaluateDeterministic(q, 'x^3/3').isCorrect).toBe(true)

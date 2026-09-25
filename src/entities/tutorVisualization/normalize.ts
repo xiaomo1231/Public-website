@@ -7,6 +7,7 @@ import {
   type GraphKind,
   type GraphLayoutKind,
   type GraphNode,
+  type HasseVisualization,
   type Matrix2x2,
   type PlacementBlock,
   type TransformVector,
@@ -79,6 +80,7 @@ const ALL_TYPES: readonly TutorVisualizationType[] = [
   'transform_2d',
   'venn_2d',
   'eigen_2d',
+  'hasse_2d',
 ]
 
 const LINE_TYPES: readonly TutorVisualizationType[] = [
@@ -632,6 +634,64 @@ function normalizeVenn(draft: VisualizationDraft, base: CommonBase): Normalized 
   }
 }
 
+function normalizeHasse(draft: VisualizationDraft, base: CommonBase): Normalized {
+  if (!Array.isArray(draft.elements) || !Array.isArray(draft.relations)) {
+    return { ok: false, reason: 'missing-hasse-data' }
+  }
+  if (draft.elements.length < 2 || draft.elements.length > MAX_GRAPH_NODES) {
+    return { ok: false, reason: 'invalid-hasse-element-count' }
+  }
+  const elements: HasseVisualization['elements'] = []
+  const ids = new Set<string>()
+  for (const raw of draft.elements) {
+    const item = asRecord(raw)
+    const id = sanitizeText(item?.id, MAX_ID_LENGTH)
+    const label = sanitizeText(item?.label, MAX_LABEL_LENGTH)
+    if (!id || !label || ids.has(id) || DANGEROUS_KEYS.has(id)) {
+      return { ok: false, reason: 'invalid-hasse-element' }
+    }
+    ids.add(id)
+    elements.push({ id, label })
+  }
+  const pairs = new Set<string>()
+  const relations: HasseVisualization['relations'] = []
+  for (const raw of draft.relations) {
+    const item = asRecord(raw)
+    const lower = sanitizeText(item?.lower, MAX_ID_LENGTH)
+    const upper = sanitizeText(item?.upper, MAX_ID_LENGTH)
+    if (!lower || !upper || lower === upper || !ids.has(lower) || !ids.has(upper)) {
+      return { ok: false, reason: 'invalid-hasse-relation' }
+    }
+    const key = `${lower}\u0000${upper}`
+    if (pairs.has(key)) continue
+    pairs.add(key)
+    relations.push({ lower, upper })
+  }
+  if (relations.length === 0 || relations.length > VISUALIZATION_LIMITS.maxGraphEdges) {
+    return { ok: false, reason: 'invalid-hasse-relation-count' }
+  }
+  // Reject cycles locally. The input may provide a generating relation or a
+  // full order; the renderer derives the transitive reduction from reachability.
+  const reach = new Map(elements.map(({ id }) => [id, new Set<string>()]))
+  for (const { lower, upper } of relations) reach.get(lower)!.add(upper)
+  for (const pivot of ids) for (const source of ids) {
+    if (reach.get(source)!.has(pivot)) {
+      for (const target of reach.get(pivot)!) reach.get(source)!.add(target)
+    }
+  }
+  if ([...ids].some((id) => reach.get(id)!.has(id))) {
+    return { ok: false, reason: 'cyclic-hasse-relation' }
+  }
+  const covers = relations.filter(({ lower, upper }) =>
+    ![...ids].some(
+      (middle) => middle !== lower && middle !== upper &&
+        reach.get(lower)!.has(middle) && reach.get(middle)!.has(upper),
+    ),
+  )
+  const value: HasseVisualization = { ...base, type: 'hasse_2d', elements, relations: covers }
+  return { ok: true, value }
+}
+
 function normalizeOne(raw: unknown, index: number): Normalized {
   const draft = asRecord(raw) as VisualizationDraft | null
   if (!draft) return { ok: false, reason: 'not-an-object' }
@@ -653,6 +713,7 @@ function normalizeOne(raw: unknown, index: number): Normalized {
   if (type === 'graph_2d') return normalizeGraph(draft, base)
   if (type === 'transform_2d') return normalizeTransform(draft, base)
   if (type === 'venn_2d') return normalizeVenn(draft, base)
+  if (type === 'hasse_2d') return normalizeHasse(draft, base)
 
   const planeBase: CommonBase & { viewport?: VisualizationViewport } = {
     ...base,

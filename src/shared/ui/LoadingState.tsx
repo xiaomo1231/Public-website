@@ -30,7 +30,7 @@ export function LoadingState({
   return (
     <div
       className={cn(
-        'flex flex-col items-center justify-center gap-3 rounded-lg border bg-card/50 p-10 text-center text-sm text-muted-foreground',
+        'flex flex-col items-center justify-center gap-3 rounded-xl border border-border/70 bg-card/60 p-10 text-center text-sm text-muted-foreground',
         className,
       )}
     >

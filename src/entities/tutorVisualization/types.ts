@@ -16,10 +16,10 @@
  * Deliberately separate from the Dexie database version and from
  * `TUTOR_LESSON_VERSION`: this only changes when the visualization *data*
  * shape changes. v2 added `vectors_2d` and `graph_2d`; v3 added `transform_2d`
- * and `venn_2d`; v4 added `eigen_2d`. Older rows are still read and rendered
+ * and `venn_2d`; v4 added `eigen_2d`; v5 added `hasse_2d`. Older rows are still read and rendered
  * unchanged.
  */
-export const TUTOR_VISUALIZATION_SCHEMA_VERSION = 4
+export const TUTOR_VISUALIZATION_SCHEMA_VERSION = 5
 
 export type TutorVisualizationType =
   | 'function_2d'
@@ -32,6 +32,7 @@ export type TutorVisualizationType =
   | 'transform_2d'
   | 'venn_2d'
   | 'eigen_2d'
+  | 'hasse_2d'
 
 export type VisualizationRelation = '=' | '<' | '<=' | '>' | '>='
 
@@ -286,6 +287,13 @@ export interface VennVisualization extends TutorVisualizationBase {
   operands: string[]
 }
 
+/** A finite partially ordered set. `relations` contains asserted x <= y pairs. */
+export interface HasseVisualization extends TutorVisualizationBase {
+  type: 'hasse_2d'
+  elements: { id: string; label: string }[]
+  relations: { lower: string; upper: string }[]
+}
+
 export type TutorVisualization =
   | LineVisualization
   | PointsVisualization
@@ -295,6 +303,7 @@ export type TutorVisualization =
   | TransformVisualization
   | VennVisualization
   | Eigen2DVisualization
+  | HasseVisualization
 
 export const LINE_VISUALIZATION_TYPES = ['function_2d', 'equation_2d', 'inequality_2d'] as const
 
@@ -346,6 +355,9 @@ export interface VisualizationDraft {
   eigenpairs?: unknown
   showUnitCircle?: unknown
   showTransform?: unknown
+  // hasse_2d
+  elements?: unknown
+  relations?: unknown
   // placement (all types)
   placement?: unknown
 }

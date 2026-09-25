@@ -14,7 +14,7 @@ export const Progress = forwardRef<ElementRef<typeof ProgressPrimitive.Root>, Pr
       {...props}
     >
       <ProgressPrimitive.Indicator
-        className="h-full w-full flex-1 bg-primary transition-all"
+        className="progress-reveal h-full w-full flex-1 bg-primary transition-all"
         style={{ transform: `translateX(-${100 - Math.max(0, Math.min(100, value))}%)` }}
       />
     </ProgressPrimitive.Root>

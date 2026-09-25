@@ -15,7 +15,7 @@ import * as ContextualTutorV1 from './contextual-tutor/v1'
 import * as ProfessorProfileV1 from './professor-profile/v1'
 import * as MistakeAnalyzerV2 from './mistake-analyzer/v2'
 import * as QuizGeneratorV1 from './quiz-generator/v1'
-import * as VisualizationGeneratorV4 from './visualization-generator/v4'
+import * as VisualizationGeneratorV5 from './visualization-generator/v5'
 
 export const PROMPT_VERSIONS = {
   documentAnalyzer: 'v2',
@@ -29,7 +29,7 @@ export const PROMPT_VERSIONS = {
   professorProfile: 'v1',
   mistakeAnalyzer: 'v2',
   quizGenerator: 'v1',
-  visualizationGenerator: 'v4',
+  visualizationGenerator: 'v5',
 } as const
 
 export const prompts = {
@@ -44,7 +44,7 @@ export const prompts = {
   professorProfile: ProfessorProfileV1,
   mistakeAnalyzer: MistakeAnalyzerV2,
   quizGenerator: QuizGeneratorV1,
-  visualizationGenerator: VisualizationGeneratorV4,
+  visualizationGenerator: VisualizationGeneratorV5,
 } as const
 
 export type {
@@ -68,4 +68,4 @@ export type {
   GeneratedQuizQuestion,
   QuizQuestionType,
 } from './quiz-generator/v1'
-export type { VisualizationInput, VisualizationOutput } from './visualization-generator/v4'
+export type { VisualizationInput, VisualizationOutput } from './visualization-generator/v5'

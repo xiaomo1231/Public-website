@@ -1,6 +1,17 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { ArrowLeft, BookX, Brain, Calendar, FileText, History, Layers, ListChecks, Pencil, Sparkles } from 'lucide-react'
+import {
+  ArrowLeft,
+  BookX,
+  Brain,
+  Calendar,
+  FileText,
+  History,
+  Layers,
+  ListChecks,
+  Pencil,
+  Sparkles,
+} from 'lucide-react'
 import { useProject, useProjects } from '@/features/project/useProjects'
 import { SUBJECT_LABEL_KEYS } from '@/entities/project/types'
 import { Badge } from '@/shared/ui/Badge'
@@ -9,7 +20,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/sha
 import { EmptyState } from '@/shared/ui/EmptyState'
 import { ErrorState } from '@/shared/ui/ErrorState'
 import { LoadingState } from '@/shared/ui/LoadingState'
-import { PageContainer, PageContent, PageHeader } from '@/shared/ui/Page'
+import { PageContainer, PageContent } from '@/shared/ui/Page'
+import { SectionHeading } from '@/shared/ui/Section'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/shared/ui/Tabs'
 import { TruncatedText } from '@/shared/ui/TruncatedText'
 import { ProjectDocumentsTab } from '@/widgets/documents/ProjectDocumentsTab'
@@ -71,26 +83,62 @@ export function ProjectDetailPage(): JSX.Element {
 
   return (
     <PageContainer>
-      <PageHeader
-        title={
-          <div className="flex min-w-0 flex-wrap items-center gap-2">
-            <Button asChild variant="ghost" size="icon" aria-label={t('projectDetail.backToProjects')}>
-              <Link to="/projects">
-                <ArrowLeft className="h-4 w-4" />
-              </Link>
-            </Button>
-            <TruncatedText text={project.name} className="min-w-0 max-w-full" />
-            <Badge variant="outline">{t(SUBJECT_LABEL_KEYS[project.subject])}</Badge>
+      {/* Course workspace banner: project identity is the page's focal point. */}
+      <header className="relative isolate overflow-hidden border-b border-border/70">
+        <div aria-hidden className="app-gradient absolute inset-0" />
+        <div aria-hidden className="aurora" />
+        <div className="relative z-10 px-4 py-6 sm:px-6 lg:px-8">
+          <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
+            <div className="min-w-0 space-y-3">
+              <div className="flex items-center gap-2">
+                <Button
+                  asChild
+                  variant="ghost"
+                  size="icon"
+                  aria-label={t('projectDetail.backToProjects')}
+                >
+                  <Link to="/projects">
+                    <ArrowLeft className="h-4 w-4" />
+                  </Link>
+                </Button>
+                <p className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+                  <span aria-hidden className="h-1.5 w-1.5 rounded-full bg-theme-primary" />
+                  {t('projectDetail.courseWorkspace')}
+                </p>
+              </div>
+              <div className="flex min-w-0 flex-wrap items-center gap-2">
+                <h1 className="min-w-0 max-w-full break-words text-[26px] font-semibold leading-tight tracking-tight text-foreground sm:text-[32px]">
+                  <TruncatedText text={project.name} className="min-w-0 max-w-full" />
+                </h1>
+                <Badge variant="outline">{t(SUBJECT_LABEL_KEYS[project.subject])}</Badge>
+              </div>
+              <p className="max-w-2xl text-sm text-muted-foreground sm:text-[15px]">
+                {project.description || t('projectDetail.subtitle')}
+              </p>
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
+                <span>
+                  {t('projectDetail.about.created')}: {formatDate(project.createdAt)}
+                </span>
+                <span>
+                  {t('projectDetail.about.lastUpdated')}: {formatDateTime(project.updatedAt)}
+                </span>
+              </div>
+            </div>
+            <div className="flex shrink-0 flex-wrap items-center gap-2">
+              <Button asChild>
+                <Link to={`/projects/${project.id}/tutor`}>
+                  <Sparkles className="h-4 w-4" />
+                  {t('projectDetail.openTutor')}
+                </Link>
+              </Button>
+              <Button variant="outline" onClick={() => setRenameOpen(true)}>
+                <Pencil className="h-4 w-4" />
+                {t('common.rename')}
+              </Button>
+            </div>
           </div>
-        }
-        description={project.description || t('projectDetail.subtitle')}
-        actions={
-          <Button variant="outline" onClick={() => setRenameOpen(true)}>
-            <Pencil className="h-4 w-4" />
-            {t('common.rename')}
-          </Button>
-        }
-      />
+        </div>
+      </header>
       <PageContent>
         <Tabs defaultValue="documents">
           <TabsList>
@@ -109,51 +157,54 @@ export function ProjectDetailPage(): JSX.Element {
               {t('projectDetail.tab.mistakes')}
             </TabsTrigger>
           </TabsList>
+
           <TabsContent value="documents">
             <ProjectDocumentsTab projectId={project.id} />
           </TabsContent>
-          <TabsContent value="analysis" className="space-y-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <h2 className="flex items-center gap-2 text-base font-semibold">
-                  <Sparkles className="h-4 w-4" />
-                  {t('projectDetail.analysis.title')}
-                </h2>
-                <p className="text-sm text-muted-foreground">
-                  {t('projectDetail.analysis.description')}
+
+          <TabsContent value="analysis" className="space-y-5">
+            <SectionHeading
+              title={t('projectDetail.analysis.title')}
+              description={t('projectDetail.analysis.description')}
+            />
+            <div className="rounded-xl border border-border/70 bg-card p-3 shadow-soft sm:p-4">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <p className="flex items-center gap-2 text-sm font-medium text-foreground">
+                  <Sparkles className="h-4 w-4 text-muted-foreground" aria-hidden />
+                  {t('projectDetail.quickActions')}
                 </p>
-              </div>
-              <div className="flex flex-wrap items-center gap-2">
-                <Button variant="outline" asChild>
-                  <Link to={`/projects/${project.id}/quiz`}>
-                    <ListChecks className="h-4 w-4" />
-                    {t('projectDetail.card.quiz')}
-                  </Link>
-                </Button>
-                <Button variant="outline" asChild>
-                  <Link to={`/projects/${project.id}/mistakes`}>
-                    <BookX className="h-4 w-4" />
-                    {t('projectDetail.card.mistakes')}
-                  </Link>
-                </Button>
-                <Button variant="outline" asChild>
-                  <Link to={`/projects/${project.id}/mastery`}>
-                    <Brain className="h-4 w-4" />
-                    {t('projectDetail.card.mastery')}
-                  </Link>
-                </Button>
-                <Button variant="outline" asChild>
-                  <Link to={`/projects/${project.id}/history`}>
-                    <History className="h-4 w-4" />
-                    {t('projectDetail.card.chatHistory')}
-                  </Link>
-                </Button>
-                <Button variant="outline" asChild>
-                  <Link to={`/projects/${project.id}/tutor`}>
-                    <Sparkles className="h-4 w-4" />
-                    {t('projectDetail.openTutor')}
-                  </Link>
-                </Button>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Button asChild>
+                    <Link to={`/projects/${project.id}/tutor`}>
+                      <Sparkles className="h-4 w-4" />
+                      {t('projectDetail.openTutor')}
+                    </Link>
+                  </Button>
+                  <Button variant="outline" asChild>
+                    <Link to={`/projects/${project.id}/quiz`}>
+                      <ListChecks className="h-4 w-4" />
+                      {t('projectDetail.card.quiz')}
+                    </Link>
+                  </Button>
+                  <Button variant="outline" asChild>
+                    <Link to={`/projects/${project.id}/mistakes`}>
+                      <BookX className="h-4 w-4" />
+                      {t('projectDetail.card.mistakes')}
+                    </Link>
+                  </Button>
+                  <Button variant="outline" asChild>
+                    <Link to={`/projects/${project.id}/mastery`}>
+                      <Brain className="h-4 w-4" />
+                      {t('projectDetail.card.mastery')}
+                    </Link>
+                  </Button>
+                  <Button variant="outline" asChild>
+                    <Link to={`/projects/${project.id}/history`}>
+                      <History className="h-4 w-4" />
+                      {t('projectDetail.card.chatHistory')}
+                    </Link>
+                  </Button>
+                </div>
               </div>
             </div>
             <CourseAnalysisPanel
@@ -162,21 +213,17 @@ export function ProjectDetailPage(): JSX.Element {
               onStartTutor={(topicId) => navigate(`/projects/${project.id}/tutor/${topicId}`)}
             />
           </TabsContent>
+
           <TabsContent value="quiz" className="space-y-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <h2 className="flex items-center gap-2 text-base font-semibold">
-                  <ListChecks className="h-4 w-4" />
-                  {t('projectDetail.quizzes.title')}
-                </h2>
-                <p className="text-sm text-muted-foreground">
-                  {t('projectDetail.quizzes.description')}
-                </p>
-              </div>
-              <Button asChild>
-                <Link to={`/projects/${project.id}/quiz`}>{t('projectDetail.quizzes.open')}</Link>
-              </Button>
-            </div>
+            <SectionHeading
+              title={t('projectDetail.quizzes.title')}
+              description={t('projectDetail.quizzes.description')}
+              action={
+                <Button asChild>
+                  <Link to={`/projects/${project.id}/quiz`}>{t('projectDetail.quizzes.open')}</Link>
+                </Button>
+              }
+            />
             <EmptyState
               icon={<ListChecks className="h-8 w-8" />}
               title={t('projectDetail.quizzes.emptyTitle')}
@@ -190,23 +237,19 @@ export function ProjectDetailPage(): JSX.Element {
               }
             />
           </TabsContent>
+
           <TabsContent value="mistakes" className="space-y-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <h2 className="flex items-center gap-2 text-base font-semibold">
-                  <BookX className="h-4 w-4" />
-                  {t('projectDetail.mistakes.title')}
-                </h2>
-                <p className="text-sm text-muted-foreground">
-                  {t('projectDetail.mistakes.description')}
-                </p>
-              </div>
-              <Button asChild>
-                <Link to={`/projects/${project.id}/mistakes`}>
-                  {t('projectDetail.mistakes.open')}
-                </Link>
-              </Button>
-            </div>
+            <SectionHeading
+              title={t('projectDetail.mistakes.title')}
+              description={t('projectDetail.mistakes.description')}
+              action={
+                <Button asChild>
+                  <Link to={`/projects/${project.id}/mistakes`}>
+                    {t('projectDetail.mistakes.open')}
+                  </Link>
+                </Button>
+              }
+            />
             <EmptyState
               icon={<BookX className="h-8 w-8" />}
               title={t('projectDetail.mistakes.emptyTitle')}
@@ -220,7 +263,12 @@ export function ProjectDetailPage(): JSX.Element {
               }
             />
           </TabsContent>
+
           <TabsContent value="overview" className="space-y-4">
+            <SectionHeading
+              title={t('projectDetail.tab.overview')}
+              description={t('projectDetail.about.description')}
+            />
             <div className="grid gap-4 lg:grid-cols-3">
               <Card className="lg:col-span-2">
                 <CardHeader>
@@ -246,12 +294,13 @@ export function ProjectDetailPage(): JSX.Element {
                 </CardContent>
               </Card>
 
-              <Card>
+              <Card variant="accent">
                 <CardHeader>
                   <CardTitle>{t('projectDetail.upcoming.title')}</CardTitle>
                 </CardHeader>
                 <CardContent>
                   <EmptyState
+                    className="border-0 bg-transparent p-0"
                     icon={<FileText className="h-6 w-6" />}
                     title={t('projectDetail.upcoming.uploadTitle')}
                     description={t('projectDetail.upcoming.uploadBody')}

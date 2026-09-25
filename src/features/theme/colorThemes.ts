@@ -42,13 +42,13 @@ const DEFAULT_THEME: ColorThemeDefinition = {
   labelKey: 'theme.default',
   descriptionKey: 'theme.default.description',
   palette: {
-    primary: '#172340',
-    secondary: '#F1F5F9',
-    accent: '#E2E8F0',
+    primary: '#4931C4',
+    secondary: '#EDEAFA',
+    accent: '#D7F4EC',
     border: '#CBD5E1',
     muted: '#64748B',
   },
-  preview: ['#172340', '#F1F5F9', '#E2E8F0', '#CBD5E1', '#64748B'],
+  preview: ['#4931C4', '#EDEAFA', '#D7F4EC', '#CBD5E1', '#64748B'],
 }
 
 const PINK_AQUA: ColorThemeDefinition = {

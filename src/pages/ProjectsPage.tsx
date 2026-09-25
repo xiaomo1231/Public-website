@@ -19,13 +19,7 @@ import {
   DropdownMenuItem,
   DropdownMenuSeparator,
 } from '@/shared/ui/DropdownMenu'
-import {
-  Select,
-  SelectTrigger,
-  SelectValue,
-  SelectContent,
-  SelectItem,
-} from '@/shared/ui/Select2'
+import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/shared/ui/Select2'
 import { Button } from '@/shared/ui/Button'
 import { Card, CardContent, CardHeader } from '@/shared/ui/Card'
 import { EmptyState } from '@/shared/ui/EmptyState'
@@ -44,9 +38,9 @@ const SUBJECT_OPTIONS = Object.entries(SUBJECT_LABEL_KEYS) as [Subject, Translat
 export function ProjectsPage(): JSX.Element {
   const { t } = useTranslation()
   const { projects, loading, loaded, create, rename, remove } = useProjects()
-  const [dialog, setDialog] = useState<null | { mode: 'create' } | { mode: 'rename'; id: string; name: string }>(
-    null,
-  )
+  const [dialog, setDialog] = useState<
+    null | { mode: 'create' } | { mode: 'rename'; id: string; name: string }
+  >(null)
   const [name, setName] = useState('')
   const [subject, setSubject] = useState<Subject>('calculus')
   const [description, setDescription] = useState('')
@@ -70,7 +64,11 @@ export function ProjectsPage(): JSX.Element {
     setSubmitting(true)
     try {
       if (dialog.mode === 'create') {
-        const project = await create({ name: name.trim(), subject, description: description.trim() })
+        const project = await create({
+          name: name.trim(),
+          subject,
+          description: description.trim(),
+        })
         toast({ variant: 'success', title: t('projects.created'), description: project.name })
       } else {
         await rename(dialog.id, name.trim())
@@ -126,9 +124,13 @@ export function ProjectsPage(): JSX.Element {
             }
           />
         ) : (
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
             {projects.map((p) => (
-              <Card key={p.id} className="transition-colors hover:border-foreground/20">
+              <Card key={p.id} variant="interactive" className="course-cover overflow-hidden">
+                <div aria-hidden className="course-cover__art">
+                  <FolderKanban />
+                  <span>✦</span>
+                </div>
                 <CardHeader className="flex flex-row items-start justify-between gap-2 space-y-0">
                   <div className="min-w-0">
                     <TruncatedText

@@ -1,4 +1,4 @@
-import { OperatorNode, parse, simplify, type MathNode } from 'mathjs'
+import { OperatorNode, parse, rationalize, simplify, type MathNode } from 'mathjs'
 import { t } from '@/i18n'
 
 /**
@@ -8,8 +8,8 @@ import { t } from '@/i18n'
  *   1. Normalise Unicode math (superscripts, ×, ÷, π, √, …).
  *   2. Parse both sides with mathjs (implicit multiplication is supported).
  *   3. Symbolic check: `simplify(lhs - rhs)` reduces to 0.
- *   4. Numeric sampling: evaluate both sides at several random points and
- *      compare within tolerance. A mismatch is strong evidence of inequality.
+ *   4. Numeric sampling: evaluate both sides at fixed points. A mismatch is
+ *      evidence of inequality; agreement alone cannot prove an identity.
  *
  * Returns:
  *   true  — expressions are equivalent
@@ -115,6 +115,14 @@ function symbolicEqual(a: MathNode, b: MathNode): EquivalenceResult {
     // Sometimes simplify leaves `0 * x` etc. Try again after a second pass.
     const diff2 = simplify(diff)
     if (isZeroNode(diff2)) return true
+    // Rationalization can prove polynomial/rational identities that the
+    // default simplifier leaves unexpanded, such as (x+1)^2 = x^2+2x+1.
+    try {
+      if (isZeroNode(rationalize(diff2))) return true
+    } catch {
+      // Non-rational expressions continue to the numeric mismatch check.
+    }
+    if (isZeroNode(simplify(diff2, [...simplify.rules, 'sin(n)^2 + cos(n)^2 -> 1']))) return true
     return false
   } catch {
     return null
@@ -122,12 +130,12 @@ function symbolicEqual(a: MathNode, b: MathNode): EquivalenceResult {
 }
 
 function numericEqual(a: MathNode, b: MathNode, vars: string[], samples = 16): EquivalenceResult {
+  const sampleValues = [-11, -5, -2, -1, -0.5, 0.25, 1, 2, 3, 5, 8, 13, 21, 34, 55, 89]
   let successes = 0
   for (let i = 0; i < samples; i++) {
     const scope: Record<string, number> = {}
-    for (const v of vars) {
-      // Avoid 0 to reduce degenerate cases; keep values small.
-      scope[v] = (Math.random() - 0.5) * 6 + 0.5
+    for (const [index, v] of vars.entries()) {
+      scope[v] = sampleValues[(i + index * 5) % sampleValues.length]!
     }
     try {
       const va = a.evaluate(scope)
@@ -142,7 +150,7 @@ function numericEqual(a: MathNode, b: MathNode, vars: string[], samples = 16): E
     }
   }
   if (successes === 0) return null
-  return true
+  return vars.length === 0 ? true : null
 }
 
 /** Compare two already-parsed nodes. */
@@ -153,7 +161,6 @@ export function nodesEquivalent(a: MathNode, b: MathNode): EquivalenceResult {
   const num = numericEqual(a, b, vars)
   if (num === false) return false
   if (num === true) return true
-  if (sym === false) return false
   return null
 }
 

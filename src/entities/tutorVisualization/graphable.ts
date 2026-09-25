@@ -63,6 +63,10 @@ function looksLikeEigenText(text: string): boolean {
   )
 }
 
+function looksLikeHasseText(text: string): boolean {
+  return /(?:\bHasse diagram\b|\bpartial order\b|\bpartially ordered set\b|\bposet\b|Hasse 图|偏序集|偏序关系)/i.test(text)
+}
+
 /** A set operation only counts when a set context is present (English). */
 function looksLikeVennText(text: string): boolean {
   if (/(?:venn diagram|维恩图|文氏图)/i.test(text)) return true
@@ -91,6 +95,7 @@ export function hasGraphableMath(markdown: string): boolean {
     looksLikeGraphText(markdown) ||
     looksLikeTransformText(markdown) ||
     looksLikeVennText(markdown) ||
-    looksLikeEigenText(markdown)
+    looksLikeEigenText(markdown) ||
+    looksLikeHasseText(markdown)
   )
 }

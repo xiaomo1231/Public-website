@@ -7,7 +7,7 @@
 > Only facts verified by the code and tests are stated here. Planned work is
 > marked **(planned)** and is not implemented.
 
-## Current implementation (V0.2.6)
+## Current implementation (V0.2.7)
 
 ### Storage — current truth
 
@@ -68,7 +68,7 @@ modules. A topic change invalidates the cached lesson only through the existing
 `TutorLesson.contentHash` (topic fields + prompt version + notes/transcript
 context). Opening any page never triggers a project-level analysis.
 
-### Tutor math visualization (Phase 1 / 1.1 / 2 / 3.0 / 3.1 / 3.2, v0.2.6)
+### Tutor math visualization (Phase 1 / 1.1 / 2 / 3.0 / 3.1 / 3.2, v0.2.6; Phase 3.3 in progress)
 
 ```
 Tutor Lesson Markdown
@@ -117,6 +117,12 @@ Tutor Lesson Markdown
   candidate disagrees with the local result the figure is rejected so it can
   never contradict the lesson text. `Av`, the transformed arrows and the
   viewport are all computed locally.
+- `hasse_2d` (Phase 3.3): the model supplies named elements and asserted
+  lower/upper comparisons only. The normalizer rejects unknown elements,
+  duplicate ids, self-relations and cycles, then computes the transitive
+  reduction locally. A deterministic layered SVG places each element by its
+  longest path from a minimal element; no model coordinates or styles are
+  accepted. This is the first remaining discrete-mathematics visualization.
 - **Placement**: a visualization may anchor to a teaching block
   (`{ scope: 'section', block, index }`); the renderer inserts it after the
   matching section and falls back to lesson level when the anchor does not
@@ -151,15 +157,15 @@ table scrolls inside its own wrapper rather than the page.
 | --- | --- | --- |
 | Dexie `verno` | 11 | database shape |
 | `TUTOR_LESSON_VERSION` | 3 | v2 added source figures, v3 added visualizations |
-| `TUTOR_VISUALIZATION_SCHEMA_VERSION` | 4 | v2 vectors/graph, v3 transform/venn, v4 eigen |
+| `TUTOR_VISUALIZATION_SCHEMA_VERSION` | 5 | v2 vectors/graph, v3 transform/venn, v4 eigen, v5 Hasse |
 | `COURSE_ANALYSIS_SCHEMA_VERSION` | — | independent of Dexie |
-| `visualization-generator` prompt | v4 | v1–v3 kept; the registry points at v4 |
+| `visualization-generator` prompt | v5 | v1–v4 kept; the registry points at v5 |
 | `tutorLesson` prompt | v4 | v2 visual examples; v3 Markdown-table spec; v4 eigenvalue example |
 
 Phase 3.1 added `transform_2d` / `venn_2d` and bumped the visualization schema to
 3; Phase 3.1.1 added Markdown-table rendering (a pure reading-renderer change, no
 schema impact). **Phase 3.2 added `eigen_2d` and bumped the visualization schema
-to 4.** None added a Dexie migration or changed `TUTOR_LESSON_VERSION`. The Tutor
+to 4. Phase 3.3 has started with `hasse_2d` and schema v5.** None added a Dexie migration or changed `TUTOR_LESSON_VERSION`. The Tutor
 Lesson prompt moved to v4, which is folded into `TutorLesson.contentHash`, so
 **existing cached lessons regenerate once on their next open** (the intended,
 existing invalidation mechanism) — the normal lesson call produces the new text
@@ -182,12 +188,12 @@ viewport or scroll changes (all cleaned up on unmount); the popup closes when
 the selection scrolls out of view. Mobile keeps a bottom-sheet layout bounded by
 `visualViewport`. This module has no dependency on the visualization code.
 
-### Planned (not implemented)
+### Planned / in progress
 
-- **Phase 3.3+** (planned): the remaining subject visualizations — relation /
-  Cartesian diagrams, truth tables, Hasse diagrams, state machines and matrix
-  steps. `eigen_2d` (Phase 3.2) is implemented. Scope only for the rest; no
-  source, prompt or test files exist yet.
+- **Phase 3.3+** (in progress): Hasse diagrams are implemented. Remaining
+  candidates are relation / Cartesian diagrams, truth tables and matrix steps.
+  State machines can already be represented by `graph_2d`; assess whether a
+  dedicated type adds enough value before duplicating graph capabilities.
 
 ---
 
@@ -401,8 +407,9 @@ Never "You are bad at…".
     positioning fix (3.2) also shipped
 8. Dashboard — **planned**
 9. PWA polish, a11y, import/export — **planned**
-Phase 3.3 (remaining subject visualizations: relation / truth table / Hasse /
-state machine / matrix steps) — **planned**, scope analysis only
+Phase 3.3 (remaining subject visualizations) — **in progress**: `hasse_2d`
+implemented; relation / Cartesian diagrams, truth tables and matrix steps remain
+under consideration. `graph_2d` already covers state-machine diagrams.
 
 ## Security model
 

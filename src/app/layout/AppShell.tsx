@@ -17,8 +17,14 @@ export function AppShell(): JSX.Element {
   }, [])
 
   return (
-    <div className="flex h-full min-h-screen w-full bg-background text-foreground">
-      <div className="hidden lg:block">
+    <div className="app-shell-wash relative flex h-full min-h-screen w-full bg-background text-foreground lg:gap-2 lg:p-4">
+      {/* Ambient depth behind every page. Non-interactive and never over a
+          reading surface (cards and the article stay opaque). */}
+      <div aria-hidden className="pointer-events-none fixed inset-0 z-0 overflow-hidden">
+        <div className="aurora aurora--subtle" />
+      </div>
+
+      <div className="relative z-10 hidden shrink-0 lg:block">
         <Sidebar />
       </div>
 
@@ -47,7 +53,7 @@ export function AppShell(): JSX.Element {
         </div>
       </div>
 
-      <div className="flex min-w-0 flex-1 flex-col">
+      <div className="relative z-10 flex min-w-0 flex-1 flex-col">
         <Header onOpenMobileNav={() => setMobileNavOpen(true)} />
         <div className="flex min-h-0 flex-1 flex-col">
           <Outlet />

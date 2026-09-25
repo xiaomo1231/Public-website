@@ -212,6 +212,22 @@ describe('ProcessingService — visual source preservation', () => {
     expect(second[0]!.id).not.toBe(first[0]!.id)
     expect(await visuals.getImage(first[0]!.id)).toBeNull()
   })
+
+  it('keeps the previous chunks and figure when re-processing cannot commit', async () => {
+    pdfState.pages = [{ text: 'Original material', imageOps: [85] }]
+    const documentId = await processPdf()
+    const oldChunks = await chunks.listByDocument(documentId)
+    const oldFigures = await visuals.listByDocument(documentId)
+    expect(oldFigures).toHaveLength(1)
+
+    vi.spyOn(chunks, 'addPrepared').mockRejectedValueOnce(new Error('storage failed'))
+    await expect(service().process(documentId)).rejects.toThrow('storage failed')
+
+    expect((await chunks.listByDocument(documentId)).map((chunk) => chunk.id)).toEqual(oldChunks.map((chunk) => chunk.id))
+    expect((await visuals.listByDocument(documentId)).map((figure) => figure.id)).toEqual(oldFigures.map((figure) => figure.id))
+    expect(await visuals.getImage(oldFigures[0]!.id)).toBeTruthy()
+    expect((await documents.get(documentId)).status).toBe('ready')
+  })
 })
 
 describe('TutorLessonService — visual sources', () => {

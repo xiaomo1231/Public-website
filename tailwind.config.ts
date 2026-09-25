@@ -56,6 +56,30 @@ export default {
         md: 'calc(var(--radius) - 2px)',
         sm: 'calc(var(--radius) - 4px)',
       },
+      /*
+       * Elevation reads from CSS variables so each light/dark (and colour
+       * theme) can tune its own shadow. Components use `shadow-soft` /
+       * `shadow-lift`, never a literal shadow.
+       */
+      boxShadow: {
+        soft: 'var(--shadow-soft)',
+        lift: 'var(--shadow-lift)',
+      },
+      keyframes: {
+        rise: {
+          from: { opacity: '0', transform: 'translateY(8px)' },
+          to: { opacity: '1', transform: 'translateY(0)' },
+        },
+        fade: {
+          from: { opacity: '0' },
+          to: { opacity: '1' },
+        },
+      },
+      animation: {
+        // Short, one-shot entrances used sparingly (sections, tab panels).
+        rise: 'rise 0.45s cubic-bezier(0.22, 1, 0.36, 1) both',
+        fade: 'fade 0.22s ease-out both',
+      },
       fontFamily: {
         // Text fonts first, then dedicated symbol / maths fallbacks so that
         // √ ∞ ∑ ∫ ∂ ≤ ≥ ≠ ≈ → ∈ ∪ ∩ and Greek letters resolve to a font that

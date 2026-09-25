@@ -19,7 +19,7 @@
 
 **这不是"AI PDF 总结工具"。** 教学以题目为主要载体，而不是长篇总结。
 
-当前版本：**V0.2.6（0.2.6）**。
+当前版本：**V0.2.7（0.2.7）**。
 
 ---
 
@@ -359,7 +359,7 @@ docs/             architecture.md
 4. **增量分析**：**章节级增量生成已实现**（§5.1）。边界：只支持「按章节/小节」的局部更新，且要求受影响 topic 都已有经本地校验的 `sourceChunkIds`；旧数据缺依赖时返回 `ANALYSIS_SCOPE_UNSUPPORTED`（`dependencies-missing`）而非降级。跨章节 Topic 的**多来源扩展**仍是保守策略（只在其自身来源被证明变化时才重建）。
 5. **`#4C1A2`**：Warm Orange 主题的 `deep` 色按用户原文保留，但它不是合法 hex，无法用作 CSS 颜色。当前处理：保留在 palette metadata 里，**不写入任何 CSS 变量**；主题选择器把它渲染成「不可用」虚线 `?` 色块，不伪造颜色。等待正确色值。
 6. **对比度**：浅色主按钮已改用 `--primary-strong`（Pink Aqua `#1E8F9C` = 3.84:1，Warm Orange `#8C3332` = 7.79:1；Default 15.55:1，Academic 4.82:1）。**Pink Aqua 仍为 AA-large，未达 AA-normal（4.5:1）**——因为 `#1E8F9C` 是用户指定值，达标需要改色。暗色模式主按钮 6.67–14.22:1 全部达标。
-7. **数学可视化（Phase 1 / 1.1 / 2 / 3.0 / 3.1 / 3.2 已实现并验证，随 v0.2.6 发布）**：按 Phase 0 结论实现——独立第二次结构化 JSON AI 调用（`visualization-generator/v4`）+ 本地 mathjs AST 白名单 + 确定性采样 / 矩阵与集合运算 / 特征求解 / 图布局 + 确定性 SVG renderer（`TutorVisualizationFigure` / `TutorGraphFigure` / `TutorVennFigure` / `plotLayout`）。支持线性函数/方程/方程组/不等式/点集/表格，受控非线性显式函数，`vectors_2d`，`graph_2d`（≤12 节点），`transform_2d`，`venn_2d`，以及 **Phase 3.2 的 `eigen_2d`（2×2 实矩阵的实特征值/特征向量，本地闭式求解 + `Av ≈ λv` 验证；支持不同实特征值、重复特征值（标量矩阵/缺陷矩阵）、零/负特征值；复特征值安全回退不绘图）**。**教学联动**：Tutor Lesson Prompt 升 v4，在适合主题中给出明确可验证的数值例子；可视化只复用 Lesson 中的矩阵/向量/集合/运算；`placement` 支持把图形锚定到 `Example` 等教学区块（`{ scope:'section', block, index }`），无法解析则回退课时末尾。AI 只提供语义数据，**不提供坐标、变换结果、特征值或 determinant**（AI 提供的 eigenpair 仅作候选，本地重算并校验；全部不一致则不绘图）。未新增 Dexie 表/索引；`TUTOR_LESSON_VERSION`=3（未变）、`TUTOR_VISUALIZATION_SCHEMA_VERSION`=4、可视化 prompt v4、Tutor Lesson Prompt v4（v1–v3 保留）。注意：**Tutor Lesson Prompt 升 v4 会经 `contentHash` 使旧课时在下次打开时自然重生成一次**。详见 `README.md` 与 `docs/architecture.md`。
+7. **数学可视化 Phase 3.3 进行中**：在 v0.2.6 已发布的 `visualization-generator/v4`、schema v4 类型上，工作区新增 Hasse 图 `hasse_2d`：模型提供明确有限偏序元素与比较关系，本地校验环、计算传递约简并确定分层位置；使用确定性 SVG 和双语无障碍描述。注册表现已切换到 visualization prompt v5，schema 升至 v5；未新增 Dexie 表/索引，也未改 Tutor Lesson 缓存版本。其余考虑项：关系/笛卡尔图、真值表、矩阵步骤；状态机可用已有 `graph_2d` 表示，暂不重复实现。
 
 8. **Markdown 表格渲染（Phase 3.1.1 已实现并验证，随 v0.2.6 发布）**：共享 `RichText` 新增 GFM pipe table block（`shared/lib/markdownTable.ts` 纯解析 + `markdownText.ts` block + `RichText` 语义化渲染）；cell 复用现有 inline 文本/code/LaTeX；宽表仅在容器内横向滚动；普通 `|x|` 不误判；code fence / block math 内不解析表格。Tutor Lesson Prompt 升 **v3**（保留 v1/v2）规范表格输出。旧缓存中的多行 Markdown 表格**无需重新调用 AI 即可正确显示**；Prompt v3 经 `contentHash` 使旧课时自然重生成一次。未改 `TUTOR_LESSON_VERSION` / Visualization schema / Dexie。
 

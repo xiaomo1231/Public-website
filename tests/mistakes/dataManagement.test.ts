@@ -105,6 +105,41 @@ describe('DataManagementService', () => {
     expect(Array.isArray(bundle.blobs)).toBe(true)
   })
 
+  it('exports all project tables and lossless binary data without API credentials', async () => {
+    const project = await new ProjectService(db).create({ name: 'P', subject: 'cs' })
+    const bytes = new Uint8Array([0, 1, 127, 255]).buffer
+    await db.documentBlobs.put({ id: 'doc', projectId: project.id, mimeType: 'application/pdf', bytes })
+    await db.visualSourceImages.put({ id: 'figure', projectId: project.id, mimeType: 'image/png', bytes })
+    await db.table('practiceSets').put({ id: 'set', projectId: project.id })
+    await db.table('practiceQuestions').put({ id: 'practice-q', projectId: project.id })
+    await db.table('practiceAttempts').put({ id: 'practice-a', projectId: project.id })
+    await db.table('courseStructureNodes').put({ id: 'chapter', projectId: project.id })
+    await db.settings.put({
+      id: 'singleton', provider: 'openai', baseURL: '', model: '', temperature: 0.7,
+      maxTokens: 100, updatedAt: 1, apiKey: 'legacy-secret', apiKeyEncrypted: 'encrypted-secret',
+    })
+
+    const bundle = await new DataManagementService(db).exportAll()
+    for (const name of ['practiceSets', 'practiceQuestions', 'practiceAttempts', 'courseStructureNodes']) {
+      expect((bundle.json[name] as unknown[]).length).toBe(1)
+    }
+    expect(JSON.stringify(bundle)).not.toContain('legacy-secret')
+    expect(JSON.stringify(bundle)).not.toContain('encrypted-secret')
+    expect(bundle.blobs).toEqual([
+      { id: 'doc', kind: 'document', mimeType: 'application/pdf', bytesBase64: 'AAF//w==' },
+      { id: 'figure', kind: 'visualSource', mimeType: 'image/png', bytesBase64: 'AAF//w==' },
+    ])
+  })
+
+  it('preserves binary bytes across base64 segment boundaries', async () => {
+    const project = await new ProjectService(db).create({ name: 'P', subject: 'cs' })
+    const bytes = Uint8Array.from({ length: 8195 }, (_, index) => index % 256)
+    await db.documentBlobs.put({ id: 'large', projectId: project.id, mimeType: 'application/pdf', bytes: bytes.buffer })
+    const { blobs } = await new DataManagementService(db).exportAll()
+    const decoded = Uint8Array.from(atob(blobs[0]!.bytesBase64), (char) => char.charCodeAt(0))
+    expect(decoded).toEqual(bytes)
+  })
+
   it('deleteProject removes every table row for that project', async () => {
     const projects = new ProjectService(db)
     const p = await projects.create({ name: 'P', subject: 'cs' })
@@ -195,6 +230,40 @@ describe('DataManagementService', () => {
     expect(inv.translations).toBe(0)
     expect(doc.id).toBeDefined() // still in memory but no longer in db
     void mistake
+  })
+
+  it('removes lessons and professor practice atomically with the project', async () => {
+    const projects = new ProjectService(db)
+    const a = await projects.create({ name: 'A', subject: 'cs' })
+    const b = await projects.create({ name: 'B', subject: 'cs' })
+    for (const project of [a, b]) {
+      await db.table('tutorLessons').put({ id: `lesson-${project.id}`, projectId: project.id })
+      await db.table('practiceSets').put({ id: `set-${project.id}`, projectId: project.id })
+      await db.table('practiceQuestions').put({ id: `q-${project.id}`, projectId: project.id })
+      await db.table('practiceAttempts').put({ id: `attempt-${project.id}`, projectId: project.id })
+    }
+
+    await new DataManagementService(db).deleteProject(a.id)
+    for (const name of ['tutorLessons', 'practiceSets', 'practiceQuestions', 'practiceAttempts']) {
+      expect(await db.table(name).where('projectId').equals(a.id).count()).toBe(0)
+      expect(await db.table(name).where('projectId').equals(b.id).count()).toBe(1)
+    }
+  })
+
+  it('rolls back project deletion when the final delete fails', async () => {
+    const project = await new ProjectService(db).create({ name: 'P', subject: 'cs' })
+    const doc = await new DocumentRepository(db).create({
+      projectId: project.id, type: 'text', name: 'a.txt', sizeBytes: 1,
+      blob: new Blob(['x'], { type: 'text/plain' }),
+    })
+    await db.table('practiceSets').put({ id: 'set', projectId: project.id })
+    db.projects.hook('deleting', () => { throw new Error('delete blocked') })
+
+    await expect(new DataManagementService(db).deleteProject(project.id)).rejects.toThrow('delete blocked')
+    expect(await db.projects.get(project.id)).toBeDefined()
+    expect(await db.documents.get(doc.id)).toBeDefined()
+    expect(await db.documentBlobs.get(doc.id)).toBeDefined()
+    expect(await db.table('practiceSets').get('set')).toBeDefined()
   })
 
   it('deleteAll wipes every table', async () => {

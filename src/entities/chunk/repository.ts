@@ -44,16 +44,26 @@ export class ChunkRepository {
 
   async addMany(inputs: NewChunkInput[]): Promise<DocumentChunk[]> {
     if (inputs.length === 0) return []
+    const rows = this.prepareMany(inputs)
+    await this.addPrepared(rows)
+    return rows
+  }
+
+  /** Assign stable ids before a document replacement is committed. */
+  prepareMany(inputs: NewChunkInput[]): DocumentChunk[] {
     const now = Date.now()
-    const rows: DocumentChunk[] = inputs.map((input) => ({
+    return inputs.map((input) => ({
       id: crypto.randomUUID(),
       ...input,
       createdAt: now,
     }))
+  }
+
+  async addPrepared(rows: DocumentChunk[]): Promise<void> {
+    if (rows.length === 0) return
     try {
       await this.db.chunks.bulkAdd(rows)
       logger.debug('Chunks added', { count: rows.length, documentId: rows[0]?.documentId })
-      return rows
     } catch (err) {
       throw new StorageError(t('storage.failedToSaveChunks'), err)
     }

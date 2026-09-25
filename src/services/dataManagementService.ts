@@ -13,6 +13,8 @@ import { CourseContextRepository } from '@/entities/courseContext/repository'
 import { CourseStructureRepository } from '@/entities/courseStructure/repository'
 import { TranslationRepository } from '@/entities/translation/repository'
 import { QuestionRepository } from '@/entities/question/repository'
+import { PracticeRepository } from '@/entities/practice/repository'
+import { TutorLessonRepository } from '@/entities/tutorLesson/repository'
 import { SettingsService } from './settingsService'
 import { clearCachedDeviceKey } from '@/infrastructure/crypto/deviceKey'
 
@@ -37,6 +39,24 @@ export interface DataInventory {
   processingJobs: number
   hasApiKey: boolean
   estimatedTotalBytes: number
+}
+
+export interface ExportBlob {
+  id: string
+  kind: 'document' | 'visualSource'
+  mimeType: string
+  bytesBase64: string
+}
+
+function encodeBytes(bytes: ArrayBuffer): string {
+  const view = new Uint8Array(bytes)
+  const parts: string[] = []
+  // Every non-final segment is divisible by three, so only the final
+  // segment needs base64 padding and the segments can be joined directly.
+  for (let i = 0; i < view.length; i += 8190) {
+    parts.push(btoa(String.fromCharCode(...view.subarray(i, i + 8190))))
+  }
+  return parts.join('')
 }
 
 export class DataManagementService {
@@ -106,36 +126,49 @@ export class DataManagementService {
     }
   }
 
-  /** Export everything as a single JSON file plus the raw document blobs. */
-  async exportAll(): Promise<{ json: Record<string, unknown>; blobs: Array<{ id: string; bytes: ArrayBuffer; mimeType: string }> }> {
+  /** Export restorable content without device secrets. Binary data is base64 encoded for JSON. */
+  async exportAll(): Promise<{ json: Record<string, unknown>; blobs: ExportBlob[] }> {
     const db = this.db
     const tables = [
       'projects', 'documents', 'documentBlobs', 'chunks', 'processingJobs',
       'courseAnalyses', 'topics', 'concepts', 'formulas', 'symbols', 'examples',
       'courseExercises', 'prerequisites', 'tutorSessions', 'tutorLessons',
-      'visualSources', 'courseContexts', 'courseStructures', 'translations',
+      'visualSources', 'courseContexts', 'courseStructures', 'courseStructureNodes',
+      'practiceSets', 'practiceQuestions', 'practiceAttempts', 'translations',
       'questions', 'questionAttempts', 'quizzes', 'knowledgeMastery', 'mistakes',
       'inviteKeys', 'user', 'settings',
     ] as const
     const json: Record<string, unknown> = {
       exportedAt: new Date().toISOString(),
       schemaVersion: this.db.verno,
+      blobEncoding: 'base64',
     }
     for (const name of tables) {
       if (name === 'documentBlobs') continue // blobs exported separately
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      json[name] = await (db as any).table(name).toArray()
+      const rows = await (db as any).table(name).toArray()
+      if (name === 'settings') {
+        json[name] = rows.map((row: Record<string, unknown>) => {
+          const { apiKey, apiKeyEncrypted, ...safe } = row
+          void apiKey
+          void apiKeyEncrypted
+          return safe
+        })
+      } else {
+        json[name] = rows
+      }
     }
     const blobs = await db.table('documentBlobs').toArray()
     const visualImages = await db.table('visualSourceImages').toArray()
     return {
       json,
       blobs: [
-        ...blobs.map((b) => ({ id: b.id as string, bytes: b.bytes, mimeType: b.mimeType as string })),
+        ...blobs.map((b) => ({ id: b.id, kind: 'document' as const, bytesBase64: encodeBytes(b.bytes), mimeType: b.mimeType })),
         ...visualImages.map((b) => ({
-          id: b.id as string,
-          bytes: b.bytes,
-          mimeType: b.mimeType as string,
+          id: b.id,
+          kind: 'visualSource' as const,
+          bytesBase64: encodeBytes(b.bytes),
+          mimeType: b.mimeType,
         })),
       ],
     }
@@ -156,21 +189,28 @@ export class DataManagementService {
     const visualRepo = new VisualSourceRepository(this.db)
     const contextRepo = new CourseContextRepository(this.db)
     const structureRepo = new CourseStructureRepository(this.db)
+    const practiceRepo = new PracticeRepository(this.db)
+    const lessonRepo = new TutorLessonRepository(this.db)
 
-    await docRepo.deleteByProject(projectId)
-    await visualRepo.deleteByProject(projectId)
-    await contextRepo.deleteByProject(projectId)
-    await structureRepo.deleteByProject(projectId)
-    await this.db.table('chunks').where('projectId').equals(projectId).delete()
-    await analysesRepo.deleteByProject(projectId)
-    await mastery.deleteByProject(projectId)
-    await mistakeRepo.deleteByProject(projectId)
-    await quizRepo.deleteByProject(projectId)
-    await questionRepo.deleteByProject(projectId)
-    await attemptRepo.deleteByProject(projectId)
-    await sessionRepo.deleteByProject(projectId)
-    await translationRepo.deleteByProject(projectId)
-    await projectRepo.delete(projectId)
+    await this.db.transaction('rw', this.db.tables, async () => {
+      await projectRepo.get(projectId)
+      await docRepo.deleteByProject(projectId)
+      await visualRepo.deleteByProject(projectId)
+      await contextRepo.deleteByProject(projectId)
+      await structureRepo.deleteByProject(projectId)
+      await this.db.table('chunks').where('projectId').equals(projectId).delete()
+      await analysesRepo.deleteByProject(projectId)
+      await lessonRepo.deleteByProject(projectId)
+      await practiceRepo.deleteByProject(projectId)
+      await mastery.deleteByProject(projectId)
+      await mistakeRepo.deleteByProject(projectId)
+      await quizRepo.deleteByProject(projectId)
+      await questionRepo.deleteByProject(projectId)
+      await attemptRepo.deleteByProject(projectId)
+      await sessionRepo.deleteByProject(projectId)
+      await translationRepo.deleteByProject(projectId)
+      await projectRepo.delete(projectId)
+    })
     logger.warn('Project deleted via Data Management', { projectId })
   }
 
