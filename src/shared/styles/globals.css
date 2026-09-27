@@ -31,7 +31,7 @@
      * the semantic tokens; the aliases follow automatically because `var()`
      * is substituted after the cascade. Components reference either the
      * semantic token (bg-primary, bg-accent, …) or the theme alias
-     * (bg-theme-accent-soft, app-gradient) — never a literal colour.
+     * (bg-theme-accent-soft, tech-grid) — never a literal colour.
      */
     --theme-primary: var(--primary);
     --theme-primary-soft: var(--secondary);
@@ -354,20 +354,6 @@
   }
 
   /*
-   * Homepage wash. A deliberately restrained diagonal gradient built from the
-   * theme's soft tokens. Reading surfaces (cards, the tutor article) stay on
-   * solid backgrounds — this is for the dashboard shell only.
-   */
-  .app-gradient {
-    background-image: linear-gradient(
-      135deg,
-      hsl(var(--theme-gradient-start)) 0%,
-      hsl(var(--theme-gradient-middle)) 50%,
-      hsl(var(--theme-gradient-end)) 100%
-    );
-  }
-
-  /*
    * Translucent theme tint for chrome that sits over content (the app header).
    * Pairs with `backdrop-blur`; never used for large surfaces.
    */
@@ -381,65 +367,49 @@
    * behind them, so long-form text contrast is unaffected.
    */
   .app-shell-wash {
-    background-image: radial-gradient(
-      48rem 32rem at 100% -8%,
-      hsl(var(--theme-gradient-start) / 0.5),
-      transparent 62%
-    );
+    background-image:
+      radial-gradient(52rem 34rem at 104% -12%, hsl(var(--theme-gradient-start) / 0.5), transparent 60%),
+      radial-gradient(46rem 30rem at -8% 112%, hsl(var(--theme-gradient-end) / 0.45), transparent 62%);
   }
 
   /*
-   * Decorative aurora: two large, blurred theme-tinted blobs that drift very
-   * slowly behind content. Purely presentational — `pointer-events: none`, no
-   * text, and it never sits on a reading surface (cards are opaque). The
-   * strength is tuned per placement and per light/dark so it never competes
-   * with body text.
+   * Precision grid — the shell's decorative ground. A blueprint rule set
+   * (fine minor squares over a coarser major grid) drawn from theme tokens,
+   * masked so it fades before it reaches any reading surface. Purely
+   * presentational: `pointer-events: none`, no text, never on a card. This is
+   * the instrument-paper surface the whole product sits on.
    */
-  .aurora {
-    --aurora-strength: 0.12;
+  .tech-grid {
     position: absolute;
     inset: 0;
     z-index: 0;
     overflow: hidden;
     pointer-events: none;
+    -webkit-mask-image: radial-gradient(115% 82% at 50% 0%, #000 30%, transparent 80%);
+    mask-image: radial-gradient(115% 82% at 50% 0%, #000 30%, transparent 80%);
   }
 
-  .dark .aurora {
-    --aurora-strength: 0.24;
-  }
-
-  .aurora--subtle {
-    --aurora-strength: 0.07;
-  }
-
-  .dark .aurora--subtle {
-    --aurora-strength: 0.14;
-  }
-
-  .aurora::before,
-  .aurora::after {
+  .tech-grid::before,
+  .tech-grid::after {
     content: '';
     position: absolute;
-    width: 58%;
-    aspect-ratio: 1 / 1;
-    border-radius: 9999px;
-    filter: blur(56px);
-    opacity: var(--aurora-strength);
-    will-change: transform;
+    inset: 0;
   }
 
-  .aurora::before {
-    top: -34%;
-    left: -12%;
-    background: radial-gradient(circle at center, hsl(var(--theme-primary) / 0.9), transparent 68%);
-    animation: aurora-drift 30s ease-in-out infinite;
+  /* Fine graph-paper squares. */
+  .tech-grid::before {
+    background-image:
+      linear-gradient(to right, hsl(var(--theme-primary) / 0.1) 1px, transparent 1px),
+      linear-gradient(to bottom, hsl(var(--theme-primary) / 0.1) 1px, transparent 1px);
+    background-size: 26px 26px;
   }
 
-  .aurora::after {
-    right: -14%;
-    bottom: -40%;
-    background: radial-gradient(circle at center, hsl(var(--theme-accent) / 0.85), transparent 68%);
-    animation: aurora-drift 40s ease-in-out infinite reverse;
+  /* Major rules, on the theme accent, every five cells. */
+  .tech-grid::after {
+    background-image:
+      linear-gradient(to right, hsl(var(--theme-accent) / 0.22) 1px, transparent 1px),
+      linear-gradient(to bottom, hsl(var(--theme-accent) / 0.22) 1px, transparent 1px);
+    background-size: 130px 130px;
   }
 
   /* A quiet divider for lists that should not become a stack of cards. */
@@ -495,195 +465,100 @@
   .sidebar-link--active {
     box-shadow: 0 4px 14px -8px hsl(var(--primary) / 0.4);
   }
-  .sidebar-orbit {
-    position: relative;
-    display: grid;
-    place-items: center;
-    width: 110px;
-    height: 110px;
-    margin: 24px auto;
-    border: 1px dashed hsl(var(--primary) / 0.25);
-    border-radius: 50%;
-    color: hsl(var(--primary));
-    transform: rotate(-12deg);
-  }
-  .sidebar-orbit > svg {
-    width: 38px;
-    height: 38px;
-    stroke-width: 1.2;
-  }
-  .sidebar-orbit > span {
-    position: absolute;
-    right: -5px;
-    top: 10px;
-    font-size: 28px;
-  }
   .page-icon {
-    transform: rotate(-6deg);
     box-shadow: var(--shadow-soft);
   }
-  .study-hero {
-    border-radius: 32px;
+  /*
+   * Hero panel: a crisp instrument surface with restrained depth and a
+   * hairline edge, rather than a soft "floating card".
+   */
+  .lab-hero {
+    border-radius: 24px;
+    border: 1px solid hsl(var(--border) / 0.7);
     box-shadow: var(--shadow-lift);
   }
-  .study-orbit {
+
+  /*
+   * Blueprint frame: hairline registration brackets at the top-left and
+   * bottom-right corners, like a plan drawing. Two bracket marks, not a
+   * coloured side bar (which is banned as a card accent).
+   */
+  .blueprint-frame {
     position: relative;
-    height: 290px;
-    width: 100%;
-    max-width: 410px;
-    margin: auto;
   }
-  .study-orbit__ring {
+  .blueprint-frame::before,
+  .blueprint-frame::after {
+    content: '';
     position: absolute;
-    inset: 20px 30px;
-    border: 1px solid hsl(var(--primary) / 0.15);
-    border-radius: 50%;
-    transform: rotate(-25deg) scaleY(0.8);
+    width: 13px;
+    height: 13px;
+    border: 1px solid hsl(var(--primary) / 0.6);
+    pointer-events: none;
   }
-  .study-orbit__planet {
-    position: absolute;
-    width: 176px;
-    height: 176px;
-    left: calc(50% - 88px);
-    top: 50px;
-    display: grid;
-    place-items: center;
-    border-radius: 45%;
-    transform: rotate(-12deg);
-    background: linear-gradient(145deg, hsl(var(--card)), hsl(var(--theme-primary-soft)));
-    box-shadow:
-      12px 24px 45px -15px hsl(var(--primary) / 0.22),
-      inset 0 2px 1px hsl(var(--card));
-    color: hsl(var(--primary));
+  .blueprint-frame::before {
+    top: -1px;
+    left: -1px;
+    border-right: 0;
+    border-bottom: 0;
+    border-top-left-radius: inherit;
   }
-  .study-orbit__planet > svg {
-    width: 84px;
-    height: 84px;
+  .blueprint-frame::after {
+    right: -1px;
+    bottom: -1px;
+    border-left: 0;
+    border-top: 0;
+    border-bottom-right-radius: inherit;
   }
-  .study-note {
-    position: absolute;
-    background: hsl(var(--card));
-    color: hsl(var(--foreground));
-    border: 1px solid hsl(var(--border) / 0.5);
-    box-shadow: var(--shadow-lift);
-    animation: note-float 7s ease-in-out infinite;
-    border-radius: 20px;
-  }
-  .study-note--math {
-    left: 2%;
-    top: 20px;
-    width: 136px;
-    padding: 18px;
-    --note-tilt: -10deg;
-    font-family: Georgia, serif;
-    font-size: 21px;
-  }
-  .study-note__dot {
-    display: block;
-    width: 22px;
+
+  /*
+   * Instrument tick scale: fine ticks with rarer major ticks. A measurement
+   * rule used as a section device — never decoration on body copy.
+   */
+  .tick-rule {
     height: 6px;
-    border-radius: 8px;
-    background: hsl(var(--theme-accent));
-    margin-bottom: 10px;
+    background-repeat: no-repeat;
+    background-position: left bottom;
+    background-image:
+      repeating-linear-gradient(to right, hsl(var(--border)) 0 1px, transparent 1px 14px),
+      repeating-linear-gradient(to right, hsl(var(--border) / 0.55) 0 1px, transparent 1px 70px);
+    background-size: 100% 4px, 100% 6px;
   }
-  .study-note__line {
-    display: block;
-    height: 4px;
-    background: hsl(var(--border));
-    border-radius: 4px;
-    margin-top: 12px;
+
+  /* Graph-paper plate for project covers. */
+  .plate-grid {
+    background-image:
+      linear-gradient(to right, hsl(var(--primary) / 0.14) 1px, transparent 1px),
+      linear-gradient(to bottom, hsl(var(--primary) / 0.14) 1px, transparent 1px);
+    background-size: 14px 14px;
   }
-  .study-note__line--short {
-    width: 65%;
-    margin-top: 7px;
+
+  /* Monospace micro-label — only for measured / technical data. */
+  .label-mono {
+    @apply font-mono text-[10px] font-medium uppercase tracking-[0.18em] text-muted-foreground;
   }
-  .study-note--idea {
-    right: 0;
-    top: 38px;
-    display: flex;
-    gap: 9px;
-    align-items: center;
-    padding: 14px 18px;
-    --note-tilt: 9deg;
-    animation-delay: -2s;
-    font-size: 20px;
-    font-weight: 700;
-    background: hsl(var(--theme-accent-soft));
+
+  /* Numeric readouts align in columns. */
+  .data-num {
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: 'tnum' 1;
   }
-  .study-note--idea svg {
-    width: 20px;
-  }
-  .study-note--graph {
-    right: 8%;
-    bottom: 12px;
-    display: flex;
-    align-items: center;
-    gap: 14px;
-    padding: 18px 22px;
-    --note-tilt: 7deg;
-    animation-delay: -4s;
-    font-family: Georgia, serif;
-    font-size: 20px;
-  }
-  .study-note--graph svg {
-    width: 42px;
-    height: 42px;
-    color: hsl(var(--primary));
-  }
-  .orbit-spark {
-    position: absolute;
-    color: hsl(var(--primary));
-  }
-  .orbit-spark--one {
-    right: 16%;
-    top: 0;
-    font-size: 32px;
-  }
-  .orbit-spark--two {
-    left: 15%;
-    bottom: 30px;
-    font-size: 40px;
-  }
-  .orbit-dot {
-    position: absolute;
-    right: 5%;
-    bottom: 105px;
-    width: 11px;
-    height: 11px;
-    background: hsl(var(--theme-accent));
-    border-radius: 50%;
+
+  /* One authored moment: a plotted line draws itself in once. */
+  .graph-draw {
+    stroke-dasharray: var(--graph-len, 600);
+    stroke-dashoffset: var(--graph-len, 600);
+    animation: graph-draw 1.6s cubic-bezier(0.22, 1, 0.36, 1) forwards;
   }
   .floating-course {
     transition:
       transform 220ms ease,
       box-shadow 220ms ease;
   }
-  .course-cover__art {
-    height: 104px;
-    margin: 10px 10px 0;
-    padding: 24px;
-    border-radius: 18px;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    background: linear-gradient(
-      120deg,
-      hsl(var(--theme-primary-soft)),
-      hsl(var(--theme-gradient-end))
-    );
-    color: hsl(var(--primary));
-  }
-  .course-cover__art > svg {
-    width: 38px;
-    height: 38px;
-    stroke-width: 1.4;
-    transform: rotate(-9deg);
-  }
-  .course-cover__art > span {
-    font-size: 35px;
-  }
-  .course-cover:nth-child(2n) .course-cover__art {
-    background: hsl(var(--theme-accent-soft));
+  /* Instrument plate at the top of a course card (grid + subject glyph). */
+  .subject-plate {
+    position: relative;
+    overflow: hidden;
+    border-bottom: 1px solid hsl(var(--border) / 0.6);
   }
   @media (min-width: 1024px) {
     .floating-sidebar {
@@ -691,12 +566,8 @@
     }
   }
   @media (max-width: 767px) {
-    .study-orbit {
-      height: 240px;
-      max-width: 340px;
-    }
-    .study-hero {
-      border-radius: 24px;
+    .lab-hero {
+      border-radius: 20px;
     }
   }
   @media (prefers-reduced-motion: no-preference) {
@@ -709,13 +580,10 @@
   }
 }
 
-@keyframes note-float {
-  0%,
-  100% {
-    transform: translateY(0) rotate(var(--note-tilt, 0deg));
-  }
-  50% {
-    transform: translateY(-9px) rotate(calc(var(--note-tilt, 0deg) + 2deg));
+/* The plotted line draws itself in once, then stays put. */
+@keyframes graph-draw {
+  to {
+    stroke-dashoffset: 0;
   }
 }
 
@@ -741,19 +609,6 @@
   }
 }
 
-/* Slow, low-amplitude drift for the decorative aurora blobs. */
-@keyframes aurora-drift {
-  0% {
-    transform: translate3d(-6%, -3%, 0) scale(1);
-  }
-  50% {
-    transform: translate3d(5%, 4%, 0) scale(1.12);
-  }
-  100% {
-    transform: translate3d(-6%, -3%, 0) scale(1);
-  }
-}
-
 /*
  * Motion safety net: honour the OS "reduce motion" preference for every
  * transition and animation in the app, including ones added by libraries.
@@ -775,10 +630,15 @@
   .animate-rise,
   .animate-fade,
   .progress-reveal,
-  .study-note,
   .brand-mark::after,
-  .aurora::before,
-  .aurora::after {
+  .graph-draw,
+  .tech-grid::before,
+  .tech-grid::after {
     animation: none !important;
+  }
+
+  /* Keep the plotted line fully drawn when its animation is switched off. */
+  .graph-draw {
+    stroke-dashoffset: 0 !important;
   }
 }

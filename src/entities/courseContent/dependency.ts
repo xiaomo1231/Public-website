@@ -17,11 +17,11 @@ import { computeTopicDependencyHash, relinkDeclaredChunks } from './topicDepende
  *
  * ```
  * Source document
- *       â†? (chunks)
- *   CourseStructure            â†?the single source of truth for the outline
- *       â†? *   Analysis scope
- *       â†? *   Topic                      â†?may span chapters; owns sourceChunkIds
- *       â†? *   Notes / Lecture transcript / Practice references
+ *       â†’ (chunks)
+ *   CourseStructure            â†’the single source of truth for the outline
+ *       â†’ *   Analysis scope
+ *       â†’ *   Topic                      â†’may span chapters; owns sourceChunkIds
+ *       â†’ *   Notes / Lecture transcript / Practice references
  * ```
  *
  * So the unit that may safely be regenerated is an **affected topic set**, not
@@ -33,15 +33,15 @@ import { computeTopicDependencyHash, relinkDeclaredChunks } from './topicDepende
  */
 
 /**
- * A topic's dependencies. Structural rather than `Pick<Topic, â€?` so callers
- * only supply what matters here â€?a real `Topic` still satisfies it.
+ * A topic's dependencies. Structural rather than `Pick<Topic, â€¦` so callers
+ * only supply what matters here â€”a real `Topic` still satisfies it.
  */
 export interface TopicDependency {
   id: string
   chapterId?: string
   sectionId?: string
   sourceRefs: ReadonlyArray<{ chunkId?: string }>
-  /** Validated dependency. Absent â‡?the topic cannot be regenerated locally. */
+  /** Validated dependency. Absent â‡’the topic cannot be regenerated locally. */
   sourceChunkIds?: string[]
   sourceChapterIds?: string[]
   sourceSectionIds?: string[]
@@ -66,7 +66,7 @@ export type PracticeDependency = Pick<
   'id' | 'chunkId' | 'chapterId' | 'sectionId'
 >
 
-/** Tiered plan vocabulary. Stable strings â€?UI and tests key off these. */
+/** Tiered plan vocabulary. Stable strings â€”UI and tests key off these. */
 export type IncrementalOpKind =
   | 'unchanged'
   | 'relinkOnly'
@@ -209,7 +209,7 @@ export function planContentDependencies(input: ContentDependencyInput): ContentD
         continue
       }
       // Affected, but we cannot tell *which* chunks it depends on. Keep the
-      // topic and escalate â€?never guess a dependency, never regenerate blind.
+      // topic and escalate â€”never guess a dependency, never regenerate blind.
       ops.push({
         kind: 'needsFullReanalysis',
         entity: 'topic',

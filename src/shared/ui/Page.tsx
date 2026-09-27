@@ -10,6 +10,8 @@ export interface PageHeaderProps {
   /** Optional leading icon shown in a theme-tinted badge. */
   icon?: ReactNode
   actions?: ReactNode
+  /** Optional strip rendered under the title block (e.g. per-course navigation). */
+  nav?: ReactNode
   className?: string
 }
 
@@ -19,6 +21,7 @@ export function PageHeader({
   eyebrow,
   icon,
   actions,
+  nav,
   className,
 }: PageHeaderProps): JSX.Element {
   return (
@@ -52,6 +55,7 @@ export function PageHeader({
         </div>
         {actions && <div className="flex shrink-0 flex-wrap items-center gap-2">{actions}</div>}
       </div>
+      {nav && <div className="mt-4">{nav}</div>}
     </header>
   )
 }
@@ -63,7 +67,18 @@ export interface PageContentProps {
 
 export function PageContent({ children, className }: PageContentProps): JSX.Element {
   return (
-    <main className={cn('flex-1 overflow-auto px-4 py-6 sm:px-6 lg:px-8', className)}>
+    <main
+      id="main-content"
+      tabIndex={-1}
+      className={cn(
+        // `relative` makes this the containing block for visually-hidden
+        // (position:absolute) descendants. Without it, `sr-only` inputs inside
+        // a page resolve against the shell column, escape this scroll box, and
+        // stretch the document into a second scroll container.
+        'relative flex-1 overflow-auto px-4 py-6 outline-none sm:px-6 lg:px-8',
+        className,
+      )}
+    >
       {children}
     </main>
   )

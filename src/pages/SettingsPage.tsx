@@ -134,13 +134,26 @@ export function SettingsPage(): JSX.Element {
         description={t('settings.description')}
         actions={
           <>
-            <Button variant="outline" onClick={resetDefaults}>
+            <Button
+              variant="outline"
+              onClick={resetDefaults}
+              aria-label={t('settings.resetDefaults')}
+              title={t('settings.resetDefaults')}
+            >
               <RotateCcw className="h-4 w-4" />
-              {t('settings.resetDefaults')}
+              <span className="hidden sm:inline">{t('settings.resetDefaults')}</span>
             </Button>
-            <Button variant="outline" onClick={testConnection} disabled={testing || !draft.apiKey}>
+            <Button
+              variant="outline"
+              onClick={testConnection}
+              disabled={testing || !draft.apiKey}
+              aria-label={t('settings.testConnection')}
+              title={t('settings.testConnection')}
+            >
               {testing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Wifi className="h-4 w-4" />}
-              {testing ? t('settings.testing') : t('settings.testConnection')}
+              <span className="hidden sm:inline">
+                {testing ? t('settings.testing') : t('settings.testConnection')}
+              </span>
             </Button>
             <Button onClick={save} disabled={!dirty || saving}>
               <Save className="h-4 w-4" />

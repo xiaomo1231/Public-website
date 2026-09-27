@@ -126,10 +126,16 @@ export function ProjectsPage(): JSX.Element {
         ) : (
           <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
             {projects.map((p) => (
-              <Card key={p.id} variant="interactive" className="course-cover overflow-hidden">
-                <div aria-hidden className="course-cover__art">
-                  <FolderKanban />
-                  <span>✦</span>
+              <Card key={p.id} variant="interactive" className="overflow-hidden">
+                <div aria-hidden className="subject-plate relative h-24 bg-theme-primary-soft/40">
+                  <div className="plate-grid absolute inset-0" />
+                  <span className="absolute left-4 top-3.5 font-mono text-2xl font-semibold text-primary">
+                    {p.name.slice(0, 1)}
+                  </span>
+                  <FolderKanban
+                    className="absolute bottom-3 right-4 h-8 w-8 text-primary opacity-60"
+                    strokeWidth={1.4}
+                  />
                 </div>
                 <CardHeader className="flex flex-row items-start justify-between gap-2 space-y-0">
                   <div className="min-w-0">

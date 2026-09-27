@@ -19,6 +19,7 @@ import {
 import { MistakeCard } from '@/widgets/mistakes/MistakeCard'
 import { AddMistakeDialog } from '@/widgets/mistakes/AddMistakeDialog'
 import { WeaknessPanel } from '@/widgets/mistakes/WeaknessPanel'
+import { ProjectFlowNav } from '@/widgets/project/ProjectFlowNav'
 import { buildAIServices } from '@/services/aiServices'
 import { MistakeService } from '@/services/mistakeService'
 import type { Mistake, MistakeStats, MistakeStatus, MistakeType } from '@/entities/mistake/types'
@@ -203,6 +204,7 @@ export function MistakeBookPage(): JSX.Element {
           </div>
         }
         description={t('mistakes.subtitle')}
+        nav={<ProjectFlowNav projectId={projectId} active="mistakes" />}
         actions={
           <>
             <Button variant="outline" onClick={() => setAddOpen(true)}>

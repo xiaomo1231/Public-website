@@ -3,8 +3,10 @@ import { Outlet } from 'react-router-dom'
 import { Sidebar } from './Sidebar'
 import { Header } from './Header'
 import { cn } from '@/shared/lib/utils'
+import { useTranslation } from '@/i18n'
 
 export function AppShell(): JSX.Element {
+  const { t } = useTranslation()
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
 
   // Close mobile nav when resizing back to desktop
@@ -18,11 +20,12 @@ export function AppShell(): JSX.Element {
 
   return (
     <div className="app-shell-wash relative flex h-full min-h-screen w-full bg-background text-foreground lg:gap-2 lg:p-4">
-      {/* Ambient depth behind every page. Non-interactive and never over a
-          reading surface (cards and the article stay opaque). */}
-      <div aria-hidden className="pointer-events-none fixed inset-0 z-0 overflow-hidden">
-        <div className="aurora aurora--subtle" />
-      </div>
+      <a
+        href="#main-content"
+        className="focus-ring sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-[60] focus:rounded-full focus:bg-primary-strong focus:px-4 focus:py-2 focus:text-sm focus:font-medium focus:text-primary-foreground"
+      >
+        {t('common.skipToContent')}
+      </a>
 
       <div className="relative z-10 hidden shrink-0 lg:block">
         <Sidebar />

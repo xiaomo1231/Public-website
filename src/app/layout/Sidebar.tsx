@@ -30,6 +30,9 @@ export interface SidebarProps {
 export function Sidebar({ onNavigate }: SidebarProps): JSX.Element {
   const { t } = useTranslation()
   const location = useLocation()
+  // The homepage already states "local-first" in its own content, so the shared
+  // sidebar note is redundant there. It stays on every other page.
+  const isDashboard = location.pathname === '/dashboard'
 
   return (
     <aside className="floating-sidebar flex h-full w-60 flex-col bg-card">
@@ -87,16 +90,34 @@ export function Sidebar({ onNavigate }: SidebarProps): JSX.Element {
         })}
       </nav>
 
-      <div aria-hidden className="sidebar-orbit">
-        <Sparkles />
-        <span>✦</span>
-      </div>
-      <div className="p-4">
-        <div className="flex items-start gap-2 rounded-lg bg-muted/50 px-3 py-2 text-xs text-muted-foreground">
-          <ShieldCheck className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden />
-          <span>{t('app.dataStaysLocal')}</span>
+      <div aria-hidden className="mx-4 mb-1">
+        <div className="plate-grid rounded-xl border border-border/60 p-3">
+          <svg viewBox="0 0 120 60" className="h-auto w-full text-primary" fill="none">
+            <path
+              d="M6 52h108M6 52V8"
+              className="text-muted-foreground"
+              stroke="currentColor"
+              strokeWidth="1.2"
+              strokeLinecap="round"
+            />
+            <path
+              d="M14 48c14 0 16-30 34-30s22 18 34 8 18-14 24-14"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+            />
+            <circle cx="48" cy="18" r="3" fill="currentColor" />
+          </svg>
         </div>
       </div>
+      {!isDashboard && (
+        <div className="p-4">
+          <div className="flex items-start gap-2 rounded-lg bg-muted/50 px-3 py-2 text-xs text-muted-foreground">
+            <ShieldCheck className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden />
+            <span>{t('app.dataStaysLocal')}</span>
+          </div>
+        </div>
+      )}
     </aside>
   )
 }

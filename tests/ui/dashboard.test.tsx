@@ -95,7 +95,7 @@ describe('DashboardPage', () => {
   it('spotlights the most recent project instead of an empty state', () => {
     setProjects([project()])
     renderDashboard()
-    expect(screen.getByText('Continue learning')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /Calculus I/ })).toHaveAttribute('href', '/projects/p1')
     expect(screen.queryByText('No projects yet')).not.toBeInTheDocument()
   })
 

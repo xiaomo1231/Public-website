@@ -8,6 +8,7 @@ import { EmptyState } from '@/shared/ui/EmptyState'
 import { LoadingState } from '@/shared/ui/LoadingState'
 import { PageContainer, PageContent, PageHeader } from '@/shared/ui/Page'
 import { TruncatedText } from '@/shared/ui/TruncatedText'
+import { ProjectFlowNav } from '@/widgets/project/ProjectFlowNav'
 import { TutorSessionRepository } from '@/entities/tutorSession/repository'
 import {
   SESSION_STATUS_LABEL_KEYS,
@@ -73,6 +74,7 @@ export function ChatHistoryPage(): JSX.Element {
           </div>
         }
         description={t('chatHistory.subtitle')}
+        nav={<ProjectFlowNav projectId={projectId} active="history" />}
       />
       <PageContent>
         {sessions.length === 0 ? (
@@ -152,7 +154,15 @@ function TurnCard({ turn }: { turn: TutorTurn }) {
   const isFeedback = turn.kind === 'feedback'
   const correct = turn.evaluation?.isCorrect
   return (
-    <Card className={isStudent ? 'border-l-4 border-l-primary' : isFeedback && correct === false ? 'border-l-4 border-l-destructive' : 'border-l-4 border-l-muted'}>
+    <Card
+      className={
+        isStudent
+          ? 'border-primary/30'
+          : isFeedback && correct === false
+            ? 'border-destructive/40'
+            : 'border-border'
+      }
+    >
       <CardContent className="space-y-2 p-4 text-sm">
         <div className="flex items-center gap-2 text-xs uppercase tracking-wider text-muted-foreground">
           {isStudent ? t('chatHistory.student') : t('chatHistory.tutor')}

@@ -15,7 +15,7 @@ export interface UserProfile {
   name: string
   /**
    * Language used for **translation targets and course content**. This is NOT
-   * the interface language â€?see `uiLanguage`.
+   * the interface language â€”see `uiLanguage`.
    */
   language: UserLanguage
   /** Appearance mode: Light / Dark / System. */

@@ -19,6 +19,7 @@ import { TutorLessonView } from '@/widgets/tutor/TutorLessonView'
 import { TutorSymbolsPanel } from '@/widgets/tutor/TutorSymbolsPanel'
 import { ClassProgressCard } from '@/widgets/tutor/ClassProgressCard'
 import { CourseStructurePanel } from '@/widgets/courseStructure/CourseStructurePanel'
+import { ProjectFlowNav } from '@/widgets/project/ProjectFlowNav'
 import { useProjectTopics } from '@/features/tutor/useProjectTopics'
 import { useTutorLesson } from '@/features/tutor/useTutorLesson'
 import { useCourseContext } from '@/features/tutor/useCourseContext'
@@ -90,7 +91,11 @@ export function TutorPage(): JSX.Element {
   if (!analysis || topics.length === 0) {
     return (
       <PageContainer>
-        <PageHeader title={t('tutor.title')} description={t('tutor.notAnalysedPageHint')} />
+        <PageHeader
+          title={t('tutor.title')}
+          description={t('tutor.notAnalysedPageHint')}
+          nav={<ProjectFlowNav projectId={projectId} active="tutor" />}
+        />
         <PageContent>
           <EmptyState
             icon={<Brain className="h-10 w-10" />}
@@ -126,6 +131,7 @@ export function TutorPage(): JSX.Element {
           </div>
         }
         description={t('tutor.subtitle')}
+        nav={<ProjectFlowNav projectId={projectId} active="tutor" />}
         actions={
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -181,7 +187,9 @@ export function TutorPage(): JSX.Element {
                         : 'hover:bg-accent/50'
                     }`}
                   >
-                    <span className="mt-0.5 shrink-0 text-muted-foreground">{index + 1}.</span>
+                    <span className="data-num mt-0.5 shrink-0 font-mono text-xs text-muted-foreground">
+                      {String(index + 1).padStart(2, '0')}
+                    </span>
                     <TruncatedText text={topic.name} className="min-w-0 flex-1" />
                   </button>
                 ))}
@@ -197,7 +205,7 @@ export function TutorPage(): JSX.Element {
                 topicDescription={activeTopic.description}
                 state={lessonState}
                 footer={
-                  <div className="mt-2 rounded-lg border border-border/70 bg-muted/20 p-5">
+                  <div className="blueprint-frame mt-2 rounded-xl border border-border/70 bg-muted/20 p-5">
                     <h2 className="text-base font-semibold text-foreground">
                       {t('tutor.readyToPractice')}
                     </h2>

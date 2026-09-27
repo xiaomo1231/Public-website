@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest'
 /**
  * Guards the visual-refresh infrastructure:
  *  - every colour theme defines the semantic tokens in both light and dark;
- *  - the decorative motion (aurora, brand sheen, progress reveal) is declared;
+ *  - the decorative motion (graph draw, brand sheen, progress reveal) is declared;
  *  - `prefers-reduced-motion: reduce` switches the decorative motion off.
  *
  * These are structural guarantees read from the real `globals.css`, so a future
@@ -103,16 +103,16 @@ describe('theme tokens', () => {
 })
 
 describe('decorative motion', () => {
-  it('declares the aurora, brand sheen and progress-reveal keyframes', () => {
-    expect(css).toContain('@keyframes aurora-drift')
+  it('declares the graph-draw, brand sheen and progress-reveal keyframes', () => {
+    expect(css).toContain('@keyframes graph-draw')
     expect(css).toContain('@keyframes brand-sheen')
     expect(css).toContain('@keyframes progress-reveal')
   })
 
   it('builds the decoration from theme tokens, never a literal colour', () => {
-    // The aurora and brand mark must go through the theme variables.
-    expect(css).toMatch(/\.aurora::before[\s\S]*hsl\(var\(--theme-primary\)/)
-    expect(css).toMatch(/\.aurora::after[\s\S]*hsl\(var\(--theme-accent\)/)
+    // The precision grid and brand mark must go through the theme variables.
+    expect(css).toMatch(/\.tech-grid::before[\s\S]*hsl\(var\(--theme-primary\)/)
+    expect(css).toMatch(/\.tech-grid::after[\s\S]*hsl\(var\(--theme-accent\)/)
     expect(css).toMatch(/\.brand-mark[\s\S]*hsl\(var\(--primary-strong\)/)
   })
 
@@ -120,7 +120,15 @@ describe('decorative motion', () => {
     const media = /@media \(prefers-reduced-motion: reduce\)\s*\{([\s\S]*?)\n\}/.exec(css)
     expect(media, 'missing reduced-motion media block').not.toBeNull()
     const body = media![1]!
-    for (const selector of ['.animate-rise', '.animate-fade', '.progress-reveal', '.brand-mark::after', '.study-note']) {
+    for (const selector of [
+      '.animate-rise',
+      '.animate-fade',
+      '.progress-reveal',
+      '.brand-mark::after',
+      '.graph-draw',
+      '.tech-grid::before',
+      '.tech-grid::after',
+    ]) {
       expect(body, `${selector} not disabled`).toContain(selector)
     }
     expect(body).toContain('animation: none !important')

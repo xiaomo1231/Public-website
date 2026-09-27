@@ -3,10 +3,12 @@ import { Link, useNavigate, useParams } from 'react-router-dom'
 import {
   AlertCircle,
   ArrowLeft,
+  BookX,
   CheckCircle2,
   ChevronRight,
   HelpCircle,
   Loader2,
+  Sparkles,
   TrendingDown,
   TrendingUp,
   XCircle,
@@ -21,6 +23,7 @@ import { Progress } from '@/shared/ui/Progress'
 import { PageContainer, PageContent, PageHeader } from '@/shared/ui/Page'
 import { buildOfflineQuizService, buildAIServices } from '@/services/aiServices'
 import { QuestionSource } from '@/widgets/quiz/QuestionSource'
+import { ProjectFlowNav } from '@/widgets/project/ProjectFlowNav'
 import type { Quiz } from '@/entities/quiz/types'
 import type { Question } from '@/entities/question/types'
 import type { QuestionAttempt } from '@/entities/questionAttempt/types'
@@ -99,6 +102,8 @@ export function QuizResultPage(): JSX.Element {
     }
   }
 
+  if (!projectId) return <div />
+
   if (loading) {
     return (
       <PageContainer>
@@ -152,6 +157,7 @@ export function QuizResultPage(): JSX.Element {
           </div>
         }
         description={quiz.title}
+        nav={<ProjectFlowNav projectId={projectId} active="quiz" />}
         actions={
           <Button variant="outline" asChild>
             <Link to={`/projects/${projectId}/mastery`}>{t('quizResult.mastery')}</Link>
@@ -186,6 +192,31 @@ export function QuizResultPage(): JSX.Element {
                   {t('quizResult.unverifiedNote')}
                 </p>
               )}
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="min-w-0">
+              <p className="text-sm font-medium text-foreground">{t('quizResult.nextTitle')}</p>
+              <p className="text-xs text-muted-foreground">{t('quizResult.nextHint')}</p>
+            </div>
+            <div className="flex shrink-0 flex-wrap gap-2">
+              {mistakes.length > 0 && (
+                <Button asChild>
+                  <Link to={`/projects/${projectId}/mistakes`}>
+                    <BookX className="h-4 w-4" />
+                    {t('quizResult.openMistakeBook')}
+                  </Link>
+                </Button>
+              )}
+              <Button asChild variant={mistakes.length > 0 ? 'outline' : 'default'}>
+                <Link to={`/projects/${projectId}/tutor`}>
+                  <Sparkles className="h-4 w-4" />
+                  {t('quizResult.backToTutor')}
+                </Link>
+              </Button>
             </div>
           </CardContent>
         </Card>

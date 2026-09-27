@@ -11,6 +11,7 @@ import { PageContainer, PageContent, PageHeader } from '@/shared/ui/Page'
 import { RichText } from '@/shared/ui/RichText'
 import { VisualSourceFigure } from '@/widgets/source/VisualSourceFigure'
 import { DocumentUploadDialog } from '@/widgets/documents/DocumentUploadDialog'
+import { ProjectFlowNav } from '@/widgets/project/ProjectFlowNav'
 import { PracticeService, type PracticeFeedback, type PracticeProgress } from '@/services/practiceService'
 import { CourseContextService } from '@/services/courseContextService'
 import type { PracticeQuestion, PracticeSet, ProfessorQuestionStyleProfile } from '@/entities/practice/types'
@@ -220,6 +221,7 @@ export function PracticePage(): JSX.Element {
           </div>
         }
         description={t('practice.subtitle')}
+        nav={<ProjectFlowNav projectId={projectId} active="quiz" />}
         actions={
           <Button variant="outline" size="sm" onClick={() => setUploadOpen(true)}>
             <Upload className="h-4 w-4" />

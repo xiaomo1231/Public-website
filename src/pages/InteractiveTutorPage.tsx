@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { ArrowLeft, Brain, Sparkles } from 'lucide-react'
+import { ArrowLeft, ArrowRight, Brain, Sparkles } from 'lucide-react'
 import { Button } from '@/shared/ui/Button'
 import { Card, CardDescription, CardHeader, CardTitle } from '@/shared/ui/Card'
 import { EmptyState } from '@/shared/ui/EmptyState'
@@ -8,6 +8,7 @@ import { LoadingState } from '@/shared/ui/LoadingState'
 import { PageContainer, PageContent, PageHeader } from '@/shared/ui/Page'
 import { TruncatedText } from '@/shared/ui/TruncatedText'
 import { TutorPanel } from '@/widgets/tutor/TutorPanel'
+import { ProjectFlowNav } from '@/widgets/project/ProjectFlowNav'
 import { useProjectTopics } from '@/features/tutor/useProjectTopics'
 import { useTranslation } from '@/i18n'
 
@@ -44,7 +45,10 @@ export function InteractiveTutorPage(): JSX.Element {
   if (!analysis || !activeTopic) {
     return (
       <PageContainer>
-        <PageHeader title={t('tutor.interactiveTitle')} />
+        <PageHeader
+          title={t('tutor.interactiveTitle')}
+          nav={<ProjectFlowNav projectId={projectId} active="tutor" />}
+        />
         <PageContent>
           <EmptyState
             icon={<Brain className="h-10 w-10" />}
@@ -76,6 +80,7 @@ export function InteractiveTutorPage(): JSX.Element {
           </div>
         }
         description={t('tutor.interactiveSubtitle')}
+        nav={<ProjectFlowNav projectId={projectId} active="tutor" />}
       />
       <PageContent>
         {/* Reading measure: a lecture-notes column, never full-bleed. */}
@@ -101,6 +106,19 @@ export function InteractiveTutorPage(): JSX.Element {
             topicDescription={activeTopic.description}
             language={language}
           />
+
+          <div className="mt-4 flex flex-col gap-3 rounded-2xl border border-border/70 bg-muted/20 p-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="min-w-0">
+              <p className="text-sm font-medium text-foreground">{t('tutor.nextStepTitle')}</p>
+              <p className="text-xs text-muted-foreground">{t('tutor.nextStepHint')}</p>
+            </div>
+            <Button asChild size="sm" className="shrink-0">
+              <Link to={`/projects/${projectId}/quiz`}>
+                {t('tutor.nextStepQuiz')}
+                <ArrowRight className="h-4 w-4" />
+              </Link>
+            </Button>
+          </div>
         </div>
       </PageContent>
     </PageContainer>

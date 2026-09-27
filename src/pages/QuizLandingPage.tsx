@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { ArrowLeft, Brain, ClipboardList, Clock, ListChecks, Sparkles, Upload } from 'lucide-react'
 import { Button } from '@/shared/ui/Button'
@@ -8,6 +8,7 @@ import { EmptyState } from '@/shared/ui/EmptyState'
 import { LoadingState } from '@/shared/ui/LoadingState'
 import { PageContainer, PageContent, PageHeader } from '@/shared/ui/Page'
 import { QuizConfigDialog } from '@/widgets/quiz/QuizConfigDialog'
+import { ProjectFlowNav } from '@/widgets/project/ProjectFlowNav'
 import { buildAIServices } from '@/services/aiServices'
 import { QuizRepository } from '@/entities/quiz/repository'
 import { QUIZ_STATUS_LABEL_KEYS, type Quiz, type QuizConfig } from '@/entities/quiz/types'
@@ -24,6 +25,16 @@ export function QuizLandingPage(): JSX.Element {
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState(false)
   const [progress, setProgress] = useState<{ stage: string; progress: number } | null>(null)
+  const configRef = useRef<HTMLDivElement>(null)
+
+  /** Bring the setup panel into view and move focus to it. */
+  function focusConfig() {
+    const el = configRef.current
+    if (!el) return
+    const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false
+    el.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'start' })
+    el.focus({ preventScroll: true })
+  }
 
   useEffect(() => {
     if (!projectId) return
@@ -91,6 +102,7 @@ export function QuizLandingPage(): JSX.Element {
           </div>
         }
         description={t('quiz.subtitle')}
+        nav={<ProjectFlowNav projectId={projectId} active="quiz" />}
         actions={
           <Button variant="outline" asChild>
             <Link to={`/projects/${projectId}/mastery`}>
@@ -119,7 +131,9 @@ export function QuizLandingPage(): JSX.Element {
           </CardContent>
         </Card>
 
-        <QuizConfigDialog projectId={projectId} onStart={handleStart} busy={busy} progress={progress} />
+        <div ref={configRef} tabIndex={-1} className="scroll-mt-4 rounded-[1.5rem] outline-none">
+          <QuizConfigDialog projectId={projectId} onStart={handleStart} busy={busy} progress={progress} />
+        </div>
 
         {loading ? (
           <LoadingState label={t('quiz.loading')} />
@@ -128,6 +142,12 @@ export function QuizLandingPage(): JSX.Element {
             icon={<Sparkles className="h-10 w-10" />}
             title={t('quiz.empty')}
             description={t('quiz.emptyHint')}
+            action={
+              <Button variant="outline" onClick={focusConfig}>
+                <Sparkles className="h-4 w-4" />
+                {t('quiz.setup')}
+              </Button>
+            }
           />
         ) : (
           <Card>

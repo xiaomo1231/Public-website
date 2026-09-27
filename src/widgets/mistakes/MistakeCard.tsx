@@ -59,8 +59,8 @@ export function MistakeCard({
     mistake.status === 'understood'
       ? 'border-emerald-500/40'
       : mistake.status === 'archived'
-        ? 'border-muted'
-        : 'border-l-4 border-l-amber-500/60'
+        ? 'border-border/60'
+        : 'border-amber-500/40'
 
   return (
     <Card className={cn(statusTone)}>

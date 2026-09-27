@@ -5,9 +5,11 @@ import { Button } from '@/shared/ui/Button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/shared/ui/Card'
 import { Badge } from '@/shared/ui/Badge'
 import { EmptyState } from '@/shared/ui/EmptyState'
+import { ErrorState } from '@/shared/ui/ErrorState'
 import { LoadingState } from '@/shared/ui/LoadingState'
 import { Progress } from '@/shared/ui/Progress'
 import { PageContainer, PageContent, PageHeader } from '@/shared/ui/Page'
+import { ProjectFlowNav } from '@/widgets/project/ProjectFlowNav'
 import { MasteryService } from '@/services/masteryService'
 import type { KnowledgeMastery } from '@/entities/knowledgeMastery/types'
 import { cn, relativeTime } from '@/shared/lib/utils'
@@ -25,15 +27,21 @@ export function MasteryPage(): JSX.Element {
   const { t } = useTranslation()
   const [rows, setRows] = useState<KnowledgeMastery[]>([])
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(false)
+  const [reloadKey, setReloadKey] = useState(0)
 
   useEffect(() => {
     if (!projectId) return
     let cancelled = false
+    setLoading(true)
+    setError(false)
     void (async () => {
       try {
         const service = new MasteryService()
         const data = await service.listByProject(projectId)
         if (!cancelled) setRows(data.sort((a, b) => a.mastery - b.mastery))
+      } catch {
+        if (!cancelled) setError(true)
       } finally {
         if (!cancelled) setLoading(false)
       }
@@ -41,7 +49,7 @@ export function MasteryPage(): JSX.Element {
     return () => {
       cancelled = true
     }
-  }, [projectId])
+  }, [projectId, reloadKey])
 
   if (!projectId) return <div />
 
@@ -64,6 +72,7 @@ export function MasteryPage(): JSX.Element {
           </div>
         }
         description={t('mastery.subtitle')}
+        nav={<ProjectFlowNav projectId={projectId} active="mastery" />}
         actions={
           <Button variant="outline" asChild>
             <Link to={`/projects/${projectId}/quiz`}>{t('mastery.takeQuiz')}</Link>
@@ -73,6 +82,16 @@ export function MasteryPage(): JSX.Element {
       <PageContent className="space-y-6">
         {loading ? (
           <LoadingState label={t('mastery.loading')} />
+        ) : error ? (
+          <ErrorState
+            title={t('mastery.loadFailed')}
+            description={t('mastery.loadFailedHint')}
+            action={
+              <Button variant="outline" onClick={() => setReloadKey((k) => k + 1)}>
+                {t('common.tryAgain')}
+              </Button>
+            }
+          />
         ) : rows.length === 0 ? (
           <EmptyState
             icon={<Brain className="h-10 w-10" />}

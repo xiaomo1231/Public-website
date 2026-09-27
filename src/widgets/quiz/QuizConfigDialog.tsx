@@ -9,6 +9,7 @@ import { Button } from '@/shared/ui/Button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/shared/ui/Card'
 import { Input } from '@/shared/ui/Input'
 import { Label } from '@/shared/ui/Label'
+import { Progress } from '@/shared/ui/Progress'
 import {
   Select,
   SelectContent,
@@ -212,10 +213,8 @@ export function QuizConfigDialog({ projectId, onStart, busy, progress }: QuizCon
 
         {busy && progress && (
           <div className="space-y-1">
-            <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
-              <div className="h-full bg-primary transition-[width]" style={{ width: `${progress.progress}%` }} />
-            </div>
-            <p className="text-xs capitalize text-muted-foreground">
+            <Progress value={progress.progress} className="h-1.5" />
+            <p className="text-xs text-muted-foreground">
               {(STAGE_LABEL_KEYS[progress.stage]
                 ? t(STAGE_LABEL_KEYS[progress.stage])
                 : progress.stage) + '…'}

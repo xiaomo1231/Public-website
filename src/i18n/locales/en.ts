@@ -214,6 +214,41 @@ export const en = {
     "Add PDFs, slides, or paste text. We'll extract and structure them automatically.",
   'projectDetail.upcoming.goToDocuments': 'Go to Documents',
 
+  'projectNav.label': 'Course sections',
+  'projectNav.home': 'Course home',
+  'projectNav.tutor': 'Tutor',
+  'projectNav.quiz': 'Quiz',
+  'projectNav.mistakes': 'Mistakes',
+  'projectNav.mastery': 'Mastery',
+  'projectNav.history': 'History',
+  'tutor.nextStepTitle': 'What next',
+  'tutor.nextStepHint':
+    'When this topic starts to feel solid, check it with a quiz or review what you got wrong.',
+  'tutor.nextStepQuiz': 'Take a quiz',
+  'quizResult.nextTitle': 'What next',
+  'quizResult.nextHint':
+    'Keep going: review what you missed, then practise the areas that need it.',
+  'quizResult.openMistakeBook': 'Open Mistake Book',
+  'quizResult.backToTutor': 'Back to tutor',
+  'weakness.unavailable':
+    'Review areas could not be checked right now. Your mistakes are still saved.',
+  'mastery.loadFailed': 'Could not load mastery',
+  'mastery.loadFailedHint': 'Your practice records are safe. Please try again.',
+  'common.skipToContent': 'Skip to content',
+
+  'plot.title': 'Function plot',
+  'plot.hint':
+    'Pick a function type and drag its sliders — the curve and the formula update together. Point at the curve to read a coordinate. Everything is computed on this device.',
+  'plot.typeGroupLabel': 'Function type',
+  'plot.type.linear': 'Linear',
+  'plot.type.quadratic': 'Quadratic',
+  'plot.type.cubic': 'Cubic',
+  'plot.type.sine': 'Sine',
+  'plot.probe': 'Read coordinate x',
+  'plot.offCurve': 'No point here',
+  'plot.srDescription':
+    'Interactive plot. Choose a function type, adjust its coefficients with the sliders, and point at the curve to read a coordinate. The curve updates immediately.',
+
   'documents.title': 'Content Library',
   'documents.subtitle': 'Upload PDFs, slides, images, or paste text. Files are processed locally.',
   'documents.upload': 'Upload',
@@ -487,6 +522,7 @@ export const en = {
   'quiz.loading': 'Loading quizzes',
   'quiz.empty': 'No quizzes yet',
   'quiz.emptyHint': 'Generate your first quiz above.',
+  'quiz.setup': 'Set up a quiz',
   'quiz.previous': 'Previous quizzes',
   'quiz.previousCount': '{count} saved locally.',
   'quiz.previousCount.one': '{count} saved locally.',
@@ -628,7 +664,7 @@ export const en = {
   'mastery.band.strong': 'Strong',
   'mastery.band.solid': 'Solid',
   'mastery.band.developing': 'Developing',
-  'mastery.band.needsWork': 'Needs work',
+  'mastery.band.needsWork': 'Early stage',
   'mastery.backToProject': 'Back to project',
   'mastery.title': 'Knowledge Mastery',
   'mastery.subtitle':
@@ -644,7 +680,7 @@ export const en = {
   'mastery.below': '{count} below 60%',
   'mastery.above': '{count} above 80%',
   'mastery.knowledgePoints': 'Knowledge points',
-  'mastery.knowledgePointsHint': 'Weakest first — focus your study time here.',
+  'mastery.knowledgePointsHint': 'Lowest estimate first — spend your study time here.',
   'mastery.correct': '{count} correct',
   'mastery.noAttempts': 'No graded attempts yet',
   'mastery.updatedAt': 'Updated {date}',

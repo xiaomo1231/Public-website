@@ -84,30 +84,23 @@ export function ProjectDetailPage(): JSX.Element {
   return (
     <PageContainer>
       {/* Course workspace banner: project identity is the page's focal point. */}
-      <header className="relative isolate overflow-hidden border-b border-border/70">
-        <div aria-hidden className="app-gradient absolute inset-0" />
-        <div aria-hidden className="aurora" />
+      <header className="relative isolate overflow-hidden border-b border-border/70 bg-card">
+        <div aria-hidden className="tech-grid" />
         <div className="relative z-10 px-4 py-6 sm:px-6 lg:px-8">
           <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
             <div className="min-w-0 space-y-3">
-              <div className="flex items-center gap-2">
-                <Button
-                  asChild
-                  variant="ghost"
-                  size="icon"
-                  aria-label={t('projectDetail.backToProjects')}
-                >
-                  <Link to="/projects">
-                    <ArrowLeft className="h-4 w-4" />
-                  </Link>
-                </Button>
-                <p className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
-                  <span aria-hidden className="h-1.5 w-1.5 rounded-full bg-theme-primary" />
-                  {t('projectDetail.courseWorkspace')}
-                </p>
-              </div>
+              <Button
+                asChild
+                variant="ghost"
+                size="icon"
+                aria-label={t('projectDetail.backToProjects')}
+              >
+                <Link to="/projects">
+                  <ArrowLeft className="h-4 w-4" />
+                </Link>
+              </Button>
               <div className="flex min-w-0 flex-wrap items-center gap-2">
-                <h1 className="min-w-0 max-w-full break-words text-[26px] font-semibold leading-tight tracking-tight text-foreground sm:text-[32px]">
+                <h1 className="min-w-0 max-w-full break-words text-[26px] font-semibold leading-tight tracking-[-0.01em] text-foreground sm:text-[32px]">
                   <TruncatedText text={project.name} className="min-w-0 max-w-full" />
                 </h1>
                 <Badge variant="outline">{t(SUBJECT_LABEL_KEYS[project.subject])}</Badge>
@@ -115,6 +108,7 @@ export function ProjectDetailPage(): JSX.Element {
               <p className="max-w-2xl text-sm text-muted-foreground sm:text-[15px]">
                 {project.description || t('projectDetail.subtitle')}
               </p>
+              <div className="tick-rule max-w-[15rem]" aria-hidden />
               <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
                 <span>
                   {t('projectDetail.about.created')}: {formatDate(project.createdAt)}

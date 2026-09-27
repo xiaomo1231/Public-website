@@ -8,6 +8,7 @@ import { LoadingState } from '@/shared/ui/LoadingState'
 import { Progress } from '@/shared/ui/Progress'
 import { PageContainer, PageContent, PageHeader } from '@/shared/ui/Page'
 import { QuestionCard } from '@/widgets/quiz/QuestionCard'
+import { ProjectFlowNav } from '@/widgets/project/ProjectFlowNav'
 import { buildOfflineQuizService } from '@/services/aiServices'
 import type { Question } from '@/entities/question/types'
 import type { Quiz } from '@/entities/quiz/types'
@@ -84,6 +85,8 @@ export function QuizPage(): JSX.Element {
     setIndex((i) => i + 1)
   }
 
+  if (!projectId) return <div />
+
   if (loading) {
     return (
       <PageContainer>
@@ -127,6 +130,7 @@ export function QuizPage(): JSX.Element {
           </div>
         }
         description={t('quiz.instructions')}
+        nav={<ProjectFlowNav projectId={projectId} active="quiz" />}
       />
       <PageContent className="space-y-4">
         <div className="space-y-1">

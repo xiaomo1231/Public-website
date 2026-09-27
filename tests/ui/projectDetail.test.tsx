@@ -103,7 +103,9 @@ describe('ProjectDetailPage', () => {
 
   it('presents the project as a course workspace with its identity and dates', () => {
     renderPage()
-    expect(screen.getByText('Course workspace')).toBeInTheDocument()
+    expect(screen.getByText('Physics 101')).toBeInTheDocument()
+    expect(screen.getByText(/Created:/)).toBeInTheDocument()
+    expect(screen.getByText(/Last updated:/)).toBeInTheDocument()
     // The primary workspace action is available from the banner.
     expect(screen.getAllByRole('link', { name: /Open Tutor/ }).length).toBeGreaterThanOrEqual(1)
     expect(screen.getByText('Mechanics and waves')).toBeInTheDocument()

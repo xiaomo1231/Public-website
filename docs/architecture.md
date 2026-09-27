@@ -7,7 +7,7 @@
 > Only facts verified by the code and tests are stated here. Planned work is
 > marked **(planned)** and is not implemented.
 
-## Current implementation (V0.2.7)
+## Current implementation (V0.2.8)
 
 ### Storage — current truth
 

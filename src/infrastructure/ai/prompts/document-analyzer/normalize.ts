@@ -69,7 +69,7 @@ function normalizeTopic(raw: Record<string, unknown>): DocumentTopic | null {
     description: asTrimmedString(raw.description),
     sourceRefs: normalizeSourceRefs(raw.sourceRefs),
   }
-  // Raw ids only. They are validated against the candidate set by the service â€?  // a model-supplied id is never trusted on its own.
+  // Raw ids only. They are validated against the candidate set by the service â€”  // a model-supplied id is never trusted on its own.
   const sourceChunkIds = asStringArraySafe(raw.sourceChunkIds)
   if (sourceChunkIds.length > 0) topic.sourceChunkIds = sourceChunkIds
   return topic
@@ -170,7 +170,7 @@ function asStringArraySafe(value: unknown): string[] {
 
 /**
  * Coerce arbitrary model output into a `DocumentAnalysisOutput`.
- * Throws only when the response is not an object at all â€?an empty-but-valid
+ * Throws only when the response is not an object at all â€”an empty-but-valid
  * analysis is preferable to persisting garbage.
  */
 export function normalizeDocumentAnalysis(raw: unknown): DocumentAnalysisOutput {

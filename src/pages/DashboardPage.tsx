@@ -9,6 +9,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/sha
 import { EmptyState } from '@/shared/ui/EmptyState'
 import { LoadingState } from '@/shared/ui/LoadingState'
 import { PageContainer, PageContent, PageHeader } from '@/shared/ui/Page'
+import { FunctionPlot } from '@/widgets/dashboard/FunctionPlot'
 import { SectionHeading } from '@/shared/ui/Section'
 import { TruncatedText } from '@/shared/ui/TruncatedText'
 import { WeaknessPanel } from '@/widgets/mistakes/WeaknessPanel'
@@ -36,7 +37,6 @@ export function DashboardPage(): JSX.Element {
   return (
     <PageContainer>
       <PageHeader
-        eyebrow={t('dashboard.eyebrow')}
         icon={<Sparkles className="h-5 w-5" />}
         title={t('dashboard.greeting', { name: profile?.name ?? t('dashboard.student') })}
         description={t('dashboard.subtitle')}
@@ -55,21 +55,17 @@ export function DashboardPage(): JSX.Element {
           <LoadingState label={t('dashboard.loading')} />
         ) : (
           <>
-            {/* Hero: the page's focal point. A restrained theme wash plus a slow
-                aurora sit behind the text; the copy itself is always solid. */}
-            <section className="study-hero relative isolate overflow-hidden p-6 sm:p-8 lg:p-10">
-              <div aria-hidden className="app-gradient absolute inset-0" />
-              <div aria-hidden className="aurora" />
+            {/* Hero: the page's focal point. The precision grid sits behind the
+                copy; the plotted curve is the page's single authored moment. */}
+            <section className="lab-hero blueprint-frame relative isolate overflow-hidden bg-card p-6 sm:p-8 lg:p-10">
+              <div aria-hidden className="tech-grid" />
               <div className="relative z-10">
-                <div className="grid items-center gap-6 md:grid-cols-[1.1fr_0.9fr]">
+                <div className="grid items-center gap-8 md:grid-cols-[1.05fr_0.95fr]">
                   <div className="max-w-2xl space-y-5">
-                    <p className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
-                      <span aria-hidden className="h-1.5 w-1.5 rounded-full bg-theme-primary" />
-                      {t('dashboard.heroEyebrow')}
-                    </p>
-                    <h2 className="max-w-lg text-balance text-4xl font-semibold leading-[1.12] tracking-tight text-foreground sm:text-5xl xl:text-6xl">
+                    <h2 className="max-w-lg text-balance text-4xl font-semibold leading-[1.08] tracking-[-0.02em] text-foreground sm:text-5xl xl:text-[3.4rem]">
                       {stats.total > 0 ? t('dashboard.heroTitleActive') : t('dashboard.heroTitle')}
                     </h2>
+                    <div className="tick-rule max-w-[15rem]" aria-hidden />
                     <p className="text-sm leading-relaxed text-muted-foreground sm:text-[15px]">
                       {t('dashboard.heroBody')}
                     </p>
@@ -89,10 +85,12 @@ export function DashboardPage(): JSX.Element {
                       )}
                     </div>
                   </div>
-                  <StudyOrbit />
+                  <figure className="blueprint-frame m-0 rounded-2xl border border-border/70 bg-background/70 p-4">
+                    <FunctionPlot />
+                  </figure>
                 </div>
 
-                <dl className="hero-stats mt-8 grid gap-3 sm:grid-cols-3">
+                <dl className="mt-8 grid gap-3 sm:grid-cols-3">
                   <StatCell
                     icon={<FolderKanban className="h-4 w-4" />}
                     label={t('dashboard.projects')}
@@ -119,15 +117,12 @@ export function DashboardPage(): JSX.Element {
             </section>
 
             {featured && (
-              <section className="animate-rise">
+              <section>
                 <FeaturedProject project={featured} />
               </section>
             )}
 
-            <section
-              className={`grid animate-rise gap-6 ${!featured || others.length > 0 ? 'lg:grid-cols-3' : ''}`}
-              style={{ animationDelay: '70ms' }}
-            >
+            <section className={`grid gap-6 ${!featured || others.length > 0 ? 'lg:grid-cols-3' : ''}`}>
               <div className={featured && others.length === 0 ? 'hidden' : 'lg:col-span-2'}>
                 {others.length > 0 ? (
                   <>
@@ -223,17 +218,17 @@ export function DashboardPage(): JSX.Element {
               </Card>
             </section>
 
-            <section className="animate-rise" style={{ animationDelay: '140ms' }}>
+            <section>
               <ThemePicker />
             </section>
 
             {featured && (
-              <section className="animate-rise" style={{ animationDelay: '210ms' }}>
+              <section>
                 <WeaknessPanel projectId={featured.id} compact />
               </section>
             )}
 
-            <Card className="animate-rise" style={{ animationDelay: '280ms' }}>
+            <Card>
               <CardHeader>
                 <CardTitle>{t('dashboard.localFirstTitle')}</CardTitle>
                 <CardDescription>{t('dashboard.localFirstBody')}</CardDescription>
@@ -251,33 +246,30 @@ function FeaturedProject({ project }: { project: Project }): JSX.Element {
   return (
     <Link
       to={`/projects/${project.id}`}
-      className="floating-course focus-ring group relative block overflow-hidden rounded-[1.5rem] border border-border/50 bg-card p-5 shadow-lift transition-colors hover:border-border sm:p-6"
+      className="floating-course blueprint-frame focus-ring group block overflow-hidden rounded-[1.5rem] border border-border/60 bg-card p-5 shadow-lift transition-colors hover:border-border sm:p-6"
     >
-      <span aria-hidden className="absolute inset-y-0 left-0 w-1.5 bg-theme-primary" />
-      <div className="flex flex-col gap-4 pl-2 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex min-w-0 items-center gap-4">
           <span
             aria-hidden
-            className="grid h-12 w-12 shrink-0 place-items-center rounded-xl bg-theme-primary-soft text-lg font-semibold uppercase text-foreground"
+            className="plate-grid grid h-12 w-12 shrink-0 place-items-center rounded-xl border border-border/70 bg-background font-mono text-lg font-semibold text-primary"
           >
             {project.name.slice(0, 1)}
           </span>
           <div className="min-w-0">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-              {t('dashboard.continueLearning')}
-            </p>
             <TruncatedText
               as="div"
               text={project.name}
-              className="text-lg font-semibold text-foreground"
+              className="text-lg font-semibold tracking-tight text-foreground"
             />
-            <div className="mt-0.5 truncate text-xs text-muted-foreground">
-              {t(SUBJECT_LABEL_KEYS[project.subject])} ·{' '}
-              {t('dashboard.updatedAt', { date: relativeTime(project.updatedAt) })}
+            <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
+              <span className="label-mono">{t(SUBJECT_LABEL_KEYS[project.subject])}</span>
+              <span aria-hidden>·</span>
+              <span>{t('dashboard.updatedAt', { date: relativeTime(project.updatedAt) })}</span>
             </div>
           </div>
         </div>
-        <span className="inline-flex shrink-0 items-center gap-1.5 self-start rounded-lg border border-border px-3 py-1.5 text-sm font-medium text-foreground sm:self-auto">
+        <span className="inline-flex shrink-0 items-center gap-1.5 self-start rounded-full border border-border px-4 py-1.5 text-sm font-medium text-foreground sm:self-auto">
           {t('projects.openProject')}
           <ArrowRight
             aria-hidden
@@ -301,46 +293,17 @@ function StatCell({
   hint?: string
 }) {
   return (
-    <div className="flex items-start gap-3 rounded-2xl bg-card/90 p-4 shadow-soft">
-      <span
-        aria-hidden
-        className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-theme-accent-soft text-foreground"
-      >
-        {icon}
-      </span>
-      <div className="min-w-0">
-        <dt className="text-xs text-muted-foreground">{label}</dt>
-        <dd className="truncate text-xl font-semibold leading-tight text-foreground">{value}</dd>
-        {hint && <p className="truncate text-xs text-muted-foreground">{hint}</p>}
+    <div className="blueprint-frame rounded-2xl border border-border/70 bg-card p-4 shadow-soft">
+      <div className="flex items-center justify-between gap-2">
+        <dt className="label-mono">{label}</dt>
+        <span aria-hidden className="text-muted-foreground [&_svg]:h-4 [&_svg]:w-4">
+          {icon}
+        </span>
       </div>
-    </div>
-  )
-}
-
-function StudyOrbit(): JSX.Element {
-  return (
-    <div className="study-orbit" aria-hidden="true">
-      <div className="study-orbit__ring" />
-      <div className="study-orbit__planet">
-        <BookOpen strokeWidth={1.35} />
-      </div>
-      <div className="study-note study-note--math">
-        <span className="study-note__dot" />
-        <span>∫ f(x) dx</span>
-        <span className="study-note__line" />
-        <span className="study-note__line study-note__line--short" />
-      </div>
-      <div className="study-note study-note--idea">
-        <Sparkles />
-        <span>Aha!</span>
-      </div>
-      <div className="study-note study-note--graph">
-        <TrendingUp />
-        <span>x → ∞</span>
-      </div>
-      <span className="orbit-spark orbit-spark--one">✦</span>
-      <span className="orbit-spark orbit-spark--two">✧</span>
-      <span className="orbit-dot" />
+      <dd className="data-num mt-2 truncate text-2xl font-semibold leading-none text-foreground">
+        {value}
+      </dd>
+      {hint && <p className="mt-1.5 truncate text-xs text-muted-foreground">{hint}</p>}
     </div>
   )
 }

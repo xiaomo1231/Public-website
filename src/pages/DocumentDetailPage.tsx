@@ -30,6 +30,7 @@ import { ProgressiveList } from '@/shared/ui/ProgressiveList'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/shared/ui/Tabs'
 import { TruncatedText } from '@/shared/ui/TruncatedText'
 import { ChunkPreview } from '@/widgets/documents/ChunkPreview'
+import { ProjectFlowNav } from '@/widgets/project/ProjectFlowNav'
 import { formatDate, formatDateTime, relativeTime } from '@/shared/lib/utils'
 import { formatBytes } from '@/shared/lib/format'
 import { useTranslation } from '@/i18n'
@@ -78,6 +79,8 @@ export function DocumentDetailPage(): JSX.Element {
     return chunks.filter((c) => c.text.toLowerCase().includes(q) || c.sourceReference.toLowerCase().includes(q))
   }, [chunks, search])
 
+  if (!projectId) return <div />
+
   if (status === 'loading') {
     return (
       <PageContainer>
@@ -101,7 +104,7 @@ export function DocumentDetailPage(): JSX.Element {
                   {t('common.tryAgain')}
                 </Button>
                 <Button asChild>
-                  <Link to={`/projects/${projectId}/documents`}>
+                  <Link to={`/projects/${projectId}`}>
                     <ArrowLeft className="h-4 w-4" />
                     {t('documentDetail.backToLibrary')}
                   </Link>
@@ -123,7 +126,7 @@ export function DocumentDetailPage(): JSX.Element {
             description={t('documentDetail.notFoundHint')}
             action={
               <Button asChild>
-                <Link to={`/projects/${projectId}/documents`}>
+                <Link to={`/projects/${projectId}`}>
                   <ArrowLeft className="h-4 w-4" />
                   {t('documentDetail.backToLibrary')}
                 </Link>
@@ -142,7 +145,7 @@ export function DocumentDetailPage(): JSX.Element {
       await new DocumentRepository(getDb()).delete(document.id)
       setDeleteOpen(false)
       toast({ variant: 'success', title: t('documentDetail.deleted'), description: document.name })
-      navigate(`/projects/${projectId}/documents`, { replace: true })
+      navigate(`/projects/${projectId}`, { replace: true })
     } catch (err) {
       toast({ variant: 'error', title: t('documentDetail.deleteFailed'), description: (err as Error).message })
     } finally {
@@ -156,7 +159,7 @@ export function DocumentDetailPage(): JSX.Element {
         title={
           <div className="flex flex-wrap items-center gap-2">
             <Button asChild variant="ghost" size="icon" aria-label={t('documentDetail.back')}>
-              <Link to={`/projects/${projectId}/documents`}>
+              <Link to={`/projects/${projectId}`}>
                 <ArrowLeft className="h-4 w-4" />
               </Link>
             </Button>
@@ -168,6 +171,7 @@ export function DocumentDetailPage(): JSX.Element {
           </div>
         }
         description={t('documentDetail.subtitle')}
+        nav={<ProjectFlowNav projectId={projectId} active="home" />}
         actions={
           <Button variant="destructive" onClick={() => setDeleteOpen(true)}>
             <Trash2 className="h-4 w-4" />

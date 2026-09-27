@@ -22,6 +22,7 @@ export function WeaknessPanel({ projectId, onReview, compact }: WeaknessPanelPro
   const { t } = useTranslation()
   const [report, setReport] = useState<WeaknessReport | null>(null)
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(false)
 
   useEffect(() => {
     let cancelled = false
@@ -29,6 +30,8 @@ export function WeaknessPanel({ projectId, onReview, compact }: WeaknessPanelPro
       try {
         const data = await new WeaknessService().analyze(projectId, { limit: compact ? 4 : 8 })
         if (!cancelled) setReport(data)
+      } catch {
+        if (!cancelled) setError(true)
       } finally {
         if (!cancelled) setLoading(false)
       }
@@ -39,6 +42,20 @@ export function WeaknessPanel({ projectId, onReview, compact }: WeaknessPanelPro
   }, [projectId, compact])
 
   if (loading) return <LoadingState label={t('weakness.checking')} inline />
+
+  if (error) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-base">
+            <BookOpenCheck className="h-4 w-4" />
+            {t('weakness.title')}
+          </CardTitle>
+          <CardDescription>{t('weakness.unavailable')}</CardDescription>
+        </CardHeader>
+      </Card>
+    )
+  }
 
   if (!report || report.areas.length === 0) {
     return (

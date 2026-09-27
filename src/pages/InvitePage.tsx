@@ -49,10 +49,10 @@ export function InvitePage(): JSX.Element {
     <div className="grid min-h-screen place-items-center bg-background p-6">
       <Card className="w-full max-w-md">
         <CardHeader>
-          <div className="mb-2 grid h-10 w-10 place-items-center rounded-md bg-primary-strong text-primary-foreground">
-            <Sparkles className="h-5 w-5" />
-          </div>
-          <CardTitle>{t('invite.title')}</CardTitle>
+          <CardTitle className="flex items-center gap-2">
+            <Sparkles className="h-5 w-5 text-primary" aria-hidden />
+            {t('invite.title')}
+          </CardTitle>
           <CardDescription>{t('invite.description')}</CardDescription>
         </CardHeader>
         <CardContent>
@@ -78,11 +78,11 @@ export function InvitePage(): JSX.Element {
               )}
             </div>
 
-            <Button type="submit" className="w-full" disabled={submitting || loading || !code.trim()}>
+            <Button type="submit" className="w-full" disabled={submitting || loading}>
               {submitting ? t('invite.verifying') : t('invite.unlock')}
             </Button>
 
-            <div className="rounded-md border bg-muted/40 p-3 text-xs text-muted-foreground">
+            <div className="rounded-md bg-muted/40 p-3 text-xs text-muted-foreground">
               <div className="mb-1 font-medium text-foreground">{t('invite.demoCodes')}</div>
               <div className="flex flex-wrap gap-1.5">
                 {DEMO_CODES.map((c) => (
