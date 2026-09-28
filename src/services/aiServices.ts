@@ -13,6 +13,7 @@ import { MistakeAnalysisService } from './mistakeAnalysisService'
 import { WeaknessService } from './weaknessService'
 import { ReviewSessionService } from './reviewSessionService'
 import { ProjectService } from './projectService'
+import { HomeworkService } from './homeworkService'
 import { getDb } from '@/infrastructure/db/database'
 import { DocumentRepository } from '@/entities/document/repository'
 import { ChunkRepository } from '@/entities/chunk/repository'
@@ -108,6 +109,18 @@ export async function buildAIServices(): Promise<AIServicesBundle | null> {
     weakness: new WeaknessService(db),
     reviewSession: new ReviewSessionService({ quiz, mistakes, db }),
   }
+}
+
+/**
+ * Homework walkthroughs read and edit only local data for most operations
+ * (questions, drafts, hints, the revealed solution), so this factory ALWAYS
+ * returns a service. The AI is `null` when no provider is configured; only the
+ * AI-backed operations then fail, with an actionable message.
+ */
+export async function buildHomeworkService(): Promise<HomeworkService> {
+  const settings = await new SettingsService().get()
+  const ai = settings.apiKey.trim() ? new AIService({ config: settings }) : null
+  return new HomeworkService({ ai, db: getDb() })
 }
 
 /**

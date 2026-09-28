@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import {
   BookX,
   Brain,
+  ClipboardList,
   History,
   Home,
   ListChecks,
@@ -14,6 +15,7 @@ import { useTranslation, type TranslationKey } from '@/i18n'
 
 export type ProjectFlowSection =
   | 'home'
+  | 'homework'
   | 'tutor'
   | 'quiz'
   | 'mistakes'
@@ -36,6 +38,12 @@ interface FlowItem {
  */
 const ITEMS: FlowItem[] = [
   { key: 'home', labelKey: 'projectNav.home', icon: Home, path: (id) => `/projects/${id}` },
+  {
+    key: 'homework',
+    labelKey: 'projectNav.homework',
+    icon: ClipboardList,
+    path: (id) => `/projects/${id}/homework`,
+  },
   {
     key: 'tutor',
     labelKey: 'projectNav.tutor',

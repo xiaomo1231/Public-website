@@ -16,6 +16,9 @@ import * as ProfessorProfileV1 from './professor-profile/v1'
 import * as MistakeAnalyzerV2 from './mistake-analyzer/v2'
 import * as QuizGeneratorV1 from './quiz-generator/v1'
 import * as VisualizationGeneratorV5 from './visualization-generator/v5'
+import * as HomeworkAnalyzerV1 from './homework-analyzer/v1'
+import * as HomeworkQuestionV1 from './homework-question/v1'
+import * as HomeworkQaV1 from './homework-qa/v1'
 
 export const PROMPT_VERSIONS = {
   documentAnalyzer: 'v2',
@@ -30,6 +33,9 @@ export const PROMPT_VERSIONS = {
   mistakeAnalyzer: 'v2',
   quizGenerator: 'v1',
   visualizationGenerator: 'v5',
+  homeworkAnalyzer: 'v1',
+  homeworkQuestion: 'v1',
+  homeworkQa: 'v1',
 } as const
 
 export const prompts = {
@@ -45,6 +51,9 @@ export const prompts = {
   mistakeAnalyzer: MistakeAnalyzerV2,
   quizGenerator: QuizGeneratorV1,
   visualizationGenerator: VisualizationGeneratorV5,
+  homeworkAnalyzer: HomeworkAnalyzerV1,
+  homeworkQuestion: HomeworkQuestionV1,
+  homeworkQa: HomeworkQaV1,
 } as const
 
 export type {
@@ -69,3 +78,12 @@ export type {
   QuizQuestionType,
 } from './quiz-generator/v1'
 export type { VisualizationInput, VisualizationOutput } from './visualization-generator/v5'
+export type {
+  HomeworkAnalyzerInput,
+  HomeworkAnalyzerOutput,
+} from './homework-analyzer/v1'
+export type {
+  HomeworkQuestionInput,
+  HomeworkQuestionOutput,
+} from './homework-question/v1'
+export type { HomeworkQaInput, HomeworkQaHistoryItem } from './homework-qa/v1'

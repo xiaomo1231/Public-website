@@ -22,6 +22,7 @@ import type { TutorLesson } from '@/entities/tutorLesson/types'
 import type { VisualSource, VisualSourceImageRow } from '@/entities/visualSource/types'
 import type { CourseContext } from '@/entities/courseContext/types'
 import type { PracticeAttempt, PracticeQuestion, PracticeSet } from '@/entities/practice/types'
+import type { HomeworkQuestion, HomeworkSet } from '@/entities/homework/types'
 import type { CourseStructure, CourseStructureNode } from '@/entities/courseStructure/types'
 import type { TranslationEntry } from '@/entities/translation/types'
 import type { Question } from '@/entities/question/types'
@@ -71,6 +72,9 @@ export class AppDatabase extends Dexie {
   practiceSets!: EntityTable<PracticeSet, 'id'>
   practiceQuestions!: EntityTable<PracticeQuestion, 'id'>
   practiceAttempts!: EntityTable<PracticeAttempt, 'id'>
+  /** Student-uploaded homework walkthroughs (questions + hints + solution). */
+  homeworkSets!: EntityTable<HomeworkSet, 'id'>
+  homeworkQuestions!: EntityTable<HomeworkQuestion, 'id'>
   /** Detected textbook chapter/section hierarchy (structural source of truth). */
   courseStructures!: EntityTable<CourseStructure, 'id'>
   courseStructureNodes!: EntityTable<CourseStructureNode, 'id'>
@@ -413,6 +417,54 @@ export class AppDatabase extends Dexie {
       knowledgeMastery: 'id, projectId, knowledgePoint, [projectId+knowledgePoint]',
       mistakes:
         'id, projectId, questionId, quizId, knowledgePoint, mistakeType, status, source, createdAt, [projectId+status], [projectId+knowledgePoint]',
+    })
+
+    // Phase 8: homework walkthroughs — a student uploads an assignment, the
+    // existing extraction pipeline reads it, and the AI turns it into questions
+    // with progressive hints and a worked solution. Additive only: a new
+    // material type plus two tables; no existing row is transformed.
+    this.version(12).stores({
+      projects: 'id, name, subject, createdAt, updatedAt',
+      user: 'id',
+      settings: 'id, updatedAt',
+      inviteKeys: 'code, usedAt',
+      cryptoKeys: 'id',
+      documents:
+        'id, projectId, type, status, materialType, name, uploadedAt, processedAt, [projectId+status], [projectId+type], [projectId+materialType]',
+      documentBlobs: 'id, projectId',
+      chunks:
+        'id, documentId, projectId, order, chapterId, sectionId, [documentId+order], [projectId+documentId], [projectId+chapterId]',
+      processingJobs: 'id, documentId, projectId, stage, updatedAt, [projectId+updatedAt]',
+      courseAnalyses: 'id, projectId, status, finishedAt',
+      topics: 'id, projectId, order',
+      concepts: 'id, projectId, name',
+      formulas: 'id, projectId, name',
+      symbols: 'id, projectId, symbol',
+      examples: 'id, projectId',
+      courseExercises: 'id, projectId, difficulty',
+      prerequisites: 'id, projectId',
+      tutorSessions: 'id, projectId, status, updatedAt, [projectId+updatedAt]',
+      tutorLessons: 'id, projectId, topicId, generatedAt, [projectId+topicId+language]',
+      visualSources:
+        'id, projectId, documentId, pageNumber, createdAt, [documentId+pageNumber], [projectId+documentId]',
+      visualSourceImages: 'id, projectId',
+      courseContexts: 'id, projectId',
+      practiceSets: 'id, projectId, documentId, createdAt, [projectId+documentId]',
+      practiceQuestions: 'id, projectId, setId, topicId, status, [setId+status]',
+      practiceAttempts: 'id, projectId, questionId, setId, submittedAt, [projectId+setId]',
+      courseStructures: 'id, projectId, sourceDocumentId, [projectId+sourceDocumentId]',
+      courseStructureNodes: 'id, structureId, projectId, parentId, order, [structureId+order]',
+      translations: 'id, projectId, createdAt, [projectId+createdAt]',
+      questions:
+        'id, projectId, topicId, knowledgePoint, type, difficulty, createdAt, [projectId+topicId], [projectId+knowledgePoint]',
+      questionAttempts:
+        'id, projectId, questionId, quizId, topicId, knowledgePoint, createdAt, [projectId+createdAt], [quizId+createdAt]',
+      quizzes: 'id, projectId, status, startedAt, [projectId+startedAt]',
+      knowledgeMastery: 'id, projectId, knowledgePoint, [projectId+knowledgePoint]',
+      mistakes:
+        'id, projectId, questionId, quizId, knowledgePoint, mistakeType, status, source, createdAt, [projectId+status], [projectId+knowledgePoint]',
+      homeworkSets: 'id, projectId, documentId, createdAt, [projectId+documentId]',
+      homeworkQuestions: 'id, projectId, setId, order, [setId+order]',
     })
   }
 }

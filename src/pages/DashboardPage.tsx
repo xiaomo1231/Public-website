@@ -39,7 +39,6 @@ export function DashboardPage(): JSX.Element {
       <PageHeader
         icon={<Sparkles className="h-5 w-5" />}
         title={t('dashboard.greeting', { name: profile?.name ?? t('dashboard.student') })}
-        description={t('dashboard.subtitle')}
         actions={
           <Button asChild>
             <Link to="/projects">

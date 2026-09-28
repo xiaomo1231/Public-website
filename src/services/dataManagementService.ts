@@ -15,6 +15,7 @@ import { TranslationRepository } from '@/entities/translation/repository'
 import { QuestionRepository } from '@/entities/question/repository'
 import { PracticeRepository } from '@/entities/practice/repository'
 import { TutorLessonRepository } from '@/entities/tutorLesson/repository'
+import { HomeworkRepository } from '@/entities/homework/repository'
 import { SettingsService } from './settingsService'
 import { clearCachedDeviceKey } from '@/infrastructure/crypto/deviceKey'
 
@@ -134,7 +135,8 @@ export class DataManagementService {
       'courseAnalyses', 'topics', 'concepts', 'formulas', 'symbols', 'examples',
       'courseExercises', 'prerequisites', 'tutorSessions', 'tutorLessons',
       'visualSources', 'courseContexts', 'courseStructures', 'courseStructureNodes',
-      'practiceSets', 'practiceQuestions', 'practiceAttempts', 'translations',
+      'practiceSets', 'practiceQuestions', 'practiceAttempts',
+      'homeworkSets', 'homeworkQuestions', 'translations',
       'questions', 'questionAttempts', 'quizzes', 'knowledgeMastery', 'mistakes',
       'inviteKeys', 'user', 'settings',
     ] as const
@@ -191,6 +193,7 @@ export class DataManagementService {
     const structureRepo = new CourseStructureRepository(this.db)
     const practiceRepo = new PracticeRepository(this.db)
     const lessonRepo = new TutorLessonRepository(this.db)
+    const homeworkRepo = new HomeworkRepository(this.db)
 
     await this.db.transaction('rw', this.db.tables, async () => {
       await projectRepo.get(projectId)
@@ -202,6 +205,7 @@ export class DataManagementService {
       await analysesRepo.deleteByProject(projectId)
       await lessonRepo.deleteByProject(projectId)
       await practiceRepo.deleteByProject(projectId)
+      await homeworkRepo.deleteByProject(projectId)
       await mastery.deleteByProject(projectId)
       await mistakeRepo.deleteByProject(projectId)
       await quizRepo.deleteByProject(projectId)

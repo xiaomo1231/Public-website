@@ -15,12 +15,14 @@ export type LearningMaterialType =
   | 'user_notes'
   | 'lecture_transcript'
   | 'professor_practice'
+  | 'homework'
 
 export const LEARNING_MATERIAL_TYPES: readonly LearningMaterialType[] = [
   'textbook',
   'user_notes',
   'lecture_transcript',
   'professor_practice',
+  'homework',
 ]
 
 export function isLearningMaterialType(value: unknown): value is LearningMaterialType {
