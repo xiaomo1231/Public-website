@@ -8,6 +8,15 @@ export interface SourceReference {
   section?: string
   quote?: string
   /**
+   * Set when the reference is grounded on a real chunk but the exact excerpt
+   * for the current question could not be located in it (e.g. an OCR difference
+   * or a passage that holds several questions). The UI then shows the page and
+   * the source entry and asks the student to verify the passage, instead of
+   * showing a neighbouring question's text as if it were this question's
+   * evidence. Absent means the quote is the located excerpt (or none recorded).
+   */
+  quotePending?: boolean
+  /**
    * Chunk this reference was resolved from. Always set from local data —
    * never taken from the model's output.
    */

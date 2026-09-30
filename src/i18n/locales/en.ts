@@ -46,6 +46,8 @@ export const en = {
   'nav.dashboard': 'Dashboard',
   'nav.projects': 'Projects',
   'nav.settings': 'Settings',
+  'nav.collapseSidebar': 'Collapse sidebar',
+  'nav.expandSidebar': 'Expand sidebar',
 
   'header.welcome': 'Welcome',
   'header.welcomeNamed': 'Welcome, {name}',
@@ -186,6 +188,9 @@ export const en = {
   'projectDetail.card.mastery': 'Mastery',
   'projectDetail.card.chatHistory': 'Chat History',
   'projectDetail.openTutor': 'Open Tutor',
+  'projectDetail.path.title': 'Course path',
+  'projectDetail.path.hint':
+    'Read the material, work through homework with guidance, then practise with the tutor and quiz.',
   'projectDetail.quizzes.title': 'Quizzes',
   'projectDetail.quizzes.description':
     'Generate adaptive practice questions from your course material.',
@@ -221,6 +226,7 @@ export const en = {
   'projectNav.mistakes': 'Mistakes',
   'projectNav.mastery': 'Mastery',
   'projectNav.history': 'History',
+  'projectNav.files': 'Files',
   'tutor.nextStepTitle': 'What next',
   'tutor.nextStepHint':
     'When this topic starts to feel solid, check it with a quiz or review what you got wrong.',
@@ -237,6 +243,7 @@ export const en = {
   'common.skipToContent': 'Skip to content',
 
   'plot.title': 'Function plot',
+  'plot.readout': 'Point',
   'plot.hint':
     'Pick a function type and drag its sliders — the curve and the formula update together. Point at the curve to read a coordinate. Everything is computed on this device.',
   'plot.typeGroupLabel': 'Function type',
@@ -257,9 +264,15 @@ export const en = {
   'homework.emptyHint': 'Upload a photo, PDF, or other file of your assignment to start.',
   'homework.analyzing': 'Reading the questions…',
   'homework.status.analyzing': 'Reading questions',
+  'homework.status.preparing': 'Preparing help',
   'homework.status.ready': 'Ready',
   'homework.status.failed': 'Failed',
   'homework.analyzingHint': 'This runs once on this device.',
+  'homework.progress.extracting': 'Extracting text and running OCR…',
+  'homework.progress.identifying': 'Reading questions · batch {current} of {total}',
+  'homework.progress.identifyingUnknown': 'Reading questions…',
+  'homework.progress.generating': 'Preparing hints and solution · {current} of {total}',
+  'homework.progress.generatingUnknown': 'Preparing hints and solution…',
   'homework.open': 'Open walkthrough',
   'homework.analyze': 'Read questions',
   'homework.retryAnalyze': 'Retry analysis',
@@ -268,6 +281,8 @@ export const en = {
   'homework.questionsCount.one': '{count} question',
   'homework.progress': 'Question {current} of {total}',
   'homework.nav': 'Questions',
+  'homework.viewQuestion': 'View question',
+  'homework.questionNavHint': 'Jump to another question',
   'homework.draft': 'Your working',
   'homework.draftPlaceholder': 'Write your steps here — saved automatically on this device.',
   'homework.saved': 'Saved',
@@ -303,6 +318,12 @@ export const en = {
   'homework.noContent':
     'No text was extracted from this file, so no questions could be read. Check the file and upload it again.',
   'homework.noQuestions': 'No questions were found in this assignment. Check the file, then retry.',
+  'homework.noReadableText':
+    'This file did not contain enough readable text to find questions. If it is a scan, try a clearer copy or a text-based PDF.',
+  'homework.sourcesUnverified':
+    'The AI proposed {count} question group(s), but their sources could not be matched to the document. Nothing was saved — retry, or try a shorter file.',
+  'homework.partialNote':
+    'Recognized {recognized} question(s); {ranges} range(s) could not be read. Retry to finish those.',
   'homework.contentIncomplete': 'The AI returned incomplete help for this question.',
   'homework.emptyMessage': 'Type your question first.',
   'homework.emptyReply': 'The AI returned an empty reply. Please try again.',
@@ -320,6 +341,129 @@ export const en = {
   'homework.hintsReduced': 'Hints are now {count}; your progress was adjusted.',
   'homework.regenerate': 'Regenerate hints & solution',
   'homework.reanalyze': 'Re-analyze questions',
+  'homework.menu.label': 'Assignment actions',
+  'homework.menu.refresh': 'Refresh',
+  'homework.menu.reanalyze': 'Re-analyze',
+  'homework.menu.delete': 'Delete',
+  'homework.menu.uploadAnswer': 'Upload professor answer',
+  'homework.menu.replaceAnswer': 'Replace professor answer',
+  'homework.menu.manageAnswer': 'Check answer mapping',
+  'homework.answer.title': 'Professor answer',
+  'homework.answer.subtitle':
+    'Link the professor’s answer file, match answers to questions, then generate help grounded in it.',
+  'homework.answer.notAnswerFile': 'That file is not a professor answer.',
+  'homework.answer.uploadHint':
+    'Upload the answer file the professor handed out. It is parsed locally; only a matched question and its answer are sent to your AI.',
+  'homework.answer.linked': 'Linked answer file',
+  'homework.answer.processing':
+    'The answer file is still being processed. Wait for it to finish, then check the mapping.',
+  'homework.answer.failed': 'The answer file could not be read.',
+  'homework.answer.openFile': 'Open answer file',
+  'homework.answer.previewTitle': 'Question ⇄ answer mapping',
+  'homework.answer.previewHint':
+    'Only unique one-to-one number matches are filled in automatically. Check every row — a wrong match is never used.',
+  'homework.answer.colQuestion': 'Question',
+  'homework.answer.colAnswer': 'Professor answer',
+  'homework.answer.status.matched': 'Matched',
+  'homework.answer.status.needsReview': 'Check',
+  'homework.answer.status.none': 'No answer',
+  'homework.answer.noneOption': 'No answer',
+  'homework.answer.reason.answer-number-duplicate':
+    'This answer number appears more than once — choose the right one.',
+  'homework.answer.reason.question-number-duplicate':
+    'Two questions share this number — choose manually.',
+  'homework.answer.reason.question-number-missing':
+    'This question has no printed number — choose manually.',
+  'homework.answer.reason.answer-number-missing': 'No answer with this number was found.',
+  'homework.answer.reason.no-answers': 'No numbered answers were found in the file.',
+  'homework.answer.unmatched': '{count} answer entry(ies) not assigned.',
+  'homework.answer.emptyEntries': 'No numbered answers were found. Assign answers manually.',
+  'homework.answer.confirm': 'Save mapping',
+  'homework.answer.confirmAndGenerate': 'Save & generate help',
+  'homework.answer.generating': 'Generating help from the professor answer…',
+  'homework.answer.generated': 'Generated help for {generated} question(s).',
+  'homework.answer.generatedPartial':
+    'Generated {generated}; {failed} failed and kept their previous help.',
+  'homework.answer.replace': 'Replace answer file',
+  'homework.answer.unlink': 'Unlink answer file',
+  'homework.answer.unlinkHint':
+    'Unlinking clears the answer mapping but keeps the file and all your work.',
+  'homework.answer.deleteFile': 'Delete answer file',
+  'homework.answer.deleteFileHint':
+    'This also deletes the uploaded answer file from this project. Your homework and work are kept.',
+  'homework.answer.professorOriginal': 'Professor answer (verbatim)',
+  'homework.answer.verifyNote':
+    'AI-generated explanation. If it disagrees with the professor’s answer, trust the original file.',
+  'homework.answer.aiExplanation': 'AI explanation based on the professor answer',
+  'homework.answer.aiExplanationNotBased': 'AI explanation (not based on a professor answer)',
+  'homework.answer.previousSolution':
+    'Previous AI solution (kept, not based on the professor answer)',
+  'homework.answer.notGenerated': 'No help has been generated from the professor answer yet.',
+  'homework.answer.generateOne': 'Generate from professor answer',
+  'homework.mode.label': 'Study mode',
+  'homework.mode.practice': 'Practice',
+  'homework.mode.review': 'Review',
+  'homework.analysisInterrupted':
+    'This analysis looks interrupted. Use Re-analyze to try again.',
+  'homework.setRemoved': 'This assignment was removed.',
+  'homework.deleteTitle': 'Delete this assignment?',
+  'homework.deleteIntro':
+    '“{name}” and its uploaded file will be removed from this project only.',
+  'homework.deleteScope': 'Also removed: {count} question(s).',
+  'homework.deleteStudentNote':
+    'Your saved drafts, revealed hints and conversations for this assignment will be deleted too.',
+  'homework.deleteConfirm': 'Delete assignment',
+  'homework.deleted': 'Assignment deleted',
+  'homework.deleteFailed': 'Could not delete this assignment',
+
+  'studyMode.label': 'Study mode',
+  'studyMode.knowledge': 'By topic',
+  'studyMode.slides': 'By slide',
+
+  'slides.title': 'Learn by slide',
+  'slides.subtitle':
+    'Read a presentation one slide at a time and ask the AI about the page you are on.',
+  'slides.noPresentations': 'No presentations yet',
+  'slides.noPresentationsHint': 'Upload a PPT or PPTX file to study it slide by slide.',
+  'slides.openFiles': 'Open project files',
+  'slides.pickFileHint': 'Choose a presentation to study.',
+  'slides.slideCount': '{count} slides',
+  'slides.slideCount.one': '{count} slide',
+  'slides.start': 'Start',
+  'slides.backToFiles': 'All presentations',
+  'slides.pickSlideHint': 'Pick a slide to start, or continue where you left off.',
+  'slides.position': 'Slide {current} / {total}',
+  'slides.untitled': 'Untitled slide',
+  'slides.noText': 'No text on this slide',
+  'slides.hasImage': 'Image',
+  'slides.viewerLabel': 'Slide {current} of {total}',
+  'slides.emptySlideBody': 'This slide has no extractable text.',
+  'slides.speakerNotes': 'Speaker notes',
+  'slides.extractionNote':
+    'Text and images are extracted from your file; the original slide layout is not re-drawn. Check the image for anything not shown here.',
+  'slides.lessonLabel': 'Slide explanation',
+  'slides.generateHint':
+    'Generate an explanation when you are ready — nothing is sent until you ask.',
+  'slides.explain': 'Explain this slide',
+  'slides.regenerate': 'Regenerate',
+  'slides.retry': 'Retry this slide',
+  'slides.failedBody': 'This slide could not be prepared.',
+  'slides.guidingQuestion': 'Check yourself',
+  'slides.askTitle': 'Ask about this slide',
+  'slides.askPlaceholder': 'What are you unsure about on this slide?',
+  'slides.send': 'Send',
+  'slides.you': 'You',
+  'slides.tutor': 'Tutor',
+  'slides.prev': 'Previous',
+  'slides.next': 'Next',
+  'slides.notReadyTitle': 'This file is not ready',
+  'slides.notReadyBody': 'Wait for processing to finish, or check the file in project files.',
+  'slides.emptySlide': 'This slide has no text, image, or notes to explain.',
+  'slides.incompleteResponse': 'The AI returned incomplete help for this slide.',
+  'slides.emptyMessage': 'Type your question first.',
+  'slides.emptyReply': 'The AI returned an empty reply. Please try again.',
+  'slides.notGenerated': 'Generate the explanation for this slide first.',
+  'slides.noProvider': 'Configure an AI provider first (Settings → AI).',
 
   'documents.title': 'Content Library',
   'documents.subtitle': 'Upload PDFs, slides, images, or paste text. Files are processed locally.',
@@ -658,6 +802,8 @@ export const en = {
   'questionSource.slide': 'Slide {slide}',
   'questionSource.sourceN': 'Source {index}',
   'questionSource.unavailable': 'No matching course excerpt was found.',
+  'questionSource.pendingExcerpt':
+    'The exact passage for this question has not been located yet — open the source to verify it.',
   'questionSource.notRecorded': 'No source was recorded for this question.',
   'questionSource.expand': 'Show full excerpt',
   'questionSource.collapse': 'Show less',
@@ -982,6 +1128,7 @@ export const en = {
   'translate.noProject': 'Open a project to use translation',
   'translate.noProvider': 'Configure AI provider first',
   'translate.failed': 'Translation failed',
+  'translate.incomplete': 'The AI translated only part of the selection. Select a shorter passage and try again.',
 
   'invite.verifyFailed': 'Could not verify invite code',
   'invite.title': 'Enter invite code',
@@ -1101,6 +1248,9 @@ export const en = {
   'errors.unknownError': 'Unknown error',
   'errors.aiKeyRequired': 'API key is required. Configure it in Settings.',
   'errors.aiRateLimited': 'Rate limited by AI provider',
+  'errors.aiQuotaExceeded': 'AI provider account is out of credit or quota',
+  'errors.aiContextTooLong': 'The request was too long for the model context window',
+  'errors.aiOutputLimit': 'The model rejected the requested output token limit',
   'errors.aiTimeout': 'AI request timed out after {ms} ms',
   'errors.aiUnavailable': 'AI provider is unavailable',
   'errors.aiMalformedJson': 'AI returned malformed JSON',
@@ -1209,6 +1359,12 @@ export const en = {
     'The API key was rejected. Check that it is correct and still active.',
   'friendlyError.rateLimited':
     'The AI provider is rate limiting requests. Wait a moment and try again.',
+  'friendlyError.quotaExceeded':
+    'Your AI provider account is out of credit or quota. Check your provider account or billing, then retry.',
+  'friendlyError.contextTooLong':
+    'The request was too long for the model. Try a shorter assignment, or a model with a larger context window.',
+  'friendlyError.outputLimit':
+    'The model does not accept that output token limit. The app retries with a smaller limit automatically; if it keeps failing, lower “Max tokens” in Settings.',
   'friendlyError.timeout':
     'The AI took too long to respond. Check your connection or try a smaller request.',
   'friendlyError.providerUnavailable':
@@ -1230,7 +1386,10 @@ export const en = {
   'friendlyError.generic': 'The request failed. Please try again.',
   'friendlyError.offline': 'AI connection unavailable. Check your network connection.',
   'friendlyError.outputTruncated':
-    'The AI response was cut off at the output limit, so it could not be used. Raise "Max tokens" in Settings, or analyze fewer documents at once.',
+    'The model stopped before finishing its reply. Retry this question; if it keeps happening, try a model with a larger output window.',
+  'homework.originalPages': 'Original PDF pages and diagrams',
+  'homework.originalPage': 'Original page {page}',
+  'homework.openOriginalPage': 'Open original page {page} in full size',
 
   'evalNote.integrationConstant': 'Integration constant treated as arbitrary.',
   'evalNote.equationRearranged':
@@ -1268,6 +1427,7 @@ export const en = {
   'batch.processingNote': 'Files are processed locally, two at a time.',
   'batch.readyToUpload': 'Ready to upload: {count}',
   'batch.duplicatesCount': 'Duplicates: {count}',
+  'batch.duplicateLocate': 'Find in this project',
   'batch.invalidCount': 'Invalid files: {count}',
   'batch.uploadCount': 'Upload {count} files',
   'batch.uploadCount.one': 'Upload 1 file',
@@ -1352,6 +1512,38 @@ export const en = {
   'materials.fileCount': '{count} file(s)',
   'materials.analyzed': 'Analyzed',
   'materials.processing': 'Processing…',
+
+  'materialType.textbook': 'Textbook',
+  'materialType.user_notes': 'My notes',
+  'materialType.lecture_transcript': 'Lecture transcript',
+  'materialType.professor_practice': 'Professor practice',
+  'materialType.homework': 'Homework',
+  'materialType.homework_answer': 'Professor answer',
+
+  'files.title': 'Project files',
+  'files.subtitle': 'Every file uploaded to this project, with the role and status it was stored as.',
+  'files.upload': 'Upload file',
+  'files.openAll': 'All project files',
+  'files.materialLabel': 'This file is',
+  'files.filter.material': 'All materials',
+  'files.deleteTitle': 'Delete this file?',
+  'files.deleteIntro':
+    '“{name}” will be removed from this project only. Other projects are not affected.',
+  'files.deleteRemoves': 'This also removes',
+  'files.removes.chunks': '{count} extracted chunks',
+  'files.removes.structures': 'the book structure detected from this file',
+  'files.removes.visuals': '{count} captured figures',
+  'files.removes.homework': 'the homework questions built from it',
+  'files.removes.practice': 'the practice questions built from it',
+  'files.removes.slides': 'the slide study lesson(s) built from it',
+  'files.removes.none': 'Nothing else is attached to this file.',
+  'files.deleteKeeps': 'Your quiz results, mistakes and mastery estimates are kept.',
+  'files.deleteConfirm': 'Delete file',
+  'files.deleteBlockedTitle': 'This file has saved work',
+  'files.deleteBlockedBody':
+    'It holds {work}. Delete that work first, then remove the file. Nothing has been deleted.',
+  'files.deleteBlockedHomework': 'homework drafts, hints or messages',
+  'files.deleteBlockedPractice': 'practice answers',
 
   'structure.title': 'Course Structure',
   'structure.empty': 'No chapter structure detected yet.',

@@ -41,6 +41,18 @@ describe('splitMathSegments', () => {
     ])
   })
 
+  it('does not treat a currency range as math', () => {
+    const segments = splitMathSegments('Between $5 and $10 dollars.')
+    expect(segments.every((s) => s.kind === 'text')).toBe(true)
+    expect(segments.map((s) => s.value).join('')).toBe('Between $5 and $10 dollars.')
+  })
+
+  it('treats an escaped dollar as a literal sign, not a delimiter', () => {
+    const segments = splitMathSegments('costs \\$5 today')
+    expect(segments.every((s) => s.kind === 'text')).toBe(true)
+    expect(segments.map((s) => s.value).join('')).toBe('costs $5 today')
+  })
+
   it('does not let inline math span a newline', () => {
     const segments = splitMathSegments('a $x\ny$ b')
     expect(segments.every((s) => s.kind === 'text')).toBe(true)

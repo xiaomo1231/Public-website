@@ -1,6 +1,6 @@
-import { useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { ArrowRight, BookOpen, FolderKanban, Sparkles, TrendingUp } from 'lucide-react'
+import { ArrowRight, FolderKanban, Sparkles } from 'lucide-react'
 import { useProjects } from '@/features/project/useProjects'
 import { useAuth } from '@/features/auth/useAuth'
 import { Badge } from '@/shared/ui/Badge'
@@ -15,13 +15,34 @@ import { TruncatedText } from '@/shared/ui/TruncatedText'
 import { WeaknessPanel } from '@/widgets/mistakes/WeaknessPanel'
 import { ThemePicker } from '@/widgets/theme/ThemePicker'
 import { SUBJECT_LABEL_KEYS, type Project } from '@/entities/project/types'
-import { relativeTime } from '@/shared/lib/utils'
+import { cn, relativeTime } from '@/shared/lib/utils'
 import { useTranslation } from '@/i18n'
+
+/**
+ * The homepage entrance plays once per session: the first visit gets a short
+ * staggered rise, and returning to the page later skips it. The flag is set
+ * only after the animation would have finished, so React StrictMode's dev
+ * double-mount still shows it.
+ */
+let homeIntroShown = false
+
+function useHomeIntro(): boolean {
+  const [play] = useState(() => !homeIntroShown)
+  useEffect(() => {
+    if (!play) return
+    const id = window.setTimeout(() => {
+      homeIntroShown = true
+    }, 1000)
+    return () => window.clearTimeout(id)
+  }, [play])
+  return play
+}
 
 export function DashboardPage(): JSX.Element {
   const { t } = useTranslation()
   const { projects, loading, loaded } = useProjects()
   const { profile } = useAuth()
+  const playIntro = useHomeIntro()
 
   const stats = useMemo(() => {
     const total = projects.length
@@ -54,152 +75,136 @@ export function DashboardPage(): JSX.Element {
           <LoadingState label={t('dashboard.loading')} />
         ) : (
           <>
-            {/* Hero: the page's focal point. The precision grid sits behind the
-                copy; the plotted curve is the page's single authored moment. */}
-            <section className="lab-hero blueprint-frame relative isolate overflow-hidden bg-card p-6 sm:p-8 lg:p-10">
-              <div aria-hidden className="tech-grid" />
-              <div className="relative z-10">
-                <div className="grid items-center gap-8 md:grid-cols-[1.05fr_0.95fr]">
-                  <div className="max-w-2xl space-y-5">
-                    <h2 className="max-w-lg text-balance text-4xl font-semibold leading-[1.08] tracking-[-0.02em] text-foreground sm:text-5xl xl:text-[3.4rem]">
-                      {stats.total > 0 ? t('dashboard.heroTitleActive') : t('dashboard.heroTitle')}
-                    </h2>
-                    <div className="tick-rule max-w-[15rem]" aria-hidden />
-                    <p className="text-sm leading-relaxed text-muted-foreground sm:text-[15px]">
-                      {t('dashboard.heroBody')}
-                    </p>
-                    <div className="flex flex-wrap items-center gap-3 pt-2">
-                      <Button asChild size="lg">
-                        <Link to="/projects">
-                          {stats.total > 0
-                            ? t('dashboard.continueStudying')
-                            : t('dashboard.createFirstProject')}
-                          <ArrowRight className="h-4 w-4" />
-                        </Link>
-                      </Button>
-                      {featured && (
-                        <Button asChild variant="outline" size="lg">
-                          <Link to={`/projects/${featured.id}`}>{t('dashboard.openLatest')}</Link>
-                        </Button>
-                      )}
-                    </div>
-                  </div>
-                  <figure className="blueprint-frame m-0 rounded-2xl border border-border/70 bg-background/70 p-4">
-                    <FunctionPlot />
-                  </figure>
+            {/* Hero: the live coordinate plane is the left, larger half — the
+                page's main visual, with real room to read the curve. The copy
+                and the loose counts sit in a compact rail beside it, so the
+                recent-course row stays close to the first screen. */}
+            <section className="lab-hero blueprint-frame relative isolate overflow-hidden bg-card p-6 sm:p-8">
+              <div className="mx-auto grid w-full max-w-[86rem] gap-8 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)] lg:items-center lg:gap-10">
+                <div
+                  className={cn(
+                    'order-2 rounded-2xl border border-border/70 bg-background/60 p-4 sm:p-5 lg:order-1',
+                    playIntro && 'intro-item',
+                  )}
+                  style={playIntro ? { animationDelay: '140ms' } : undefined}
+                >
+                  <FunctionPlot />
                 </div>
 
-                <dl className="mt-8 grid gap-3 sm:grid-cols-3">
-                  <StatCell
-                    icon={<FolderKanban className="h-4 w-4" />}
-                    label={t('dashboard.projects')}
-                    value={String(stats.total)}
-                    hint={
-                      stats.total === 0
-                        ? t('dashboard.createFirstProject')
-                        : t('dashboard.projectsCount', { count: stats.subjects })
-                    }
-                  />
-                  <StatCell
-                    icon={<BookOpen className="h-4 w-4" />}
-                    label={t('projects.subject')}
-                    value={String(stats.subjects)}
-                  />
-                  <StatCell
-                    icon={<TrendingUp className="h-4 w-4" />}
-                    label={t('dashboard.lastActivity')}
-                    value={stats.lastUpdated ? relativeTime(stats.lastUpdated) : '—'}
-                    hint={stats.lastUpdated ? t('dashboard.autoSaved') : t('dashboard.noActivity')}
-                  />
-                </dl>
+                <div className="order-1 max-w-xl space-y-4 lg:order-2">
+                  <p
+                    className={cn(
+                      'flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground',
+                      playIntro && 'intro-item',
+                    )}
+                  >
+                    <span aria-hidden className="h-1.5 w-1.5 shrink-0 rounded-full bg-theme-primary" />
+                    {t('dashboard.heroEyebrow')}
+                  </p>
+                  <h2
+                    className={cn(
+                      'text-balance text-[2rem] font-semibold leading-[1.08] tracking-[-0.02em] text-foreground sm:text-[2.25rem]',
+                      playIntro && 'intro-item',
+                    )}
+                    style={playIntro ? { animationDelay: '70ms' } : undefined}
+                  >
+                    {stats.total > 0 ? t('dashboard.heroTitleActive') : t('dashboard.heroTitle')}
+                  </h2>
+                  <p
+                    className={cn(
+                      'text-sm leading-relaxed text-muted-foreground sm:text-[15px]',
+                      playIntro && 'intro-item',
+                    )}
+                    style={playIntro ? { animationDelay: '130ms' } : undefined}
+                  >
+                    {t('dashboard.heroBody')}
+                  </p>
+                  <div
+                    className={cn('flex flex-wrap items-center gap-3 pt-1', playIntro && 'intro-item')}
+                    style={playIntro ? { animationDelay: '190ms' } : undefined}
+                  >
+                    <Button asChild size="lg">
+                      <Link to="/projects">
+                        {stats.total > 0
+                          ? t('dashboard.continueStudying')
+                          : t('dashboard.createFirstProject')}
+                        <ArrowRight className="h-4 w-4" />
+                      </Link>
+                    </Button>
+                    {featured && (
+                      <Button asChild variant="outline" size="lg">
+                        <Link to={`/projects/${featured.id}`}>{t('dashboard.openLatest')}</Link>
+                      </Button>
+                    )}
+                  </div>
+                  <p
+                    className={cn('label-mono pt-1', playIntro && 'intro-item')}
+                    style={playIntro ? { animationDelay: '250ms' } : undefined}
+                  >
+                    {`${stats.total} ${t('dashboard.projects')} · ${t('dashboard.projectsCount', {
+                      count: stats.subjects,
+                    })} · ${
+                      stats.lastUpdated
+                        ? t('dashboard.updatedAt', { date: relativeTime(stats.lastUpdated) })
+                        : t('dashboard.noActivity')
+                    }`}
+                  </p>
+                </div>
               </div>
             </section>
 
+            {featured ? (
+              <section className="space-y-3">
+                <SectionHeading
+                  title={t('dashboard.continueLearning')}
+                  description={t('dashboard.recentProjectsHint')}
+                  action={
+                    projects.length > recent.length ? (
+                      <Button asChild variant="ghost" size="sm">
+                        <Link to="/projects">
+                          {t('dashboard.viewAllProjects')}
+                          <ArrowRight className="h-4 w-4" />
+                        </Link>
+                      </Button>
+                    ) : undefined
+                  }
+                />
+                <FeaturedProject project={featured} />
+                {others.length > 0 && (
+                  <Card className="overflow-hidden">
+                    <ul className="hairline-list">
+                      {others.map((p) => (
+                        <li key={p.id}>
+                          <ProjectRow project={p} />
+                        </li>
+                      ))}
+                    </ul>
+                  </Card>
+                )}
+              </section>
+            ) : (
+              <EmptyState
+                icon={<FolderKanban className="h-8 w-8" />}
+                title={t('dashboard.noProjects')}
+                description={t('dashboard.noProjectsHint')}
+                action={
+                  <Button asChild>
+                    <Link to="/projects">
+                      {t('dashboard.createFirstProject')}
+                      <ArrowRight className="h-4 w-4" />
+                    </Link>
+                  </Button>
+                }
+              />
+            )}
+
             {featured && (
               <section>
-                <FeaturedProject project={featured} />
+                <WeaknessPanel projectId={featured.id} compact />
               </section>
             )}
 
-            <section className={`grid gap-6 ${!featured || others.length > 0 ? 'lg:grid-cols-3' : ''}`}>
-              <div className={featured && others.length === 0 ? 'hidden' : 'lg:col-span-2'}>
-                {others.length > 0 ? (
-                  <>
-                    <SectionHeading
-                      title={t('dashboard.otherProjects')}
-                      description={t('dashboard.recentProjectsHint')}
-                      action={
-                        projects.length > recent.length ? (
-                          <Button asChild variant="ghost" size="sm">
-                            <Link to="/projects">
-                              {t('dashboard.viewAllProjects')}
-                              <ArrowRight className="h-4 w-4" />
-                            </Link>
-                          </Button>
-                        ) : undefined
-                      }
-                    />
-                    <Card className="overflow-hidden">
-                      <ul className="hairline-list">
-                        {others.map((p) => (
-                          <li key={p.id}>
-                            <Link
-                              to={`/projects/${p.id}`}
-                              className="focus-ring group flex min-w-0 items-center gap-3 px-4 py-3 transition-colors hover:bg-accent/40"
-                            >
-                              <span
-                                aria-hidden
-                                className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-theme-primary-soft text-sm font-semibold uppercase text-foreground"
-                              >
-                                {p.name.slice(0, 1)}
-                              </span>
-                              <div className="min-w-0 flex-1">
-                                <TruncatedText
-                                  as="div"
-                                  text={p.name}
-                                  className="text-sm font-medium text-foreground"
-                                />
-                                <div className="truncate text-xs text-muted-foreground">
-                                  {t(SUBJECT_LABEL_KEYS[p.subject])} ·{' '}
-                                  {t('dashboard.updatedAt', { date: relativeTime(p.updatedAt) })}
-                                </div>
-                              </div>
-                              <Badge variant="outline" className="hidden shrink-0 sm:inline-flex">
-                                {t(SUBJECT_LABEL_KEYS[p.subject])}
-                              </Badge>
-                              <ArrowRight
-                                aria-hidden
-                                className="h-4 w-4 shrink-0 text-muted-foreground motion-safe:transition-transform motion-safe:group-hover:translate-x-0.5"
-                              />
-                            </Link>
-                          </li>
-                        ))}
-                      </ul>
-                    </Card>
-                  </>
-                ) : !featured ? (
-                  <>
-                    <SectionHeading
-                      title={t('dashboard.recentProjects')}
-                      description={t('dashboard.recentProjectsHint')}
-                    />
-                    <EmptyState
-                      icon={<FolderKanban className="h-8 w-8" />}
-                      title={t('dashboard.noProjects')}
-                      description={t('dashboard.noProjectsHint')}
-                      action={
-                        <Button asChild>
-                          <Link to="/projects">
-                            {t('dashboard.createFirstProject')}
-                            <ArrowRight className="h-4 w-4" />
-                          </Link>
-                        </Button>
-                      }
-                    />
-                  </>
-                ) : null}
-              </div>
-
+            <div className="grid gap-6 lg:grid-cols-2">
               <Card variant="accent">
                 <CardHeader>
                   <CardTitle>{t('dashboard.whatsNext')}</CardTitle>
@@ -215,17 +220,8 @@ export function DashboardPage(): JSX.Element {
                   </Button>
                 </CardContent>
               </Card>
-            </section>
-
-            <section>
               <ThemePicker />
-            </section>
-
-            {featured && (
-              <section>
-                <WeaknessPanel projectId={featured.id} compact />
-              </section>
-            )}
+            </div>
 
             <Card>
               <CardHeader>
@@ -251,7 +247,7 @@ function FeaturedProject({ project }: { project: Project }): JSX.Element {
         <div className="flex min-w-0 items-center gap-4">
           <span
             aria-hidden
-            className="plate-grid grid h-12 w-12 shrink-0 place-items-center rounded-xl border border-border/70 bg-background font-mono text-lg font-semibold text-primary"
+            className="plate-grid grid h-14 w-14 shrink-0 place-items-center rounded-xl border border-border/70 bg-background font-mono text-xl font-semibold text-primary"
           >
             {project.name.slice(0, 1)}
           </span>
@@ -280,29 +276,33 @@ function FeaturedProject({ project }: { project: Project }): JSX.Element {
   )
 }
 
-function StatCell({
-  icon,
-  label,
-  value,
-  hint,
-}: {
-  icon: React.ReactNode
-  label: string
-  value: string
-  hint?: string
-}) {
+function ProjectRow({ project }: { project: Project }): JSX.Element {
+  const { t } = useTranslation()
   return (
-    <div className="blueprint-frame rounded-2xl border border-border/70 bg-card p-4 shadow-soft">
-      <div className="flex items-center justify-between gap-2">
-        <dt className="label-mono">{label}</dt>
-        <span aria-hidden className="text-muted-foreground [&_svg]:h-4 [&_svg]:w-4">
-          {icon}
-        </span>
+    <Link
+      to={`/projects/${project.id}`}
+      className="focus-ring group flex min-w-0 items-center gap-3 px-4 py-3 transition-colors hover:bg-accent/40"
+    >
+      <span
+        aria-hidden
+        className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-theme-primary-soft text-sm font-semibold uppercase text-foreground"
+      >
+        {project.name.slice(0, 1)}
+      </span>
+      <div className="min-w-0 flex-1">
+        <TruncatedText as="div" text={project.name} className="text-sm font-medium text-foreground" />
+        <div className="truncate text-xs text-muted-foreground">
+          {t(SUBJECT_LABEL_KEYS[project.subject])} ·{' '}
+          {t('dashboard.updatedAt', { date: relativeTime(project.updatedAt) })}
+        </div>
       </div>
-      <dd className="data-num mt-2 truncate text-2xl font-semibold leading-none text-foreground">
-        {value}
-      </dd>
-      {hint && <p className="mt-1.5 truncate text-xs text-muted-foreground">{hint}</p>}
-    </div>
+      <Badge variant="outline" className="hidden shrink-0 sm:inline-flex">
+        {t(SUBJECT_LABEL_KEYS[project.subject])}
+      </Badge>
+      <ArrowRight
+        aria-hidden
+        className="h-4 w-4 shrink-0 text-muted-foreground motion-safe:transition-transform motion-safe:group-hover:translate-x-0.5"
+      />
+    </Link>
   )
 }

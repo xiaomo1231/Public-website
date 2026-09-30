@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import type { Document } from '@/entities/document/types'
-import { DocumentService } from '@/services/documentService'
+import { DocumentService, type DocumentDeleteImpact } from '@/services/documentService'
 import { ProjectService } from '@/services/projectService'
 import { DocumentRepository } from '@/entities/document/repository'
 import { getDb } from '@/infrastructure/db/database'
@@ -33,6 +33,8 @@ interface DocumentsActions {
   refresh: (projectId: string) => Promise<void>
   remove: (id: string, projectId: string) => Promise<void>
   rename: (id: string, projectId: string, name: string) => Promise<void>
+  /** What deleting a file would remove / invalidate (shown before confirming). */
+  describeDelete: (id: string, projectId: string) => Promise<DocumentDeleteImpact>
   reset: () => void
 }
 
@@ -182,7 +184,7 @@ export const useDocumentsStore = create<DocumentsStore>((set, get) => ({
   },
 
   async remove(id, projectId) {
-    await getService().delete(id)
+    await getService().delete(id, projectId)
     set((s) => {
       const byId = { ...s.byId }
       delete byId[id]
@@ -200,6 +202,10 @@ export const useDocumentsStore = create<DocumentsStore>((set, get) => ({
         singleError,
       }
     })
+  },
+
+  async describeDelete(id, projectId) {
+    return getService().getDeleteImpact(id, projectId)
   },
 
   async rename(id, projectId, name) {

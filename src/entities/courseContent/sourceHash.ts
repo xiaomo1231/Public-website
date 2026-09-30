@@ -18,7 +18,11 @@ import { fnv1a } from '@/shared/lib/hash'
  * This mirrors the selection the analyzer performs, and must keep doing so.
  */
 export function selectAnalysisDocuments(documents: Document[]): Document[] {
-  const ready = documents.filter((doc) => doc.status === 'ready')
+  // A professor answer key is reference material, not course knowledge. It must
+  // never be fingerprinted or analysed as if it were a textbook / notes.
+  const ready = documents.filter(
+    (doc) => doc.status === 'ready' && resolveMaterialType(doc.materialType) !== 'homework_answer',
+  )
   const textbooks = ready.filter((doc) => resolveMaterialType(doc.materialType) === 'textbook')
   return textbooks.length > 0 ? textbooks : ready
 }

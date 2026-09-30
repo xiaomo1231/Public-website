@@ -46,6 +46,18 @@ describe('QuestionSource', () => {
     expect(screen.getByText('No matching course excerpt was found.')).toBeInTheDocument()
   })
 
+  it('asks the student to verify the passage when the exact excerpt is pending', () => {
+    renderSource([
+      source({ quote: undefined, quotePending: true, page: 5 }),
+    ])
+    expect(
+      screen.getByText(/exact passage for this question has not been located/i),
+    ).toBeInTheDocument()
+    // The page/location is still shown so the source can be opened.
+    expect(screen.getByText('Page 5 · Derivatives')).toBeInTheDocument()
+    expect(screen.queryByText(/No matching course excerpt/)).not.toBeInTheDocument()
+  })
+
   it('lists multiple sources separately', () => {
     renderSource([
       source({ chunkId: 'a', documentName: 'Lecture 03.pdf', page: 12 }),

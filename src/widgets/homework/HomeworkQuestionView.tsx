@@ -1,6 +1,21 @@
 import { useEffect, useRef, useState } from 'react'
-import { Eye, EyeOff, Lightbulb, Loader2, MessageCircle, RotateCcw, Send, Sparkles } from 'lucide-react'
+import { Link } from 'react-router-dom'
+import {
+  ArrowUp,
+  ClipboardCheck,
+  ExternalLink,
+  Eye,
+  EyeOff,
+  Lightbulb,
+  Loader2,
+  MessageCircle,
+  RotateCcw,
+  Send,
+  Sparkles,
+} from 'lucide-react'
 import type { HomeworkMessage, HomeworkQuestion } from '@/entities/homework/types'
+import type { SourceReference } from '@/entities/courseAnalysis/types'
+import { formatHomeworkQuestion } from '@/entities/homework/formatQuestion'
 import type { HomeworkService } from '@/services/homeworkService'
 import { Badge } from '@/shared/ui/Badge'
 import { Button } from '@/shared/ui/Button'
@@ -15,6 +30,10 @@ import { useTranslation } from '@/i18n'
 export interface HomeworkQuestionViewProps {
   question: HomeworkQuestion
   service: HomeworkService
+  /** `review` shows the professor answer; `practice` (default) hides it. */
+  mode?: 'practice' | 'review'
+  /** The linked answer document, for the "open original file" link. */
+  answerDocumentId?: string
 }
 
 /**
@@ -23,7 +42,12 @@ export interface HomeworkQuestionViewProps {
  * help conversation. The question is rendered by the parent with a `key`, so
  * switching questions remounts this component and its local state resets.
  */
-export function HomeworkQuestionView({ question, service }: HomeworkQuestionViewProps): JSX.Element {
+export function HomeworkQuestionView({
+  question,
+  service,
+  mode = 'practice',
+  answerDocumentId,
+}: HomeworkQuestionViewProps): JSX.Element {
   const { t } = useTranslation()
 
   const [draft, setDraft] = useState(question.draftText)
@@ -41,8 +65,36 @@ export function HomeworkQuestionView({ question, service }: HomeworkQuestionView
   const [busy, setBusy] = useState(false)
   const [actionError, setActionError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
+  const [sourcePages, setSourcePages] = useState<Array<{ page: number; url: string }>>([])
+  const [displaySourceRefs, setDisplaySourceRefs] = useState<SourceReference[]>(question.sourceRefs)
 
   const saveTimer = useRef<number | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    let urls: string[] = []
+    void service.loadQuestionSourcePages(question).then((pages) => {
+      if (cancelled) return
+      urls = pages.map(({ image }) => URL.createObjectURL(image))
+      setSourcePages(pages.map(({ page }, index) => ({ page, url: urls[index]! })))
+    }).catch(() => {
+      // Original PDF remains available through the source link.
+    })
+    return () => {
+      cancelled = true
+      urls.forEach((url) => URL.revokeObjectURL(url))
+    }
+  }, [question, service])
+
+  useEffect(() => {
+    let cancelled = false
+    void service.resolveQuestionSources(question).then((refs) => {
+      if (!cancelled) setDisplaySourceRefs(refs)
+    }).catch(() => {
+      // Keep the saved citation and original-document link available.
+    })
+    return () => { cancelled = true }
+  }, [question, service])
 
   // Debounced draft persistence; also flush when the question unmounts.
   useEffect(() => {
@@ -90,7 +142,13 @@ export function HomeworkQuestionView({ question, service }: HomeworkQuestionView
     setNotice(null)
     const previousHints = hints.length
     try {
-      const next = await service.generateContent(question.id)
+      // A question confirmed against the professor answer regenerates FROM that
+      // answer; every other question uses the ordinary walkthrough.
+      const useProfessorAnswer =
+        question.answerStatus === 'matched' && Boolean((question.answerText ?? '').trim())
+      const next = useProfessorAnswer
+        ? await service.generateAnswerForQuestion(question.id)
+        : await service.generateContent(question.id)
       if (next) {
         setHints(next.hints)
         setSolution(next.solution)
@@ -137,10 +195,18 @@ export function HomeworkQuestionView({ question, service }: HomeworkQuestionView
 
   const hasMoreHints = revealed < hints.length
   const preparing = status === 'pending' && hints.length === 0 && !solution
+  const questionAnchorId = `homework-question-${question.id}`
 
   return (
-    <div className="space-y-4">
-      <Card>
+    /*
+     * Wide screens: the question stays in the left column (sticky, no inner
+     * scroll so the page never gets a second scrollbar) while the working area
+     * — draft, hints, answer, conversation — lives in the right column. Narrow
+     * screens fall back to one column with the question first.
+     */
+    <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+      <div id={questionAnchorId} className="min-w-0 scroll-mt-4 space-y-4 lg:sticky lg:top-4">
+        <Card data-selection-context="homework" data-selection-title={question.number ?? question.documentName}>
         <CardHeader className="space-y-2">
           <div className="flex flex-wrap items-center gap-2">
             <Sparkles className="h-4 w-4 text-muted-foreground" aria-hidden />
@@ -148,15 +214,81 @@ export function HomeworkQuestionView({ question, service }: HomeworkQuestionView
             {question.number && <Badge variant="outline">{question.number}</Badge>}
           </div>
           <RichText
-            text={question.prompt}
+            text={formatHomeworkQuestion(question.prompt)}
             format="markdown"
-            paragraphClassName="text-[16px] leading-[1.7]"
+            className="max-w-[74ch] [&>p]:mb-3"
+            paragraphClassName="text-[16px] leading-[1.75] sm:text-[17px]"
           />
         </CardHeader>
         <CardContent className="space-y-3">
-          <QuestionSource sourceRefs={question.sourceRefs} projectId={question.projectId} />
+          <QuestionSource sourceRefs={displaySourceRefs} projectId={question.projectId} />
+          {sourcePages.length > 0 && (
+            <details open={displaySourceRefs.some((ref) => ref.quotePending) || /\b(?:figure|diagram|shown|below|network)\b|图|如下图|如图/i.test(question.prompt)}>
+              <summary className="cursor-pointer rounded-md px-1 py-2 text-sm font-medium text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                {t('homework.originalPages')}
+              </summary>
+              <div className="grid gap-4 pt-2 lg:grid-cols-2">
+                {sourcePages.map(({ page, url }) => (
+                  <figure key={page} className="min-w-0 space-y-2">
+                    <figcaption className="text-xs text-muted-foreground">{t('homework.originalPage', { page })}</figcaption>
+                    <a href={url} target="_blank" rel="noreferrer" aria-label={t('homework.openOriginalPage', { page })}>
+                      <img src={url} alt={t('homework.originalPage', { page })} loading="lazy" className="h-auto w-full rounded-lg border border-border object-contain" />
+                    </a>
+                  </figure>
+                ))}
+              </div>
+            </details>
+          )}
         </CardContent>
-      </Card>
+        </Card>
+      </div>
+
+      <div className="min-w-0 space-y-4">
+        {/* Narrow screens only: a small, always-reachable way back to the
+            question while the student is reading or typing below it. */}
+        <div className="sticky top-2 z-10 flex justify-end lg:hidden">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="bg-background/90 backdrop-blur"
+            onClick={() =>
+              document.getElementById(questionAnchorId)?.scrollIntoView({ block: 'start' })
+            }
+          >
+            <ArrowUp className="h-4 w-4" />
+            {t('homework.viewQuestion')}
+          </Button>
+        </div>
+
+        {/* Review only: the professor's own answer, kept verbatim and clearly
+            separated from the AI explanation. Hidden while practising. */}
+        {mode === 'review' && question.answerText && question.answerStatus === 'matched' && (
+          <Card className="border-theme-primary/40 bg-theme-primary-soft/30">
+            <CardHeader className="space-y-1">
+              <CardTitle className="flex items-center gap-2 text-base">
+                <ClipboardCheck className="h-4 w-4" aria-hidden />
+                {t('homework.answer.professorOriginal')}
+              </CardTitle>
+              <p className="text-xs text-muted-foreground">{t('homework.answer.verifyNote')}</p>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <RichText
+                text={question.answerText}
+                format="markdown"
+                paragraphClassName="text-[15px] leading-relaxed"
+              />
+              {answerDocumentId && (
+                <Button variant="outline" size="sm" asChild>
+                  <Link to={`/projects/${question.projectId}/documents/${answerDocumentId}`}>
+                    <ExternalLink className="h-4 w-4" />
+                    {t('homework.answer.openFile')}
+                  </Link>
+                </Button>
+              )}
+            </CardContent>
+          </Card>
+        )}
 
       <Card>
         <CardHeader>
@@ -244,12 +376,26 @@ export function HomeworkQuestionView({ question, service }: HomeworkQuestionView
               <Lightbulb className="h-4 w-4 text-muted-foreground" aria-hidden />
               {t('homework.hintOf', { current: revealed, total: hints.length })}
             </CardTitle>
+            {answerDocumentId && (
+              <p className="text-xs text-muted-foreground">
+                {question.answerBased
+                  ? t('homework.answer.aiExplanation')
+                  : t('homework.answer.aiExplanationNotBased')}
+              </p>
+            )}
           </CardHeader>
           <CardContent className="space-y-2">
+            {/* Hints are AI-authored prose that can contain inline/display
+                LaTeX, so they render through the shared RichText renderer
+                instead of showing raw `$…$` delimiters. */}
             {hints.slice(0, revealed).map((hint, index) => (
-              <p key={index} className="rounded-lg bg-muted/40 p-3 text-sm leading-relaxed text-foreground">
-                {hint}
-              </p>
+              <div key={index} className="rounded-lg bg-muted/40 p-3">
+                <RichText
+                  text={hint}
+                  format="markdown"
+                  paragraphClassName="text-sm leading-relaxed text-foreground"
+                />
+              </div>
             ))}
             {revealed === 0 && <p className="text-xs text-muted-foreground">{t('homework.hint')}</p>}
             {!hasMoreHints && <p className="text-xs text-muted-foreground">{t('homework.noMoreHints')}</p>}
@@ -265,12 +411,33 @@ export function HomeworkQuestionView({ question, service }: HomeworkQuestionView
               {t('homework.solutionTitle')}
             </CardTitle>
             <p className="text-xs text-muted-foreground">{t('homework.aiGenerated')}</p>
+            {answerDocumentId && (
+              <p className="text-xs text-muted-foreground">
+                {question.answerBased
+                  ? t('homework.answer.aiExplanation')
+                  : t('homework.answer.aiExplanationNotBased')}
+              </p>
+            )}
           </CardHeader>
-          <CardContent>
+          <CardContent className="space-y-3">
             {solution ? (
               <RichText text={solution} format="markdown" paragraphClassName="text-[16px] leading-[1.7]" />
             ) : (
               <p className="text-sm text-muted-foreground">{t('homework.noAnswer')}</p>
+            )}
+            {question.previousSolution && (
+              <details className="rounded-lg border border-border/60 bg-muted/20 p-3">
+                <summary className="cursor-pointer text-xs font-medium text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                  {t('homework.answer.previousSolution')}
+                </summary>
+                <div className="pt-2">
+                  <RichText
+                    text={question.previousSolution}
+                    format="markdown"
+                    paragraphClassName="text-[14px] leading-relaxed text-muted-foreground"
+                  />
+                </div>
+              </details>
             )}
           </CardContent>
         </Card>
@@ -301,7 +468,18 @@ export function HomeworkQuestionView({ question, service }: HomeworkQuestionView
                     <span className="sr-only">
                       {message.role === 'student' ? t('homework.you') : t('homework.tutor')}:{' '}
                     </span>
-                    {message.content}
+                    {/* The tutor's replies may contain LaTeX, so they render
+                        through RichText. The student's own words are shown
+                        exactly as typed and are never rewritten. */}
+                    {message.role === 'assistant' ? (
+                      <RichText
+                        text={message.content}
+                        format="markdown"
+                        paragraphClassName="text-sm leading-relaxed"
+                      />
+                    ) : (
+                      message.content
+                    )}
                   </li>
                 ))}
               </ul>
@@ -328,6 +506,7 @@ export function HomeworkQuestionView({ question, service }: HomeworkQuestionView
           </CardContent>
         </Card>
       )}
+      </div>
     </div>
   )
 }

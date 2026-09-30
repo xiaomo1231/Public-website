@@ -5,6 +5,7 @@ import {
   BookX,
   Brain,
   Calendar,
+  ClipboardList,
   FileText,
   History,
   Layers,
@@ -125,6 +126,12 @@ export function ProjectDetailPage(): JSX.Element {
                   {t('projectDetail.openTutor')}
                 </Link>
               </Button>
+              <Button variant="outline" asChild>
+                <Link to={`/projects/${project.id}/history`}>
+                  <History className="h-4 w-4" />
+                  {t('projectDetail.card.chatHistory')}
+                </Link>
+              </Button>
               <Button variant="outline" onClick={() => setRenameOpen(true)}>
                 <Pencil className="h-4 w-4" />
                 {t('common.rename')}
@@ -134,6 +141,7 @@ export function ProjectDetailPage(): JSX.Element {
         </div>
       </header>
       <PageContent>
+        <CoursePath projectId={project.id} />
         <Tabs defaultValue="documents">
           <TabsList>
             <TabsTrigger value="documents">{t('projectDetail.tab.documents')}</TabsTrigger>
@@ -161,46 +169,6 @@ export function ProjectDetailPage(): JSX.Element {
               title={t('projectDetail.analysis.title')}
               description={t('projectDetail.analysis.description')}
             />
-            <div className="rounded-xl border border-border/70 bg-card p-3 shadow-soft sm:p-4">
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <p className="flex items-center gap-2 text-sm font-medium text-foreground">
-                  <Sparkles className="h-4 w-4 text-muted-foreground" aria-hidden />
-                  {t('projectDetail.quickActions')}
-                </p>
-                <div className="flex flex-wrap items-center gap-2">
-                  <Button asChild>
-                    <Link to={`/projects/${project.id}/tutor`}>
-                      <Sparkles className="h-4 w-4" />
-                      {t('projectDetail.openTutor')}
-                    </Link>
-                  </Button>
-                  <Button variant="outline" asChild>
-                    <Link to={`/projects/${project.id}/quiz`}>
-                      <ListChecks className="h-4 w-4" />
-                      {t('projectDetail.card.quiz')}
-                    </Link>
-                  </Button>
-                  <Button variant="outline" asChild>
-                    <Link to={`/projects/${project.id}/mistakes`}>
-                      <BookX className="h-4 w-4" />
-                      {t('projectDetail.card.mistakes')}
-                    </Link>
-                  </Button>
-                  <Button variant="outline" asChild>
-                    <Link to={`/projects/${project.id}/mastery`}>
-                      <Brain className="h-4 w-4" />
-                      {t('projectDetail.card.mastery')}
-                    </Link>
-                  </Button>
-                  <Button variant="outline" asChild>
-                    <Link to={`/projects/${project.id}/history`}>
-                      <History className="h-4 w-4" />
-                      {t('projectDetail.card.chatHistory')}
-                    </Link>
-                  </Button>
-                </div>
-              </div>
-            </div>
             <CourseAnalysisPanel
               projectId={project.id}
               subject={t(SUBJECT_LABEL_KEYS[project.subject])}
@@ -320,6 +288,48 @@ export function ProjectDetailPage(): JSX.Element {
         onRename={handleRename}
       />
     </PageContainer>
+  )
+}
+
+/**
+ * The course's learning path, stated once on the course home: read, then move
+ * into the tutor, quiz, mistake book and mastery. Reuses the same destination
+ * names as the course navigation so the wording stays consistent everywhere.
+ */
+function CoursePath({ projectId }: { projectId: string }): JSX.Element {
+  const { t } = useTranslation()
+  const steps = [
+    { key: 'tutor', labelKey: 'projectNav.tutor' as const, icon: Sparkles, to: `/projects/${projectId}/tutor` },
+    { key: 'homework', labelKey: 'projectNav.homework' as const, icon: ClipboardList, to: `/projects/${projectId}/homework` },
+    { key: 'quiz', labelKey: 'projectNav.quiz' as const, icon: ListChecks, to: `/projects/${projectId}/quiz` },
+    { key: 'mistakes', labelKey: 'projectNav.mistakes' as const, icon: BookX, to: `/projects/${projectId}/mistakes` },
+    { key: 'mastery', labelKey: 'projectNav.mastery' as const, icon: Brain, to: `/projects/${projectId}/mastery` },
+  ]
+
+  return (
+    <div className="blueprint-frame mb-5 rounded-2xl border border-border/70 bg-card p-4 shadow-soft">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0">
+          <p className="label-mono">{t('projectDetail.path.title')}</p>
+          <p className="mt-1 text-sm text-muted-foreground">{t('projectDetail.path.hint')}</p>
+        </div>
+        <ol className="flex shrink-0 flex-wrap items-center gap-1.5">
+          {steps.map((step, index) => {
+            const Icon = step.icon
+            return (
+              <li key={step.key}>
+                <Button asChild variant={index === 0 ? 'default' : 'outline'} size="sm">
+                  <Link to={step.to}>
+                    <Icon className="h-4 w-4" />
+                    {t(step.labelKey)}
+                  </Link>
+                </Button>
+              </li>
+            )
+          })}
+        </ol>
+      </div>
+    </div>
   )
 }
 

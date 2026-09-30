@@ -1,9 +1,9 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { FolderKanban, MoreHorizontal, Pencil, Plus, Trash2 } from 'lucide-react'
+import { ArrowRight, FolderKanban, MoreHorizontal, Pencil, Plus, Trash2 } from 'lucide-react'
 import { toast } from '@/features/toast/toastStore'
 import { useProjects } from '@/features/project/useProjects'
-import { SUBJECT_LABEL_KEYS, type Subject } from '@/entities/project/types'
+import { SUBJECT_LABEL_KEYS, type Project, type Subject } from '@/entities/project/types'
 import {
   Dialog,
   DialogContent,
@@ -46,6 +46,12 @@ export function ProjectsPage(): JSX.Element {
   const [description, setDescription] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [deleteCandidate, setDeleteCandidate] = useState<{ id: string; name: string } | null>(null)
+
+  // Hierarchy over uniformity: the most recently studied course is the page's
+  // primary entrance; the rest are a quieter, denser grid beneath it.
+  const sorted = [...projects].sort((a, b) => b.updatedAt - a.updatedAt)
+  const primary = sorted[0]
+  const rest = sorted.slice(1)
 
   function openCreate() {
     setDialog({ mode: 'create' })
@@ -124,74 +130,26 @@ export function ProjectsPage(): JSX.Element {
             }
           />
         ) : (
-          <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
-            {projects.map((p) => (
-              <Card key={p.id} variant="interactive" className="overflow-hidden">
-                <div aria-hidden className="subject-plate relative h-24 bg-theme-primary-soft/40">
-                  <div className="plate-grid absolute inset-0" />
-                  <span className="absolute left-4 top-3.5 font-mono text-2xl font-semibold text-primary">
-                    {p.name.slice(0, 1)}
-                  </span>
-                  <FolderKanban
-                    className="absolute bottom-3 right-4 h-8 w-8 text-primary opacity-60"
-                    strokeWidth={1.4}
+          <div className="space-y-6">
+            {primary && (
+              <ProjectSpotlight
+                project={primary}
+                onRename={() => openRename(primary.id, primary.name)}
+                onDelete={() => setDeleteCandidate({ id: primary.id, name: primary.name })}
+              />
+            )}
+            {rest.length > 0 && (
+              <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
+                {rest.map((p) => (
+                  <ProjectCard
+                    key={p.id}
+                    project={p}
+                    onRename={() => openRename(p.id, p.name)}
+                    onDelete={() => setDeleteCandidate({ id: p.id, name: p.name })}
                   />
-                </div>
-                <CardHeader className="flex flex-row items-start justify-between gap-2 space-y-0">
-                  <div className="min-w-0">
-                    <TruncatedText
-                      as="h3"
-                      text={p.name}
-                      className="text-base font-semibold leading-none tracking-tight"
-                    />
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      {t('projects.createdAt', { date: relativeTime(p.createdAt) })}
-                    </p>
-                  </div>
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button variant="ghost" size="icon" aria-label={t('projects.actions')}>
-                        <MoreHorizontal className="h-4 w-4" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      <DropdownMenuItem asChild>
-                        <Link to={`/projects/${p.id}`}>
-                          <FolderKanban className="h-4 w-4" />
-                          {t('projects.open')}
-                        </Link>
-                      </DropdownMenuItem>
-                      <DropdownMenuItem onSelect={() => openRename(p.id, p.name)}>
-                        <Pencil className="h-4 w-4" />
-                        {t('projects.rename')}
-                      </DropdownMenuItem>
-                      <DropdownMenuSeparator />
-                      <DropdownMenuItem
-                        onSelect={() => setDeleteCandidate({ id: p.id, name: p.name })}
-                        className="text-destructive focus:text-destructive"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                        {t('projects.delete')}
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  <div className="flex items-center gap-2">
-                    <Badge variant="outline">{t(SUBJECT_LABEL_KEYS[p.subject])}</Badge>
-                    <span className="text-xs text-muted-foreground">
-                      {t('projects.updatedAt', { date: relativeTime(p.updatedAt) })}
-                    </span>
-                  </div>
-                  {p.description && (
-                    <p className="line-clamp-2 text-sm text-muted-foreground">{p.description}</p>
-                  )}
-                  <Button asChild variant="outline" className="w-full">
-                    <Link to={`/projects/${p.id}`}>{t('projects.openProject')}</Link>
-                  </Button>
-                </CardContent>
-              </Card>
-            ))}
+                ))}
+              </div>
+            )}
           </div>
         )}
       </PageContent>
@@ -298,5 +256,157 @@ export function ProjectsPage(): JSX.Element {
         </DialogContent>
       </Dialog>
     </PageContainer>
+  )
+}
+
+function ProjectActionsMenu({
+  project,
+  onRename,
+  onDelete,
+}: {
+  project: Project
+  onRename: () => void
+  onDelete: () => void
+}): JSX.Element {
+  const { t } = useTranslation()
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button variant="ghost" size="icon" aria-label={t('projects.actions')}>
+          <MoreHorizontal className="h-4 w-4" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end">
+        <DropdownMenuItem asChild>
+          <Link to={`/projects/${project.id}`}>
+            <FolderKanban className="h-4 w-4" />
+            {t('projects.open')}
+          </Link>
+        </DropdownMenuItem>
+        <DropdownMenuItem onSelect={onRename}>
+          <Pencil className="h-4 w-4" />
+          {t('projects.rename')}
+        </DropdownMenuItem>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem onSelect={onDelete} className="text-destructive focus:text-destructive">
+          <Trash2 className="h-4 w-4" />
+          {t('projects.delete')}
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  )
+}
+
+/** The primary entrance: the most recently studied course. */
+function ProjectSpotlight({
+  project,
+  onRename,
+  onDelete,
+}: {
+  project: Project
+  onRename: () => void
+  onDelete: () => void
+}): JSX.Element {
+  const { t } = useTranslation()
+  return (
+    <div className="blueprint-frame relative overflow-hidden rounded-[1.5rem] border border-border/60 bg-card shadow-lift">
+      <div className="flex flex-col gap-5 p-5 sm:flex-row sm:items-center sm:justify-between sm:p-6">
+        <div className="flex min-w-0 items-center gap-4">
+          <span
+            aria-hidden
+            className="plate-grid grid h-14 w-14 shrink-0 place-items-center rounded-xl border border-border/70 bg-background font-mono text-xl font-semibold text-primary"
+          >
+            {project.name.slice(0, 1)}
+          </span>
+          <div className="min-w-0 space-y-1">
+            <div className="flex items-center gap-2">
+              <TruncatedText
+                as="h3"
+                text={project.name}
+                className="text-lg font-semibold tracking-tight text-foreground"
+              />
+              <Badge variant="outline" className="hidden shrink-0 sm:inline-flex">
+                {t(SUBJECT_LABEL_KEYS[project.subject])}
+              </Badge>
+            </div>
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
+              <span className="label-mono">
+                {t('projects.updatedAt', { date: relativeTime(project.updatedAt) })}
+              </span>
+              <span aria-hidden>·</span>
+              <span>{t('projects.createdAt', { date: relativeTime(project.createdAt) })}</span>
+            </div>
+            {project.description && (
+              <p className="line-clamp-2 max-w-xl text-sm text-muted-foreground">
+                {project.description}
+              </p>
+            )}
+          </div>
+        </div>
+        <div className="flex shrink-0 items-center gap-2">
+          <Button asChild>
+            <Link to={`/projects/${project.id}`}>
+              {t('projects.openProject')}
+              <ArrowRight className="h-4 w-4" />
+            </Link>
+          </Button>
+          <ProjectActionsMenu project={project} onRename={onRename} onDelete={onDelete} />
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/** A quieter entry in the grid beneath the spotlight. */
+function ProjectCard({
+  project,
+  onRename,
+  onDelete,
+}: {
+  project: Project
+  onRename: () => void
+  onDelete: () => void
+}): JSX.Element {
+  const { t } = useTranslation()
+  return (
+    <Card variant="interactive" className="overflow-hidden">
+      <div aria-hidden className="subject-plate relative h-20 bg-theme-primary-soft/40">
+        <div className="plate-grid absolute inset-0" />
+        <span className="absolute left-4 top-3 font-mono text-xl font-semibold text-primary">
+          {project.name.slice(0, 1)}
+        </span>
+        <FolderKanban
+          className="absolute bottom-2.5 right-4 h-7 w-7 text-primary opacity-60"
+          strokeWidth={1.4}
+        />
+      </div>
+      <CardHeader className="flex flex-row items-start justify-between gap-2 space-y-0">
+        <div className="min-w-0">
+          <TruncatedText
+            as="h3"
+            text={project.name}
+            className="text-base font-semibold leading-none tracking-tight"
+          />
+          <p className="mt-1 text-xs text-muted-foreground">
+            {t('projects.createdAt', { date: relativeTime(project.createdAt) })}
+          </p>
+        </div>
+        <ProjectActionsMenu project={project} onRename={onRename} onDelete={onDelete} />
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <div className="flex items-center gap-2">
+          <Badge variant="outline">{t(SUBJECT_LABEL_KEYS[project.subject])}</Badge>
+          <span className="text-xs text-muted-foreground">
+            {t('projects.updatedAt', { date: relativeTime(project.updatedAt) })}
+          </span>
+        </div>
+        {project.description && (
+          <p className="line-clamp-2 text-sm text-muted-foreground">{project.description}</p>
+        )}
+        <Button asChild variant="outline" className="w-full">
+          <Link to={`/projects/${project.id}`}>{t('projects.openProject')}</Link>
+        </Button>
+      </CardContent>
+    </Card>
   )
 }

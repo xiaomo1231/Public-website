@@ -39,6 +39,12 @@ export interface UploadQueueItem {
   progress?: number
   error?: string
   documentId?: string
+  /**
+   * When `issue === 'duplicate'`, the document already in this project that
+   * matched. Lets the prompt point the user at the existing file instead of
+   * only saying "already uploaded".
+   */
+  duplicateOf?: { documentId: string; name: string }
 }
 
 /** Local-first: PDF/OCR extraction is CPU heavy and IndexedDB is shared. */
@@ -51,6 +57,8 @@ export interface FileIdentity {
   name: string
   size: number
   modified?: number
+  /** Present when the identity came from a stored document. */
+  id?: string
 }
 
 export function identityOfFile(file: File): FileIdentity {
@@ -58,11 +66,13 @@ export function identityOfFile(file: File): FileIdentity {
 }
 
 export function identityOfDocument(doc: {
+  id: string
   name: string
   sizeBytes: number
   sourceModifiedAt?: number
 }): FileIdentity {
   return {
+    id: doc.id,
     name: doc.name,
     size: doc.sizeBytes,
     ...(doc.sourceModifiedAt !== undefined ? { modified: doc.sourceModifiedAt } : {}),
@@ -109,8 +119,16 @@ export function createFileQueueItems(
       return { ...base, status: 'skipped' as const, issue: classification.reason }
     }
     const identity = identityOfFile(file)
-    if (known.some((k) => isSameFile(k, identity))) {
-      return { ...base, status: 'skipped' as const, issue: 'duplicate' as const }
+    const match = known.find((k) => isSameFile(k, identity))
+    if (match) {
+      return {
+        ...base,
+        status: 'skipped' as const,
+        issue: 'duplicate' as const,
+        // Only a *stored* document (with an id) can be linked to. A duplicate
+        // of an earlier file in the same selection has nothing to point at yet.
+        ...(match.id ? { duplicateOf: { documentId: match.id, name: match.name } } : {}),
+      }
     }
     known.push(identity)
     return base

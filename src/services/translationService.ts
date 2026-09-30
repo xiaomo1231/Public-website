@@ -42,11 +42,28 @@ export class TranslationService {
         }),
       },
     ]
-    const { data, raw } = await this.ai.chatJSON<unknown>(messages, {
+    let { data, raw } = await this.ai.chatJSON<unknown>(messages, {
       ...(input.signal ? { signal: input.signal } : {}),
     })
     // Validate + sanitise before persisting.
-    const output = normalizeTranslation(data)
+    let output = normalizeTranslation(data)
+    if (isIncompleteTranslation(input.selectedText, output.translation)) {
+      const retry = await this.ai.chatJSON<unknown>([
+        { role: 'system', content: prompts.translator.buildSystemPrompt() },
+        { role: 'user', content: `${messages[1]!.content}\nThe previous response omitted most of the selected text. Translate every sentence in full.` },
+      ], { ...(input.signal ? { signal: input.signal } : {}) })
+      data = retry.data
+      raw = retry.raw
+      output = normalizeTranslation(data)
+      if (isIncompleteTranslation(input.selectedText, output.translation)) {
+        throw new AppError(t('translate.incomplete'), 'MALFORMED_TRANSLATION')
+      }
+    }
+    // Notes about terminology are useful for a single term; for a sentence or
+    // passage they make the result look like a lesson instead of a translation.
+    if (input.selectedText.trim().length > 40) {
+      output = { ...output, contextNote: '', alternatives: [] }
+    }
     logger.debug('Translation completed', { tokens: raw.usage?.totalTokens })
     const entry: TranslationEntry = {
       id: crypto.randomUUID(),
@@ -70,6 +87,12 @@ export class TranslationService {
   listByProject(projectId: string, limit?: number) {
     return this.repo.listByProject(projectId, limit)
   }
+}
+
+export function isIncompleteTranslation(source: string, translation: string): boolean {
+  const original = source.trim()
+  const result = translation.trim()
+  return original.length >= 70 && result.length < Math.max(12, original.length * 0.18)
 }
 
 /**

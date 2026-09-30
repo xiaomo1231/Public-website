@@ -5,8 +5,10 @@ import { InvitePage } from '@/pages/InvitePage'
 import { DashboardPage } from '@/pages/DashboardPage'
 import { ProjectsPage } from '@/pages/ProjectsPage'
 import { ProjectDetailPage } from '@/pages/ProjectDetailPage'
+import { ProjectFilesPage } from '@/pages/ProjectFilesPage'
 import { DocumentDetailPage } from '@/pages/DocumentDetailPage'
 import { TutorPage } from '@/pages/TutorPage'
+import { SlideStudyPage } from '@/pages/SlideStudyPage'
 import { InteractiveTutorPage } from '@/pages/InteractiveTutorPage'
 import { ChatHistoryPage } from '@/pages/ChatHistoryPage'
 import { QuizLandingPage } from '@/pages/QuizLandingPage'
@@ -35,9 +37,13 @@ export const routes: RouteObject[] = [
       { path: 'dashboard', element: <DashboardPage /> },
       { path: 'projects', element: <ProjectsPage /> },
       { path: 'projects/:id', element: <ProjectDetailPage /> },
+      { path: 'projects/:id/files', element: <ProjectFilesPage /> },
       { path: 'projects/:id/tutor/:topicId', element: <TutorPage /> },
       { path: 'projects/:id/tutor/:topicId/interactive', element: <InteractiveTutorPage /> },
       { path: 'projects/:id/tutor', element: <TutorPage /> },
+      { path: 'projects/:id/slides', element: <SlideStudyPage /> },
+      { path: 'projects/:id/slides/:documentId', element: <SlideStudyPage /> },
+      { path: 'projects/:id/slides/:documentId/:slideNumber', element: <SlideStudyPage /> },
       { path: 'projects/:id/history', element: <ChatHistoryPage /> },
       { path: 'projects/:id/quiz', element: <QuizLandingPage /> },
       { path: 'projects/:id/quiz/:quizId', element: <QuizPage /> },

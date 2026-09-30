@@ -31,9 +31,29 @@ export class HomeworkRepository {
     return this.sets().get(id)
   }
 
+  listSetsByDocument(documentId: string): Promise<HomeworkSet[]> {
+    return this.sets().where('documentId').equals(documentId).toArray()
+  }
+
   async upsertSet(set: HomeworkSet): Promise<HomeworkSet> {
     await this.sets().put(set)
     return set
+  }
+
+  /**
+   * Patch one set from its CURRENT row, inside a transaction, so a concurrent
+   * progress write can never clobber a status change (or vice versa). Returns
+   * `undefined` when the set was deleted mid-run, which callers read as "do not
+   * resurrect".
+   */
+  async updateSet(id: string, patch: Partial<HomeworkSet>): Promise<HomeworkSet | undefined> {
+    return this.db.transaction('rw', this.sets(), async () => {
+      const existing = await this.sets().get(id)
+      if (!existing) return undefined
+      const next: HomeworkSet = { ...existing, ...patch, id, updatedAt: Date.now() }
+      await this.sets().put(next)
+      return next
+    })
   }
 
   listQuestions(setId: string): Promise<HomeworkQuestion[]> {
@@ -59,11 +79,13 @@ export class HomeworkRepository {
     id: string,
     patch: Partial<HomeworkQuestion>,
   ): Promise<HomeworkQuestion | undefined> {
-    const existing = await this.getQuestion(id)
-    if (!existing) return undefined
-    const next: HomeworkQuestion = { ...existing, ...patch, id, updatedAt: Date.now() }
-    await this.questions().put(next)
-    return next
+    return this.db.transaction('rw', this.questions(), async () => {
+      const existing = await this.questions().get(id)
+      if (!existing) return undefined
+      const next: HomeworkQuestion = { ...existing, ...patch, id, updatedAt: Date.now() }
+      await this.questions().put(next)
+      return next
+    })
   }
 
   /**
@@ -93,6 +115,65 @@ export class HomeworkRepository {
       }
       await this.questions().put(next)
       return next
+    })
+  }
+
+  /**
+   * Write an answer-based hints + solution. Preserves every student field and
+   * clamps the revealed-hint progress, exactly like `applyGeneratedContent`,
+   * and additionally records that the content is grounded in the professor
+   * answer. `previousSolution` keeps the replaced AI solution, when there was
+   * one, so it is never silently overwritten.
+   */
+  async applyAnswerBasedContent(
+    id: string,
+    hints: string[],
+    solution: string,
+    promptVersion: string,
+    previousSolution?: string,
+  ): Promise<HomeworkQuestion | undefined> {
+    return this.db.transaction('rw', this.questions(), async () => {
+      const existing = await this.questions().get(id)
+      if (!existing) return undefined
+      const next: HomeworkQuestion = {
+        ...existing,
+        hints,
+        solution,
+        generationStatus: 'ready',
+        generationError: undefined,
+        promptVersion,
+        answerBased: true,
+        ...(previousSolution ? { previousSolution } : {}),
+        revealedHints: Math.min(existing.revealedHints, hints.length),
+        updatedAt: Date.now(),
+      }
+      await this.questions().put(next)
+      return next
+    })
+  }
+
+  /**
+   * Clear every professor-answer link on a set's questions, without touching
+   * the questions themselves, their hints/solution, or any student record.
+   * Used when the answer file association is removed.
+   */
+  async clearAnswerLinks(setId: string): Promise<number> {
+    return this.db.transaction('rw', this.questions(), async () => {
+      const rows = await this.questions().where('setId').equals(setId).toArray()
+      for (const row of rows) {
+        const next: HomeworkQuestion = {
+          ...row,
+          answerText: undefined,
+          answerNumber: undefined,
+          answerChunkIds: undefined,
+          answerStatus: undefined,
+          answerBased: undefined,
+          previousSolution: undefined,
+          updatedAt: Date.now(),
+        }
+        await this.questions().put(next)
+      }
+      return rows.length
     })
   }
 

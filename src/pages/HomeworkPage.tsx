@@ -1,6 +1,14 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { ArrowLeft, ArrowRight, ClipboardList, Loader2, RefreshCw, RotateCcw } from 'lucide-react'
+import {
+  AlertTriangle,
+  ArrowLeft,
+  ArrowRight,
+  ClipboardList,
+  Loader2,
+  RefreshCw,
+  RotateCcw,
+} from 'lucide-react'
 import type { HomeworkQuestion, HomeworkSet, ReanalysisSummary } from '@/entities/homework/types'
 import { Badge } from '@/shared/ui/Badge'
 import { Button } from '@/shared/ui/Button'
@@ -10,7 +18,7 @@ import { ErrorState } from '@/shared/ui/ErrorState'
 import { LoadingState } from '@/shared/ui/LoadingState'
 import { PageContainer, PageContent, PageHeader } from '@/shared/ui/Page'
 import { RichText } from '@/shared/ui/RichText'
-import { TruncatedText } from '@/shared/ui/TruncatedText'
+import { formatHomeworkQuestion } from '@/entities/homework/formatQuestion'
 import { HomeworkQuestionView } from '@/widgets/homework/HomeworkQuestionView'
 import { ProjectFlowNav } from '@/widgets/project/ProjectFlowNav'
 import { useHomeworkService } from '@/features/homework/useHomeworkService'
@@ -40,6 +48,8 @@ export function HomeworkPage(): JSX.Element {
   const [retrying, setRetrying] = useState(false)
   const [summary, setSummary] = useState<ReanalysisSummary | null>(null)
   const [error, setError] = useState<string | null>(null)
+  /** Practice (answer hidden) or review (professor answer shown). */
+  const [mode, setMode] = useState<'practice' | 'review'>('practice')
 
   const load = useCallback(async () => {
     if (!service || !assignmentId) return
@@ -75,6 +85,19 @@ export function HomeworkPage(): JSX.Element {
     [questions, activeId],
   )
   const active = index >= 0 ? questions[index] : (questions[0] ?? null)
+
+  // Keep the current question's chip visible in the horizontal navigator.
+  const navRef = useRef<HTMLDivElement>(null)
+  const activeChipRef = useRef<HTMLButtonElement>(null)
+  useEffect(() => {
+    const nav = navRef.current
+    const chip = activeChipRef.current
+    if (!nav || !chip) return
+    const navRect = nav.getBoundingClientRect()
+    const chipRect = chip.getBoundingClientRect()
+    const delta = chipRect.left - navRect.left - (nav.clientWidth - chipRect.width) / 2
+    nav.scrollLeft = Math.max(0, nav.scrollLeft + delta)
+  }, [active?.id])
 
   async function retrySet(): Promise<void> {
     if (!service || !assignmentId) return
@@ -119,6 +142,30 @@ export function HomeworkPage(): JSX.Element {
         nav={<ProjectFlowNav projectId={projectId} active="homework" />}
         actions={
           <div className="flex flex-wrap items-center gap-2">
+            {set?.answerDocumentId && (
+              <div
+                role="group"
+                aria-label={t('homework.mode.label')}
+                className="inline-flex items-center gap-1 rounded-full border border-border/70 bg-muted/30 p-1"
+              >
+                <Button
+                  variant={mode === 'practice' ? 'default' : 'ghost'}
+                  size="sm"
+                  aria-pressed={mode === 'practice'}
+                  onClick={() => setMode('practice')}
+                >
+                  {t('homework.mode.practice')}
+                </Button>
+                <Button
+                  variant={mode === 'review' ? 'default' : 'ghost'}
+                  size="sm"
+                  aria-pressed={mode === 'review'}
+                  onClick={() => setMode('review')}
+                >
+                  {t('homework.mode.review')}
+                </Button>
+              </div>
+            )}
             {set?.status === 'ready' && questions.length > 0 && (
               <Button variant="outline" onClick={() => void retrySet()} disabled={retrying}>
                 {retrying ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
@@ -180,6 +227,18 @@ export function HomeworkPage(): JSX.Element {
               </Card>
             )}
 
+            {set.analysisNote && (
+              <Card className="border-amber-500/40 bg-amber-500/5">
+                <CardContent className="flex items-start gap-2 p-3 text-sm text-foreground">
+                  <AlertTriangle
+                    className="mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400"
+                    aria-hidden
+                  />
+                  <span>{set.analysisNote}</span>
+                </CardContent>
+              </Card>
+            )}
+
             {questions.length === 0 ? (
               <Card>
                 <CardContent className="flex items-center gap-2 p-6 text-sm text-muted-foreground">
@@ -188,71 +247,91 @@ export function HomeworkPage(): JSX.Element {
                 </CardContent>
               </Card>
             ) : (
-              <div className="grid gap-5 lg:grid-cols-[220px_minmax(0,1fr)]">
-                <aside className="min-w-0">
-                  <Card>
-                    <CardHeader>
-                      <CardTitle className="text-base">{t('homework.nav')}</CardTitle>
-                    </CardHeader>
-                    <CardContent className="space-y-1">
-                      <ol className="flex gap-1 overflow-x-auto pb-1 lg:flex-col lg:overflow-visible">
-                        {questions.map((question, position) => (
-                          <li key={question.id} className="shrink-0">
-                            <button
-                              type="button"
-                              onClick={() => setActiveId(question.id)}
-                              aria-current={question.id === active?.id ? 'true' : undefined}
-                              className={cn(
-                                'focus-ring flex w-full min-w-0 items-center gap-2 rounded-md px-2 py-2 text-left text-sm transition-colors',
-                                question.id === active?.id
-                                  ? 'bg-theme-primary-soft text-foreground'
-                                  : 'text-muted-foreground hover:bg-muted hover:text-foreground',
-                              )}
-                            >
-                              <span className="data-num shrink-0 font-mono text-xs text-muted-foreground">
-                                {String(position + 1).padStart(2, '0')}
-                              </span>
-                              <TruncatedText
-                                text={question.number ?? question.prompt}
-                                className="hidden min-w-0 flex-1 lg:block"
-                              />
-                            </button>
-                          </li>
-                        ))}
-                      </ol>
-                    </CardContent>
-                  </Card>
-                </aside>
-
-                <section className="min-w-0 space-y-4">
-                  {active && <HomeworkQuestionView key={active.id} question={active} service={service} />}
-
-                  <div className="flex items-center justify-between gap-2">
+              <div className="space-y-4">
+                {/* Compact question navigator: a single horizontal row so the
+                    question and the working area are not squeezed into a third
+                    column. The active chip scrolls itself into view. */}
+                <Card className="blueprint-frame border-border/70">
+                  <CardContent className="flex items-center gap-2 p-2 sm:p-3">
                     <Button
                       variant="outline"
                       size="sm"
+                      className="shrink-0"
                       onClick={() => setActiveId(questions[Math.max(0, index - 1)]?.id ?? null)}
                       disabled={index <= 0}
                     >
                       <ArrowLeft className="h-4 w-4" />
-                      {t('homework.prev')}
+                      <span className="hidden sm:inline">{t('homework.prev')}</span>
                     </Button>
-                    <Badge variant="outline" className="data-num font-mono">
+
+                    <div
+                      ref={navRef}
+                      className="min-w-0 flex-1 overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+                    >
+                      <ol
+                        aria-label={t('homework.questionNavHint')}
+                        className="flex items-center gap-1.5 py-1"
+                      >
+                        {questions.map((question, position) => {
+                          const isActive = question.id === active?.id
+                          return (
+                            <li key={question.id} className="shrink-0">
+                              <button
+                                type="button"
+                                ref={isActive ? activeChipRef : undefined}
+                                onClick={() => setActiveId(question.id)}
+                                aria-current={isActive ? 'true' : undefined}
+                                aria-label={`${position + 1}. ${question.number ?? question.prompt}`}
+                                title={question.number ?? question.prompt}
+                                className={cn(
+                                  'focus-ring grid h-9 min-w-9 place-items-center rounded-full px-2.5 text-xs font-medium transition-colors',
+                                  isActive
+                                    ? 'bg-theme-primary-soft text-foreground'
+                                    : 'text-muted-foreground hover:bg-muted hover:text-foreground',
+                                )}
+                              >
+                                <span className="data-num font-mono">
+                                  {String(position + 1).padStart(2, '0')}
+                                </span>
+                              </button>
+                            </li>
+                          )
+                        })}
+                      </ol>
+                    </div>
+
+                    <Badge
+                      variant="outline"
+                      className="data-num hidden shrink-0 font-mono sm:inline-flex"
+                      aria-live="polite"
+                    >
                       {t('homework.progress', { current: index + 1, total: questions.length })}
                     </Badge>
+
                     <Button
                       variant="outline"
                       size="sm"
+                      className="shrink-0"
                       onClick={() =>
                         setActiveId(questions[Math.min(questions.length - 1, index + 1)]?.id ?? null)
                       }
                       disabled={index >= questions.length - 1}
                     >
-                      {t('homework.next')}
+                      <span className="hidden sm:inline">{t('homework.next')}</span>
                       <ArrowRight className="h-4 w-4" />
                     </Button>
-                  </div>
-                </section>
+                  </CardContent>
+                </Card>
+
+                {active && (
+                  <HomeworkQuestionView
+                    key={active.id}
+                    question={active}
+                    service={service}
+                    mode={mode}
+                    {...(set.answerDocumentId ? { answerDocumentId: set.answerDocumentId } : {})}
+                  />
+                )}
               </div>
             )}
 
@@ -266,7 +345,7 @@ export function HomeworkPage(): JSX.Element {
                   {retired.map((question) => (
                     <div key={question.id} className="space-y-2 rounded-lg border border-border/70 p-3">
                       <RichText
-                        text={question.prompt}
+                        text={formatHomeworkQuestion(question.prompt)}
                         format="markdown"
                         paragraphClassName="text-sm leading-relaxed"
                       />

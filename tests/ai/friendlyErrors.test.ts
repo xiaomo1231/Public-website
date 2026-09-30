@@ -3,9 +3,12 @@ import { friendlyAIError } from '@/shared/lib/aiErrors'
 import {
   AIProviderError,
   AuthFailedError,
+  ContextTooLongError,
   InvalidJSONError,
   MissingAPIKeyError,
+  OutputLimitError,
   ProviderUnavailableError,
+  QuotaExceededError,
   RateLimitedError,
   TimeoutError,
 } from '@/infrastructure/ai/errors'
@@ -30,6 +33,18 @@ describe('friendlyAIError', () => {
 
   it('explains provider unavailability', () => {
     expect(friendlyAIError(new ProviderUnavailableError())).toMatch(/unavailable|network/i)
+  })
+
+  it('tells the user to check their account when out of credit', () => {
+    expect(friendlyAIError(new QuotaExceededError())).toMatch(/credit|quota|account/i)
+  })
+
+  it('explains a context overflow as a too-long request', () => {
+    expect(friendlyAIError(new ContextTooLongError())).toMatch(/too long|context/i)
+  })
+
+  it('explains a rejected output cap', () => {
+    expect(friendlyAIError(new OutputLimitError())).toMatch(/token limit|Max tokens/i)
   })
 
   it('explains malformed JSON', () => {

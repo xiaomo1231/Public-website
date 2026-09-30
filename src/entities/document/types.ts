@@ -16,6 +16,12 @@ export type LearningMaterialType =
   | 'lecture_transcript'
   | 'professor_practice'
   | 'homework'
+  /**
+   * The professor's answer key for one homework assignment. It is course
+   * *reference* material, never a knowledge source: it is excluded from course
+   * analysis and never sent to the tutor as course context.
+   */
+  | 'homework_answer'
 
 export const LEARNING_MATERIAL_TYPES: readonly LearningMaterialType[] = [
   'textbook',
@@ -23,7 +29,17 @@ export const LEARNING_MATERIAL_TYPES: readonly LearningMaterialType[] = [
   'lecture_transcript',
   'professor_practice',
   'homework',
+  'homework_answer',
 ]
+
+/**
+ * True for material that may ground a course analysis / tutor lesson.
+ * A professor answer key is deliberately excluded: it is an answer sheet, not
+ * something the tutor should teach from.
+ */
+export function isCourseMaterialType(value: unknown): boolean {
+  return resolveMaterialType(value) !== 'homework_answer'
+}
 
 export function isLearningMaterialType(value: unknown): value is LearningMaterialType {
   return typeof value === 'string' && (LEARNING_MATERIAL_TYPES as readonly string[]).includes(value)

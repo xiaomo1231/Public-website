@@ -64,6 +64,7 @@ export function QuestionSource({ sourceRefs, projectId }: QuestionSourceProps): 
               documentName={ref.documentName || t('common.unknown')}
               {...(locationOf(ref, t) ? { location: locationOf(ref, t) } : {})}
               quote={ref.quote ?? ''}
+              {...(ref.quotePending ? { quotePending: true } : {})}
               index={index + 1}
               total={refs.length}
               {...(projectId && ref.documentId

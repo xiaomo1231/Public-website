@@ -9,7 +9,8 @@ import { t } from '@/i18n'
 
 export interface ContextualTutorInput {
   projectId: string
-  topicId: string
+  topicId?: string
+  contextKind?: 'lesson' | 'homework'
   topicTitle?: string
   sectionHeading?: string
   selectedText: string
@@ -34,7 +35,7 @@ export interface ContextualTutorAnswer {
 const inFlight = new Map<string, Promise<ContextualTutorAnswer>>()
 
 function keyOf(input: ContextualTutorInput): string {
-  return [input.projectId, input.topicId, input.selectedText, input.question].join('\u0000')
+  return [input.projectId, input.topicId ?? '', input.contextKind ?? 'lesson', input.selectedText, input.question].join('\u0000')
 }
 
 /**
@@ -63,7 +64,7 @@ export class ContextualTutorService {
 
   private async run(input: ContextualTutorInput): Promise<ContextualTutorAnswer> {
     const messages: ChatMessage[] = [
-      { role: 'system', content: prompts.contextualTutor.buildSystemPrompt() },
+      { role: 'system', content: prompts.contextualTutor.buildSystemPrompt(input.contextKind) },
       {
         role: 'user',
         content: prompts.contextualTutor.buildUserPrompt({
@@ -73,6 +74,7 @@ export class ContextualTutorService {
           surroundingContext: input.surroundingContext,
           question: input.question,
           language: input.language,
+          ...(input.contextKind ? { contextKind: input.contextKind } : {}),
         }),
       },
     ]
@@ -90,7 +92,7 @@ export class ContextualTutorService {
 
     logger.debug('Contextual tutor answered', {
       projectId: input.projectId,
-      topicId: input.topicId,
+      ...(input.topicId ? { topicId: input.topicId } : {}),
       chars: answer.length,
     })
     return { question: input.question, answer }

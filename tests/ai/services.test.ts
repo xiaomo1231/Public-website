@@ -602,4 +602,50 @@ describe('TranslationService', () => {
     expect(entry.alternatives).toContain('力矩')
     expect(entry.context.topic).toBe('physics')
   })
+
+  it('retries a truncated homework translation and keeps only the complete translation', async () => {
+    const chatJSON = vi.fn()
+      .mockResolvedValueOnce({
+        data: { translation: '第6题：', contextNote: '这是一道向量空间题。', alternatives: [] },
+        raw: { content: '', model: 'gpt-test' },
+      })
+      .mockResolvedValueOnce({
+        data: {
+          translation: '第6题：考虑实向量空间 R²，它采用标准的加法与标量乘法。判断以下各集合是否构成 R² 的子空间。',
+          contextNote: '这是一道向量空间题。',
+          alternatives: ['线性空间'],
+        },
+        raw: { content: '', model: 'gpt-test' },
+      })
+    const svc = new TranslationService({ ai: fakeAI({ chatJSON }), repo: undefined as never })
+    const entry = await svc.translate({
+      projectId: 'p',
+      selectedText: 'Problem 6: Consider the real vector space R² defined with the standard operations of addition and scalar multiplication. Determine whether the following sets are subspaces.',
+      surroundingContext: 'Linear algebra homework',
+      sourceLanguage: 'en',
+      targetLanguage: 'zh',
+    })
+
+    expect(chatJSON).toHaveBeenCalledTimes(2)
+    expect(entry.translation).toContain('判断以下各集合')
+    expect(entry.contextNote).toBe('')
+    expect(entry.alternatives).toEqual([])
+  })
+
+  it('does not save a short summary as the translation of a long selection', async () => {
+    const chatJSON = vi.fn().mockResolvedValue({
+      data: { translation: '第6题：', contextNote: '向量空间习题', alternatives: [] },
+      raw: { content: '', model: 'gpt-test' },
+    })
+    const svc = new TranslationService({ ai: fakeAI({ chatJSON }), repo: undefined as never })
+
+    await expect(svc.translate({
+      projectId: 'p',
+      selectedText: 'Problem 6: Consider the real vector space R² defined with the standard operations of addition and scalar multiplication.',
+      surroundingContext: '',
+      sourceLanguage: 'en',
+      targetLanguage: 'zh',
+    })).rejects.toMatchObject({ code: 'MALFORMED_TRANSLATION' })
+    expect(chatJSON).toHaveBeenCalledTimes(2)
+  })
 })

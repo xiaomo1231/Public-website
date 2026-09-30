@@ -8,6 +8,12 @@ import { useTranslation } from '@/i18n'
 export function AppShell(): JSX.Element {
   const { t } = useTranslation()
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
+  /**
+   * Desktop sidebar collapsed. Held in AppShell state, which survives
+   * client-side route changes, so the choice is kept while the student moves
+   * between pages (no persistence, no database table).
+   */
+  const [navCollapsed, setNavCollapsed] = useState(false)
 
   // Close mobile nav when resizing back to desktop
   useEffect(() => {
@@ -19,7 +25,12 @@ export function AppShell(): JSX.Element {
   }, [])
 
   return (
-    <div className="app-shell-wash relative flex h-full min-h-screen w-full bg-background text-foreground lg:gap-2 lg:p-4">
+    <div
+      className={cn(
+        'app-shell-wash relative flex h-full min-h-screen w-full bg-background text-foreground lg:p-4',
+        navCollapsed ? 'lg:gap-0' : 'lg:gap-2',
+      )}
+    >
       <a
         href="#main-content"
         className="focus-ring sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-[60] focus:rounded-full focus:bg-primary-strong focus:px-4 focus:py-2 focus:text-sm focus:font-medium focus:text-primary-foreground"
@@ -27,8 +38,19 @@ export function AppShell(): JSX.Element {
         {t('common.skipToContent')}
       </a>
 
-      <div className="relative z-10 hidden shrink-0 lg:block">
-        <Sidebar />
+      {/*
+        Desktop sidebar. It collapses to zero width; the content is only
+        mounted while expanded so nothing hidden stays keyboard-focusable. The
+        width transition is short and disabled under reduced-motion.
+      */}
+      <div
+        className={cn(
+          'relative z-10 hidden shrink-0 overflow-hidden transition-[width] duration-200 ease-out motion-reduce:transition-none lg:block',
+          navCollapsed ? 'w-0' : 'w-60',
+        )}
+        aria-hidden={navCollapsed}
+      >
+        {!navCollapsed && <Sidebar onCollapse={() => setNavCollapsed(true)} />}
       </div>
 
       {/* Mobile drawer */}
@@ -57,7 +79,10 @@ export function AppShell(): JSX.Element {
       </div>
 
       <div className="relative z-10 flex min-w-0 flex-1 flex-col">
-        <Header onOpenMobileNav={() => setMobileNavOpen(true)} />
+        <Header
+          onOpenMobileNav={() => setMobileNavOpen(true)}
+          {...(navCollapsed ? { onExpandNav: () => setNavCollapsed(false) } : {})}
+        />
         <div className="flex min-h-0 flex-1 flex-col">
           <Outlet />
         </div>

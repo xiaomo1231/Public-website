@@ -16,6 +16,7 @@
  */
 
 import { TABLE_LIMITS, tryParseTable, type TableAlignment } from './markdownTable'
+import { isCurrencyLikeEnd } from './mathText'
 
 export type InlineSpan =
   | { kind: 'text'; value: string }
@@ -42,14 +43,16 @@ export type MarkdownBlock =
   | TableBlock
 
 /**
- * Order matters: code spans first (so LaTeX inside them is left alone), then
- * display math, then inline math, then emphasis.
+ * Order matters: an escaped `\$` (a literal dollar) and code spans first (so
+ * LaTeX inside them is left alone), then display math, then inline math, then
+ * emphasis.
  *
  * Emphasis requires non-space content at both ends, so prose like `a * b * c`
- * is not mistaken for italics.
+ * is not mistaken for italics. An inline `$…$` followed by a digit is left as
+ * prose, so a currency range such as `$5 and $10` is never typeset as maths.
  */
 const INLINE_PATTERN =
-  /`([^`]+)`|\$\$([\s\S]+?)\$\$|\\\[([\s\S]+?)\\\]|\\\(([\s\S]+?)\\\)|\$(\S[^$\n]*?)\$|\*\*(\S(?:[^*]*?\S)?)\*\*|\*(\S(?:[^*]*?\S)?)\*/g
+  /`([^`]+)`|\$\$([\s\S]+?)\$\$|\\\[([\s\S]+?)\\\]|\\\(([\s\S]+?)\\\)|\$(\S[^$\n]*?)\$|\*\*(\S(?:[^*]*?\S)?)\*\*|\*(\S(?:[^*]*?\S)?)\*|\\\$/g
 
 export function splitInline(text: string): InlineSpan[] {
   const spans: InlineSpan[] = []
@@ -61,12 +64,30 @@ export function splitInline(text: string): InlineSpan[] {
       spans.push({ kind: 'text', value: text.slice(lastIndex, match.index) })
     }
 
-    if (match[1] !== undefined) {
+    // The escaped `\$` alternative has no capture group: every group is
+    // undefined and it is a literal dollar sign, not a delimiter.
+    const escaped =
+      match[1] === undefined &&
+      match[2] === undefined &&
+      match[3] === undefined &&
+      match[4] === undefined &&
+      match[5] === undefined &&
+      match[6] === undefined &&
+      match[7] === undefined
+
+    if (escaped) {
+      spans.push({ kind: 'text', value: '$' })
+    } else if (match[1] !== undefined) {
       spans.push({ kind: 'code', value: match[1] })
     } else if (match[2] !== undefined || match[3] !== undefined) {
       spans.push({ kind: 'math', value: (match[2] ?? match[3] ?? '').trim(), display: true })
     } else if (match[4] !== undefined || match[5] !== undefined) {
-      spans.push({ kind: 'math', value: (match[4] ?? match[5] ?? '').trim(), display: false })
+      const end = match.index + match[0].length
+      if (match[5] !== undefined && isCurrencyLikeEnd(text, end)) {
+        spans.push({ kind: 'text', value: match[0] })
+      } else {
+        spans.push({ kind: 'math', value: (match[4] ?? match[5] ?? '').trim(), display: false })
+      }
     } else if (match[6] !== undefined) {
       spans.push({ kind: 'strong', value: match[6] })
     } else if (match[7] !== undefined) {

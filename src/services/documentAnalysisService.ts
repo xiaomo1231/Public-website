@@ -108,17 +108,22 @@ export class DocumentAnalysisService {
 
     const documents = await this.documents.listByProject(projectId)
     const readyDocs = documents.filter((d) => d.status === 'ready')
-    if (readyDocs.length === 0) {
+    // A professor answer key is reference material, never course knowledge; it
+    // is excluded from the analysis (and from its source hash) entirely.
+    const courseDocs = readyDocs.filter(
+      (d) => resolveMaterialType(d.materialType) !== 'homework_answer',
+    )
+    if (courseDocs.length === 0) {
       throw new AppError(t('errors.noProcessedDocuments'), 'NO_DOCUMENTS')
     }
 
     // The textbook is the primary source of course facts. Notes and lecture
     // transcripts are context for the tutor, not the basis of the analysis —
     // unless there is no textbook at all.
-    const textbookDocs = readyDocs.filter(
+    const textbookDocs = courseDocs.filter(
       (d) => resolveMaterialType(d.materialType) === 'textbook',
     )
-    const analysisDocs = textbookDocs.length > 0 ? textbookDocs : readyDocs
+    const analysisDocs = textbookDocs.length > 0 ? textbookDocs : courseDocs
     // Chunks carry the textbook chapter/section they came from; the analysis is
     // grounded in that structure instead of re-inventing an outline.
     const chunkLists = await Promise.all(

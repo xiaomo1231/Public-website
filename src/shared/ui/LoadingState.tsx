@@ -34,7 +34,9 @@ export function LoadingState({
         className,
       )}
     >
-      <Loader2 className="h-6 w-6 animate-spin" />
+      <span className="plate-grid grid h-14 w-14 place-items-center rounded-2xl border border-border/70 bg-theme-primary-soft text-foreground">
+        <Loader2 className="h-5 w-5 animate-spin" />
+      </span>
       {resolvedLabel && <div className="font-medium text-foreground">{resolvedLabel}</div>}
       {description && <div>{description}</div>}
     </div>

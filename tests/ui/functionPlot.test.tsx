@@ -27,7 +27,7 @@ describe('FunctionPlot', () => {
 
     expect(screen.getByText('f(x) = x')).toBeInTheDocument()
     // a = 1, b = 0, probe x = 1 → f(1) = 1
-    expect(screen.getByText('(1, 1)')).toBeInTheDocument()
+    expect(screen.getByText('P (1, 1)')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Linear' })).toHaveAttribute('aria-pressed', 'true')
     expect(screen.getByRole('img', { name: /Interactive plot/ })).toBeInTheDocument()
   })
@@ -51,7 +51,7 @@ describe('FunctionPlot', () => {
     setRange('a', '-2')
     expect(screen.getByText('f(x) = −2·x²')).toBeInTheDocument()
     // Probe x = 1 → f(1) = -2
-    expect(screen.getByText('(1, -2)')).toBeInTheDocument()
+    expect(screen.getByText('P (1, -2)')).toBeInTheDocument()
   })
 
   it('resets the current family to its defaults', () => {

@@ -362,14 +362,17 @@
   }
 
   /*
-   * A very light corner wash for the app shell. Reading surfaces (cards, the
-   * tutor article) stay on solid backgrounds — this only tints the chrome
-   * behind them, so long-form text contrast is unaffected.
+   * A single quiet top wash for the app shell — one theme tint fading out, not
+   * a pair of coloured "aurora" blobs. Reading surfaces (cards, the tutor
+   * article) stay on solid backgrounds, so long-form text contrast is
+   * unaffected.
    */
   .app-shell-wash {
-    background-image:
-      radial-gradient(52rem 34rem at 104% -12%, hsl(var(--theme-gradient-start) / 0.5), transparent 60%),
-      radial-gradient(46rem 30rem at -8% 112%, hsl(var(--theme-gradient-end) / 0.45), transparent 62%);
+    background-image: linear-gradient(
+      to bottom,
+      hsl(var(--theme-gradient-start) / 0.55),
+      transparent 20rem
+    );
   }
 
   /*
@@ -423,30 +426,22 @@
   }
 
   /*
+   * Indeterminate progress: only used when the real work-unit total is not yet
+   * known. It carries no value — it must never be read as a percentage.
+   */
+  .progress-indeterminate {
+    animation: progress-indeterminate 1.4s ease-in-out infinite;
+  }
+
+  /*
    * Brand mark: a filled, text-bearing surface, so it uses the text-safe
-   * primary pair. A slow sheen sweeps across it every few seconds — purely
-   * decorative and disabled under reduced motion.
+   * primary pair. A flat two-tone, no sweeping sheen.
    */
   .brand-mark {
     position: relative;
     overflow: hidden;
-    background-image: linear-gradient(135deg, hsl(var(--primary-strong)), hsl(var(--primary)));
+    background-image: linear-gradient(150deg, hsl(var(--primary-strong)), hsl(var(--primary)));
     color: hsl(var(--primary-foreground));
-  }
-
-  .brand-mark::after {
-    content: '';
-    position: absolute;
-    inset: -40% -130%;
-    background: linear-gradient(
-      115deg,
-      transparent 42%,
-      hsl(var(--primary-foreground) / 0.28) 50%,
-      transparent 58%
-    );
-    transform: translateX(-70%);
-    animation: brand-sheen 8s ease-in-out infinite;
-    pointer-events: none;
   }
 
   .focus-ring {
@@ -549,6 +544,21 @@
     stroke-dashoffset: var(--graph-len, 600);
     animation: graph-draw 1.6s cubic-bezier(0.22, 1, 0.36, 1) forwards;
   }
+  /*
+   * Homepage entrance: one short, staggered rise per element — transform and
+   * opacity only, so nothing reflows and controls are clickable throughout.
+   * Played once (see the dashboard) and switched off under reduced motion.
+   */
+  .intro-item {
+    animation: intro-rise 0.55s cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+  /*
+   * A brief ring on a value that just changed (function switch / reset). It is
+   * a state cue, not a loop; the number itself is never delayed.
+   */
+  .value-flash {
+    animation: value-flash 0.55s ease-out;
+  }
   .floating-course {
     transition:
       transform 220ms ease,
@@ -571,8 +581,10 @@
     }
   }
   @media (prefers-reduced-motion: no-preference) {
+    /* Only the single "continue learning" entry lifts — the quiet list rows do
+       not, so the primary entry reads as the one interactive surface. */
     .floating-course:hover {
-      transform: translateY(-4px);
+      transform: translateY(-2px);
     }
     .sidebar-link:hover {
       transform: translateX(3px);
@@ -587,15 +599,25 @@
   }
 }
 
-/* A slow highlight that sweeps across the brand mark. */
-@keyframes brand-sheen {
-  0%,
-  55% {
-    transform: translateX(-70%);
+/* A short rise used for the homepage entrance. */
+@keyframes intro-rise {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
   }
-  75%,
-  100% {
-    transform: translateX(70%);
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* A ring that fades out, marking a value that just changed. */
+@keyframes value-flash {
+  from {
+    box-shadow: 0 0 0 2px hsl(var(--theme-accent) / 0.55);
+  }
+  to {
+    box-shadow: 0 0 0 2px transparent;
   }
 }
 
@@ -606,6 +628,16 @@
   }
   to {
     clip-path: inset(0 0 0 0);
+  }
+}
+
+/* Sweep an indeterminate bar across its track. */
+@keyframes progress-indeterminate {
+  from {
+    transform: translateX(-120%);
+  }
+  to {
+    transform: translateX(320%);
   }
 }
 
@@ -630,8 +662,10 @@
   .animate-rise,
   .animate-fade,
   .progress-reveal,
-  .brand-mark::after,
+  .progress-indeterminate,
   .graph-draw,
+  .intro-item,
+  .value-flash,
   .tech-grid::before,
   .tech-grid::after {
     animation: none !important;
@@ -640,5 +674,11 @@
   /* Keep the plotted line fully drawn when its animation is switched off. */
   .graph-draw {
     stroke-dashoffset: 0 !important;
+  }
+
+  /* A still, visible bar instead of a sweep when motion is reduced. */
+  .progress-indeterminate {
+    width: 40% !important;
+    transform: none !important;
   }
 }

@@ -103,9 +103,8 @@ describe('theme tokens', () => {
 })
 
 describe('decorative motion', () => {
-  it('declares the graph-draw, brand sheen and progress-reveal keyframes', () => {
+  it('declares the graph-draw and progress-reveal keyframes', () => {
     expect(css).toContain('@keyframes graph-draw')
-    expect(css).toContain('@keyframes brand-sheen')
     expect(css).toContain('@keyframes progress-reveal')
   })
 
@@ -124,7 +123,6 @@ describe('decorative motion', () => {
       '.animate-rise',
       '.animate-fade',
       '.progress-reveal',
-      '.brand-mark::after',
       '.graph-draw',
       '.tech-grid::before',
       '.tech-grid::after',

@@ -28,6 +28,10 @@ export class PracticeRepository {
     return this.sets().get(id)
   }
 
+  listSetsByDocument(documentId: string): Promise<PracticeSet[]> {
+    return this.sets().where('documentId').equals(documentId).toArray()
+  }
+
   async upsertSet(set: PracticeSet): Promise<PracticeSet> {
     await this.sets().put(set)
     return set

@@ -12,9 +12,20 @@ export type MathSegment =
 /**
  * `$$…$$` and `\[…\]` are display math; `$…$` and `\(…\)` are inline.
  * The inline `$` form requires non-space content and no newline so that prose
- * containing a currency sign is not swallowed.
+ * containing a currency sign is not swallowed. An escaped `\$` is a literal
+ * dollar, never a delimiter.
  */
-const MATH_PATTERN = /\$\$([\s\S]+?)\$\$|\\\[([\s\S]+?)\\\]|\\\(([\s\S]+?)\\\)|\$(\S[^$\n]*?)\$/g
+const MATH_PATTERN =
+  /\$\$([\s\S]+?)\$\$|\\\[([\s\S]+?)\\\]|\\\(([\s\S]+?)\\\)|\$(\S[^$\n]*?)\$|\\\$/g
+
+/**
+ * True when the character right after a candidate inline `$…$` span is a
+ * digit. That shape is a currency amount — `Between $5 and $10` — not a
+ * formula, so the dollars stay prose.
+ */
+export function isCurrencyLikeEnd(text: string, endIndex: number): boolean {
+  return /\d/.test(text[endIndex] ?? '')
+}
 
 export function splitMathSegments(text: string): MathSegment[] {
   const segments: MathSegment[] = []
@@ -25,9 +36,26 @@ export function splitMathSegments(text: string): MathSegment[] {
     if (match.index > lastIndex) {
       segments.push({ kind: 'text', value: text.slice(lastIndex, match.index) })
     }
-    const display = match[1] !== undefined || match[2] !== undefined
-    const value = match[1] ?? match[2] ?? match[3] ?? match[4] ?? ''
-    segments.push({ kind: 'math', value: value.trim(), display })
+    // The escaped `\$` alternative has no capture group: every group is
+    // undefined and it is a literal dollar sign, not a delimiter.
+    const escaped =
+      match[1] === undefined &&
+      match[2] === undefined &&
+      match[3] === undefined &&
+      match[4] === undefined
+    if (escaped) {
+      segments.push({ kind: 'text', value: '$' })
+    } else {
+      const display = match[1] !== undefined || match[2] !== undefined
+      const value = match[1] ?? match[2] ?? match[3] ?? match[4] ?? ''
+      const dollarForm = match[4] !== undefined
+      const end = match.index + match[0].length
+      if (!display && dollarForm && isCurrencyLikeEnd(text, end)) {
+        segments.push({ kind: 'text', value: match[0] })
+      } else {
+        segments.push({ kind: 'math', value: value.trim(), display })
+      }
+    }
     lastIndex = match.index + match[0].length
   }
 

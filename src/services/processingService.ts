@@ -8,14 +8,14 @@ import type { DocumentChunk, NewChunkInput } from '@/entities/chunk/types'
 import type { VisualSource } from '@/entities/visualSource/types'
 import { getDb, type AppDatabase } from '@/infrastructure/db/database'
 import { VisualSourceRepository } from '@/entities/visualSource/repository'
-import { fallbackVisualCaption } from '@/entities/visualSource/types'
+import { fallbackVisualCaption, slideVisualCaption } from '@/entities/visualSource/types'
 import {
   classifyVisualType,
   looksLikeUnreliableVisualText,
 } from '@/infrastructure/files/visualDetection'
 import { extractPdf, renderPdfPageImage, type RenderedPageImage } from '@/infrastructure/files/pdfExtractor'
 import { extractDocx } from '@/infrastructure/files/docxExtractor'
-import { extractPptx } from '@/infrastructure/files/pptxExtractor'
+import { extractPptx, extractPptxSlideImages, type PptxSlideImage } from '@/infrastructure/files/pptxExtractor'
 import { extractOcr } from '@/infrastructure/files/ocrExtractor'
 import {
   chunksFromDocx,
@@ -317,6 +317,11 @@ export class ProcessingService {
     extraction: ExtractionOutput,
     storedChunks: DocumentChunk[],
   ): Promise<PreparedVisualSource[]> {
+    // Presentations: preserve the images each slide embeds. This is the
+    // "original picture" we can honestly show for a slide — the app has no PPTX
+    // rasteriser, so the slide layout itself is not re-drawn.
+    if (document.type === 'pptx') return this.preparePptxVisuals(document, storedChunks)
+
     if (document.type !== 'pdf') return []
 
     const pages = extraction.raw.pages ?? []
@@ -368,8 +373,8 @@ export class ProcessingService {
 
       if (rendered) {
         source.imageMimeType = rendered.mimeType
-        source.width = rendered.width
-        source.height = rendered.height
+        if (rendered.width > 0) source.width = rendered.width
+        if (rendered.height > 0) source.height = rendered.height
         result.push({ source, image: rendered })
       } else {
         // No renderer available (e.g. no canvas). Keep the provenance so the
@@ -377,6 +382,62 @@ export class ProcessingService {
         source.imageMimeType = ''
         result.push({ source })
       }
+    }
+    return result
+  }
+
+  /**
+   * Preserve the images embedded in a presentation's slides.
+   *
+   * Only bytes already inside the user's .pptx are copied; nothing is invented.
+   * The slide's own text is still the primary reading material — the images
+   * supplement it and are shown next to it in the slide study view.
+   */
+  private async preparePptxVisuals(
+    document: Document,
+    storedChunks: DocumentChunk[],
+  ): Promise<PreparedVisualSource[]> {
+    const stored = await this.documents.getBytes(document.id)
+    if (!stored) return []
+
+    let images: PptxSlideImage[]
+    try {
+      images = await extractPptxSlideImages(new Blob([stored.bytes], { type: stored.mimeType }))
+    } catch (err) {
+      logger.warn('Slide image extraction failed', {
+        id: document.id,
+        error: (err as Error)?.message,
+      })
+      return []
+    }
+    if (images.length === 0) return []
+
+    const chunksBySlide = new Map<number, DocumentChunk[]>()
+    for (const chunk of storedChunks) {
+      if (chunk.pageNumber === undefined) continue
+      const list = chunksBySlide.get(chunk.pageNumber) ?? []
+      list.push(chunk)
+      chunksBySlide.set(chunk.pageNumber, list)
+    }
+
+    const result: PreparedVisualSource[] = []
+    for (const image of images) {
+      const slideChunks = chunksBySlide.get(image.slideNumber) ?? []
+      const source: VisualSource = {
+        id: crypto.randomUUID(),
+        projectId: document.projectId,
+        documentId: document.id,
+        pageNumber: image.slideNumber,
+        type: 'illustration',
+        caption: slideVisualCaption(image.slideNumber),
+        sourceChunkIds: slideChunks.map((chunk) => chunk.id),
+        imageMimeType: image.mimeType,
+        createdAt: Date.now(),
+      }
+      result.push({
+        source,
+        image: { bytes: image.bytes, mimeType: image.mimeType, width: 0, height: 0 },
+      })
     }
     return result
   }

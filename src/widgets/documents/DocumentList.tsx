@@ -14,7 +14,14 @@ import {
   Search,
   Trash2,
 } from 'lucide-react'
-import type { Document, DocumentType, ProcessingStatus } from '@/entities/document/types'
+import {
+  LEARNING_MATERIAL_TYPES,
+  resolveMaterialType,
+  type Document,
+  type DocumentType,
+  type LearningMaterialType,
+  type ProcessingStatus,
+} from '@/entities/document/types'
 import { Button } from '@/shared/ui/Button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/shared/ui/Card'
 import { EmptyState } from '@/shared/ui/EmptyState'
@@ -71,9 +78,19 @@ const STATUS_ICON: Record<ProcessingStatus, typeof Loader2 | typeof CheckCircle2
   failed: AlertCircle,
 }
 
+const MATERIAL_LABEL_KEY: Record<LearningMaterialType, TranslationKey> = {
+  textbook: 'materialType.textbook',
+  user_notes: 'materialType.user_notes',
+  lecture_transcript: 'materialType.lecture_transcript',
+  professor_practice: 'materialType.professor_practice',
+  homework: 'materialType.homework',
+  homework_answer: 'materialType.homework_answer',
+}
+
 type SortKey = 'newest' | 'oldest' | 'name' | 'size'
 type TypeFilter = 'all' | DocumentType
 type StatusFilter = 'all' | ProcessingStatus
+type MaterialFilter = 'all' | LearningMaterialType
 
 export interface DocumentListProps {
   documents: Document[]
@@ -82,6 +99,15 @@ export interface DocumentListProps {
   onUploadClick: () => void
   onRename: (id: string, name: string) => Promise<void>
   onDelete: (id: string) => Promise<void>
+  /** Show the learning-material badge on each row (project files overview). */
+  showMaterialType?: boolean
+  /** Offer a material-type filter (project files overview). */
+  materialFilter?: boolean
+  /**
+   * When provided, the delete action asks the owner to confirm instead of
+   * opening the built-in dialog — used to show the full delete impact.
+   */
+  onDeleteRequest?: (doc: Document) => void
 }
 
 export function DocumentList({
@@ -91,10 +117,14 @@ export function DocumentList({
   onUploadClick,
   onRename,
   onDelete,
+  showMaterialType = false,
+  materialFilter = false,
+  onDeleteRequest,
 }: DocumentListProps): JSX.Element {
   const { t } = useTranslation()
   const [query, setQuery] = useState('')
   const [type, setType] = useState<TypeFilter>('all')
+  const [material, setMaterial] = useState<MaterialFilter>('all')
   const [status, setStatus] = useState<StatusFilter>('all')
   const [sort, setSort] = useState<SortKey>('newest')
   const [renaming, setRenaming] = useState<Document | null>(null)
@@ -105,6 +135,7 @@ export function DocumentList({
     const q = query.trim().toLowerCase()
     let list = documents.filter((d) => {
       if (type !== 'all' && d.type !== type) return false
+      if (material !== 'all' && resolveMaterialType(d.materialType) !== material) return false
       if (status !== 'all' && d.status !== status) return false
       if (q && !d.name.toLowerCase().includes(q)) return false
       return true
@@ -124,7 +155,7 @@ export function DocumentList({
       }
     })
     return list
-  }, [documents, query, type, status, sort])
+  }, [documents, query, type, material, status, sort])
 
   if (loading) {
     return <LoadingState label={t('documents.loading')} />
@@ -157,6 +188,21 @@ export function DocumentList({
             className="pl-9"
           />
         </div>
+        {materialFilter && (
+          <Select value={material} onValueChange={(v) => setMaterial(v as MaterialFilter)}>
+            <SelectTrigger className="w-[150px]" aria-label={t('files.filter.material')}>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">{t('files.filter.material')}</SelectItem>
+              {LEARNING_MATERIAL_TYPES.map((m) => (
+                <SelectItem key={m} value={m}>
+                  {t(MATERIAL_LABEL_KEY[m])}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
         <Select value={type} onValueChange={(v) => setType(v as TypeFilter)}>
           <SelectTrigger className="w-[140px]">
             <Filter className="h-4 w-4" />
@@ -231,6 +277,11 @@ export function DocumentList({
                       </Link>
                     </TooltipWrapper>
                   </TooltipProvider>
+                  {showMaterialType && (
+                    <Badge variant="secondary" className="hidden shrink-0 md:inline-flex">
+                      {t(MATERIAL_LABEL_KEY[resolveMaterialType(doc.materialType)])}
+                    </Badge>
+                  )}
                   <Badge variant="outline" className="hidden sm:inline-flex">
                     {t(TYPE_LABEL_KEY[doc.type])}
                   </Badge>
@@ -267,7 +318,7 @@ export function DocumentList({
                       </DropdownMenuItem>
                       <DropdownMenuSeparator />
                       <DropdownMenuItem
-                        onSelect={() => setDeleting(doc)}
+                        onSelect={() => (onDeleteRequest ? onDeleteRequest(doc) : setDeleting(doc))}
                         className="text-destructive focus:text-destructive"
                       >
                         <Trash2 className="h-4 w-4" />
@@ -311,36 +362,38 @@ export function DocumentList({
         </DialogContent>
       </Dialog>
 
-      <Dialog
-        open={deleting !== null}
-        onOpenChange={(open) => {
-          if (!open) setDeleting(null)
-        }}
-      >
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>{t('documents.deleteTitle')}</DialogTitle>
-            <DialogDescription>
-              {t('documents.deleteBody', { name: deleting?.name ?? '' })}
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setDeleting(null)}>
-              {t('common.cancel')}
-            </Button>
-            <Button
-              variant="destructive"
-              onClick={async () => {
-                if (!deleting) return
-                await onDelete(deleting.id)
-                setDeleting(null)
-              }}
-            >
-              {t('common.delete')}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {!onDeleteRequest && (
+        <Dialog
+          open={deleting !== null}
+          onOpenChange={(open) => {
+            if (!open) setDeleting(null)
+          }}
+        >
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>{t('documents.deleteTitle')}</DialogTitle>
+              <DialogDescription>
+                {t('documents.deleteBody', { name: deleting?.name ?? '' })}
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setDeleting(null)}>
+                {t('common.cancel')}
+              </Button>
+              <Button
+                variant="destructive"
+                onClick={async () => {
+                  if (!deleting) return
+                  await onDelete(deleting.id)
+                  setDeleting(null)
+                }}
+              >
+                {t('common.delete')}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
     </div>
   )
 }

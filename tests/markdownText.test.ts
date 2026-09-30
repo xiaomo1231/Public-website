@@ -48,6 +48,24 @@ describe('splitInline', () => {
     expect(splitInline('costs $ 5')).toEqual([{ kind: 'text', value: 'costs $ 5' }])
   })
 
+  it('does not treat a currency range as math', () => {
+    const spans = splitInline('Between $5 and $10 dollars.')
+    expect(spans.every((s) => s.kind === 'text')).toBe(true)
+    expect(spans.map((s) => s.value).join('')).toBe('Between $5 and $10 dollars.')
+  })
+
+  it('treats an escaped dollar as a literal sign, not a delimiter', () => {
+    const spans = splitInline('costs \\$5 today')
+    expect(spans.every((s) => s.kind === 'text')).toBe(true)
+    expect(spans.map((s) => s.value).join('')).toBe('costs $5 today')
+  })
+
+  it('leaves dollars inside a code span untouched', () => {
+    const spans = splitInline('use `$x$` here')
+    expect(spans).toContainEqual({ kind: 'code', value: '$x$' })
+    expect(spans.some((s) => s.kind === 'math')).toBe(false)
+  })
+
   it('mixes Chinese prose with LaTeX', () => {
     const spans = splitInline('集合的交集记作 \\(A \\cap B\\)。')
     expect(spans[0]).toEqual({ kind: 'text', value: '集合的交集记作 ' })

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { act, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { SelectionTranslator } from '@/widgets/translation/SelectionTranslator'
 import { ContextualTutorPopup, type ContextualTutorContext } from '@/widgets/tutor/ContextualTutorPopup'
@@ -47,7 +47,7 @@ function selectNode(element: Element): void {
     addRange: () => undefined,
   } as unknown as Selection)
 
-  document.dispatchEvent(new Event('selectionchange'))
+  act(() => document.dispatchEvent(new Event('selectionchange')))
 
   // Later selectionchange events (focusing a button, clicking) must look
   // collapsed, otherwise they would rebuild the selection and reset the action.
@@ -161,6 +161,55 @@ describe('SelectionTranslator — three separate actions', () => {
 
     await user.click(await screen.findByRole('button', { name: 'Ask AI' }))
     expect((await screen.findByRole('dialog')).textContent).toContain('The union of two sets')
+  })
+})
+
+describe('SelectionTranslator — homework question', () => {
+  function renderHomeworkToolbar(): void {
+    window.history.pushState({}, '', '/projects/p1/homework/set1')
+    render(
+      <>
+        <article data-selection-context="homework" data-selection-title="Problem 6">
+          <p data-testid="homework-passage">Consider the real vector space R².</p>
+        </article>
+        <SelectionTranslator />
+      </>,
+    )
+  }
+
+  it('offers separate translation and question actions for a homework selection', async () => {
+    const user = userEvent.setup()
+    renderHomeworkToolbar()
+    selectNode(screen.getByTestId('homework-passage'))
+
+    expect(await screen.findByRole('button', { name: 'Translate' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Explain' })).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Ask AI' }))
+    const dialog = await screen.findByRole('dialog')
+    await user.type(within(dialog).getByLabelText('Your question'), 'What is a subspace?')
+    await user.click(within(dialog).getByRole('button', { name: 'Ask' }))
+
+    await waitFor(() => expect(askMock).toHaveBeenCalledTimes(1))
+    expect(askMock.mock.calls[0]![0]).toMatchObject({
+      projectId: 'p1',
+      contextKind: 'homework',
+      topicTitle: 'Problem 6',
+      selectedText: 'Consider the real vector space R².',
+      question: 'What is a subspace?',
+    })
+    expect(askMock.mock.calls[0]![0].topicId).toBeUndefined()
+    expect(translateMock).not.toHaveBeenCalled()
+    expect(within(dialog).queryByRole('link', { name: /Continue in Interactive Tutor/ })).not.toBeInTheDocument()
+  })
+
+  it('translates homework text without invoking the question service', async () => {
+    const user = userEvent.setup()
+    renderHomeworkToolbar()
+    selectNode(screen.getByTestId('homework-passage'))
+
+    await user.click(await screen.findByRole('button', { name: 'Translate' }))
+    await waitFor(() => expect(translateMock).toHaveBeenCalledTimes(1))
+    expect(askMock).not.toHaveBeenCalled()
   })
 })
 

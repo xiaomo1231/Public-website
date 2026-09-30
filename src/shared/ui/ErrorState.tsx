@@ -26,7 +26,9 @@ export function ErrorState({
         className,
       )}
     >
-      <AlertCircle className="h-6 w-6 text-destructive" />
+      <span className="grid h-14 w-14 place-items-center rounded-2xl border border-destructive/40 bg-destructive/10">
+        <AlertCircle className="h-6 w-6 text-destructive" />
+      </span>
       <div className="space-y-1">
         <h3 className="text-base font-semibold text-destructive">{resolvedTitle}</h3>
         {description && (

@@ -10,7 +10,8 @@ import { useTranslation } from '@/i18n'
 
 export interface ContextualTutorContext {
   projectId: string
-  topicId: string
+  topicId?: string
+  contextKind?: 'lesson' | 'homework'
   topicTitle?: string
   sectionHeading?: string
   selectedText: string
@@ -73,7 +74,8 @@ export function ContextualTutorPopup({
         }
         const { answer } = await services.contextualTutor.ask({
           projectId: context.projectId,
-          topicId: context.topicId,
+          ...(context.topicId ? { topicId: context.topicId } : {}),
+          ...(context.contextKind ? { contextKind: context.contextKind } : {}),
           ...(context.topicTitle ? { topicTitle: context.topicTitle } : {}),
           ...(context.sectionHeading ? { sectionHeading: context.sectionHeading } : {}),
           selectedText: context.selectedText,
@@ -110,7 +112,9 @@ export function ContextualTutorPopup({
     }
   }
 
-  const continueHref = `/projects/${context.projectId}/tutor/${context.topicId}/interactive`
+  const continueHref = context.topicId
+    ? `/projects/${context.projectId}/tutor/${context.topicId}/interactive`
+    : null
 
   return (
     <div
@@ -202,13 +206,15 @@ export function ContextualTutorPopup({
               className="text-[14px] leading-[1.6]"
             />
             <div className="flex items-center justify-between gap-2">
-              <a
-                href={continueHref}
-                className="inline-flex items-center gap-1 text-[12px] text-muted-foreground hover:text-foreground"
-              >
-                {t('contextual.continue')}
-                <ArrowRight className="h-3 w-3" aria-hidden />
-              </a>
+              {continueHref && (
+                <a
+                  href={continueHref}
+                  className="inline-flex items-center gap-1 text-[12px] text-muted-foreground hover:text-foreground"
+                >
+                  {t('contextual.continue')}
+                  <ArrowRight className="h-3 w-3" aria-hidden />
+                </a>
+              )}
               <Button size="sm" onClick={() => void send(input)} disabled={busy || !input.trim()}>
                 {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
                 {t('contextual.send')}

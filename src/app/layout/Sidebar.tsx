@@ -2,11 +2,13 @@ import { NavLink, useLocation } from 'react-router-dom'
 import {
   FolderKanban,
   LayoutDashboard,
+  PanelLeftClose,
   Settings as SettingsIcon,
   ShieldCheck,
   Sparkles,
 } from 'lucide-react'
 import type { ComponentType } from 'react'
+import { Button } from '@/shared/ui/Button'
 import { useTranslation, type TranslationKey } from '@/i18n'
 import { cn } from '@/shared/lib/utils'
 
@@ -25,9 +27,14 @@ const NAV_ITEMS: NavItem[] = [
 
 export interface SidebarProps {
   onNavigate?: () => void
+  /**
+   * Desktop only: when provided, a visible "collapse to the left" button is
+   * shown. The mobile drawer omits it, so the drawer behaviour is unchanged.
+   */
+  onCollapse?: () => void
 }
 
-export function Sidebar({ onNavigate }: SidebarProps): JSX.Element {
+export function Sidebar({ onNavigate, onCollapse }: SidebarProps): JSX.Element {
   const { t } = useTranslation()
   const location = useLocation()
   // The homepage already states "local-first" in its own content, so the shared
@@ -40,12 +47,24 @@ export function Sidebar({ onNavigate }: SidebarProps): JSX.Element {
         <div className="brand-mark grid h-9 w-9 shrink-0 place-items-center rounded-xl shadow-soft">
           <Sparkles className="h-4 w-4" />
         </div>
-        <div className="flex min-w-0 flex-col leading-tight">
+        <div className="flex min-w-0 flex-1 flex-col leading-tight">
           <span className="truncate text-sm font-semibold text-foreground">{t('app.name')}</span>
           <span className="truncate text-[10px] uppercase tracking-wider text-muted-foreground">
             {t('app.tagline')}
           </span>
         </div>
+        {onCollapse && (
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="hidden h-8 w-8 shrink-0 lg:grid"
+            aria-label={t('nav.collapseSidebar')}
+            onClick={onCollapse}
+          >
+            <PanelLeftClose className="h-4 w-4" />
+          </Button>
+        )}
       </div>
 
       <nav className="flex-1 space-y-2 px-3">

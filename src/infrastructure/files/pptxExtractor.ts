@@ -172,3 +172,98 @@ export async function extractPptx(blob: Blob): Promise<PptxExtractionResult> {
     metadata: { title, author },
   }
 }
+
+/** An image embedded in a slide, extracted verbatim from the .pptx media. */
+export interface PptxSlideImage {
+  slideNumber: number
+  bytes: ArrayBuffer
+  mimeType: string
+}
+
+/** Only formats a browser can display inline; EMF/WMF/TIFF are skipped. */
+const DISPLAYABLE_IMAGE_MIME: Record<string, string> = {
+  png: 'image/png',
+  jpg: 'image/jpeg',
+  jpeg: 'image/jpeg',
+  gif: 'image/gif',
+  bmp: 'image/bmp',
+  webp: 'image/webp',
+  svg: 'image/svg+xml',
+}
+
+function mimeFromPath(path: string): string | undefined {
+  const ext = path.slice(path.lastIndexOf('.') + 1).toLowerCase()
+  return DISPLAYABLE_IMAGE_MIME[ext]
+}
+
+/** Resolve an OPC relationship target (e.g. `../media/image1.png`) to a zip path. */
+function resolvePart(baseDir: string, target: string): string {
+  const segments = `${baseDir}/${target}`.split('/')
+  const out: string[] = []
+  for (const segment of segments) {
+    if (segment === '' || segment === '.') continue
+    if (segment === '..') out.pop()
+    else out.push(segment)
+  }
+  return out.join('/')
+}
+
+/**
+ * Extract the images each slide embeds, straight from the .pptx media.
+ *
+ * The original slide layout is not rasterised (there is no PPTX renderer in
+ * this app), so the honest "original picture" we can preserve is the media the
+ * slide itself contains. This only ever copies bytes that are already in the
+ * user's file — nothing is invented or re-drawn.
+ */
+export async function extractPptxSlideImages(
+  blob: Blob,
+  options: { maxPerSlide?: number; minBytes?: number } = {},
+): Promise<PptxSlideImage[]> {
+  const maxPerSlide = options.maxPerSlide ?? 3
+  const minBytes = options.minBytes ?? 1024
+  const arrayBuffer = await blob.arrayBuffer()
+  const zip = await JSZip.loadAsync(arrayBuffer)
+  const parser = new DOMParser()
+  const out: PptxSlideImage[] = []
+
+  const slideFiles = Object.keys(zip.files)
+    .filter((n) => /^ppt\/slides\/slide\d+\.xml$/.test(n))
+    .sort((a, b) => {
+      const na = Number(a.match(/slide(\d+)/)?.[1] ?? '0')
+      const nb = Number(b.match(/slide(\d+)/)?.[1] ?? '0')
+      return na - nb
+    })
+
+  for (const name of slideFiles) {
+    const slideNumber = Number(name.match(/slide(\d+)/)?.[1] ?? '0')
+    if (!slideNumber) continue
+    const relsName = name.replace('/slides/slide', '/slides/_rels/slide') + '.rels'
+    const relsXml = await zip.file(relsName)?.async('text')
+    if (!relsXml) continue
+
+    const doc = parser.parseFromString(relsXml, 'application/xml')
+    if (doc.getElementsByTagName('parsererror').length > 0) continue
+
+    const candidates: PptxSlideImage[] = []
+    for (const rel of Array.from(doc.getElementsByTagName('Relationship'))) {
+      const type = rel.getAttribute('Type') ?? ''
+      if (!type.endsWith('/image')) continue
+      const target = rel.getAttribute('Target')
+      if (!target || /^https?:/i.test(target)) continue
+      const path = resolvePart('ppt/slides', target)
+      const mimeType = mimeFromPath(path)
+      if (!mimeType) continue
+      const file = zip.file(path)
+      if (!file) continue
+      const bytes = await file.async('arraybuffer')
+      if (bytes.byteLength < minBytes) continue
+      candidates.push({ slideNumber, bytes, mimeType })
+    }
+
+    candidates.sort((a, b) => b.bytes.byteLength - a.bytes.byteLength)
+    out.push(...candidates.slice(0, maxPerSlide))
+  }
+
+  return out
+}

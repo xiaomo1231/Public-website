@@ -27,6 +27,7 @@ interface SelectionState {
   topicTitle?: string
   projectId?: string
   topicId?: string
+  contextKind?: 'lesson' | 'homework'
   language: string
   fromVisual: boolean
   tooLong: boolean
@@ -117,6 +118,8 @@ export function SelectionTranslator(): JSX.Element | null {
           ? range.getBoundingClientRect()
           : { left: 0, top: 0, width: 0, height: 0 }
       const route = parseTopicRoute(window.location.pathname)
+      const homeworkScope = elementFor(range.startContainer)?.closest('[data-selection-context="homework"]')
+      const homeworkProject = homeworkScope ? parseProjectRoute(window.location.pathname) : null
       const mobile = window.innerWidth < 640
       const anchor: PopupAnchor = {
         left: rect.left,
@@ -128,7 +131,7 @@ export function SelectionTranslator(): JSX.Element | null {
       const canonicalLatex = extractCanonicalLatex(range)
       const surrounding = getSurroundingParagraph(range)
       const sectionHeading = getSectionHeading(range)
-      const topicTitle = getTopicTitle(range)
+      const topicTitle = homeworkScope?.getAttribute('data-selection-title') || getTopicTitle(range)
 
       setAction(null)
       setTranslation(null)
@@ -138,7 +141,8 @@ export function SelectionTranslator(): JSX.Element | null {
         ...(canonicalLatex ? { canonicalLatex } : {}),
         ...(sectionHeading ? { sectionHeading } : {}),
         ...(topicTitle ? { topicTitle } : {}),
-        ...(route ?? {}),
+        ...(route ?? (homeworkProject ? { projectId: homeworkProject } : {})),
+        ...(homeworkProject ? { contextKind: 'homework' as const } : {}),
         language: detectLanguage(`${text} ${surrounding}`),
         fromVisual: isInsideVisual(range),
         tooLong: text.length > MAX_SELECTION,
@@ -305,10 +309,11 @@ export function SelectionTranslator(): JSX.Element | null {
   if (!selection) return null
 
   const contextualContext: ContextualTutorContext | null =
-    selection.projectId && selection.topicId
+    selection.projectId
       ? {
           projectId: selection.projectId,
-          topicId: selection.topicId,
+          ...(selection.topicId ? { topicId: selection.topicId } : {}),
+          ...(selection.contextKind ? { contextKind: selection.contextKind } : {}),
           ...(selection.topicTitle ? { topicTitle: selection.topicTitle } : {}),
           ...(selection.sectionHeading ? { sectionHeading: selection.sectionHeading } : {}),
           selectedText: selection.canonicalLatex ?? selection.text,
@@ -428,6 +433,10 @@ function parseTopicRoute(pathname: string): { projectId: string; topicId: string
   const match = /^\/projects\/([^/]+)\/tutor\/([^/]+)/.exec(pathname)
   if (!match) return null
   return { projectId: match[1]!, topicId: match[2]! }
+}
+
+function parseProjectRoute(pathname: string): string | null {
+  return /^\/projects\/([^/]+)\/homework\/[^/]+/.exec(pathname)?.[1] ?? null
 }
 
 function elementFor(node: Node | null): Element | null {

@@ -4,6 +4,7 @@ import {
   BookX,
   Brain,
   ClipboardList,
+  FolderOpen,
   History,
   Home,
   ListChecks,
@@ -15,6 +16,7 @@ import { useTranslation, type TranslationKey } from '@/i18n'
 
 export type ProjectFlowSection =
   | 'home'
+  | 'files'
   | 'homework'
   | 'tutor'
   | 'quiz'
@@ -38,6 +40,12 @@ interface FlowItem {
  */
 const ITEMS: FlowItem[] = [
   { key: 'home', labelKey: 'projectNav.home', icon: Home, path: (id) => `/projects/${id}` },
+  {
+    key: 'files',
+    labelKey: 'projectNav.files',
+    icon: FolderOpen,
+    path: (id) => `/projects/${id}/files`,
+  },
   {
     key: 'homework',
     labelKey: 'projectNav.homework',

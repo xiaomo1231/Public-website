@@ -20,6 +20,12 @@ export interface SourceQuoteProps {
   quote: string
   /** Full text to show in the reader. Defaults to `quote`. */
   fullText?: string
+  /**
+   * The reference is grounded on a real passage, but the exact excerpt for this
+   * question could not be located. Shown as "verify the passage" instead of an
+   * empty-excerpt message.
+   */
+  quotePending?: boolean
   documentHref?: string
   meta?: SourceDetail[]
   technical?: SourceDetail[]
@@ -38,6 +44,7 @@ export function SourceQuote({
   location,
   quote,
   fullText,
+  quotePending,
   documentHref,
   meta,
   technical,
@@ -86,6 +93,8 @@ export function SourceQuote({
               paragraphClassName="text-[13px] leading-relaxed text-foreground"
             />
           </blockquote>
+        ) : quotePending ? (
+          <p className="text-xs text-muted-foreground">{t('questionSource.pendingExcerpt')}</p>
         ) : (
           <p className="text-xs text-muted-foreground">{t('questionSource.unavailable')}</p>
         )}

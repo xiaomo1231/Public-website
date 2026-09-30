@@ -16,6 +16,7 @@ import { QuestionRepository } from '@/entities/question/repository'
 import { PracticeRepository } from '@/entities/practice/repository'
 import { TutorLessonRepository } from '@/entities/tutorLesson/repository'
 import { HomeworkRepository } from '@/entities/homework/repository'
+import { SlideLessonRepository } from '@/entities/slideLesson/repository'
 import { SettingsService } from './settingsService'
 import { clearCachedDeviceKey } from '@/infrastructure/crypto/deviceKey'
 
@@ -136,7 +137,7 @@ export class DataManagementService {
       'courseExercises', 'prerequisites', 'tutorSessions', 'tutorLessons',
       'visualSources', 'courseContexts', 'courseStructures', 'courseStructureNodes',
       'practiceSets', 'practiceQuestions', 'practiceAttempts',
-      'homeworkSets', 'homeworkQuestions', 'translations',
+      'homeworkSets', 'homeworkQuestions', 'slideLessons', 'translations',
       'questions', 'questionAttempts', 'quizzes', 'knowledgeMastery', 'mistakes',
       'inviteKeys', 'user', 'settings',
     ] as const
@@ -194,6 +195,7 @@ export class DataManagementService {
     const practiceRepo = new PracticeRepository(this.db)
     const lessonRepo = new TutorLessonRepository(this.db)
     const homeworkRepo = new HomeworkRepository(this.db)
+    const slideRepo = new SlideLessonRepository(this.db)
 
     await this.db.transaction('rw', this.db.tables, async () => {
       await projectRepo.get(projectId)
@@ -206,6 +208,7 @@ export class DataManagementService {
       await lessonRepo.deleteByProject(projectId)
       await practiceRepo.deleteByProject(projectId)
       await homeworkRepo.deleteByProject(projectId)
+      await slideRepo.deleteByProject(projectId)
       await mastery.deleteByProject(projectId)
       await mistakeRepo.deleteByProject(projectId)
       await quizRepo.deleteByProject(projectId)

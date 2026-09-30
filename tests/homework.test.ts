@@ -19,11 +19,14 @@ type StubHandler = (system: string, user: string) => unknown
 
 /** A tiny AI stand-in that branches on the system prompt. */
 function stubAI(handler: StubHandler): AIService {
+  const respond = async (messages: StubMessage[]) => ({
+    data: await handler(messages[0]?.content ?? '', messages[1]?.content ?? ''),
+    raw: {},
+  })
   return {
-    chatJSON: async (messages: StubMessage[]) => ({
-      data: await handler(messages[0]?.content ?? '', messages[1]?.content ?? ''),
-      raw: {},
-    }),
+    chatJSON: respond,
+    // The analyzer now streams its JSON; both paths share the same handler.
+    streamJSON: respond,
     chat: async () => ({ content: 'Start by writing down what is given.' }),
   } as unknown as AIService
 }
@@ -59,6 +62,58 @@ describe('homework normalization', () => {
     expect(out[0]!.prompt).toBe('Keep me')
     expect(out[0]!.sourceRefs[0]!.chunkId).toBe('c1')
     expect(out[0]!.sourceRefs[0]!.documentName).toBe('hw.txt')
+  })
+
+  it('accepts c:-prefixed ids and full labels, rejecting invented ones', () => {
+    const out = normalizeQuestions(
+      {
+        questions: [
+          { prompt: 'Prefixed', sourceChunkIds: ['c:c1'] },
+          { prompt: 'Full label', sourceChunkIds: ['[c:c2 · p2]'] },
+          { prompt: 'Invented', sourceChunkIds: ['c:nope'] },
+          { prompt: 'Other batch', sourceChunkIds: ['[c:zzz · p3]'] },
+        ],
+      },
+      [chunkA, chunkB],
+      document,
+    )
+    expect(out.map((q) => q.prompt)).toEqual(['Prefixed', 'Full label'])
+    expect(out[0]!.sourceRefs[0]!.chunkId).toBe('c1')
+    expect(out[1]!.sourceRefs[0]!.chunkId).toBe('c2')
+  })
+
+  it('does not show the previous question’s text as the current question’s source', () => {
+    const shared = {
+      id: 'c3',
+      text: 'Problem 4. Differentiate 3x.\nProblem 5. Find the limit of x² at 3.',
+      order: 0,
+      pageNumber: 3,
+    } as unknown as DocumentChunk
+    const out = normalizeQuestions(
+      { questions: [{ prompt: 'Problem 5. Find the limit of x² at 3.', sourceChunkIds: ['c:c3'] }] },
+      [shared],
+      document,
+    )
+    expect(out).toHaveLength(1)
+    expect(out[0]!.sourceRefs[0]!.quote).toContain('Problem 5')
+    expect(out[0]!.sourceRefs[0]!.quote).not.toContain('Problem 4')
+    expect(out[0]!.sourceRefs[0]!.quotePending).toBeUndefined()
+  })
+
+  it('marks an unlocatable excerpt as pending instead of showing a neighbour', () => {
+    const shared = {
+      id: 'c4',
+      text: 'Problem 1. Alpha.\nProblem 2. Beta.',
+      order: 0,
+      pageNumber: 4,
+    } as unknown as DocumentChunk
+    const out = normalizeQuestions(
+      { questions: [{ prompt: 'A completely unrelated question.', sourceChunkIds: ['c:c4'] }] },
+      [shared],
+      document,
+    )
+    expect(out[0]!.sourceRefs[0]!.quote).toBeUndefined()
+    expect(out[0]!.sourceRefs[0]!.quotePending).toBe(true)
   })
 
   it('rejects incomplete hint/solution payloads', () => {
@@ -138,6 +193,42 @@ describe('HomeworkService', () => {
     expect(questions[0]!.hints).toHaveLength(2)
     expect(questions[0]!.solution).toBe('The limit is 9.')
     expect(questions[0]!.generationStatus).toBe('ready')
+  })
+
+  it('accepts the c:-prefixed labels a real model copies and grounds them on the real chunk', async () => {
+    const service = new HomeworkService({
+      db,
+      ai: stubAI((system) =>
+        system.includes('extract the individual questions')
+          ? {
+              questions: [
+                {
+                  number: '1',
+                  prompt: chunks[0]!.text,
+                  sourceChunkIds: [`c:${chunks[0]!.id}`],
+                },
+                {
+                  number: '2',
+                  prompt: chunks[1]!.text,
+                  sourceChunkIds: [`[c:${chunks[1]!.id} · p2]`],
+                },
+              ],
+            }
+          : { hints: ['h'], solution: 's' },
+      ),
+    })
+
+    const set = await service.createFromDocument(documentId)
+    expect(set.status).toBe('ready')
+    expect(set.questionCount).toBe(2)
+
+    const questions = await service.listQuestions(set.id)
+    expect(questions).toHaveLength(2)
+    expect(questions[0]!.sourceRefs[0]!.chunkId).toBe(chunks[0]!.id)
+    expect(questions[1]!.sourceRefs[0]!.chunkId).toBe(chunks[1]!.id)
+    // The prompt equals the passage, so a verifiable excerpt is recorded.
+    expect(questions[0]!.sourceRefs[0]!.quote).toContain('Find the limit')
+    expect(questions[0]!.sourceRefs[0]!.quotePending).toBeUndefined()
   })
 
   it('isolates a per-question content failure', async () => {
@@ -508,7 +599,7 @@ describe('HomeworkService', () => {
         if (system.includes('extract the individual questions')) {
           calls += 1
           if (calls === 1) {
-            return analyzer([chunks[0]!.id, chunks[0]!.id], ['Alpha beta gamma.', 'Alpha beta gamma!'])
+            return analyzer([chunks[0]!.id, chunks[0]!.id], ['Alpha beta gamma.', 'Alpha beta gamma gamma.'])
           }
           if (calls === 2) return analyzer([chunks[1]!.id], ['Completely different.'])
           return analyzer([chunks[1]!.id, chunks[0]!.id], ['Completely different.', 'Alpha beta gamma.'])
@@ -535,8 +626,8 @@ describe('HomeworkService', () => {
         if (system.includes('extract the individual questions')) {
           calls += 1
           return calls === 1
-            ? analyzer([chunks[0]!.id, chunks[0]!.id], ['Alpha.', 'Alpha!'])
-            : analyzer([chunks[0]!.id], ['Alpha.'])
+            ? analyzer([chunks[0]!.id, chunks[0]!.id], ['Alpha beta.', 'Alpha beta gamma.'])
+            : analyzer([chunks[0]!.id], ['Alpha beta.'])
         }
         return { hints: ['h'], solution: 's' }
       }),

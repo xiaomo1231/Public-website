@@ -1,4 +1,5 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { Link } from 'react-router-dom'
 import {
   AlertTriangle,
   CheckCircle2,
@@ -22,8 +23,9 @@ import { Label } from '@/shared/ui/Label'
 import { Progress } from '@/shared/ui/Progress'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/shared/ui/Tabs'
 import { Textarea } from '@/shared/ui/Textarea'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/shared/ui/Select2'
 import { useTranslation, type TranslationKey } from '@/i18n'
-import type { LearningMaterialType } from '@/entities/document/types'
+import { LEARNING_MATERIAL_TYPES, type LearningMaterialType } from '@/entities/document/types'
 import { ACCEPTED_TYPES } from '@/infrastructure/files/validation'
 import { formatBytes } from '@/shared/lib/format'
 import { cn } from '@/shared/lib/utils'
@@ -41,6 +43,22 @@ export interface DocumentUploadDialogProps {
   onOpenChange: (open: boolean) => void
   /** Which learning-material role these files belong to. */
   materialType?: LearningMaterialType
+  /** Let the user pick the role (used by the project files hub). */
+  allowMaterialSelect?: boolean
+  /**
+   * Fired once per successfully created document. Lets a caller (e.g. linking
+   * an answer file to an assignment) capture the id without a separate query.
+   */
+  onUploaded?: (documentId: string) => void
+}
+
+const MATERIAL_LABEL_KEY: Record<LearningMaterialType, TranslationKey> = {
+  textbook: 'materialType.textbook',
+  user_notes: 'materialType.user_notes',
+  lecture_transcript: 'materialType.lecture_transcript',
+  professor_practice: 'materialType.professor_practice',
+  homework: 'materialType.homework',
+  homework_answer: 'materialType.homework_answer',
 }
 
 const TEXT_TAB = 'text' as const
@@ -99,8 +117,14 @@ export function DocumentUploadDialog({
   open,
   onOpenChange,
   materialType = 'textbook',
+  allowMaterialSelect = false,
+  onUploaded,
 }: DocumentUploadDialogProps): JSX.Element {
   const { t } = useTranslation()
+  const [selectedMaterial, setSelectedMaterial] = useState<LearningMaterialType>(materialType)
+  // Only the hub lets the user pick the role; every other entrance passes it in
+  // and must track the prop (the dialog stays mounted while the entrance changes).
+  const material = allowMaterialSelect ? selectedMaterial : materialType
   const [mode, setMode] = useState<Mode>(FILE_TAB)
   const [text, setText] = useState('')
   const [textName, setTextName] = useState('')
@@ -109,6 +133,18 @@ export function DocumentUploadDialog({
 
   const batch = useBatchUpload(projectId)
   const { items, summary, running } = batch
+
+  // Report each newly created document id exactly once.
+  const reportedUploads = useRef<Set<string>>(new Set())
+  useEffect(() => {
+    if (!onUploaded) return
+    for (const item of items) {
+      if (item.status !== 'completed' || !item.documentId) continue
+      if (reportedUploads.current.has(item.documentId)) continue
+      reportedUploads.current.add(item.documentId)
+      onUploaded(item.documentId)
+    }
+  }, [items, onUploaded])
 
   const started = items.some((item) => item.status !== 'queued' && item.status !== 'skipped')
   const finished = summary.finished && started
@@ -129,14 +165,14 @@ export function DocumentUploadDialog({
     const files = Array.from(event.target.files ?? [])
     // Reset so picking the same file again still fires `change`.
     event.target.value = ''
-    if (files.length > 0) await batch.addFiles(files, materialType)
+    if (files.length > 0) await batch.addFiles(files, material)
   }
 
   async function handleDrop(event: React.DragEvent<HTMLLabelElement>) {
     event.preventDefault()
     setDragOver(false)
     const files = Array.from(event.dataTransfer.files ?? [])
-    if (files.length > 0) await batch.addFiles(files, materialType)
+    if (files.length > 0) await batch.addFiles(files, material)
   }
 
   async function handleUploadText() {
@@ -147,7 +183,7 @@ export function DocumentUploadDialog({
     setTextName('')
     await batch.addTextAndStart({
       text: body,
-      materialType,
+      materialType: material,
       ...(name.trim() ? { name: name.trim() } : {}),
     })
   }
@@ -160,6 +196,7 @@ export function DocumentUploadDialog({
       setText('')
       setTextName('')
       setMode(FILE_TAB)
+      setSelectedMaterial(materialType)
       setDragOver(false)
     }
     onOpenChange(next)
@@ -172,6 +209,27 @@ export function DocumentUploadDialog({
           <DialogTitle>{t('batch.title')}</DialogTitle>
           <DialogDescription>{t('batch.description')}</DialogDescription>
         </DialogHeader>
+
+        {allowMaterialSelect && !running && !finished && (
+          <div className="space-y-2">
+            <Label htmlFor="upload-material">{t('files.materialLabel')}</Label>
+            <Select
+              value={selectedMaterial}
+              onValueChange={(v) => setSelectedMaterial(v as LearningMaterialType)}
+            >
+              <SelectTrigger id="upload-material">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {LEARNING_MATERIAL_TYPES.map((m) => (
+                  <SelectItem key={m} value={m}>
+                    {t(MATERIAL_LABEL_KEY[m])}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
 
         {!running && !finished && (
           <Tabs value={mode} onValueChange={(v) => setMode(v as Mode)}>
@@ -292,18 +350,29 @@ export function DocumentUploadDialog({
                   <span className="shrink-0 text-xs text-muted-foreground">
                     {item.sizeBytes > 0 ? formatBytes(item.sizeBytes) : null}
                   </span>
-                  <span
-                    className={cn(
-                      'w-40 shrink-0 truncate text-right text-xs',
-                      item.status === 'failed' && 'text-destructive',
-                      item.status === 'skipped' && 'text-amber-600 dark:text-amber-400',
-                      (item.status === 'completed' || item.status === 'queued') &&
-                        'text-muted-foreground',
-                    )}
-                    title={item.error ?? statusLabel(item)}
-                  >
-                    {statusLabel(item)}
-                  </span>
+                  {item.duplicateOf ? (
+                    <Link
+                      to={`/projects/${projectId}/documents/${item.duplicateOf.documentId}`}
+                      title={item.duplicateOf.name}
+                      aria-label={`${statusLabel(item)} — ${t('batch.duplicateLocate')}`}
+                      className="focus-ring w-40 shrink-0 truncate text-right text-xs text-amber-600 underline-offset-2 hover:underline dark:text-amber-400"
+                    >
+                      {statusLabel(item)}
+                    </Link>
+                  ) : (
+                    <span
+                      className={cn(
+                        'w-40 shrink-0 truncate text-right text-xs',
+                        item.status === 'failed' && 'text-destructive',
+                        item.status === 'skipped' && 'text-amber-600 dark:text-amber-400',
+                        (item.status === 'completed' || item.status === 'queued') &&
+                          'text-muted-foreground',
+                      )}
+                      title={item.error ?? statusLabel(item)}
+                    >
+                      {statusLabel(item)}
+                    </span>
+                  )}
                   {!running && item.status !== 'completed' && (
                     <button
                       type="button"

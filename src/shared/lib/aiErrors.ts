@@ -21,6 +21,12 @@ export function friendlyAIError(err: unknown): string {
         return t('friendlyError.authFailed')
       case 'RATE_LIMITED':
         return t('friendlyError.rateLimited')
+      case 'QUOTA_EXCEEDED':
+        return t('friendlyError.quotaExceeded')
+      case 'CONTEXT_TOO_LONG':
+        return t('friendlyError.contextTooLong')
+      case 'OUTPUT_LIMIT':
+        return t('friendlyError.outputLimit')
       case 'TIMEOUT':
         return t('friendlyError.timeout')
       case 'PROVIDER_UNAVAILABLE':

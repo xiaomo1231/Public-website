@@ -1,4 +1,4 @@
-import { Monitor, Moon, Sun, LogOut, Languages, Menu } from 'lucide-react'
+import { Monitor, Moon, Sun, LogOut, Languages, Menu, PanelLeftOpen } from 'lucide-react'
 import type { UserTheme } from '@/entities/user/types'
 import { useAuth } from '@/features/auth/useAuth'
 import { useThemePreference } from '@/features/theme/useAppearance'
@@ -23,9 +23,14 @@ const THEME_OPTIONS: { value: UserTheme; labelKey: TranslationKey; icon: typeof 
 
 export interface HeaderProps {
   onOpenMobileNav?: () => void
+  /**
+   * Desktop only: provided when the sidebar is collapsed, so the expand button
+   * is always present and reachable while the sidebar is hidden.
+   */
+  onExpandNav?: () => void
 }
 
-export function Header({ onOpenMobileNav }: HeaderProps): JSX.Element {
+export function Header({ onOpenMobileNav, onExpandNav }: HeaderProps): JSX.Element {
   const { profile, lock } = useAuth()
   const { t } = useTranslation()
   const { language, setLanguage } = useUILanguage()
@@ -45,6 +50,17 @@ export function Header({ onOpenMobileNav }: HeaderProps): JSX.Element {
         >
           <Menu className="h-5 w-5" />
         </Button>
+        {onExpandNav && (
+          <Button
+            variant="ghost"
+            size="icon"
+            className="hidden shrink-0 lg:inline-flex"
+            aria-label={t('nav.expandSidebar')}
+            onClick={onExpandNav}
+          >
+            <PanelLeftOpen className="h-5 w-5" />
+          </Button>
+        )}
         <div className="min-w-0 truncate text-sm text-muted-foreground">
           {profile ? t('header.welcomeNamed', { name: profile.name }) : t('header.welcome')}
         </div>

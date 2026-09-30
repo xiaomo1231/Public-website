@@ -1,6 +1,6 @@
 import { useState } from 'react'
-import { useParams } from 'react-router-dom'
-import { BookOpen, Mic, NotebookPen, type LucideIcon } from 'lucide-react'
+import { Link, useParams } from 'react-router-dom'
+import { BookOpen, FolderOpen, Mic, NotebookPen, type LucideIcon } from 'lucide-react'
 import { DocumentList } from '@/widgets/documents/DocumentList'
 import { DocumentUploadDialog } from '@/widgets/documents/DocumentUploadDialog'
 import { Button } from '@/shared/ui/Button'
@@ -94,9 +94,17 @@ export function ProjectDocumentsTab({ projectId }: { projectId: string }): JSX.E
 
   return (
     <div className="space-y-4">
-      <div>
-        <h2 className="text-base font-semibold">{t('materials.title')}</h2>
-        <p className="text-sm text-muted-foreground">{t('materials.subtitle')}</p>
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <h2 className="text-base font-semibold">{t('materials.title')}</h2>
+          <p className="text-sm text-muted-foreground">{t('materials.subtitle')}</p>
+        </div>
+        <Button asChild variant="outline" size="sm" className="self-start sm:self-auto">
+          <Link to={`/projects/${projectId}/files`}>
+            <FolderOpen className="h-4 w-4" />
+            {t('files.openAll')}
+          </Link>
+        </Button>
       </div>
 
       <div className="grid gap-4 lg:grid-cols-3">

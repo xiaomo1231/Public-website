@@ -3,8 +3,11 @@ import { extractJSON, parseSSE } from '@/infrastructure/ai'
 import {
   AIProviderError,
   AuthFailedError,
+  ContextTooLongError,
   InvalidJSONError,
+  OutputLimitError,
   ProviderUnavailableError,
+  QuotaExceededError,
   RateLimitedError,
   TimeoutError,
   errorFromStatus,
@@ -19,6 +22,21 @@ describe('errorFromStatus', () => {
   it('maps 429 to RateLimitedError', () => {
     expect(errorFromStatus(429)).toBeInstanceOf(RateLimitedError)
   })
+  it('maps a 429 quota message to QuotaExceededError', () => {
+    expect(errorFromStatus(429, 'You exceeded your current quota')).toBeInstanceOf(
+      QuotaExceededError,
+    )
+    expect(errorFromStatus(429, '账户余额不足')).toBeInstanceOf(QuotaExceededError)
+  })
+  it('classifies a context overflow as ContextTooLongError', () => {
+    expect(
+      errorFromStatus(400, "This model's maximum context length is 8192 tokens"),
+    ).toBeInstanceOf(ContextTooLongError)
+    expect(errorFromStatus(400, '超过上下文长度')).toBeInstanceOf(ContextTooLongError)
+  })
+  it('classifies a rejected output cap as OutputLimitError', () => {
+    expect(errorFromStatus(400, 'max_tokens is too large: 32000')).toBeInstanceOf(OutputLimitError)
+  })
   it('maps 5xx to ProviderUnavailableError', () => {
     expect(errorFromStatus(500)).toBeInstanceOf(ProviderUnavailableError)
     expect(errorFromStatus(503, 'down')).toBeInstanceOf(ProviderUnavailableError)
@@ -28,6 +46,7 @@ describe('errorFromStatus', () => {
   })
   it('falls back to AIProviderError', () => {
     expect(errorFromStatus(418, 'teapot')).toBeInstanceOf(AIProviderError)
+    expect(errorFromStatus(400, 'bad parameter').code).toBe('INVALID_REQUEST')
   })
   it('isAIError narrows', () => {
     expect(isAIError(new InvalidJSONError())).toBe(true)

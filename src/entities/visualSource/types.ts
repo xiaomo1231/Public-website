@@ -51,3 +51,8 @@ export interface VisualSourceImageRow {
 export function fallbackVisualCaption(pageNumber: number): string {
   return `Figure from course material, page ${pageNumber}.`
 }
+
+/** Caption for an image preserved directly from a slide. */
+export function slideVisualCaption(slideNumber: number): string {
+  return `Image from slide ${slideNumber}.`
+}

@@ -126,6 +126,28 @@ describe('createFileQueueItems', () => {
     const items = createFileQueueItems([makeFile('Lecture.pdf')], existing)
     expect(items[0]?.issue).toBe('duplicate')
   })
+
+  it('points a duplicate at the stored document so it can be located', () => {
+    const existing = [
+      { id: 'doc-42', name: 'Lecture 01.pdf', size: 32, modified: 1_700_000_000_000 },
+    ]
+    const items = createFileQueueItems([makeFile('Lecture 01.pdf')], existing)
+    expect(items[0]?.issue).toBe('duplicate')
+    expect(items[0]?.duplicateOf).toEqual({ documentId: 'doc-42', name: 'Lecture 01.pdf' })
+  })
+
+  it('has nothing to point at for a duplicate inside the same selection', () => {
+    const items = createFileQueueItems([makeFile('same.pdf'), makeFile('same.pdf')])
+    expect(items[1]?.issue).toBe('duplicate')
+    expect(items[1]?.duplicateOf).toBeUndefined()
+  })
+
+  it('does not flag a file that only exists in another project', () => {
+    // The caller only ever passes the current project's documents, so an empty
+    // list means "not in this project" and the file uploads normally.
+    const items = createFileQueueItems([makeFile('Lecture 01.pdf')], [])
+    expect(items[0]?.status).toBe('queued')
+  })
 })
 
 describe('isSameFile', () => {

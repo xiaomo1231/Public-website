@@ -76,29 +76,31 @@ describe('ProjectDetailPage', () => {
     expect(screen.getByText('Upcoming in this project')).toBeInTheDocument()
   })
 
-  it('keeps every action reachable from the analysis tab, with a clear primary', async () => {
+  it('keeps every learned destination reachable from the workspace, with a clear primary', async () => {
     const user = userEvent.setup()
     renderPage()
 
-    await user.click(screen.getByRole('tab', { name: 'Analysis' }))
-
-    expect(await screen.findByText('Quick actions')).toBeInTheDocument()
-    expect(screen.getByTestId('analysis-panel')).toBeInTheDocument()
-    // Both the banner and the quick-actions panel link to the tutor.
+    // The course path is always visible on the course home.
+    expect(screen.getByText('Course path')).toBeInTheDocument()
     const tutorLinks = screen.getAllByRole('link', { name: /Open Tutor/ })
     expect(tutorLinks.length).toBeGreaterThanOrEqual(1)
     for (const link of tutorLinks) {
       expect(link).toHaveAttribute('href', '/projects/p1/tutor')
     }
     const links: Record<string, string> = {
+      Tutor: '/projects/p1/tutor',
+      Homework: '/projects/p1/homework',
       Quiz: '/projects/p1/quiz',
       Mistakes: '/projects/p1/mistakes',
       Mastery: '/projects/p1/mastery',
       'Chat History': '/projects/p1/history',
     }
     for (const [name, href] of Object.entries(links)) {
-      expect(screen.getByRole('link', { name })).toHaveAttribute('href', href)
+      expect(screen.getAllByRole('link', { name })[0]).toHaveAttribute('href', href)
     }
+
+    await user.click(screen.getByRole('tab', { name: 'Analysis' }))
+    expect(await screen.findByTestId('analysis-panel')).toBeInTheDocument()
   })
 
   it('presents the project as a course workspace with its identity and dates', () => {

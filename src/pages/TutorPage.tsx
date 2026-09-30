@@ -20,9 +20,11 @@ import { TutorSymbolsPanel } from '@/widgets/tutor/TutorSymbolsPanel'
 import { ClassProgressCard } from '@/widgets/tutor/ClassProgressCard'
 import { CourseStructurePanel } from '@/widgets/courseStructure/CourseStructurePanel'
 import { ProjectFlowNav } from '@/widgets/project/ProjectFlowNav'
+import { StudyModeTabs } from '@/widgets/slides/StudyModeTabs'
 import { useProjectTopics } from '@/features/tutor/useProjectTopics'
 import { useTutorLesson } from '@/features/tutor/useTutorLesson'
 import { useCourseContext } from '@/features/tutor/useCourseContext'
+import { useSlideDocuments } from '@/features/slides/useSlideDocuments'
 import type { CourseStructureNode } from '@/entities/courseStructure/types'
 import { useTranslation, type TranslationKey } from '@/i18n'
 
@@ -45,6 +47,12 @@ export function TutorPage(): JSX.Element {
   const { t } = useTranslation()
   const { loading, analysis, topics } = useProjectTopics(projectId)
   const { context: courseContext } = useCourseContext(projectId)
+  const { documents: slideDocuments } = useSlideDocuments(projectId)
+  /** "Learn by slide" is offered only when the project has a presentation. */
+  const hasPresentations = slideDocuments.length > 0
+  const studyMode = hasPresentations ? (
+    <StudyModeTabs projectId={projectId ?? ''} active="knowledge" />
+  ) : null
   const [activeTopicId, setActiveTopicId] = useState<string | undefined>(topicId)
   /** When set, only topics inside this chapter/section are shown. */
   const [structureFilter, setStructureFilter] = useState<CourseStructureNode | null>(null)
@@ -95,6 +103,7 @@ export function TutorPage(): JSX.Element {
           title={t('tutor.title')}
           description={t('tutor.notAnalysedPageHint')}
           nav={<ProjectFlowNav projectId={projectId} active="tutor" />}
+          {...(studyMode ? { actions: studyMode } : {})}
         />
         <PageContent>
           <EmptyState
@@ -133,7 +142,9 @@ export function TutorPage(): JSX.Element {
         description={t('tutor.subtitle')}
         nav={<ProjectFlowNav projectId={projectId} active="tutor" />}
         actions={
-          <DropdownMenu>
+          <div className="flex flex-wrap items-center gap-2">
+            {studyMode}
+            <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="outline" size="sm">
                 <Languages className="h-4 w-4" />
@@ -149,7 +160,8 @@ export function TutorPage(): JSX.Element {
                 </DropdownMenuItem>
               ))}
             </DropdownMenuContent>
-          </DropdownMenu>
+            </DropdownMenu>
+          </div>
         }
       />
       <PageContent>

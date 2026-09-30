@@ -1,9 +1,18 @@
 import JSZip from 'jszip'
 
+export interface TestPptxImage {
+  /** File name inside `ppt/media` (extension decides the mime type). */
+  name?: string
+  bytes?: Uint8Array
+  mimeType?: string
+}
+
 export interface TestPptxSlide {
   title?: string
   body?: string
   notes?: string
+  /** Images embedded in this slide (written to `ppt/media`). */
+  images?: TestPptxImage[]
 }
 
 export interface TestPptxOptions {
@@ -65,12 +74,31 @@ export async function makeTestPptx(options: TestPptxOptions = {}): Promise<Blob>
   zip.folder('ppt')!.file('presentation.xml', presentationXml)
   zip.folder('ppt/_rels')!.file('presentation.xml.rels', presentationRels)
   const slideFolder = zip.folder('ppt/slides')!
+  const slideRelsFolder = zip.folder('ppt/slides/_rels')!
   const notesFolder = zip.folder('ppt/notesSlides')!
+  const mediaFolder = zip.folder('ppt/media')!
   for (let i = 0; i < slides.length; i++) {
     const slide = slides[i]!
     slideFolder.file(`slide${i + 1}.xml`, makeSlideXml(slide))
     if (slide.notes) {
       notesFolder.file(`notesSlide${i + 1}.xml`, makeNotesXml(slide.notes))
+    }
+    const images = slide.images ?? []
+    if (images.length > 0) {
+      const relationships = images
+        .map((image, k) => {
+          const name = image.name ?? `image${i + 1}_${k + 1}.png`
+          mediaFolder.file(name, image.bytes ?? new Uint8Array(2048))
+          return `<Relationship Id="rIdImg${k + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="../media/${name}"/>`
+        })
+        .join('\n')
+      slideRelsFolder.file(
+        `slide${i + 1}.xml.rels`,
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  ${relationships}
+</Relationships>`,
+      )
     }
   }
   return zip.generateAsync({ type: 'blob' })

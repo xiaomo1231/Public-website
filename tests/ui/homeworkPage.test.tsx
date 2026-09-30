@@ -125,4 +125,38 @@ describe('HomeworkPage archive and re-analysis summary', () => {
 
     expect(await screen.findByText(/restored 1/)).toBeInTheDocument()
   })
+
+  it('offers practice / review when an answer file is linked', async () => {
+    const user = userEvent.setup()
+    holder.service.getSet = vi.fn(async () => ({ ...SET, answerDocumentId: 'a1' }))
+    renderPage()
+
+    const practice = await screen.findByRole('button', { name: 'Practice' })
+    const review = screen.getByRole('button', { name: 'Review' })
+    expect(practice).toHaveAttribute('aria-pressed', 'true')
+    await user.click(review)
+    expect(review).toHaveAttribute('aria-pressed', 'true')
+    expect(practice).toHaveAttribute('aria-pressed', 'false')
+  })
+
+  it('navigates with the compact top question list', async () => {
+    const user = userEvent.setup()
+    rows = [
+      question({ id: 'q1', order: 0, prompt: 'First question.' }),
+      question({ id: 'q2', order: 1, prompt: 'Second question.' }),
+    ]
+    renderPage()
+
+    expect(await screen.findByText('First question.')).toBeInTheDocument()
+    const chips = screen.getAllByRole('button', { name: /^\d+\./ })
+    expect(chips).toHaveLength(2)
+    expect(chips[0]).toHaveAttribute('aria-current', 'true')
+    expect(screen.getByRole('button', { name: 'Previous' })).toBeDisabled()
+
+    await user.click(chips[1]!)
+    expect(await screen.findByText('Second question.')).toBeInTheDocument()
+    expect(chips[1]).toHaveAttribute('aria-current', 'true')
+    expect(screen.getByRole('button', { name: 'Next' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Previous' })).toBeEnabled()
+  })
 })
