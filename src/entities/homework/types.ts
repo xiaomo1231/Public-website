@@ -1,5 +1,8 @@
 import type { SourceReference } from '@/entities/courseAnalysis/types'
+import type { AnswerEntry } from './answerMatching'
 import type { TranslationKey } from '@/i18n/types'
+import type { HomeworkReviewGuide } from './reviewGuide'
+import type { HomeworkAnswerCheck } from './answerCheck'
 
 /**
  * A student-uploaded homework assignment that the AI has turned into questions.
@@ -36,6 +39,13 @@ export interface HomeworkSet {
    * assignments created before answer keys existed stay valid.
    */
   answerDocumentId?: string
+  /**
+   * A student-defined division of the answer document, used when the automatic
+   * numbering parse could not split it. When present it replaces the parsed
+   * entries for mapping; every entry keeps the real chunks/pages it came from.
+   * Optional and non-indexed, so old rows stay valid.
+   */
+  answerEntries?: AnswerEntry[]
   /**
    * Live progress while the set is `analyzing`, so a card can show which stage
    * is running and how far it has got. Cleared when the run reaches a terminal
@@ -154,6 +164,10 @@ export interface HomeworkQuestion {
    * it silently overwritten. Never corrected or relabelled as the professor's.
    */
   previousSolution?: string
+  /** Cached, source-linked teaching review. Optional for existing rows. */
+  reviewGuide?: HomeworkReviewGuide
+  /** Latest answer check, tied to the exact submitted draft and reference. */
+  answerCheck?: HomeworkAnswerCheck
   /** Student's saved working. Restored on reload. */
   draftText: string
   /** How many hints the student has revealed (0..hints.length). */

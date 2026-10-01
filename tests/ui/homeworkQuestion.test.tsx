@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { MemoryRouter } from 'react-router-dom'
 import { HomeworkQuestionView } from '@/widgets/homework/HomeworkQuestionView'
 import type { HomeworkQuestion } from '@/entities/homework/types'
 import type { HomeworkService } from '@/services/homeworkService'
@@ -35,6 +36,20 @@ function stubService(): HomeworkService {
     revealNextHint: vi.fn(async () => ({ ...QUESTION, revealedHints: 1 })),
     revealSolution: vi.fn(async () => ({ ...QUESTION, solutionRevealed: true })),
     generateContent: vi.fn(async () => QUESTION),
+    checkAnswer: vi.fn(async () => ({
+      method: 'ai' as const, verdict: 'partial' as const, similarityPercent: 75,
+      feedback: 'The result is right; explain the method.', matchedPoints: ['Correct result'],
+      missingPoints: ['Reasoning'], referenceKind: 'ai_solution' as const,
+      inputHash: '', language: 'en' as const, promptVersion: 'v1',
+      questionSourceRefs: [], answerChunkIds: [], createdAt: 1,
+    })),
+    getOrGenerateReviewGuide: vi.fn(async () => ({
+      questionMeaning: 'Find the limit.', knowledgePoints: ['Use continuity.'],
+      method: 'Substitute the value.', steps: ['Set $x=3$.', 'Compute $3^2=9$.'],
+      explanation: 'A polynomial is continuous.', interpretation: 'The limit is 9.',
+      check: 'Compare nearby values.', language: 'en' as const, promptVersion: 'v1',
+      inputHash: 'test', questionSourceRefs: [], answerChunkIds: [], createdAt: 1,
+    })),
     ask: vi.fn(async () => ({
       id: 'a1',
       role: 'assistant' as const,
@@ -45,6 +60,36 @@ function stubService(): HomeworkService {
 }
 
 describe('HomeworkQuestionView', () => {
+  it('guides a span question without sending AI requests until the student sends one', async () => {
+    const user = userEvent.setup()
+    const service = stubService()
+    const question = { ...QUESTION, prompt: 'Is v in Span(v1, v2)?' }
+    render(<HomeworkQuestionView question={question} service={service} />)
+
+    expect(screen.getByText('Start with the question')).toBeInTheDocument()
+    expect(screen.getByText(/Read the original question on the left/)).toBeInTheDocument()
+    expect(screen.queryByText(/Start from the definition/)).not.toBeInTheDocument()
+    expect(service.ask).not.toHaveBeenCalled()
+
+    await user.click(screen.getByRole('button', { name: '3. Choose a method' }))
+    await user.click(screen.getByRole('button', { name: 'Span · suggested' }))
+    expect(screen.getByText(/Start from the definition/)).toBeInTheDocument()
+    expect(service.ask).not.toHaveBeenCalled()
+
+    await user.click(screen.getByRole('button', { name: 'Ask about this step' }))
+    expect(screen.getByLabelText('Ask about this question')).toHaveValue(
+      'Please help me choose a method for this question and explain why it fits. Do not solve the problem.',
+    )
+    expect(service.ask).not.toHaveBeenCalled()
+    await user.click(screen.getByRole('button', { name: 'Send' }))
+    expect(service.ask).toHaveBeenCalledWith('q1', expect.stringContaining('choose a method'))
+    expect(screen.getByLabelText('Your working')).toHaveValue('my partial working')
+
+    await user.click(screen.getByRole('button', { name: 'Show answer' }))
+    await user.click(screen.getByRole('button', { name: '6. Check' }))
+    expect(screen.getByText('Exam answer outline')).toBeInTheDocument()
+  })
+
   it('hides hints and the solution until asked, and keeps the draft', async () => {
     const user = userEvent.setup()
     const service = stubService()
@@ -66,18 +111,90 @@ describe('HomeworkQuestionView', () => {
     expect(screen.getByLabelText('Your working')).toHaveValue('my partial working')
   })
 
+  it('checks the current draft and shows an AI similarity estimate with its disclaimer', async () => {
+    const user = userEvent.setup()
+    const service = stubService()
+    const { answerCheckInputHash } = await import('@/entities/homework/answerCheck')
+    vi.mocked(service.checkAnswer).mockImplementation(async (_id, draft) => ({
+      method: 'ai', verdict: 'partial', similarityPercent: 75,
+      feedback: 'The result is right; explain the method.', matchedPoints: ['Correct result'],
+      missingPoints: ['Reasoning'], referenceKind: 'ai_solution',
+      inputHash: answerCheckInputHash(QUESTION, draft, 'en'), language: 'en', promptVersion: 'v1',
+      questionSourceRefs: [], answerChunkIds: [], createdAt: 1,
+    }))
+    render(<HomeworkQuestionView question={QUESTION} service={service} />)
+    await user.click(screen.getByRole('button', { name: 'Check answer' }))
+    expect(service.checkAnswer).toHaveBeenCalledWith('q1', 'my partial working', 'en')
+    expect(await screen.findByText(/Estimated semantic similarity/)).toHaveTextContent('75%')
+    expect(screen.getByText(/generated by AI and may be wrong/)).toBeInTheDocument()
+    await user.type(screen.getByLabelText('Your working'), ' more work')
+    expect(screen.queryByText(/Estimated semantic similarity/)).not.toBeInTheDocument()
+  })
+
   it('sends a question to the tutor and shows the reply', async () => {
     const user = userEvent.setup()
     const service = stubService()
     render(<HomeworkQuestionView question={QUESTION} service={service} />)
 
-    await user.click(screen.getByRole('button', { name: /Ask/ }))
+    // Q&A is always available directly beneath the hints; opening a separate
+    // action is no longer required.
+    const hintTitle = screen.getByText('Hint 0 of 2')
+    const chatTitle = screen.getByText('Ask AI')
+    expect(hintTitle.compareDocumentPosition(chatTitle) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     const input = screen.getByLabelText('Ask about this question')
     await user.type(input, 'Where do I start?')
     await user.click(screen.getByRole('button', { name: /Send/ }))
 
     expect(service.ask).toHaveBeenCalledWith('q1', 'Where do I start?')
     expect(await screen.findByText('Start by writing what you know.')).toBeInTheDocument()
+  })
+
+  it('keeps a failed question in the input so it can be retried', async () => {
+    const user = userEvent.setup()
+    const service = stubService()
+    vi.mocked(service.ask).mockRejectedValueOnce(new Error('Provider unavailable'))
+    render(<HomeworkQuestionView question={QUESTION} service={service} />)
+
+    const input = screen.getByLabelText('Ask about this question')
+    await user.type(input, 'How do I begin?')
+    await user.click(screen.getByRole('button', { name: 'Send' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Provider unavailable')
+    expect(input).toHaveValue('How do I begin?')
+    expect(screen.queryByRole('list', { name: 'Ask AI' })).not.toBeInTheDocument()
+  })
+
+  it('loads the original PDF only after opening its review disclosure', async () => {
+    const service = stubService()
+    const answer = {
+      ...QUESTION,
+      answerStatus: 'matched' as const,
+      answerText: 'V 1 = R\n2',
+      answerChunkIds: ['answer-chunk'],
+    }
+    const create = vi.fn(() => 'blob:answer-page')
+    const revoke = vi.fn()
+    Object.defineProperty(URL, 'createObjectURL', { configurable: true, value: create })
+    Object.defineProperty(URL, 'revokeObjectURL', { configurable: true, value: revoke })
+    Object.assign(service, {
+      loadAnswerSourcePages: vi.fn(async () => [{ page: 8, image: new Blob(['png']) }]),
+    })
+    const { unmount } = render(
+      <MemoryRouter>
+        <HomeworkQuestionView question={answer} service={service} mode="review" answerDocumentId="a1" />
+      </MemoryRouter>,
+    )
+    expect(await screen.findByText('Use continuity.')).toBeInTheDocument()
+    expect(service.loadAnswerSourcePages).not.toHaveBeenCalled()
+    expect(screen.queryByRole('img', { name: 'Original answer · page 8' })).not.toBeInTheDocument()
+    await userEvent.setup().click(screen.getByText('Professor answer (verbatim)'))
+    expect(await screen.findByRole('img', { name: 'Original answer · page 8' })).toHaveAttribute('src', 'blob:answer-page')
+    expect(screen.getByText('Extracted text').closest('details')).not.toHaveAttribute('open')
+    expect(screen.getByText(/PDF extraction may lose mathematical layout/)).toBeInTheDocument()
+    unmount()
+    await waitFor(() => expect(revoke).toHaveBeenCalledWith('blob:answer-page'))
+    delete (URL as { createObjectURL?: typeof URL.createObjectURL }).createObjectURL
+    delete (URL as { revokeObjectURL?: typeof URL.revokeObjectURL }).revokeObjectURL
   })
 
   it('keeps the question in its own anchored region with a control to return to it', async () => {
@@ -155,12 +272,10 @@ describe('HomeworkQuestionView formula rendering', () => {
   })
 
   it('typesets the tutor reply but shows the student text verbatim', async () => {
-    const user = userEvent.setup()
     const { container } = render(
       <HomeworkQuestionView question={FORMULA_QUESTION} service={formulaService()} />,
     )
 
-    await user.click(screen.getByRole('button', { name: /^Ask$/ }))
     expect(await screen.findByText(/Because/)).toBeInTheDocument()
 
     // The assistant reply's formula is typeset, not shown as `$…$`.

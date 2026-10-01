@@ -224,22 +224,106 @@ function looksLikeHeading(line: string): boolean {
   return false
 }
 
-function groupTextItemsIntoLines(items: PdfTextItem[]): string[] {
+const SUPERSCRIPT_DIGITS: Record<string, string> = {
+  '0': '⁰', '1': '¹', '2': '²', '3': '³', '4': '⁴',
+  '5': '⁵', '6': '⁶', '7': '⁷', '8': '⁸', '9': '⁹',
+}
+const SUBSCRIPT_DIGITS: Record<string, string> = {
+  '0': '₀', '1': '₁', '2': '₂', '3': '₃', '4': '₄',
+  '5': '₅', '6': '₆', '7': '₇', '8': '₈', '9': '₉',
+}
+
+function itemHeight(item: PdfTextItem): number {
+  const height = item.height ?? Math.abs(item.transform?.[3] ?? 0)
+  return height > 2 ? height : 12
+}
+
+/** Some PDFs paint a combining vector arrow before the letter it sits over.
+ * pdf.js follows paint order, so move only a geometrically overlapping arrow
+ * after its single-letter base. The original page remains the authority. */
+function orderVectorMarks(items: PdfTextItem[]): PdfTextItem[] {
+  const ordered = [...items]
+  for (let index = 0; index < ordered.length; index++) {
+    const mark = ordered[index]
+    if (mark?.str !== '\u20d7') continue
+    let baseIndex = index + 1
+    while (ordered[baseIndex]?.str?.trim() === '') baseIndex++
+    const base = ordered[baseIndex]
+    const markX = mark.transform?.[4]
+    const baseX = base?.transform?.[4]
+    const markY = mark.transform?.[5]
+    const baseY = base?.transform?.[5]
+    if (!base || !/^[A-Za-z]$/.test(base.str ?? '') ||
+      markX === undefined || baseX === undefined || base.width === undefined ||
+      markY === undefined || baseY === undefined ||
+      Math.abs(markY - baseY) > itemHeight(base) * 0.3 ||
+      markX < baseX - 1 || markX > baseX + base.width + 1) continue
+    ordered.splice(index, 1)
+    ordered.splice(baseIndex, 0, mark)
+    index = baseIndex
+  }
+  return ordered
+}
+
+/**
+ * PDF text items for a raised/lowered math glyph have a different baseline.
+ * A fixed two-pixel line threshold treated R² and v₁ as three separate lines.
+ * Join only items whose baselines fit inside the larger glyph's own height;
+ * ordinary lines keep their original breaks. Geometry is evidence for a digit
+ * script, but never for inventing a missing symbol or changing a coefficient.
+ */
+export function groupTextItemsIntoLines(items: PdfTextItem[]): string[] {
   const lines: string[] = []
-  let current: string[] = []
-  let currentY: number | undefined
-  for (const item of items) {
+  let current = ''
+  let baselineY: number | undefined
+  let baselineHeight = 12
+  let previous: PdfTextItem | undefined
+  for (const item of orderVectorMarks(items)) {
     const y = item.transform ? item.transform[5] : undefined
     const str = item.str ?? ''
-    if (currentY !== undefined && y !== undefined && Math.abs(currentY - y) > 2) {
-      const joined = current.join(' ').replace(/\s+/g, ' ').trim()
+    if (!str) continue
+    const height = itemHeight(item)
+    if (
+      baselineY !== undefined && y !== undefined &&
+      Math.abs(baselineY - y) > Math.max(2, Math.max(baselineHeight, height) * 0.55)
+    ) {
+      const joined = current.replace(/\s+/g, ' ').trim()
       if (joined) lines.push(joined)
-      current = []
+      current = ''
+      baselineY = undefined
+      previous = undefined
     }
-    if (str) current.push(str)
-    if (y !== undefined) currentY = y
+    const x = item.transform?.[4]
+    const previousEnd = previous?.transform?.[4] !== undefined && previous.width !== undefined
+      ? previous.transform[4]! + previous.width
+      : undefined
+    const closeToPrevious = x !== undefined && previousEnd !== undefined &&
+      x >= previousEnd - 1 && x - previousEnd < baselineHeight * 0.45
+    const scriptOffset = Math.max(0.8, baselineHeight * 0.12)
+    const raised = y !== undefined && baselineY !== undefined &&
+      y - baselineY > scriptOffset && height < baselineHeight * 0.85
+    const lowered = y !== undefined && baselineY !== undefined &&
+      baselineY - y > scriptOffset && height < baselineHeight * 0.85
+    const script = closeToPrevious && /^\d+$/.test(str.trim())
+      ? raised ? SUPERSCRIPT_DIGITS : lowered ? SUBSCRIPT_DIGITS : undefined
+      : undefined
+    if (script) {
+      current = current.trimEnd() + [...str.trim()].map((digit) => script[digit]).join('')
+    } else if (!current) {
+      current = str
+    } else {
+      const gap = x !== undefined && previousEnd !== undefined ? x - previousEnd : undefined
+      const separator = /\s$/.test(current) || /^\s/.test(str) ||
+        (gap !== undefined && gap < Math.min(baselineHeight, height) * 0.18) ? '' : ' '
+      current += separator + str
+    }
+    if (y !== undefined && (baselineY === undefined || height > baselineHeight)) {
+      baselineY = y
+      baselineHeight = height
+    }
+    previous = item
   }
-  const joined = current.join(' ').replace(/\s+/g, ' ').trim()
+  const joined = current.replace(/\s+/g, ' ').trim()
   if (joined) lines.push(joined)
   return lines
 }

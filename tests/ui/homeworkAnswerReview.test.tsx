@@ -5,6 +5,19 @@ import { MemoryRouter } from 'react-router-dom'
 import { HomeworkQuestionView } from '@/widgets/homework/HomeworkQuestionView'
 import type { HomeworkQuestion } from '@/entities/homework/types'
 import type { HomeworkService } from '@/services/homeworkService'
+import type { HomeworkReviewGuide } from '@/entities/homework/reviewGuide'
+
+const REVIEW: HomeworkReviewGuide = {
+  questionMeaning: 'Find the sum of 4 and 5.',
+  knowledgePoints: ['Addition combines two quantities.'],
+  method: 'Add the units.',
+  steps: ['Write $4+5$.', 'Compute $4+5=9$.'],
+  explanation: 'The result is 9 because five more than four is nine.',
+  interpretation: 'The sum is 9.',
+  check: 'Subtract 5 from 9 to get 4.',
+  language: 'en', promptVersion: 'v1', inputHash: 'test',
+  questionSourceRefs: [], answerChunkIds: [], createdAt: 1,
+}
 
 const ANSWERED: HomeworkQuestion = {
   id: 'q1',
@@ -38,6 +51,8 @@ function stubService() {
   const generateContent = vi.fn(async () => ANSWERED)
   const service = {
     loadQuestionSourcePages: vi.fn(async () => []),
+    loadAnswerSourcePages: vi.fn(async () => []),
+    getOrGenerateReviewGuide: vi.fn(async () => REVIEW),
     resolveQuestionSources: vi.fn(async () => []),
     saveDraft: vi.fn(async () => ANSWERED),
     revealNextHint: vi.fn(async () => ({ ...ANSWERED, revealedHints: 1 })),
@@ -61,7 +76,7 @@ function renderView(mode: 'practice' | 'review') {
       />
     </MemoryRouter>,
   )
-  return { generateAnswerForQuestion, generateContent }
+  return { generateAnswerForQuestion, generateContent, service }
 }
 
 describe('HomeworkQuestionView professor answer', () => {
@@ -71,13 +86,32 @@ describe('HomeworkQuestionView professor answer', () => {
     expect(screen.queryByText(/4 \+ 5 = 9/)).not.toBeInTheDocument()
   })
 
-  it('shows the professor answer, labels the explanation and links the file in review', () => {
-    renderView('review')
+  it('shows the complete teaching review first and keeps the original answer collapsed', async () => {
+    const user = userEvent.setup()
+    const { service } = renderView('review')
+    expect(await screen.findByText('Addition combines two quantities.')).toBeInTheDocument()
+    expect(screen.getByText('Add the units.')).toBeInTheDocument()
+    expect(screen.getByText('The sum is 9.')).toBeInTheDocument()
+    expect(service.getOrGenerateReviewGuide).toHaveBeenCalledWith('q1', 'en')
     expect(screen.getByText(/Professor answer \(verbatim\)/)).toBeInTheDocument()
-    // The answer text is typeset through RichText (KaTeX), not raw.
-    expect(screen.queryByText(/\$4 \+ 5/)).not.toBeInTheDocument()
+    expect(screen.getByText(/Professor answer \(verbatim\)/).closest('details')).not.toHaveAttribute('open')
     expect(screen.getByText(/AI explanation based on the professor answer/)).toBeInTheDocument()
+    await user.click(screen.getByText(/Professor answer \(verbatim\)/))
     expect(screen.getByRole('link', { name: /Open answer file/ })).toBeInTheDocument()
+  })
+
+  it('renders escaped line breaks from an older cached check as a list', async () => {
+    const { service } = stubService()
+    vi.mocked(service.getOrGenerateReviewGuide).mockResolvedValue({
+      ...REVIEW,
+      check: '正确性核对\\n- $P(0)=5$\\n- $P(1)=8$\\n\\n三个点均符合。',
+    })
+    render(<MemoryRouter><HomeworkQuestionView question={ANSWERED} service={service} mode="review" /></MemoryRouter>)
+    const heading = await screen.findByText('Final check')
+    const section = heading.closest('section')
+    expect(section?.querySelectorAll('li')).toHaveLength(2)
+    expect(section?.textContent).not.toContain('\\n-')
+    expect(section?.textContent).toContain('三个点均符合。')
   })
 
   it('regenerates from the professor answer for a matched question', async () => {

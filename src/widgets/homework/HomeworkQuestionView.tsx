@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
   ArrowUp,
+  CheckCircle2,
   ClipboardCheck,
   ExternalLink,
   Eye,
@@ -9,6 +10,8 @@ import {
   Lightbulb,
   Loader2,
   MessageCircle,
+  Mic,
+  MicOff,
   RotateCcw,
   Send,
   Sparkles,
@@ -16,6 +19,9 @@ import {
 import type { HomeworkMessage, HomeworkQuestion } from '@/entities/homework/types'
 import type { SourceReference } from '@/entities/courseAnalysis/types'
 import { formatHomeworkQuestion } from '@/entities/homework/formatQuestion'
+import { suggestLinearAlgebraMethod } from '@/entities/homework/linearAlgebraGuide'
+import { isDeferredProfessorAnswer } from '@/entities/homework/answerMatching'
+import { answerCheckInputHash, answerReference, HOMEWORK_ANSWER_CHECK_VERSION, type HomeworkAnswerCheck } from '@/entities/homework/answerCheck'
 import type { HomeworkService } from '@/services/homeworkService'
 import { Badge } from '@/shared/ui/Badge'
 import { Button } from '@/shared/ui/Button'
@@ -26,6 +32,9 @@ import { QuestionSource } from '@/widgets/quiz/QuestionSource'
 import { friendlyAIError } from '@/shared/lib/aiErrors'
 import { cn } from '@/shared/lib/utils'
 import { useTranslation } from '@/i18n'
+import { appendSpeechText, useSpeechInput } from '@/features/homework/useSpeechInput'
+import { HomeworkStudyGuide } from './HomeworkStudyGuide'
+import { HomeworkReviewPanel } from './HomeworkReviewPanel'
 
 export interface HomeworkQuestionViewProps {
   question: HomeworkQuestion
@@ -48,7 +57,9 @@ export function HomeworkQuestionView({
   mode = 'practice',
   answerDocumentId,
 }: HomeworkQuestionViewProps): JSX.Element {
-  const { t } = useTranslation()
+  const { t, language } = useTranslation()
+  const deferredAnswer = question.answerStatus === 'matched' &&
+    isDeferredProfessorAnswer(question.answerText ?? '')
 
   const [draft, setDraft] = useState(question.draftText)
   const [saved, setSaved] = useState(true)
@@ -59,16 +70,40 @@ export function HomeworkQuestionView({
   const [status, setStatus] = useState(question.generationStatus)
   const [generationError, setGenerationError] = useState(question.generationError)
   const [messages, setMessages] = useState<HomeworkMessage[]>(question.messages)
-  const [askOpen, setAskOpen] = useState(false)
   const [question_, setQuestionText] = useState('')
+  const [speechLanguageOverride, setSpeechLanguageOverride] = useState<'en-US' | 'zh-CN' | null>(null)
+  const speechLanguage = speechLanguageOverride ?? (language === 'zh-CN' ? 'zh-CN' : 'en-US')
+  const speech = useSpeechInput(speechLanguage, (text) => {
+    setQuestionText((previous) => appendSpeechText(previous, text))
+  })
+  const speechActive = speech.state === 'starting' || speech.state === 'listening' || speech.state === 'stopping'
   const [asking, setAsking] = useState(false)
+  const [askError, setAskError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [actionError, setActionError] = useState<string | null>(null)
+  const [checking, setChecking] = useState(false)
+  const [checkError, setCheckError] = useState<string | null>(null)
+  const [answerCheck, setAnswerCheck] = useState<HomeworkAnswerCheck | null>(question.answerCheck ?? null)
   const [notice, setNotice] = useState<string | null>(null)
   const [sourcePages, setSourcePages] = useState<Array<{ page: number; url: string }>>([])
+  const [answerPages, setAnswerPages] = useState<Array<{ page: number; url: string }>>([])
+  const [originalAnswerOpen, setOriginalAnswerOpen] = useState(false)
   const [displaySourceRefs, setDisplaySourceRefs] = useState<SourceReference[]>(question.sourceRefs)
 
   const saveTimer = useRef<number | null>(null)
+  const workingRef = useRef<HTMLTextAreaElement>(null)
+  const askRef = useRef<HTMLTextAreaElement>(null)
+  const suggestedMethod = suggestLinearAlgebraMethod(question.prompt)
+  const availableReference = answerReference(question)
+  const checkLanguage = language === 'zh-CN' ? 'zh' : 'en'
+  const visibleCheck = answerCheck && answerCheck.inputHash ===
+    answerCheckInputHash(question, draft, checkLanguage, HOMEWORK_ANSWER_CHECK_VERSION)
+    ? answerCheck : null
+
+  function focusField(field: HTMLTextAreaElement | null): void {
+    field?.scrollIntoView?.({ block: 'center' })
+    field?.focus({ preventScroll: true })
+  }
 
   useEffect(() => {
     let cancelled = false
@@ -85,6 +120,23 @@ export function HomeworkQuestionView({
       urls.forEach((url) => URL.revokeObjectURL(url))
     }
   }, [question, service])
+
+  useEffect(() => {
+    if (mode !== 'review' || !originalAnswerOpen || !answerDocumentId || question.answerStatus !== 'matched') return
+    let cancelled = false
+    let urls: string[] = []
+    void service.loadAnswerSourcePages(question).then((pages) => {
+      if (cancelled) return
+      urls = pages.map(({ image }) => URL.createObjectURL(image))
+      setAnswerPages(pages.map(({ page }, index) => ({ page, url: urls[index]! })))
+    }).catch(() => {
+      // The extracted text and original document link remain available.
+    })
+    return () => {
+      cancelled = true
+      urls.forEach((url) => URL.revokeObjectURL(url))
+    }
+  }, [answerDocumentId, mode, originalAnswerOpen, question, service])
 
   useEffect(() => {
     let cancelled = false
@@ -120,6 +172,20 @@ export function HomeworkQuestionView({
       }
     } catch (err) {
       setActionError(friendlyAIError(err))
+    }
+  }
+
+  async function checkDraft(): Promise<void> {
+    if (!draft.trim() || checking) return
+    setChecking(true)
+    setCheckError(null)
+    try {
+      setAnswerCheck(await service.checkAnswer(question.id, draft, checkLanguage))
+      setSaved(true)
+    } catch (err) {
+      setCheckError(friendlyAIError(err))
+    } finally {
+      setChecking(false)
     }
   }
 
@@ -172,11 +238,11 @@ export function HomeworkQuestionView({
 
   async function send(): Promise<void> {
     const text = question_.trim()
-    if (!text || asking) return
+    if (!text || asking || speechActive) return
     setAsking(true)
-    setActionError(null)
+    setAskError(null)
     const optimistic: HomeworkMessage = {
-      id: `local-${Date.now()}`,
+      id: `local-${crypto.randomUUID()}`,
       role: 'student',
       content: text,
       createdAt: Date.now(),
@@ -187,7 +253,9 @@ export function HomeworkQuestionView({
       const reply = await service.ask(question.id, text)
       setMessages((prev) => [...prev, reply])
     } catch (err) {
-      setActionError(friendlyAIError(err))
+      setMessages((prev) => prev.filter((message) => message.id !== optimistic.id))
+      setQuestionText(text)
+      setAskError(friendlyAIError(err))
     } finally {
       setAsking(false)
     }
@@ -221,7 +289,13 @@ export function HomeworkQuestionView({
           />
         </CardHeader>
         <CardContent className="space-y-3">
-          <QuestionSource sourceRefs={displaySourceRefs} projectId={question.projectId} />
+          <QuestionSource
+            sourceRefs={displaySourceRefs.map((ref) => ({
+              ...ref,
+              ...(ref.quote ? { quote: formatHomeworkQuestion(ref.quote) } : {}),
+            }))}
+            projectId={question.projectId}
+          />
           {sourcePages.length > 0 && (
             <details open={displaySourceRefs.some((ref) => ref.quotePending) || /\b(?:figure|diagram|shown|below|network)\b|图|如下图|如图/i.test(question.prompt)}>
               <summary className="cursor-pointer rounded-md px-1 py-2 text-sm font-medium text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
@@ -261,23 +335,61 @@ export function HomeworkQuestionView({
           </Button>
         </div>
 
+        {mode === 'practice' && suggestedMethod && (
+          <HomeworkStudyGuide
+            suggestedMethod={suggestedMethod}
+            solutionRevealed={solutionRevealed}
+            onWork={() => focusField(workingRef.current)}
+            onAsk={(message) => {
+              setQuestionText((previous) => previous.trim() ? previous : message)
+              focusField(askRef.current)
+            }}
+          />
+        )}
+
+        {mode === 'review' && <HomeworkReviewPanel question={question} service={service} />}
+
         {/* Review only: the professor's own answer, kept verbatim and clearly
             separated from the AI explanation. Hidden while practising. */}
         {mode === 'review' && question.answerText && question.answerStatus === 'matched' && (
-          <Card className="border-theme-primary/40 bg-theme-primary-soft/30">
-            <CardHeader className="space-y-1">
-              <CardTitle className="flex items-center gap-2 text-base">
-                <ClipboardCheck className="h-4 w-4" aria-hidden />
-                {t('homework.answer.professorOriginal')}
-              </CardTitle>
+          <details
+            className="rounded-2xl border border-border/70 bg-muted/20 p-4"
+            onToggle={(event) => {
+              setOriginalAnswerOpen(event.currentTarget.open)
+              if (!event.currentTarget.open) setAnswerPages([])
+            }}
+          >
+            <summary className="flex cursor-pointer items-center gap-2 text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+              <ClipboardCheck className="h-4 w-4" aria-hidden />
+              {t('homework.answer.professorOriginal')}
+            </summary>
+            <div className="space-y-3 pt-3">
               <p className="text-xs text-muted-foreground">{t('homework.answer.verifyNote')}</p>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <RichText
-                text={question.answerText}
-                format="markdown"
-                paragraphClassName="text-[15px] leading-relaxed"
-              />
+              {answerPages.length > 0 && (
+                <div className="space-y-3">
+                  {answerPages.map(({ page, url }) => (
+                    <figure key={page} className="min-w-0 space-y-2">
+                      <figcaption className="text-xs text-muted-foreground">
+                        {t('homework.answer.originalPage', { page })}
+                      </figcaption>
+                      <a href={url} target="_blank" rel="noreferrer" aria-label={t('homework.answer.openOriginalPage', { page })}>
+                        <img src={url} alt={t('homework.answer.originalPage', { page })} loading="lazy" className="h-auto w-full rounded-lg border border-border object-contain" />
+                      </a>
+                    </figure>
+                  ))}
+                </div>
+              )}
+              <details>
+                <summary className="cursor-pointer rounded-md py-2 text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                  {t('homework.answer.extractedText')}
+                </summary>
+                <p className="pb-2 text-xs text-muted-foreground">{t('homework.answer.extractedTextCaveat')}</p>
+                <RichText
+                  text={question.answerText}
+                  format="markdown"
+                  paragraphClassName="whitespace-pre-wrap text-[15px] leading-relaxed"
+                />
+              </details>
               {answerDocumentId && (
                 <Button variant="outline" size="sm" asChild>
                   <Link to={`/projects/${question.projectId}/documents/${answerDocumentId}`}>
@@ -286,8 +398,8 @@ export function HomeworkQuestionView({
                   </Link>
                 </Button>
               )}
-            </CardContent>
-          </Card>
+            </div>
+          </details>
         )}
 
       <Card>
@@ -299,14 +411,62 @@ export function HomeworkQuestionView({
             </span>
           </CardTitle>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-4">
           <Textarea
+            ref={workingRef}
             value={draft}
             onChange={(event) => setDraft(event.target.value)}
             placeholder={t('homework.draftPlaceholder')}
             rows={5}
             aria-label={t('homework.draft')}
           />
+          <div className="flex flex-wrap items-center gap-3">
+            <Button type="button" onClick={() => void checkDraft()} disabled={!draft.trim() || checking || !availableReference}>
+              {checking ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <CheckCircle2 className="h-4 w-4" aria-hidden />}
+              {checking ? t('homework.check.checking') : t('homework.check.button')}
+            </Button>
+            {!availableReference && (
+              <span className="text-sm text-muted-foreground">{t('homework.check.noReference')}</span>
+            )}
+          </div>
+          {checkError && <p role="alert" className="text-sm text-destructive">{checkError}</p>}
+          {visibleCheck && (
+            <section aria-label={t('homework.check.result')} className="space-y-3 rounded-xl border border-border/70 bg-muted/20 p-4">
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge variant={visibleCheck.verdict === 'incorrect' ? 'destructive' : 'outline'}>
+                  {t(`homework.check.verdict.${visibleCheck.verdict}`)}
+                </Badge>
+                <span className="text-xs text-muted-foreground">
+                  {visibleCheck.method === 'local' ? t('homework.check.localMethod') : t('homework.check.aiMethod')}
+                  {' · '}{visibleCheck.referenceKind === 'professor' ? t('homework.check.professorReference') : t('homework.check.aiReference')}
+                </span>
+              </div>
+              {visibleCheck.similarityPercent !== undefined && (
+                <p className="text-sm font-medium tabular-nums">
+                  {t('homework.check.similarity')}: {visibleCheck.similarityPercent}%
+                </p>
+              )}
+              <RichText text={visibleCheck.feedback} format="markdown" paragraphClassName="text-sm leading-relaxed" />
+              {visibleCheck.expectedAnswer && (
+                <p className="text-sm">{t('homework.check.expected')}: <span className="font-medium">{visibleCheck.expectedAnswer}</span></p>
+              )}
+              {visibleCheck.matchedPoints && visibleCheck.matchedPoints.length > 0 && (
+                <div className="space-y-1 text-sm">
+                  <p className="font-medium">{t('homework.check.matchedPoints')}</p>
+                  <ul className="list-disc space-y-1 pl-5">{visibleCheck.matchedPoints.map((point, index) => <li key={index}>{point}</li>)}</ul>
+                </div>
+              )}
+              {visibleCheck.missingPoints && visibleCheck.missingPoints.length > 0 && (
+                <div className="space-y-1 text-sm">
+                  <p className="font-medium">{t('homework.check.missingPoints')}</p>
+                  <ul className="list-disc space-y-1 pl-5">{visibleCheck.missingPoints.map((point, index) => <li key={index}>{point}</li>)}</ul>
+                </div>
+              )}
+              <p className="text-xs leading-relaxed text-muted-foreground">
+                {visibleCheck.method === 'ai' ? t('homework.check.aiDisclaimer') : t('homework.check.localDisclaimer')}
+              </p>
+            </section>
+          )}
         </CardContent>
       </Card>
 
@@ -324,11 +484,7 @@ export function HomeworkQuestionView({
           {solutionRevealed ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
           {solutionRevealed ? t('homework.hideAnswer') : t('homework.showAnswer')}
         </Button>
-        <Button type="button" variant="outline" onClick={() => setAskOpen((open) => !open)}>
-          <MessageCircle className="h-4 w-4" />
-          {t('homework.ask')}
-        </Button>
-        <Button type="button" variant="ghost" onClick={() => void regenerate()} disabled={busy}>
+        <Button type="button" variant="ghost" onClick={() => void regenerate()} disabled={busy || deferredAnswer}>
           {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <RotateCcw className="h-4 w-4" />}
           {t('homework.regenerate')}
         </Button>
@@ -358,13 +514,14 @@ export function HomeworkQuestionView({
       {status === 'failed' && (
         <Card>
           <CardContent className="space-y-3 p-4">
+            {deferredAnswer && <p className="text-sm font-medium">{t('homework.answer.deferredTitle')}</p>}
             <p className="text-sm text-muted-foreground">
-              {generationError ?? t('homework.questionFailed')}
+              {deferredAnswer ? t('homework.answer.deferredAnswer') : generationError ?? t('homework.questionFailed')}
             </p>
-            <Button type="button" variant="outline" size="sm" onClick={() => void regenerate()} disabled={busy}>
+            {!deferredAnswer && <Button type="button" variant="outline" size="sm" onClick={() => void regenerate()} disabled={busy}>
               {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <RotateCcw className="h-4 w-4" />}
               {t('homework.retry')}
-            </Button>
+            </Button>}
           </CardContent>
         </Card>
       )}
@@ -402,6 +559,115 @@ export function HomeworkQuestionView({
           </CardContent>
         </Card>
       )}
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-base">
+            <MessageCircle className="h-4 w-4 text-muted-foreground" aria-hidden />
+            {t('homework.askPanelTitle')}
+          </CardTitle>
+          <p className="text-xs text-muted-foreground">{t('homework.socraticNote')}</p>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {messages.length > 0 && (
+            <ul className="space-y-2" aria-label={t('homework.askPanelTitle')}>
+              {messages.map((message) => (
+                <li
+                  key={message.id}
+                  className={cn(
+                    'max-w-[85%] rounded-2xl px-3 py-2 text-sm leading-relaxed',
+                    message.role === 'student'
+                      ? 'ml-auto bg-primary-strong text-primary-foreground'
+                      : 'bg-muted/50 text-foreground',
+                  )}
+                >
+                  <span className="sr-only">
+                    {message.role === 'student' ? t('homework.you') : t('homework.tutor')}:{' '}
+                  </span>
+                  {message.role === 'assistant' ? (
+                    <RichText
+                      text={message.content}
+                      format="markdown"
+                      paragraphClassName="text-sm leading-relaxed"
+                    />
+                  ) : (
+                    message.content
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
+          {asking && (
+            <p role="status" className="flex items-center gap-2 text-xs text-muted-foreground">
+              <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+              {t('homework.thinking')}
+            </p>
+          )}
+          {askError && <p role="alert" className="text-sm text-destructive">{askError}</p>}
+          <div className="space-y-2">
+            <Textarea
+              ref={askRef}
+              value={question_}
+              onChange={(event) => setQuestionText(event.target.value)}
+              placeholder={t('homework.askPlaceholder')}
+              rows={2}
+              aria-label={t('homework.askTitle')}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) {
+                  event.preventDefault()
+                  void send()
+                }
+              }}
+            />
+            <div className="flex flex-wrap items-center gap-2">
+              <label className="sr-only" htmlFor={`homework-speech-language-${question.id}`}>
+                {t('homework.speechLanguage')}
+              </label>
+              <select
+                id={`homework-speech-language-${question.id}`}
+                className="h-9 rounded-full border border-input bg-background px-3 text-sm focus-ring disabled:opacity-50"
+                value={speechLanguage}
+                onChange={(event) => {
+                  speech.cancel()
+                  setSpeechLanguageOverride(event.target.value as 'en-US' | 'zh-CN')
+                }}
+                disabled={!speech.supported || asking}
+              >
+                <option value="en-US">{t('homework.speechEnglish')}</option>
+                <option value="zh-CN">{t('homework.speechChinese')}</option>
+              </select>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => speechActive ? speech.stop() : speech.start()}
+                disabled={!speech.supported || asking || speech.state === 'stopping'}
+                aria-pressed={speechActive}
+              >
+                {speechActive ? <MicOff aria-hidden /> : <Mic aria-hidden />}
+                {speechActive ? t('homework.speechStop') : t('homework.speechStart')}
+              </Button>
+              <Button type="button" onClick={() => void send()} disabled={asking || speechActive || !question_.trim()}>
+                {asking ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <Send className="h-4 w-4" aria-hidden />}
+                {t('homework.send')}
+              </Button>
+            </div>
+          </div>
+          {!speech.supported && <p className="text-xs text-muted-foreground">{t('homework.speechUnsupported')}</p>}
+          {speech.supported && (
+            <p role="status" aria-live="polite" className={cn('text-xs', speech.error ? 'text-destructive' : 'text-muted-foreground')}>
+              {speech.error
+                ? t(`homework.speechError.${speech.error}`)
+                : speech.state === 'starting'
+                  ? t('homework.speechStarting')
+                  : speech.state === 'listening'
+                    ? t('homework.speechListening')
+                    : speech.state === 'stopping'
+                      ? t('homework.speechStopping')
+                      : t('homework.speechReview')}
+            </p>
+          )}
+        </CardContent>
+      </Card>
 
       {solutionRevealed && (
         <Card>
@@ -443,69 +709,6 @@ export function HomeworkQuestionView({
         </Card>
       )}
 
-      {askOpen && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-base">
-              <MessageCircle className="h-4 w-4 text-muted-foreground" aria-hidden />
-              {t('homework.askTitle')}
-            </CardTitle>
-            <p className="text-xs text-muted-foreground">{t('homework.socraticNote')}</p>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {messages.length > 0 && (
-              <ul className="space-y-2">
-                {messages.map((message) => (
-                  <li
-                    key={message.id}
-                    className={cn(
-                      'max-w-[85%] rounded-2xl px-3 py-2 text-sm leading-relaxed',
-                      message.role === 'student'
-                        ? 'ml-auto bg-primary-strong text-primary-foreground'
-                        : 'bg-muted/50 text-foreground',
-                    )}
-                  >
-                    <span className="sr-only">
-                      {message.role === 'student' ? t('homework.you') : t('homework.tutor')}:{' '}
-                    </span>
-                    {/* The tutor's replies may contain LaTeX, so they render
-                        through RichText. The student's own words are shown
-                        exactly as typed and are never rewritten. */}
-                    {message.role === 'assistant' ? (
-                      <RichText
-                        text={message.content}
-                        format="markdown"
-                        paragraphClassName="text-sm leading-relaxed"
-                      />
-                    ) : (
-                      message.content
-                    )}
-                  </li>
-                ))}
-              </ul>
-            )}
-            <div className="flex items-end gap-2">
-              <Textarea
-                value={question_}
-                onChange={(event) => setQuestionText(event.target.value)}
-                placeholder={t('homework.askPlaceholder')}
-                rows={2}
-                aria-label={t('homework.askTitle')}
-                onKeyDown={(event) => {
-                  if (event.key === 'Enter' && !event.shiftKey) {
-                    event.preventDefault()
-                    void send()
-                  }
-                }}
-              />
-              <Button type="button" onClick={() => void send()} disabled={asking || !question_.trim()}>
-                {asking ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-                {t('homework.send')}
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-      )}
       </div>
     </div>
   )

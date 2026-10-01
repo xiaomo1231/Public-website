@@ -9,6 +9,10 @@ import { AppError, NotFoundError } from '@/infrastructure/errors/AppError'
 import { CourseContentService } from './courseContentService'
 import { DocumentRepository } from '@/entities/document/repository'
 import { ChunkRepository } from '@/entities/chunk/repository'
+import { ProcessingJobRepository } from '@/entities/processingJob/repository'
+import { ProjectService } from './projectService'
+import { ProcessingService } from './processingService'
+import { TimeoutError as AITimeoutError } from '@/infrastructure/ai/errors'
 import { buildCandidateChunkLabel } from '@/entities/courseContent/topicDependency'
 import { resolveMaterialType, type Document } from '@/entities/document/types'
 import { renderPdfPageImage } from '@/infrastructure/files/pdfExtractor'
@@ -18,6 +22,15 @@ import type { SourceReference } from '@/entities/courseAnalysis/types'
 import { friendlyAIError } from '@/shared/lib/aiErrors'
 import { getUILanguage, t } from '@/i18n'
 import { HomeworkRepository } from '@/entities/homework/repository'
+import { currentHomeworkReview, homeworkReviewInputHash, type HomeworkReviewGuide } from '@/entities/homework/reviewGuide'
+import { formatHomeworkReviewText } from '@/entities/homework/reviewFormatting'
+import {
+  answerCheckInputHash,
+  answerReference,
+  checkObjectiveAnswer,
+  currentAnswerCheck,
+  type HomeworkAnswerCheck,
+} from '@/entities/homework/answerCheck'
 import {
   hasStudentWork,
   homeworkContentFingerprint,
@@ -38,10 +51,17 @@ import {
   resolveSourceChunkIds,
 } from '@/entities/homework/sourceGrounding'
 import {
+  buildAnswerLines,
+  isDeferredProfessorAnswer,
   matchAnswersToQuestions,
+  MAX_STORED_ANSWER_CHARS,
   normalizeAnswerNumber,
   parseAnswerEntries,
+  revalidateStoredEntries,
+  summarizeAnswerEntries,
   type AnswerEntry,
+  type AnswerLine,
+  type AnswerParseSummary,
   type AnswerMatchResult,
 } from '@/entities/homework/answerMatching'
 
@@ -78,6 +98,10 @@ const MAX_QUESTIONS = 50
 const CHAT_HISTORY_TURNS = 8
 /** How many questions' hints+solutions are prepared at once (rate-limit safe). */
 const CONTENT_CONCURRENCY = 3
+/** Fewer simultaneous answer-grounded requests avoid provider rate limits. */
+const ANSWER_CONTENT_CONCURRENCY = 2
+/** Bound a single professor-answer explanation even if a stream keeps trickling. */
+const ANSWER_GENERATION_DEADLINE_MS = 120_000
 /** Bounded retries for one analyzer batch / one question request. */
 const MAX_REQUEST_RETRIES = 2
 /** Base backoff before retrying a transient batch/question failure. */
@@ -89,11 +113,21 @@ const MAX_BATCH_SPLIT_DEPTH = 5
 interface GeneratedQuestionResult {
   question?: HomeworkQuestion
   kind?: HomeworkErrorKind
+  skipped?: boolean
+}
+
+export interface AnswerGenerationProgress {
+  completed: number
+  total: number
+  generated: number
+  failed: number
+  skipped: number
 }
 
 /** Coalesce concurrent re-analyses of the same set / regenerations of a question. */
 const setRuns = new Map<string, Promise<{ set: HomeworkSet; summary: ReanalysisSummary } | undefined>>()
 const questionRuns = new Map<string, Promise<GeneratedQuestionResult>>()
+const reviewRuns = new Map<string, Promise<HomeworkReviewGuide>>()
 /**
  * Coalesce concurrent first-time analyses of the same document. The database
  * check-and-create is the real guard (it also covers two browser tabs); this
@@ -182,6 +216,136 @@ export class HomeworkService {
 
   getQuestion(id: string): Promise<HomeworkQuestion | undefined> {
     return this.homework.getQuestion(id)
+  }
+
+  /** Check the exact submitted draft against this question's current answer. */
+  async checkAnswer(questionId: string, draft: string, language: 'zh' | 'en'): Promise<HomeworkAnswerCheck> {
+    const submittedDraft = draft.trim()
+    if (!submittedDraft) throw new AppError(t('homework.check.empty'), 'VALIDATION_ERROR')
+    let question = await this.homework.getQuestion(questionId)
+    if (!question) throw new AppError(t('homework.questionMissing'), 'NOT_FOUND')
+    const set = await this.homework.getSet(question.setId)
+    if (!set || set.projectId !== question.projectId) throw new AppError(t('homework.questionMissing'), 'NOT_FOUND')
+    if (!answerReference(question)) throw new AppError(t('homework.check.noReference'), 'VALIDATION_ERROR')
+    if (question.draftText !== draft) {
+      question = await this.homework.updateQuestion(questionId, { draftText: draft })
+      if (!question) throw new AppError(t('homework.questionMissing'), 'NOT_FOUND')
+    }
+    const cached = currentAnswerCheck(question, draft, language)
+    if (cached) return cached
+    const reference = answerReference(question)
+    if (!reference) throw new AppError(t('homework.check.noReference'), 'VALIDATION_ERROR')
+    const inputHash = answerCheckInputHash(question, draft, language, prompts.homeworkAnswerCheck.VERSION)
+    const local = reference.kind === 'professor'
+      ? checkObjectiveAnswer(question, reference.text, submittedDraft) : null
+    let check: HomeworkAnswerCheck
+    if (local) {
+      check = {
+        method: 'local', verdict: local.verdict, expectedAnswer: local.expectedAnswer,
+        feedback: t(local.verdict === 'correct' ? 'homework.check.objectiveCorrect' : 'homework.check.objectiveIncorrect'),
+        referenceKind: reference.kind, inputHash, language, promptVersion: prompts.homeworkAnswerCheck.VERSION,
+        questionSourceRefs: question.sourceRefs, answerChunkIds: question.answerChunkIds ?? [], createdAt: Date.now(),
+      }
+    } else {
+      const ai = this.requireAI()
+      const messages: ChatMessage[] = [
+        { role: 'system', content: prompts.homeworkAnswerCheck.buildSystemPrompt() },
+        { role: 'user', content: prompts.homeworkAnswerCheck.buildUserPrompt({
+          question: question.prompt, studentAnswer: submittedDraft,
+          referenceAnswer: reference.text, referenceKind: reference.kind,
+          sourceText: await this.sourceText(question), language,
+        }) },
+      ]
+      const budget = planQuestionOutputBudget(messages[0]!.content.length + messages[1]!.content.length, ai.maxOutputTokens)
+      const { data } = await ai.streamJSON<unknown>(messages, undefined, { maxTokens: budget })
+      const assessed = prompts.homeworkAnswerCheck.normalizeAssessment(data)
+      if (!assessed) throw new AppError(t('homework.check.invalid'), 'INVALID_RESPONSE')
+      if (assessed.status === 'insufficient') {
+        throw new AppError(t('homework.check.insufficient', { reason: assessed.reason }), 'INVALID_RESPONSE')
+      }
+      check = {
+        method: 'ai', verdict: assessed.verdict, similarityPercent: assessed.similarityPercent,
+        feedback: assessed.feedback, matchedPoints: assessed.matchedPoints, missingPoints: assessed.missingPoints,
+        referenceKind: reference.kind, inputHash, language, promptVersion: prompts.homeworkAnswerCheck.VERSION,
+        questionSourceRefs: question.sourceRefs,
+        answerChunkIds: reference.kind === 'professor' ? (question.answerChunkIds ?? []) : [],
+        createdAt: Date.now(),
+      }
+    }
+    const saved = await this.homework.applyAnswerCheck(questionId, draft, check)
+    if (!saved) throw new AppError(t('homework.check.changed'), 'CONCURRENT_MODIFICATION')
+    return check
+  }
+
+  /** One source-grounded, cached teaching review for the current question. */
+  async getOrGenerateReviewGuide(
+    questionId: string,
+    language: 'zh' | 'en',
+    force = false,
+  ): Promise<HomeworkReviewGuide> {
+    const question = await this.homework.getQuestion(questionId)
+    if (!question) throw new AppError(t('homework.questionMissing'), 'NOT_FOUND')
+    const set = await this.homework.getSet(question.setId)
+    if (!set || set.projectId !== question.projectId) throw new AppError(t('homework.questionMissing'), 'NOT_FOUND')
+    const cached = currentHomeworkReview(question, language, prompts.homeworkReview.VERSION)
+    if (cached && !force) return cached
+
+    const inputHash = homeworkReviewInputHash(question, language, prompts.homeworkReview.VERSION)
+    const runKey = `${questionId}:${inputHash}`
+    const existing = reviewRuns.get(runKey)
+    if (existing) return existing
+    const run = this.generateReviewGuide(question, language, inputHash).finally(() => reviewRuns.delete(runKey))
+    reviewRuns.set(runKey, run)
+    return run
+  }
+
+  private async generateReviewGuide(
+    question: HomeworkQuestion,
+    language: 'zh' | 'en',
+    inputHash: string,
+  ): Promise<HomeworkReviewGuide> {
+    const ai = this.requireAI()
+    const deferredAnswer = question.answerStatus === 'matched' &&
+      isDeferredProfessorAnswer(question.answerText ?? '')
+    const hasProfessorAnswer = question.answerStatus === 'matched' && !deferredAnswer &&
+      Boolean((question.answerText ?? '').trim())
+    const input = {
+      question: question.prompt,
+      sourceText: await this.sourceText(question),
+      language,
+      ...(hasProfessorAnswer ? { professorAnswer: question.answerText } : {}),
+      ...(!deferredAnswer && question.solution ? { previousSolution: question.solution } : {}),
+    }
+    const messages: ChatMessage[] = [
+      { role: 'system', content: prompts.homeworkReview.buildSystemPrompt() },
+      { role: 'user', content: prompts.homeworkReview.buildUserPrompt(input) },
+    ]
+    const budget = planQuestionOutputBudget(messages[0]!.content.length + messages[1]!.content.length, ai.maxOutputTokens)
+    const { data } = await ai.streamJSON<unknown>(messages, undefined, { maxTokens: budget })
+    const normalized = prompts.homeworkReview.normalizeReviewOutput(data)
+    if (!normalized) throw new AppError(t('homework.review.invalid'), 'INVALID_RESPONSE')
+    if (normalized.status === 'insufficient') {
+      throw new AppError(t('homework.review.insufficient', { reason: normalized.reason }), 'INVALID_RESPONSE')
+    }
+    const guide: HomeworkReviewGuide = {
+      ...normalized,
+      questionMeaning: formatHomeworkReviewText(normalized.questionMeaning),
+      knowledgePoints: normalized.knowledgePoints.map(formatHomeworkReviewText),
+      method: formatHomeworkReviewText(normalized.method),
+      steps: normalized.steps.map(formatHomeworkReviewText),
+      explanation: formatHomeworkReviewText(normalized.explanation),
+      interpretation: formatHomeworkReviewText(normalized.interpretation),
+      check: formatHomeworkReviewText(normalized.check),
+      language,
+      promptVersion: prompts.homeworkReview.VERSION,
+      inputHash,
+      questionSourceRefs: question.sourceRefs,
+      answerChunkIds: hasProfessorAnswer ? (question.answerChunkIds ?? []) : [],
+      createdAt: Date.now(),
+    }
+    const saved = await this.homework.applyReviewGuide(question.id, guide)
+    if (!saved) throw new AppError(t('homework.review.changed'), 'CONCURRENT_MODIFICATION')
+    return guide
   }
 
   /**
@@ -369,6 +533,60 @@ export class HomeworkService {
   }
 
   /**
+   * Re-extract an already uploaded answer PDF with the current local parser.
+   * ProcessingService keeps the previous chunks when extraction fails. Only
+   * after a successful replacement do we invalidate mappings to old chunk ids;
+   * questions and every student-authored field remain in place for review.
+   */
+  async reprocessAnswerDocument(setId: string, projectId: string): Promise<void> {
+    const set = await this.homework.getSet(setId)
+    if (!set || set.projectId !== projectId) throw new NotFoundError('HomeworkSet', setId)
+    const document = await this.getAnswerDocument(setId)
+    if (!document || document.type !== 'pdf') {
+      throw new AppError(t('homework.answer.pdfRequired'), 'INVALID_INPUT')
+    }
+    const processing = new ProcessingService({
+      db: this.db,
+      documents: this.documents,
+      chunks: this.chunks,
+      jobs: new ProcessingJobRepository(this.db),
+      projects: new ProjectService(this.db),
+    })
+    await processing.process(document.id)
+    await this.db.transaction('rw', this.db.homeworkSets, this.db.homeworkQuestions, async () => {
+      await this.homework.clearAnswerLinks(setId)
+      await this.homework.updateSet(setId, { answerEntries: undefined })
+    })
+  }
+
+  /** Exact rendered answer pages, retained locally for checking PDF maths. */
+  async loadAnswerSourcePages(question: HomeworkQuestion): Promise<Array<{ page: number; image: Blob }>> {
+    if (question.answerStatus !== 'matched' || !question.answerChunkIds?.length) return []
+    const set = await this.homework.getSet(question.setId)
+    if (!set || set.projectId !== question.projectId) return []
+    const document = await this.getAnswerDocument(set.id)
+    if (!document || document.type !== 'pdf') return []
+    const allowed = new Set(question.answerChunkIds)
+    const chunks = await this.chunks.listByDocument(document.id)
+    const pages = [...new Set(chunks
+      .filter((chunk) => allowed.has(chunk.id))
+      .map((chunk) => chunk.pageNumber)
+      .filter((page): page is number => typeof page === 'number' && page > 0))].slice(0, 2)
+    if (pages.length === 0) return []
+    const stored = await this.documents.getBytes(document.id)
+    if (!stored) return []
+    const source = new Blob([stored.bytes], { type: stored.mimeType })
+    const images: Array<{ page: number; image: Blob }> = []
+    for (const page of pages) {
+      const rendered = await renderPdfPageImage(source, page, 1.8, {
+        number: question.answerNumber ?? question.number ?? '',
+      })
+      if (rendered) images.push({ page, image: new Blob([rendered.bytes], { type: rendered.mimeType }) })
+    }
+    return images
+  }
+
+  /**
    * Link an uploaded answer document to the assignment. The document must be a
    * real `homework_answer` file in the SAME project — never another project's
    * file, and never an ordinary assignment.
@@ -382,11 +600,15 @@ export class HomeworkService {
       throw new AppError(t('homework.answer.notAnswerFile'), 'INVALID_INPUT')
     }
     // Replacing: drop the old per-question links first, so no mapping can leak
-    // from the previous answer file onto the new one.
+    // from the previous answer file onto the new one. A saved manual division
+    // belongs to the old file's chunks, so it is dropped with the link.
     if (set.answerDocumentId && set.answerDocumentId !== documentId) {
       await this.homework.clearAnswerLinks(setId)
     }
-    const updated = await this.homework.updateSet(setId, { answerDocumentId: documentId })
+    const updated = await this.homework.updateSet(setId, {
+      answerDocumentId: documentId,
+      ...(set.answerDocumentId === documentId ? {} : { answerEntries: undefined }),
+    })
     return updated ?? set
   }
 
@@ -404,7 +626,7 @@ export class HomeworkService {
     if (!set || set.projectId !== projectId) throw new NotFoundError('HomeworkSet', setId)
     const answerDocumentId = set.answerDocumentId
     await this.homework.clearAnswerLinks(setId)
-    await this.homework.updateSet(setId, { answerDocumentId: undefined })
+    await this.homework.updateSet(setId, { answerDocumentId: undefined, answerEntries: undefined })
     if (options.deleteFile && answerDocumentId) {
       await this.documents.delete(answerDocumentId)
     }
@@ -412,32 +634,97 @@ export class HomeworkService {
 
   /**
    * Parse the linked answer document and propose a question-to-answer mapping.
-   * Only unique one-to-one number matches are proposed as `matched`; everything
-   * else is left for the student to confirm.
+   *
+   * The entries come from a student-defined division when one was saved;
+   * otherwise they are parsed automatically. Only unique one-to-one number
+   * matches are proposed as `matched`; everything else is left for the student
+   * to confirm. `lines` exposes the extracted text (with provenance) so the UI
+   * can offer manual division.
    */
-  async buildAnswerMapping(
-    setId: string,
-  ): Promise<{ document: Document | null; entries: AnswerEntry[]; result: AnswerMatchResult }> {
+  async buildAnswerMapping(setId: string): Promise<{
+    document: Document | null
+    entries: AnswerEntry[]
+    lines: AnswerLine[]
+    manual: boolean
+    summary: AnswerParseSummary
+    result: AnswerMatchResult
+  }> {
     const set = await this.homework.getSet(setId)
     if (!set) throw new NotFoundError('HomeworkSet', setId)
     const document = await this.getAnswerDocument(setId)
     if (!document) {
-      return { document: null, entries: [], result: { assignments: [], unmatchedAnswers: [] } }
+      return {
+        document: null,
+        entries: [],
+        lines: [],
+        manual: false,
+        summary: summarizeAnswerEntries([]),
+        result: { assignments: [], unmatchedAnswers: [] },
+      }
     }
-    const chunks = (await this.chunks.listByDocument(document.id)).slice().sort((a, b) => a.order - b.order)
-    const entries = parseAnswerEntries(chunks.map((chunk) => ({ id: chunk.id, text: chunk.text })))
+    const chunks = (await this.chunks.listByDocument(document.id))
+      .slice()
+      .sort((a, b) => a.order - b.order)
+    const sourceChunks = chunks.map((chunk) => ({
+      id: chunk.id,
+      text: chunk.text,
+      ...(chunk.pageNumber !== undefined ? { pageNumber: chunk.pageNumber } : {}),
+    }))
+    const lines = buildAnswerLines(sourceChunks)
+    const stored = revalidateStoredEntries(set.answerEntries, sourceChunks)
+    const manual = stored !== null
+    const entries = stored ?? parseAnswerEntries(sourceChunks)
     const questions = (await this.homework.listQuestions(setId)).filter((q) => !q.retired)
     const result = matchAnswersToQuestions(
       questions.map((q) => ({ id: q.id, ...(q.number ? { number: q.number } : {}) })),
       entries,
     )
-    return { document, entries, result }
+    return { document, entries, lines, manual, summary: summarizeAnswerEntries(entries), result }
+  }
+
+  /**
+   * Persist a student-defined division of the answer document. Every entry is
+   * re-validated against the document's real chunks (provenance is recomputed,
+   * never trusted) and the split is bounded. Question rows, drafts, hints and
+   * conversations are untouched.
+   */
+  async saveAnswerEntries(setId: string, entries: ReadonlyArray<AnswerEntry>): Promise<number> {
+    const set = await this.homework.getSet(setId)
+    if (!set) throw new NotFoundError('HomeworkSet', setId)
+    const document = await this.getAnswerDocument(setId)
+    if (!document) throw new AppError(t('homework.answer.noDocument'), 'INVALID_INPUT')
+    const chunks = await this.chunks.listByDocument(document.id)
+    const valid = revalidateStoredEntries(
+      entries,
+      chunks.map((chunk) => ({
+        id: chunk.id,
+        text: chunk.text,
+        ...(chunk.pageNumber !== undefined ? { pageNumber: chunk.pageNumber } : {}),
+      })),
+    )
+    if (!valid) throw new AppError(t('homework.answer.invalidSplit'), 'INVALID_INPUT')
+    const totalChars = valid.reduce((sum, entry) => sum + entry.text.length, 0)
+    if (totalChars > MAX_STORED_ANSWER_CHARS) {
+      throw new AppError(t('homework.answer.splitTooLarge'), 'INVALID_INPUT')
+    }
+    await this.homework.updateSet(setId, { answerEntries: valid })
+    return valid.length
+  }
+
+  /** Drop a student-defined division and fall back to the automatic parse. */
+  async clearAnswerEntries(setId: string): Promise<void> {
+    const set = await this.homework.getSet(setId)
+    if (!set) throw new NotFoundError('HomeworkSet', setId)
+    await this.homework.updateSet(setId, { answerEntries: undefined })
   }
 
   /**
    * Persist the confirmed mapping. Only the questions the student selected are
-   * written; a `undefined` selection clears that question's answer link. The
-   * question rows (drafts, hints, messages) are never touched otherwise.
+   * written; an absent selection clears that question's answer link. The whole
+   * write is one transaction and every rule is enforced here — duplicate
+   * questions, out-of-range or duplicate answer entries, and questions that do
+   * not belong to this set are all rejected with an actionable message. Drafts,
+   * hints, revealed progress and conversations are never touched.
    */
   async confirmAnswerMapping(
     setId: string,
@@ -446,30 +733,51 @@ export class HomeworkService {
     const set = await this.homework.getSet(setId)
     if (!set) throw new NotFoundError('HomeworkSet', setId)
     const { entries } = await this.buildAnswerMapping(setId)
-    let matched = 0
+
+    const seenQuestions = new Set<string>()
+    const seenAnswers = new Set<number>()
+    const writes: Array<{
+      questionId: string
+      answer: { answerText: string; answerNumber?: string; answerChunkIds: string[] } | null
+    }> = []
+
     for (const selection of selections) {
+      if (seenQuestions.has(selection.questionId)) {
+        throw new AppError(t('homework.answer.duplicateQuestion'), 'INVALID_INPUT')
+      }
+      seenQuestions.add(selection.questionId)
       const question = await this.homework.getQuestion(selection.questionId)
-      if (!question || question.setId !== setId) continue
+      if (!question || question.setId !== setId) {
+        throw new AppError(t('homework.answer.invalidQuestion'), 'INVALID_INPUT')
+      }
       if (selection.answerIndex === undefined) {
-        await this.homework.updateQuestion(selection.questionId, {
-          answerText: undefined,
-          answerNumber: undefined,
-          answerChunkIds: undefined,
-          answerStatus: undefined,
-        })
+        writes.push({ questionId: selection.questionId, answer: null })
         continue
       }
-      const entry = entries[selection.answerIndex]
-      if (!entry) continue
-      matched += 1
-      await this.homework.updateQuestion(selection.questionId, {
-        answerText: entry.text,
-        ...(entry.number ? { answerNumber: entry.number } : { answerNumber: undefined }),
-        answerChunkIds: entry.chunkIds,
-        answerStatus: 'matched',
+      const index = selection.answerIndex
+      if (!Number.isInteger(index) || index < 0 || index >= entries.length) {
+        throw new AppError(t('homework.answer.invalidAnswerIndex'), 'INVALID_INPUT')
+      }
+      if (seenAnswers.has(index)) {
+        throw new AppError(t('homework.answer.duplicateAnswer'), 'INVALID_INPUT')
+      }
+      seenAnswers.add(index)
+      const entry = entries[index]!
+      const text = entry.text.trim()
+      if (!text || entry.chunkIds.length === 0) {
+        throw new AppError(t('homework.answer.invalidAnswerIndex'), 'INVALID_INPUT')
+      }
+      writes.push({
+        questionId: selection.questionId,
+        answer: {
+          answerText: text,
+          ...(entry.number ? { answerNumber: entry.number } : {}),
+          answerChunkIds: entry.chunkIds,
+        },
       })
     }
-    return matched
+
+    return this.homework.setAnswerLinks(setId, writes)
   }
 
   /** Whether an answer-based generation is currently in flight for a question. */
@@ -490,7 +798,8 @@ export class HomeworkService {
   async generateAnswerContent(
     setId: string,
     questionIds?: readonly string[],
-  ): Promise<{ generated: number; failed: number }> {
+    onProgress?: (progress: AnswerGenerationProgress) => void,
+  ): Promise<{ generated: number; failed: number; skipped: number }> {
     const set = await this.homework.getSet(setId)
     if (!set) throw new NotFoundError('HomeworkSet', setId)
     const questions = (await this.homework.listQuestions(setId)).filter(
@@ -499,18 +808,62 @@ export class HomeworkService {
         question.answerStatus === 'matched' &&
         (question.answerText ?? '').trim().length > 0,
     )
-    const targets = questionIds
+    const candidates = questionIds
       ? questions.filter((question) => questionIds.includes(question.id))
       : questions
-
+    // Reopening the mapping must not regenerate every already completed
+    // explanation. An explicit question list is a deliberate regeneration.
+    const targets = questionIds ? candidates : candidates.filter((question) =>
+      !(question.answerBased && question.generationStatus === 'ready' &&
+        question.promptVersion === HOMEWORK_QUESTION_PROMPT_VERSION),
+    )
+    let skipped = candidates.length - targets.length
     let generated = 0
     let failed = 0
-    for (const question of targets) {
-      const result = await this.startAnswerGenerate(question.id)
-      if (result.question?.generationStatus === 'failed') failed += 1
-      else generated += 1
+    let completed = 0
+    let stopKind: HomeworkErrorKind | undefined
+    let timeoutFailures = 0
+    const queue = [...targets]
+    const report = (): void => onProgress?.({ completed, total: targets.length, generated, failed, skipped })
+    report()
+    while (queue.length > 0 && !stopKind) {
+      // Finish the current pair before scheduling more. This avoids sending a
+      // third request while the second is still deciding whether the provider
+      // is timing out or rate-limiting the whole batch.
+      const batch = queue.splice(0, ANSWER_CONTENT_CONCURRENCY)
+      await Promise.all(batch.map(async (question) => {
+        const result = await this.startAnswerGenerate(question.id)
+        if (result.skipped) skipped += 1
+        else if (result.question?.generationStatus === 'ready' && result.question.answerBased) generated += 1
+        else failed += 1
+        if (result.kind && (isAccountFatalError(result.kind) || result.kind === 'rate-limited')) {
+          stopKind = result.kind
+        }
+        if (result.kind === 'timeout' && ++timeoutFailures >= ANSWER_CONTENT_CONCURRENCY) {
+          stopKind = 'timeout'
+        }
+        completed += 1
+        report()
+      }))
     }
-    return { generated, failed }
+    if (stopKind && queue.length > 0) {
+      const message = stopKind === 'quota'
+        ? t('friendlyError.quotaExceeded')
+        : stopKind === 'auth'
+          ? t('friendlyError.authFailed')
+          : stopKind === 'rate-limited'
+            ? t('friendlyError.rateLimited')
+            : t('friendlyError.timeout')
+      for (const question of queue) {
+        await this.homework.updateQuestion(question.id, {
+          generationStatus: 'failed', generationError: message,
+        })
+        failed += 1
+        completed += 1
+      }
+      report()
+    }
+    return { generated, failed, skipped }
   }
 
   /**
@@ -1246,24 +1599,44 @@ export class HomeworkService {
     if (!question) return {}
     const answer = (question.answerText ?? '').trim()
     if (!answer) return { question }
+    if (isDeferredProfessorAnswer(answer)) {
+      // The numbered entry is a deliberate exercise, not an official worked
+      // answer. Do not ask the model to invent a professor-grounded solution
+      // from flattened diagram labels and then wait for a doomed timeout.
+      const updated = await this.homework.updateQuestion(questionId, {
+        generationStatus: 'failed',
+        generationError: t('homework.answer.deferredAnswer'),
+      })
+      return { question: updated, skipped: true }
+    }
     await this.homework.updateQuestion(questionId, {
       generationStatus: 'pending',
       generationError: undefined,
     })
+    const controller = new AbortController()
+    const deadline = setTimeout(() => controller.abort(), ANSWER_GENERATION_DEADLINE_MS)
     try {
       const ai = this.requireAI()
       const sourceText = await this.sourceText(question)
-      const content = normalizeQuestionContent(await requestHomeworkQuestionJSON(
-        ai,
-        question.prompt,
-        sourceText,
-        currentLanguage(),
-        'combined',
-        splitHomeworkSubparts(question.prompt).length >= 2 ? 1 : 6,
-        answer,
-      ))
+      let content: { hints: string[]; solution: string }
+      try {
+        content = normalizeQuestionContent(await requestHomeworkQuestionJSON(
+          ai, question.prompt, sourceText, currentLanguage(), 'combined', 2, answer, controller.signal,
+        ))
+      } catch (err) {
+        const kind = classifyHomeworkError(err)
+        if (kind !== 'truncated' && kind !== 'output-limit' && kind !== 'invalid-response' &&
+          !(err instanceof AppError && err.code === 'INVALID_RESPONSE')) throw err
+        // Smaller one-field responses are more reliable when a model cannot
+        // finish the combined hints + worked solution. Commit only when both
+        // stages succeed; previous help and student work stay untouched.
+        content = await prepareHomeworkQuestionInStages(
+          ai, question.prompt, sourceText, currentLanguage(), answer, controller.signal,
+        )
+      }
       const previousSolution =
         !question.answerBased && (question.solution ?? '').trim() ? question.solution : undefined
+      if (controller.signal.aborted) throw new AITimeoutError(ANSWER_GENERATION_DEADLINE_MS)
       const updated = await this.homework.applyAnswerBasedContent(
         questionId,
         content.hints,
@@ -1273,11 +1646,14 @@ export class HomeworkService {
       )
       return { question: updated }
     } catch (err) {
+      const failure = controller.signal.aborted ? new AITimeoutError(ANSWER_GENERATION_DEADLINE_MS) : err
       const updated = await this.homework.updateQuestion(questionId, {
         generationStatus: 'failed',
-        generationError: friendlyAIError(err),
+        generationError: friendlyAIError(failure),
       })
-      return { question: updated, kind: classifyHomeworkError(err) }
+      return { question: updated, kind: classifyHomeworkError(failure) }
+    } finally {
+      clearTimeout(deadline)
     }
   }
 
@@ -1386,6 +1762,7 @@ async function requestHomeworkQuestionJSON(
   mode: HomeworkQuestionMode,
   maxAttempts = 6,
   professorAnswer?: string,
+  signal?: AbortSignal,
 ): Promise<unknown> {
   const hasProfessorAnswer = Boolean(professorAnswer?.trim())
   const userPrompt = prompts.homeworkQuestion.buildUserPrompt({
@@ -1414,7 +1791,10 @@ async function requestHomeworkQuestionJSON(
     ]
     try {
       // Streaming uses an idle timeout, so a long but active solution can finish.
-      const { data } = await ai.streamJSON<unknown>(messages, undefined, { maxTokens: budget })
+      const { data } = await ai.streamJSON<unknown>(messages, undefined, {
+        maxTokens: budget,
+        ...(signal ? { signal } : {}),
+      })
       return data
     } catch (err) {
       lastError = err
@@ -1465,15 +1845,17 @@ async function prepareHomeworkQuestionInStages(
   question: string,
   sourceText: string,
   language: 'zh' | 'en',
+  professorAnswer?: string,
+  signal?: AbortSignal,
 ): Promise<{ hints: string[]; solution: string }> {
   const hintData = asRecord(await requestHomeworkQuestionJSON(
-    ai, question, sourceText, language, 'hints',
+    ai, question, sourceText, language, 'hints', professorAnswer ? 3 : 6, professorAnswer, signal,
   ))
   const hints = asStringArray(hintData?.hints).map((hint) => hint.trim())
     .filter(Boolean).slice(0, HOMEWORK_MAX_HINTS)
   if (hints.length === 0) throw new AppError(t('homework.contentIncomplete'), 'INVALID_RESPONSE')
   const solutionData = asRecord(await requestHomeworkQuestionJSON(
-    ai, question, sourceText, language, 'solution',
+    ai, question, sourceText, language, 'solution', professorAnswer ? 3 : 6, professorAnswer, signal,
   ))
   const solution = asTrimmedString(solutionData?.solution)
   if (!solution) throw new AppError(t('homework.contentIncomplete'), 'INVALID_RESPONSE')

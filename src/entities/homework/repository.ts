@@ -1,6 +1,9 @@
 import type { AppDatabase } from '@/infrastructure/db/database'
 import { getDb } from '@/infrastructure/db/database'
+import { AppError } from '@/infrastructure/errors/AppError'
 import type { HomeworkQuestion, HomeworkSet } from './types'
+import { homeworkReviewInputHash, type HomeworkReviewGuide } from './reviewGuide'
+import { answerCheckInputHash, type HomeworkAnswerCheck } from './answerCheck'
 
 /**
  * Persistence for homework assignments and their questions.
@@ -83,6 +86,31 @@ export class HomeworkRepository {
       const existing = await this.questions().get(id)
       if (!existing) return undefined
       const next: HomeworkQuestion = { ...existing, ...patch, id, updatedAt: Date.now() }
+      await this.questions().put(next)
+      return next
+    })
+  }
+
+  /** Commit a generated review only if its question and answer inputs are still current. */
+  async applyReviewGuide(id: string, guide: HomeworkReviewGuide): Promise<HomeworkQuestion | undefined> {
+    return this.db.transaction('rw', this.questions(), async () => {
+      const existing = await this.questions().get(id)
+      if (!existing || homeworkReviewInputHash(existing, guide.language, guide.promptVersion) !== guide.inputHash) {
+        return undefined
+      }
+      const next: HomeworkQuestion = { ...existing, reviewGuide: guide, updatedAt: Date.now() }
+      await this.questions().put(next)
+      return next
+    })
+  }
+
+  /** A slow AI check must never overwrite newer student work or a changed answer key. */
+  async applyAnswerCheck(id: string, submittedDraft: string, check: HomeworkAnswerCheck): Promise<HomeworkQuestion | undefined> {
+    return this.db.transaction('rw', this.questions(), async () => {
+      const existing = await this.questions().get(id)
+      if (!existing || existing.draftText !== submittedDraft ||
+        answerCheckInputHash(existing, submittedDraft, check.language, check.promptVersion) !== check.inputHash) return undefined
+      const next: HomeworkQuestion = { ...existing, answerCheck: check, updatedAt: Date.now() }
       await this.questions().put(next)
       return next
     })
@@ -174,6 +202,59 @@ export class HomeworkRepository {
         await this.questions().put(next)
       }
       return rows.length
+    })
+  }
+
+  /**
+   * Persist confirmed professor-answer links for a set in ONE transaction.
+   * Each question's CURRENT row is read first, so drafts, hints, revealed
+   * progress and conversations are never touched. A question that does not
+   * belong to `setId` aborts the whole write (nothing is partially applied).
+   */
+  async setAnswerLinks(
+    setId: string,
+    links: ReadonlyArray<{
+      questionId: string
+      answer: { answerText: string; answerNumber?: string; answerChunkIds: string[] } | null
+    }>,
+  ): Promise<number> {
+    return this.db.transaction('rw', this.questions(), async () => {
+      let matched = 0
+      for (const link of links) {
+        const existing = await this.questions().get(link.questionId)
+        if (!existing || existing.setId !== setId) {
+          throw new AppError(
+            `Question ${link.questionId} is not part of this assignment`,
+            'INVALID_INPUT',
+          )
+        }
+        const next: HomeworkQuestion = link.answer
+          ? {
+              ...existing,
+              answerText: link.answer.answerText,
+              answerNumber: link.answer.answerNumber,
+              answerChunkIds: link.answer.answerChunkIds,
+              answerStatus: 'matched',
+              // An edited answer must not leave old AI help labelled as based
+              // on the new answer. Student work and the old help stay intact.
+              answerBased: existing.answerText === link.answer.answerText &&
+                existing.answerNumber === link.answer.answerNumber
+                ? existing.answerBased : false,
+              updatedAt: Date.now(),
+            }
+          : {
+              ...existing,
+              answerText: undefined,
+              answerNumber: undefined,
+              answerChunkIds: undefined,
+              answerStatus: undefined,
+              answerBased: false,
+              updatedAt: Date.now(),
+            }
+        if (link.answer) matched += 1
+        await this.questions().put(next)
+      }
+      return matched
     })
   }
 

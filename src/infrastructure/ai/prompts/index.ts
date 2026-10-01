@@ -19,6 +19,8 @@ import * as VisualizationGeneratorV5 from './visualization-generator/v5'
 import * as HomeworkAnalyzerV2 from './homework-analyzer/v2'
 import * as HomeworkQuestionV3 from './homework-question/v3'
 import * as HomeworkQaV1 from './homework-qa/v1'
+import * as HomeworkReviewV1 from './homework-review/v1'
+import * as HomeworkAnswerCheckV1 from './homework-answer-check/v1'
 import * as SlideLessonV1 from './slide-lesson/v1'
 
 export const PROMPT_VERSIONS = {
@@ -37,6 +39,8 @@ export const PROMPT_VERSIONS = {
   homeworkAnalyzer: 'v2',
   homeworkQuestion: 'v3',
   homeworkQa: 'v1',
+  homeworkReview: 'v1',
+  homeworkAnswerCheck: 'v1',
   slideLesson: 'v1',
 } as const
 
@@ -56,6 +60,8 @@ export const prompts = {
   homeworkAnalyzer: HomeworkAnalyzerV2,
   homeworkQuestion: HomeworkQuestionV3,
   homeworkQa: HomeworkQaV1,
+  homeworkReview: HomeworkReviewV1,
+  homeworkAnswerCheck: HomeworkAnswerCheckV1,
   slideLesson: SlideLessonV1,
 } as const
 

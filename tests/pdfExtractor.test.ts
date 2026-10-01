@@ -62,7 +62,48 @@ vi.mock('pdfjs-dist', () => {
   }
 })
 
-const { extractPdf } = await import('@/infrastructure/files/pdfExtractor')
+const { extractPdf, groupTextItemsIntoLines } = await import('@/infrastructure/files/pdfExtractor')
+
+describe('PDF math text geometry', () => {
+  it('places a painted-before-base vector arrow on its overlapping letter', () => {
+    const item = (str: string, x: number, y: number, width: number, height: number) => ({
+      str, width, height, transform: [1, 0, 0, 1, x, y],
+    })
+    expect(groupTextItemsIntoLines([
+      item('where', 54, 100, 33, 11),
+      item('\u20d7', 93, 100, 0, 11),
+      item(' ', 87, 100, 1, 0),
+      item('x', 88, 100, 6, 11),
+      item(' = (x, y)', 102, 100, 55, 11),
+    ])).toEqual(['where x\u20d7 = (x, y)'])
+    // A distant mark must never be assigned to an unrelated letter.
+    expect(groupTextItemsIntoLines([
+      item('\u20d7', 10, 100, 0, 11),
+      item('x', 100, 100, 6, 11),
+    ])).not.toEqual(['x\u20d7'])
+  })
+  it('rejoins lowered and raised digits without merging separate lines', () => {
+    const item = (str: string, x: number, y: number, width: number, height: number) => ({
+      str, width, height, transform: [1, 0, 0, 1, x, y],
+    })
+    expect(groupTextItemsIntoLines([
+      item('V', 10, 100, 8, 11),
+      item('1', 18, 98.4, 4, 8),
+      item(' = {(x, y) ∈ R', 22, 100, 90, 11),
+      item('2', 112, 104.5, 4, 8),
+      item(' | x = y}', 116, 100, 55, 11),
+      item('and', 10, 80, 20, 11),
+    ])).toEqual(['V₁ = {(x, y) ∈ R² | x = y}', 'and'])
+  })
+
+  it('does not reinterpret ordinary same-size digits as scripts', () => {
+    expect(groupTextItemsIntoLines([
+      { str: 'Problem ', width: 45, height: 11, transform: [1, 0, 0, 1, 10, 100] },
+      { str: '8', width: 6, height: 11, transform: [1, 0, 0, 1, 55, 100] },
+      { str: 'Solution', width: 42, height: 11, transform: [1, 0, 0, 1, 10, 80] },
+    ])).toEqual(['Problem 8', 'Solution'])
+  })
+})
 
 describe('extractPdf (mocked)', () => {
   it('extracts text per page', async () => {

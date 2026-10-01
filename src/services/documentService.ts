@@ -187,7 +187,10 @@ export class DocumentService {
         )
         for (const set of linkedSets) {
           await this.homework.clearAnswerLinks(set.id)
-          await this.db.homeworkSets.update(set.id, { answerDocumentId: undefined })
+          await this.db.homeworkSets.update(set.id, {
+            answerDocumentId: undefined,
+            answerEntries: undefined,
+          })
         }
         await this.repo.delete(id)
       },
