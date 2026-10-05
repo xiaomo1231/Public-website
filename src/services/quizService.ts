@@ -16,7 +16,7 @@ import type {
 } from '@/entities/quiz/types'
 import type { DifficultyLevel } from '@/infrastructure/ai/prompts/types'
 import { prompts } from '@/infrastructure/ai/prompts'
-import type { QuizGenerationOutput, GeneratedQuizQuestion } from '@/infrastructure/ai/prompts/quiz-generator/v1'
+import type { QuizGenerationOutput, GeneratedQuizQuestion } from '@/infrastructure/ai/prompts/quiz-generator/v4'
 import type { ChatMessage } from '@/infrastructure/ai/types'
 import type { AIService } from './aiService'
 import { evaluateDeterministic } from './answerEvaluationService'
@@ -37,7 +37,18 @@ import type { SourceReference } from '@/entities/courseAnalysis/types'
 import { logger } from '@/infrastructure/logger/logger'
 import { AppError } from '@/infrastructure/errors/AppError'
 import { t } from '@/i18n'
+import { loadProjectSubject } from './projectSubject'
+import { ShortAnswerGrader } from './shortAnswerGrader'
+import { imbalances, parseEquation } from '@/infrastructure/chemistry/equation'
+import { isValidUnit } from '@/infrastructure/math/quantityAnswer'
+import { normalizeProgramOutput } from './answerEvaluationService'
+import type { Subject } from '@/entities/project/types'
 
+
+/** Scoring points per short answer: enough to grade, few enough to stay distinct. */
+const MIN_RUBRIC_POINTS = 2
+const MAX_RUBRIC_POINTS = 6
+const MAX_RUBRIC_POINT_LENGTH = 200
 export interface QuizServiceDeps {
   ai: AIService
   db?: AppDatabase
@@ -317,7 +328,7 @@ export class QuizService {
         language: analysis.language,
         sourceSnippets: scopedSnippets.map(formatSnippetForPrompt),
         ...(professorStyleContext ? { professorStyleContext } : {}),
-      }, options.signal)
+      }, await loadProjectSubject(projectId), options.signal)
 
       options.onProgress?.('storing', 80)
       const stored = await this.questions.addMany(
@@ -330,6 +341,11 @@ export class QuizService {
           prompt: q.prompt,
           ...(q.options ? { options: q.options } : {}),
           correctAnswer: q.correctAnswer,
+          ...(q.unit ? { unit: q.unit } : {}),
+          ...(q.rubric?.length
+            ? { rubric: q.rubric.map((text, index) => ({ id: `p${index + 1}`, text })) }
+            : {}),
+          ...(q.orderItems?.length ? { orderItems: q.orderItems } : {}),
           ...(q.solution ? { solution: q.solution } : {}),
           hints: q.hints ?? [],
           sourceRefs: resolveSourceReferences(q.sourceChunkId, q.quote, snippetIndex),
@@ -355,10 +371,17 @@ export class QuizService {
 
   private async generateWithRetry(
     input: Parameters<typeof prompts.quizGenerator.buildUserPrompt>[0],
+    subject: Subject | undefined,
     signal?: AbortSignal,
   ): Promise<GeneratedQuizQuestion[]> {
     const messages: ChatMessage[] = [
-      { role: 'system', content: prompts.quizGenerator.buildSystemPrompt() },
+      {
+        role: 'system',
+        content: prompts.subjectProfile.withSubject(
+          prompts.quizGenerator.buildSystemPrompt(),
+          subject,
+        ),
+      },
       { role: 'user', content: prompts.quizGenerator.buildUserPrompt(input) },
     ]
     let lastError: unknown = null
@@ -410,11 +433,68 @@ export class QuizService {
         }
       }
 
+      // Numeric: a unit is kept only when it is a real, convertible unit and
+      // the value is a plain number in it; otherwise grading stays unit-free.
+      let unit: string | undefined
+      if (type === 'numeric' && typeof q.unit === 'string' && q.unit.trim()) {
+        const candidate = q.unit.trim()
+        if (isValidUnit(candidate) && Number.isFinite(Number(correctAnswer))) unit = candidate
+      }
+      // A short answer is scored by its points, so it needs 2–6 distinct
+      // ones; with fewer it cannot be graded fairly and is dropped.
+      let rubric: string[] | undefined
+      if (type === 'short_answer') {
+        const seen = new Set<string>()
+        rubric = (Array.isArray(q.rubric) ? q.rubric : [])
+          .filter((point): point is string => typeof point === 'string')
+          .map((point) => point.trim().slice(0, MAX_RUBRIC_POINT_LENGTH))
+          .filter((point) => {
+            const key = point.toLowerCase()
+            if (!point || seen.has(key)) return false
+            seen.add(key)
+            return true
+          })
+          .slice(0, MAX_RUBRIC_POINTS)
+        if (rubric.length < MIN_RUBRIC_POINTS) continue
+      }
+      // A chemical equation is only kept when the reference itself parses and
+      // balances; otherwise the grader would mark correct answers wrong.
+      if (type === 'chem_equation') {
+        const reference = parseEquation(correctAnswer)
+        if (!reference.ok || imbalances(reference.equation).length > 0) continue
+      }
+      // Ordering: 3–8 distinct single-line items; the answer is rebuilt from
+      // them so the two can never disagree.
+      let orderItems: string[] | undefined
+      if (type === 'ordering') {
+        const seen = new Set<string>()
+        orderItems = (Array.isArray(q.orderItems) ? q.orderItems : [])
+          .filter((item): item is string => typeof item === 'string')
+          .map((item) => item.replace(/\s+/g, ' ').trim().slice(0, 160))
+          .filter((item) => {
+            if (!item || seen.has(item)) return false
+            seen.add(item)
+            return true
+          })
+        if (orderItems.length < 3 || orderItems.length > 8) continue
+        correctAnswer = orderItems.join('\n')
+      }
+      // Code output needs the program in the prompt; without it the question
+      // cannot be answered, so it is dropped.
+      if (type === 'code_output') {
+        if (!/```/.test(q.prompt)) continue
+        correctAnswer = normalizeProgramOutput(q.correctAnswer)
+        if (!correctAnswer) continue
+      }
+
       valid.push({
         prompt: q.prompt.trim(),
         type,
         ...(options ? { options } : {}),
         correctAnswer,
+        ...(unit ? { unit } : {}),
+        ...(rubric ? { rubric } : {}),
+        ...(orderItems ? { orderItems } : {}),
         solution: typeof q.solution === 'string' ? q.solution : '',
         knowledgePoint: typeof q.knowledgePoint === 'string' && q.knowledgePoint.trim() ? q.knowledgePoint.trim() : 'General',
         difficulty: (q.difficulty ?? 'basic') as DifficultyLevel,
@@ -461,14 +541,27 @@ export class QuizService {
     quizId: string,
     questionId: string,
     userAnswer: string,
-    opts: { durationMs?: number; hintsUsed?: number; aiFallback?: boolean } = {},
+    opts: {
+      durationMs?: number
+      hintsUsed?: number
+      aiFallback?: boolean
+      /** Grade a short answer by its scoring points (needs a configured AI). */
+      gradeShortAnswer?: boolean
+    } = {},
   ): Promise<SubmitAnswerResult> {
     const quiz = await this.getQuiz(quizId)
     const question = await this.questions.get(questionId)
     if (!question) throw new AppError(t('errors.questionNotFound'), 'NOT_FOUND')
 
-    let evaluation = evaluateDeterministic(question, userAnswer)
-    if (evaluation.isCorrect === null && opts.aiFallback) {
+    let evaluation =
+      question.type === 'short_answer' && opts.gradeShortAnswer
+        ? await new ShortAnswerGrader(this.ai).grade(
+            question,
+            userAnswer.trim(),
+            await loadProjectSubject(quiz.projectId, this.db),
+          )
+        : evaluateDeterministic(question, userAnswer)
+    if (evaluation.isCorrect === null && opts.aiFallback && question.type !== 'short_answer') {
       evaluation = await this.evaluateWithAI(question, userAnswer, evaluation)
     }
 
@@ -564,6 +657,34 @@ export class QuizService {
     }
   }
 
+  /**
+   * The student disputes an AI judgement (short answers). The attempt keeps
+   * its result for reference but stops counting: it leaves the score, the
+   * mistake book and the knowledge point's mastery, which is rebuilt from the
+   * remaining history.
+   */
+  async disputeAttempt(attemptId: string): Promise<QuestionAttempt> {
+    const attempt = await this.attempts.get(attemptId)
+    if (!attempt) throw new AppError(t('errors.questionNotFound'), 'NOT_FOUND')
+    if (attempt.evaluation.disputed) return attempt
+    const updated = await this.attempts.update({
+      ...attempt,
+      evaluation: { ...attempt.evaluation, disputed: true },
+    })
+
+    if (this.mistakes) {
+      await this.mistakes.removeAttempt(attempt.projectId, attempt.questionId, attempt.id)
+    }
+    const history = await this.attempts.listByKnowledgePoint(attempt.projectId, attempt.knowledgePoint)
+    await this.mastery.rebuild(attempt.projectId, history)
+
+    if (attempt.quizId) {
+      const quiz = await this.quizzes.get(attempt.quizId)
+      if (quiz?.status === 'completed') await this.completeQuiz(quiz.id)
+    }
+    return updated
+  }
+
   async completeQuiz(quizId: string): Promise<Quiz> {
     const quiz = await this.getQuiz(quizId)
     const attempts = await this.attempts.listByQuiz(quizId)
@@ -638,6 +759,8 @@ export function scoreQuiz(quiz: Quiz, attempts: QuestionAttempt[]): QuizScore {
   let correct = 0
   let wrong = 0
   let unverified = 0
+  /** Graded credit: 1 per correct answer, `earned / total` for a short answer. */
+  let points = 0
 
   const attemptByQuestion = new Map(attempts.map((a) => [a.questionId, a]))
 
@@ -663,12 +786,19 @@ export function scoreQuiz(quiz: Quiz, attempts: QuestionAttempt[]): QuizScore {
       kStat.unverified++
       continue
     }
-    if (attempt.evaluation.isCorrect === true) {
+    const evaluation = attempt.evaluation
+    // A disputed AI judgement is kept for reference but never scored.
+    const isCorrect = evaluation.disputed ? null : evaluation.isCorrect
+    if (isCorrect === true) {
       correct++
+      points += 1
       dStat.correct++
       kStat.correct++
-    } else if (attempt.evaluation.isCorrect === false) {
+    } else if (isCorrect === false) {
       wrong++
+      points += evaluation.score && evaluation.score.total > 0
+        ? evaluation.score.earned / evaluation.score.total
+        : 0
       dStat.wrong++
       kStat.wrong++
     } else {
@@ -679,7 +809,7 @@ export function scoreQuiz(quiz: Quiz, attempts: QuestionAttempt[]): QuizScore {
   }
 
   const gradable = correct + wrong
-  const percentage = gradable > 0 ? Math.round((correct / gradable) * 100) : 0
+  const percentage = gradable > 0 ? Math.round((points / gradable) * 100) : 0
 
   const byKnowledgePoint = [...byKpMap.values()].sort((a, b) => {
     const aAcc = a.correct + a.wrong > 0 ? a.correct / (a.correct + a.wrong) : 1
@@ -695,6 +825,7 @@ export function scoreQuiz(quiz: Quiz, attempts: QuestionAttempt[]): QuizScore {
     wrong,
     unverified,
     total: quiz.questionIds.length,
+    points: Math.round(points * 100) / 100,
     percentage,
     byDifficulty,
     byKnowledgePoint,

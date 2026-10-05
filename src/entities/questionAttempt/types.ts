@@ -6,6 +6,11 @@ export type EvaluationMethod =
   | 'numeric'
   | 'numeric_tolerance'
   | 'math_equivalent'
+  | 'unit_conversion'
+  | 'exact_output'
+  | 'rubric_ai'
+  | 'chem_equation'
+  | 'order_match'
   | 'option_id'
   | 'ai'
   | 'unverified'
@@ -16,6 +21,11 @@ export const EVAL_METHOD_LABEL_KEYS: Record<EvaluationMethod, TranslationKey> = 
   numeric: 'evalMethod.numeric',
   numeric_tolerance: 'evalMethod.numeric_tolerance',
   math_equivalent: 'evalMethod.math_equivalent',
+  unit_conversion: 'evalMethod.unit_conversion',
+  exact_output: 'evalMethod.exact_output',
+  rubric_ai: 'evalMethod.rubric_ai',
+  chem_equation: 'evalMethod.chem_equation',
+  order_match: 'evalMethod.order_match',
   option_id: 'evalMethod.option_id',
   ai: 'evalMethod.ai',
   unverified: 'evalMethod.unverified',
@@ -33,6 +43,29 @@ export interface QuestionEvaluation {
   explanation?: string
   /** Human-readable note, e.g. "Unable to verify automatically". */
   note?: string
+  /**
+   * Partial credit (short answer): scoring points covered out of the total.
+   * The question counts as `earned / total` of a question in the quiz score;
+   * `isCorrect` is true only for full coverage.
+   */
+  score?: { earned: number; total: number }
+  /** Short answer: the per-point result, with the student's own words as evidence. */
+  rubric?: RubricPointResult[]
+  /** Short answer: statements in the answer that contradict the reference. */
+  contradictions?: string[]
+  /**
+   * The student disputed this AI judgement. A disputed answer is kept for
+   * reference but excluded from the score, the mistake book and mastery.
+   */
+  disputed?: boolean
+}
+
+export interface RubricPointResult {
+  pointId: string
+  text: string
+  covered: boolean
+  /** Verbatim excerpt of the student's answer; verified locally. */
+  evidence?: string
 }
 
 export interface QuestionAttempt {

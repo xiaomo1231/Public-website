@@ -7,6 +7,7 @@ import { CourseAnalysisRepository } from '@/entities/courseAnalysis/repository'
 import { DocumentRepository } from '@/entities/document/repository'
 import { ChunkRepository } from '@/entities/chunk/repository'
 import { TutorLessonRepository } from '@/entities/tutorLesson/repository'
+import { ProjectRepository } from '@/entities/project/repository'
 import type { AIService } from '@/services/aiService'
 import { AppError } from '@/infrastructure/errors/AppError'
 
@@ -388,6 +389,28 @@ describe('TutorLessonService — cache-first', () => {
     const lessons = await new TutorLessonRepository(db).listByProject(projectId)
     expect(lessons).toHaveLength(1)
     expect(lessons[0]!.id).toBe(fresh.lesson.id)
+  })
+  it('teaches with the course subject profile and regenerates when the subject changes', async () => {
+    const systemOf = (stub: ReturnType<typeof stubAI>): string => {
+      const call = stub.streamChat.mock.calls[0] ?? stub.chat.mock.calls[0]
+      return (call?.[0] as Array<{ role: string; content: string }>)[0]!.content
+    }
+
+    const first = stubAI()
+    await service(first.ai).getOrGenerate(input())
+    expect(systemOf(first)).toContain('COURSE SUBJECT: Calculus')
+
+    // Same subject: served from cache.
+    const cached = stubAI()
+    expect((await service(cached.ai).getOrGenerate(input())).fromCache).toBe(true)
+
+    // A different subject invalidates the stored lesson.
+    await new ProjectRepository(db).update(projectId, { subject: 'discrete_math' })
+    const after = stubAI()
+    const result = await service(after.ai).getOrGenerate(input())
+    expect(result.fromCache).toBe(false)
+    expect(systemOf(after)).toContain('COURSE SUBJECT: Discrete mathematics')
+    expect(result.lesson.promptVersion).toContain('subject-profile/v1:discrete_math')
   })
 })
 

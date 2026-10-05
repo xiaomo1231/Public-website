@@ -5,6 +5,7 @@ import type {
   TutorVisualization,
   VisualizationDraftOutput,
 } from '@/entities/tutorVisualization/types'
+import type { Subject } from '@/entities/project/types'
 import { logger } from '@/infrastructure/logger/logger'
 
 /**
@@ -20,6 +21,8 @@ export interface TutorVisualizationInput {
   topicDescription: string
   language: 'zh' | 'en' | 'mixed'
   lessonContent: string
+  /** The course subject; offers the chemistry / biology figures where relevant. */
+  subject?: Subject
 }
 
 /** Graphs are small; a modest cap keeps the call cheap and bounded. */
@@ -37,7 +40,12 @@ export class TutorVisualizationService {
     if (typeof this.ai.chatJSON !== 'function') return []
 
     const messages = [
-      { role: 'system' as const, content: prompts.visualizationGenerator.buildSystemPrompt() },
+      {
+        role: 'system' as const,
+        content: prompts.visualizationGenerator.buildSystemPrompt({
+          ...(input.subject ? { subject: input.subject } : {}),
+        }),
+      },
       {
         role: 'user' as const,
         content: prompts.visualizationGenerator.buildUserPrompt({

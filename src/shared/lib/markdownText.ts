@@ -37,7 +37,8 @@ export type MarkdownBlock =
   | { kind: 'paragraph'; spans: InlineSpan[] }
   | { kind: 'list'; ordered: boolean; items: InlineSpan[][] }
   | { kind: 'quote'; spans: InlineSpan[] }
-  | { kind: 'code'; value: string }
+  /** `language` is the fence's info string (```python), when given. */
+  | { kind: 'code'; value: string; language?: string }
   /** A line that is nothing but display math. */
   | { kind: 'math'; value: string }
   | TableBlock
@@ -176,13 +177,14 @@ export function parseMarkdownBlocks(text: string): MarkdownBlock[] {
     // Fenced code — consume verbatim until the closing fence.
     if (FENCE.test(line)) {
       flushAll()
+      const language = /^\s*```\s*([\w+#.-]+)/.exec(line)?.[1]
       const body: string[] = []
       i++
       while (i < lines.length && !FENCE.test(lines[i] ?? '')) {
         body.push(lines[i] ?? '')
         i++
       }
-      blocks.push({ kind: 'code', value: body.join('\n') })
+      blocks.push({ kind: 'code', value: body.join('\n'), ...(language ? { language } : {}) })
       continue
     }
 

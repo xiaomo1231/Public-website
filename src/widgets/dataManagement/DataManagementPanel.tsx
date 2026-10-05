@@ -179,7 +179,7 @@ export function DataManagementPanel(): JSX.Element {
 
 function InventoryLine({ label, value, badge }: { label: string; value: number | string; badge?: 'default' | 'secondary' }) {
   return (
-    <div className="flex items-center justify-between rounded-md border bg-muted/30 px-3 py-2 text-sm">
+    <div className="flex items-center justify-between rounded-lg border bg-muted/30 px-3 py-2 text-sm">
       <span className="text-muted-foreground">{label}</span>
       {badge ? <Badge variant={badge}>{value}</Badge> : <span className="font-mono tabular-nums">{value}</span>}
     </div>

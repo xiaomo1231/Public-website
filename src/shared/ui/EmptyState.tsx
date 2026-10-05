@@ -19,14 +19,14 @@ export function EmptyState({
   return (
     <div
       className={cn(
-        'flex flex-col items-center justify-center gap-4 rounded-xl border border-dashed border-border/80 bg-card/60 p-10 text-center',
+        'flex animate-tab-in flex-col items-center justify-center gap-4 rounded-lg border border-dashed border-border/80 bg-card/60 p-10 text-center',
         className,
       )}
     >
       {icon && (
         <div
           aria-hidden
-          className="plate-grid grid h-16 w-16 place-items-center rounded-2xl border border-border/70 bg-theme-primary-soft text-foreground [&_svg]:h-7 [&_svg]:w-7"
+          className="grid h-16 w-16 place-items-center rounded-xl border border-border/70 bg-theme-primary-soft text-foreground motion-safe:animate-float [&_svg]:h-7 [&_svg]:w-7"
         >
           {icon}
         </div>

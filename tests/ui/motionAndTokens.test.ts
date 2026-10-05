@@ -109,9 +109,7 @@ describe('decorative motion', () => {
   })
 
   it('builds the decoration from theme tokens, never a literal colour', () => {
-    // The precision grid and brand mark must go through the theme variables.
-    expect(css).toMatch(/\.tech-grid::before[\s\S]*hsl\(var\(--theme-primary\)/)
-    expect(css).toMatch(/\.tech-grid::after[\s\S]*hsl\(var\(--theme-accent\)/)
+    // The brand mark must go through the theme variables.
     expect(css).toMatch(/\.brand-mark[\s\S]*hsl\(var\(--primary-strong\)/)
   })
 
@@ -124,11 +122,45 @@ describe('decorative motion', () => {
       '.animate-fade',
       '.progress-reveal',
       '.graph-draw',
-      '.tech-grid::before',
-      '.tech-grid::after',
+      '.animate-tab-in',
+      '.animate-float',
+      '.stagger-in > *',
     ]) {
       expect(body, `${selector} not disabled`).toContain(selector)
     }
     expect(body).toContain('animation: none !important')
+  })
+})
+
+describe('radius scale', () => {
+  // One monotonic scale: a larger step name must never render smaller (the
+  // old config had rounded-xl at 12px but rounded-md at 12.4px).
+  const STEPS = ['--radius-sm', '--radius-xs', '--radius-md', '--radius-lg', '--radius-xl', '--radius-2xl', '--radius-3xl']
+
+  it('defines every step and keeps them strictly increasing', () => {
+    const root = blockFor(':root')
+    const values = STEPS.map((step) => {
+      const raw = root.get(step)
+      expect(raw, `${step} missing`).toBeDefined()
+      return Number.parseFloat(raw!)
+    })
+    for (let i = 1; i < values.length; i++) {
+      expect(values[i]!, `${STEPS[i]} should be larger than ${STEPS[i - 1]}`).toBeGreaterThan(values[i - 1]!)
+    }
+  })
+
+  it('is what tailwind maps rounded-* onto', () => {
+    const config = readFileSync(resolvePath(process.cwd(), 'tailwind.config.ts'), 'utf8')
+    for (const [name, step] of [
+      ['sm', '--radius-sm'],
+      ['DEFAULT', '--radius-xs'],
+      ['md', '--radius-md'],
+      ['lg', '--radius-lg'],
+      ['xl', '--radius-xl'],
+      ["'2xl'", '--radius-2xl'],
+      ["'3xl'", '--radius-3xl'],
+    ] as const) {
+      expect(config).toContain(`${name}: 'var(${step})'`)
+    }
   })
 })

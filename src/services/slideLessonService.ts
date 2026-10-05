@@ -29,6 +29,8 @@ import { t } from '@/i18n'
 import { logger } from '@/infrastructure/logger/logger'
 import type { AIService } from './aiService'
 import type { ChatMessage } from '@/infrastructure/ai/types'
+import { loadProjectSubject } from './projectSubject'
+import type { Subject } from '@/entities/project/types'
 
 /** How many previous Q&A turns are sent back to the model. */
 const CHAT_HISTORY_TURNS = 8
@@ -309,7 +311,13 @@ export class SlideLessonService {
       throw new AppError(t('slides.emptySlide'), 'SLIDE_EMPTY')
     }
 
-    const promptVersion = prompts.slideLesson.VERSION
+    // Slide prompt plus the course's subject profile, so a subject change
+    // regenerates the slide lessons too.
+    const subject = await loadProjectSubject(content.document.projectId, this.db)
+    const promptVersion = prompts.subjectProfile.subjectPromptVersion(
+      prompts.slideLesson.VERSION,
+      subject,
+    )
     const hasImage = content.visuals.length > 0
     const contentHash = computeSlideContentHash({
       material: content.material,
@@ -331,7 +339,7 @@ export class SlideLessonService {
     }
 
     try {
-      return await this.runGenerate(input, content, contentHash, promptVersion)
+      return await this.runGenerate(input, content, contentHash, promptVersion, subject)
     } catch (err) {
       if (stored && stored.status === 'ready' && (stored.content ?? '').trim().length > 0) {
         return {
@@ -350,6 +358,7 @@ export class SlideLessonService {
     contentIn?: SlideContent,
     contentHashIn?: string,
     promptVersionIn?: string,
+    subjectIn?: Subject,
   ): Promise<SlideLessonResult> {
     const content = contentIn ?? (await this.getSlideContent(input.documentId, input.slideNumber))
     if (isEmptySlide(content)) throw new AppError(t('slides.emptySlide'), 'SLIDE_EMPTY')
@@ -367,7 +376,13 @@ export class SlideLessonService {
     const ai = this.requireAI()
     const neighbors = await this.buildNeighborSlides(content)
     const messages: ChatMessage[] = [
-      { role: 'system', content: prompts.slideLesson.buildSystemPrompt() },
+      {
+        role: 'system',
+        content: prompts.subjectProfile.withSubject(
+          prompts.slideLesson.buildSystemPrompt(),
+          subjectIn ?? (await loadProjectSubject(content.document.projectId, this.db)),
+        ),
+      },
       {
         role: 'user',
         content: prompts.slideLesson.buildUserPrompt({

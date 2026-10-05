@@ -59,15 +59,15 @@ export function VisualSourceFigure({ visual, documentName }: VisualSourceFigureP
           src={url}
           alt={visual.caption}
           loading="lazy"
-          className="mx-auto block h-auto max-w-full rounded-md border border-border/70 bg-card"
+          className="mx-auto block h-auto max-w-full rounded-lg border border-border/70 bg-card"
         />
       ) : unavailable ? (
-        <div className="flex items-center gap-2 rounded-md border border-dashed border-border px-3 py-4 text-[13px] text-muted-foreground">
+        <div className="flex items-center gap-2 rounded-lg border border-dashed border-border px-3 py-4 text-[13px] text-muted-foreground">
           <ImageOff className="h-4 w-4 shrink-0" aria-hidden />
           {t('tutor.visualUnavailable')}
         </div>
       ) : (
-        <div className="h-24 animate-pulse rounded-md border border-border/70 bg-muted/40" aria-hidden />
+        <div className="h-24 animate-pulse rounded-lg border border-border/70 bg-muted/40" aria-hidden />
       )}
       <figcaption className="text-center text-[13px] text-muted-foreground">
         {visual.caption}

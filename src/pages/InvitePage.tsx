@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { KeyRound, Sparkles } from 'lucide-react'
+import { KeyRound } from 'lucide-react'
 import { useAuth } from '@/features/auth/useAuth'
 import { Button } from '@/shared/ui/Button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/shared/ui/Card'
@@ -50,7 +50,7 @@ export function InvitePage(): JSX.Element {
       <Card className="w-full max-w-md">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <Sparkles className="h-5 w-5 text-primary" aria-hidden />
+            <KeyRound className="h-5 w-5 text-primary" aria-hidden />
             {t('invite.title')}
           </CardTitle>
           <CardDescription>{t('invite.description')}</CardDescription>
@@ -82,7 +82,7 @@ export function InvitePage(): JSX.Element {
               {submitting ? t('invite.verifying') : t('invite.unlock')}
             </Button>
 
-            <div className="rounded-md bg-muted/40 p-3 text-xs text-muted-foreground">
+            <div className="rounded-lg bg-muted/40 p-3 text-xs text-muted-foreground">
               <div className="mb-1 font-medium text-foreground">{t('invite.demoCodes')}</div>
               <div className="flex flex-wrap gap-1.5">
                 {DEMO_CODES.map((c) => (

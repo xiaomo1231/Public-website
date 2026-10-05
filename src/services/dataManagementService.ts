@@ -9,6 +9,7 @@ import { QuizRepository } from '@/entities/quiz/repository'
 import { QuestionAttemptRepository } from '@/entities/questionAttempt/repository'
 import { TutorSessionRepository } from '@/entities/tutorSession/repository'
 import { VisualSourceRepository } from '@/entities/visualSource/repository'
+import { ReferenceImageRepository } from '@/entities/referenceImage/repository'
 import { CourseContextRepository } from '@/entities/courseContext/repository'
 import { CourseStructureRepository } from '@/entities/courseStructure/repository'
 import { TranslationRepository } from '@/entities/translation/repository'
@@ -190,6 +191,7 @@ export class DataManagementService {
     const sessionRepo = new TutorSessionRepository(this.db)
     const translationRepo = new TranslationRepository(this.db)
     const visualRepo = new VisualSourceRepository(this.db)
+    const referenceRepo = new ReferenceImageRepository(this.db)
     const contextRepo = new CourseContextRepository(this.db)
     const structureRepo = new CourseStructureRepository(this.db)
     const practiceRepo = new PracticeRepository(this.db)
@@ -201,6 +203,7 @@ export class DataManagementService {
       await projectRepo.get(projectId)
       await docRepo.deleteByProject(projectId)
       await visualRepo.deleteByProject(projectId)
+      await referenceRepo.deleteByProject(projectId)
       await contextRepo.deleteByProject(projectId)
       await structureRepo.deleteByProject(projectId)
       await this.db.table('chunks').where('projectId').equals(projectId).delete()

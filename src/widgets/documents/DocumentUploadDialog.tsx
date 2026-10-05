@@ -246,7 +246,7 @@ export function DocumentUploadDialog({
               <Label
                 htmlFor="upload-files"
                 className={cn(
-                  'flex cursor-pointer flex-col items-center justify-center gap-2 rounded-md border border-dashed bg-muted/30 px-6 py-8 text-center text-sm transition-colors',
+                  'flex cursor-pointer flex-col items-center justify-center gap-2 rounded-lg border border-dashed bg-muted/30 px-6 py-8 text-center text-sm transition-colors',
                   dragOver && 'border-primary bg-primary/5',
                 )}
                 onDragOver={(e) => {
@@ -338,7 +338,7 @@ export function DocumentUploadDialog({
             )}
 
             <ul
-              className="max-h-64 space-y-1 overflow-y-auto rounded-md border bg-card p-2"
+              className="max-h-64 space-y-1 overflow-y-auto rounded-lg border bg-card p-2"
               aria-label={t('batch.queue')}
             >
               {items.map((item) => (
@@ -399,7 +399,7 @@ export function DocumentUploadDialog({
             )}
 
             {finished && (
-              <div className="rounded-md border bg-muted/30 px-3 py-2 text-sm">
+              <div className="rounded-lg border bg-muted/30 px-3 py-2 text-sm">
                 <p className="font-medium">{t('batch.completeTitle')}</p>
                 <p className="text-muted-foreground">
                   {summary.failed === 0 && summary.cancelled === 0 && summary.duplicates === 0

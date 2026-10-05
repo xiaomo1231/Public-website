@@ -56,7 +56,12 @@ export interface QuizScore {
   wrong: number
   unverified: number
   total: number
-  /** Percentage of automatically-graded questions that were correct. */
+  /**
+   * Graded credit: one per correct answer plus partial credit for short
+   * answers (3 of 5 points → 0.6). Absent on scores saved before short answers.
+   */
+  points?: number
+  /** Share of graded credit over graded questions, as a percentage. */
   percentage: number
   byDifficulty: Record<string, QuizDifficultyStat>
   byKnowledgePoint: QuizKnowledgeStat[]

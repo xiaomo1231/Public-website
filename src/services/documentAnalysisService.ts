@@ -101,9 +101,11 @@ export class DocumentAnalysisService {
    * Analyze all processed documents in a project, extracting structured
    * knowledge. Re-runs overwrite the previous analysis.
    */
-  async analyzeProject(projectId: string, options: { onProgress?: AnalysisProgressListener; subject?: string; signal?: AbortSignal; sideWrites?: AtomicSideWrites } = {}): Promise<CourseAnalysisRepository> {
-    await this.projects.get(projectId) // verify project exists
-    const { onProgress, subject } = options
+  async analyzeProject(projectId: string, options: { onProgress?: AnalysisProgressListener; signal?: AbortSignal; sideWrites?: AtomicSideWrites } = {}): Promise<CourseAnalysisRepository> {
+    // Also verifies the project exists. The subject is read here, from the
+    // project itself, so every path (manual or automatic) analyses with it.
+    const { subject } = await this.projects.get(projectId)
+    const { onProgress } = options
     onProgress?.({ stage: 'collecting', progress: 5, message: t('stage.collecting') })
 
     const documents = await this.documents.listByProject(projectId)
@@ -153,7 +155,10 @@ export class DocumentAnalysisService {
     const seed = await this.analyses.getByProject(projectId)
     const analysisId = seed?.id ?? crypto.randomUUID()
     const startedAt = seed?.startedAt ?? Date.now()
-    const promptVersion = prompts.documentAnalyzer.VERSION
+    const promptVersion = prompts.subjectProfile.subjectPromptVersion(
+      prompts.documentAnalyzer.VERSION,
+      subject,
+    )
     await this.analyses.upsert({
       id: analysisId,
       projectId,
@@ -175,14 +180,19 @@ export class DocumentAnalysisService {
     let output: DocumentAnalysisOutput
     try {
       const messages: ChatMessage[] = [
-        { role: 'system', content: prompts.documentAnalyzer.buildSystemPrompt() },
+        {
+          role: 'system',
+          content: prompts.subjectProfile.withSubject(
+            prompts.documentAnalyzer.buildSystemPrompt(),
+            subject,
+          ),
+        },
         {
           role: 'user',
           content: prompts.documentAnalyzer.buildUserPrompt({
             documentName: analysisDocs.map((d) => d.name).join(', '),
             documentText: documentText.slice(0, MAX_DOC_CHARS),
             language,
-            subject,
           }),
         },
       ]

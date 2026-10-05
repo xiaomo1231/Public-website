@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react'
 import { Check, X } from 'lucide-react'
 import type { Question } from '@/entities/question/types'
-import { Input } from '@/shared/ui/Input'
 import { Textarea } from '@/shared/ui/Textarea'
 import { cn } from '@/shared/lib/utils'
+import { useProject } from '@/features/project/useProjects'
+import { MathField } from '@/widgets/mathInput/MathField'
+import { OrderingInput } from './OrderingInput'
 import { useTranslation, type TranslationKey } from '@/i18n'
 
 export interface AnswerInputProps {
@@ -13,39 +15,125 @@ export interface AnswerInputProps {
   disabled?: boolean
   /** When true, show which option was correct (used after grading). */
   revealed?: boolean
+  /** Enter (Ctrl+Enter in multi-line fields) submits the answer. */
+  onSubmit?: () => void
 }
 
-export function AnswerInput({ question, value, onChange, disabled, revealed }: AnswerInputProps): JSX.Element {
+export function AnswerInput({
+  question,
+  value,
+  onChange,
+  disabled,
+  revealed,
+  onSubmit,
+}: AnswerInputProps): JSX.Element {
   const { t } = useTranslation()
+  const { project } = useProject(question.projectId)
+  const subject = project?.subject
   if (question.type === 'multiple_choice') {
     return <MultipleChoiceInput question={question} value={value} onChange={onChange} disabled={disabled} revealed={revealed} />
   }
   if (question.type === 'true_false') {
     return <TrueFalseInput value={value} onChange={onChange} disabled={disabled} revealed={revealed} correctAnswer={question.correctAnswer} />
   }
+  if (question.type === 'numeric' && question.unit) {
+    // A physical quantity: the unit is part of the answer, so it is typed
+    // with the value (and never shown here — choosing it is the task).
+    return (
+      <div className="space-y-1">
+        <MathField
+          mode="quantity"
+          subject={subject}
+          value={value}
+          onChange={onChange}
+          placeholder={t('answerInput.quantityPlaceholder')}
+          disabled={disabled}
+          {...(onSubmit ? { onSubmit } : {})}
+        />
+        <p className="text-xs text-muted-foreground">{t('answerInput.quantityHint')}</p>
+      </div>
+    )
+  }
+  if (question.type === 'code_output') {
+    return (
+      <div className="space-y-1">
+        <Textarea
+          rows={4}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder={t('answerInput.codeOutputPlaceholder')}
+          disabled={disabled}
+          spellCheck={false}
+          className="font-mono text-[13px]"
+        />
+        <p className="text-xs text-muted-foreground">{t('answerInput.codeOutputHint')}</p>
+      </div>
+    )
+  }
+  if (question.type === 'ordering') {
+    return <OrderingInput question={question} value={value} onChange={onChange} disabled={disabled} />
+  }
+  if (question.type === 'chem_equation') {
+    return (
+      <div className="space-y-1">
+        <MathField
+          mode="chemistry"
+          subject={subject}
+          value={value}
+          onChange={onChange}
+          placeholder={t('answerInput.chemEquationPlaceholder')}
+          disabled={disabled}
+          {...(onSubmit ? { onSubmit } : {})}
+        />
+        <p className="text-xs text-muted-foreground">{t('answerInput.chemEquationHint')}</p>
+      </div>
+    )
+  }
+  if (question.type === 'short_answer') {
+    const characters = value.replace(/\s+/g, '').length
+    return (
+      <div className="space-y-1">
+        <MathField
+          mode="text"
+          multiline
+          rows={6}
+          subject={subject}
+          value={value}
+          onChange={onChange}
+          placeholder={t('answerInput.shortAnswerPlaceholder')}
+          disabled={disabled}
+          {...(onSubmit ? { onSubmit } : {})}
+        />
+        <p className="data-num text-right text-xs text-muted-foreground">
+          {t('answerInput.charCount', { count: characters })}
+        </p>
+      </div>
+    )
+  }
   if (question.type === 'numeric') {
     return (
-      <Input
-        type="text"
-        inputMode="decimal"
+      <MathField
+        mode="number"
+        subject={subject}
         value={value}
-        onChange={(e) => onChange(e.target.value)}
+        onChange={onChange}
         placeholder={t('answerInput.numberPlaceholder')}
         disabled={disabled}
-        className="font-mono"
+        {...(onSubmit ? { onSubmit } : {})}
       />
     )
   }
   if (question.type === 'math_expr') {
     return (
       <div className="space-y-1">
-        <Input
-          type="text"
+        <MathField
+          mode="expression"
+          subject={subject}
           value={value}
-          onChange={(e) => onChange(e.target.value)}
+          onChange={onChange}
           placeholder={t('answerInput.expressionPlaceholder')}
           disabled={disabled}
-          className="font-mono"
+          {...(onSubmit ? { onSubmit } : {})}
         />
         <p className="text-xs text-muted-foreground">
           {t('answerInput.expressionHint', { power: '^', multiply: '*' })}
@@ -54,12 +142,15 @@ export function AnswerInput({ question, value, onChange, disabled, revealed }: A
     )
   }
   return (
-    <Textarea
-      rows={3}
+    <MathField
+      mode="text"
+      subject={subject}
+      multiline
       value={value}
-      onChange={(e) => onChange(e.target.value)}
+      onChange={onChange}
       placeholder={t('answerInput.textPlaceholder')}
       disabled={disabled}
+      {...(onSubmit ? { onSubmit } : {})}
     />
   )
 }
@@ -84,7 +175,7 @@ function MultipleChoiceInput({
             disabled={disabled}
             onClick={() => onChange(option.id)}
             className={cn(
-              'flex w-full items-center gap-3 rounded-md border px-3 py-2 text-left text-sm transition-colors',
+              'flex w-full items-center gap-3 rounded-lg border px-3 py-2 text-left text-sm transition-colors',
               selected ? 'border-foreground/40 bg-accent' : 'hover:bg-accent/50',
               revealed && isCorrect && 'border-emerald-500/60 bg-emerald-50/50 dark:bg-emerald-950/20',
               revealed && selected && !isCorrect && 'border-destructive/60 bg-destructive/5',
@@ -148,7 +239,7 @@ function TrueFalseInput({
               onChange(o.value)
             }}
             className={cn(
-              'flex-1 rounded-md border px-4 py-2 text-sm transition-colors',
+              'flex-1 rounded-lg border px-4 py-2 text-sm transition-colors',
               selected ? 'border-foreground/40 bg-accent' : 'hover:bg-accent/50',
               isCorrect && 'border-emerald-500/60 bg-emerald-50/50 dark:bg-emerald-950/20',
               revealed && selected && !isCorrect && 'border-destructive/60 bg-destructive/5',

@@ -9,7 +9,7 @@ import { Progress } from '@/shared/ui/Progress'
 import { PageContainer, PageContent, PageHeader } from '@/shared/ui/Page'
 import { QuestionCard } from '@/widgets/quiz/QuestionCard'
 import { ProjectFlowNav } from '@/widgets/project/ProjectFlowNav'
-import { buildOfflineQuizService } from '@/services/aiServices'
+import { buildAIServices, buildOfflineQuizService } from '@/services/aiServices'
 import type { Question } from '@/entities/question/types'
 import type { Quiz } from '@/entities/quiz/types'
 import type { QuestionEvaluation } from '@/entities/questionAttempt/types'
@@ -28,6 +28,9 @@ export function QuizPage(): JSX.Element {
   const [index, setIndex] = useState(0)
   const [answer, setAnswer] = useState('')
   const [evaluation, setEvaluation] = useState<QuestionEvaluation | null>(null)
+  /** The attempt behind `evaluation`, so a short-answer judgement can be disputed. */
+  const [attemptId, setAttemptId] = useState<string | null>(null)
+  const [disputing, setDisputing] = useState(false)
   const [busy, setBusy] = useState(false)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -63,10 +66,16 @@ export function QuizPage(): JSX.Element {
     if (!quizId || !current) return
     setBusy(true)
     try {
-      const result = await service.submitAnswer(quizId, current.id, answer, {
+      // Every type grades locally except short answers, which are checked
+      // point by point by AI when one is configured (otherwise: not scored).
+      const shortAnswer = current.type === 'short_answer'
+      const graded = shortAnswer ? ((await buildAIServices())?.quiz ?? null) : null
+      const result = await (graded ?? service).submitAnswer(quizId, current.id, answer, {
         durationMs: Date.now() - startedAt,
+        ...(graded ? { gradeShortAnswer: true } : {}),
       })
       setEvaluation(result.evaluation)
+      setAttemptId(result.attempt.id)
     } catch (err) {
       toast({ variant: 'error', title: t('quiz.gradeFailed'), description: (err as Error).message })
     } finally {
@@ -74,8 +83,22 @@ export function QuizPage(): JSX.Element {
     }
   }
 
+  async function dispute() {
+    if (!attemptId) return
+    setDisputing(true)
+    try {
+      const updated = await service.disputeAttempt(attemptId)
+      setEvaluation(updated.evaluation)
+    } catch (err) {
+      toast({ variant: 'error', title: t('shortAnswer.disputeFailed'), description: (err as Error).message })
+    } finally {
+      setDisputing(false)
+    }
+  }
+
   function next() {
     setEvaluation(null)
+    setAttemptId(null)
     setAnswer('')
     setStartedAt(Date.now())
     if (index + 1 >= questions.length) {
@@ -156,10 +179,14 @@ export function QuizPage(): JSX.Element {
             busy={busy}
             evaluation={evaluation}
             isLast={index + 1 >= questions.length}
+            {...(evaluation?.method === 'rubric_ai' && !evaluation.disputed && attemptId
+              ? { onDispute: () => void dispute() }
+              : {})}
+            disputing={disputing}
           />
         )}
 
-        {evaluation?.isCorrect === null && (
+        {evaluation?.isCorrect === null && current?.type !== 'short_answer' && (
           <Card>
             <CardContent className="p-4 text-xs text-muted-foreground">
               {t('quiz.unverifiedNote')}

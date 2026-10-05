@@ -1,5 +1,6 @@
 import { AIService } from './aiService'
 import { SettingsService } from './settingsService'
+import { ReferenceImageService } from './referenceImageService'
 import { DocumentAnalysisService } from './documentAnalysisService'
 import { TutorService } from './tutorService'
 import { TutorLessonService } from './tutorLessonService'
@@ -15,6 +16,7 @@ import { ReviewSessionService } from './reviewSessionService'
 import { ProjectService } from './projectService'
 import { HomeworkService } from './homeworkService'
 import { SlideLessonService } from './slideLessonService'
+import { PracticeService } from './practiceService'
 import { getDb } from '@/infrastructure/db/database'
 import { DocumentRepository } from '@/entities/document/repository'
 import { ChunkRepository } from '@/entities/chunk/repository'
@@ -162,5 +164,39 @@ export function buildOfflineQuizService(): QuizService {
     chunks: new ChunkRepository(db),
     mastery: new MasteryService(db),
     mistakes: new MistakeService(db),
+  })
+}
+
+/**
+ * Professor practice: grading choice / numeric / expression answers is local,
+ * so the service works without an AI; a configured AI adds short-answer
+ * grading by scoring points. Graded work feeds the mistake book and mastery.
+ */
+export async function buildPracticeService(): Promise<PracticeService> {
+  const db = getDb()
+  const settings = await new SettingsService().get().catch(() => null)
+  const ai = settings?.apiKey.trim() ? new AIService({ config: settings }) : undefined
+  return new PracticeService({
+    db,
+    ...(ai ? { ai } : {}),
+    mistakes: new MistakeService(db),
+    mastery: new MasteryService(db),
+  })
+}
+
+/**
+ * Web reference images (opt-in). Listing cached pictures works without an API
+ * key; searching needs the model to propose search terms.
+ */
+export async function buildReferenceImageService(): Promise<ReferenceImageService> {
+  const settings = await new SettingsService().get().catch(() => null)
+  const ai = settings?.apiKey.trim() ? new AIService({ config: settings }) : undefined
+  return new ReferenceImageService({
+    db: getDb(),
+    ...(ai ? { ai } : {}),
+    options: {
+      enabled: settings?.webImagesEnabled === true,
+      visionCheck: settings?.webImagesVisionCheck === true,
+    },
   })
 }

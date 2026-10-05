@@ -258,7 +258,7 @@ export function DocumentDetailPage(): JSX.Element {
               </CardContent>
               {document.warnings.length > 0 && (
                 <CardContent className="pt-0">
-                  <div className="rounded-md border border-amber-500/30 bg-amber-50/40 p-3 text-sm dark:bg-amber-950/30">
+                  <div className="rounded-lg border border-amber-500/30 bg-amber-50/40 p-3 text-sm dark:bg-amber-950/30">
                     <div className="mb-1 flex items-center gap-2 font-medium text-amber-800 dark:text-amber-300">
                       <AlertCircle className="h-4 w-4" />
                       {t('documentDetail.warnings', { count: document.warnings.length })}
@@ -273,7 +273,7 @@ export function DocumentDetailPage(): JSX.Element {
               )}
               {document.errorMessage && (
                 <CardContent className="pt-0">
-                  <div className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
+                  <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
                     {document.errorMessage}
                   </div>
                 </CardContent>
@@ -356,9 +356,9 @@ function DetailRow({ label, value }: { label: string; value: string }) {
 function Meta({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {
   return (
     <div className="flex min-w-0 items-center gap-3 text-muted-foreground">
-      <span className="grid h-7 w-7 shrink-0 place-items-center rounded-md bg-muted">{icon}</span>
+      <span className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-muted">{icon}</span>
       <div className="flex min-w-0 flex-col">
-        <span className="text-xs uppercase tracking-wider">{label}</span>
+        <span className="text-xs">{label}</span>
         <TruncatedText text={value} className="text-sm font-medium text-foreground" />
       </div>
     </div>

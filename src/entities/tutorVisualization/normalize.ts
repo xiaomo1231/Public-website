@@ -1,12 +1,14 @@
 import { stripThinkBlocks } from '@/infrastructure/ai/responseText'
 import {
   PLACEMENT_BLOCKS,
+  SCIENCE_VISUALIZATION_TYPES,
   TUTOR_VISUALIZATION_SCHEMA_VERSION,
   type EigenCandidate,
   type GraphEdge,
   type GraphKind,
   type GraphLayoutKind,
   type GraphNode,
+  type DistributionVisualization,
   type HasseVisualization,
   type Matrix2x2,
   type PlacementBlock,
@@ -25,6 +27,9 @@ import {
   type VisualizationViewport,
 } from './types'
 import { VISUALIZATION_LIMITS } from './limits'
+import { asRecord, readNumber, sanitizeText } from './sanitize'
+import { SCIENCE_NORMALIZERS } from './normalizeScience'
+import { DISTRIBUTION_FAMILIES, isDiscrete, validateParams, type DistributionFamily } from './distribution'
 import { normalizeViewport, parseRelationLatex } from './linear'
 import { normalizeFunctionDomain, parseExplicitFunction } from './nonlinear'
 import { dedupeGraphEdges, resolveGraphLayout } from './graph'
@@ -81,6 +86,8 @@ const ALL_TYPES: readonly TutorVisualizationType[] = [
   'venn_2d',
   'eigen_2d',
   'hasse_2d',
+  'distribution_2d',
+  ...SCIENCE_VISUALIZATION_TYPES,
 ]
 
 const LINE_TYPES: readonly TutorVisualizationType[] = [
@@ -119,32 +126,6 @@ interface CommonBase {
   schemaVersion: number
   placement: VisualizationPlacement
   caption?: string
-}
-
-function sanitizeText(value: unknown, maxLength: number): string | undefined {
-  if (typeof value !== 'string') return undefined
-  const cleaned = stripThinkBlocks(value)
-    // eslint-disable-next-line no-control-regex
-    .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim()
-  if (!cleaned) return undefined
-  return cleaned.slice(0, maxLength)
-}
-
-function readNumber(value: unknown): number | null {
-  if (typeof value === 'number') {
-    return Number.isFinite(value) && Math.abs(value) <= MAX_MAGNITUDE ? value : null
-  }
-  if (typeof value === 'string' && value.trim() !== '') {
-    const parsed = Number(value)
-    return Number.isFinite(parsed) && Math.abs(parsed) <= MAX_MAGNITUDE ? parsed : null
-  }
-  return null
-}
-
-function asRecord(value: unknown): Record<string, unknown> | null {
-  return value && typeof value === 'object' ? (value as Record<string, unknown>) : null
 }
 
 function normalizeExpressions(
@@ -692,6 +673,43 @@ function normalizeHasse(draft: VisualizationDraft, base: CommonBase): Normalized
   return { ok: true, value }
 }
 
+function normalizeDistribution(draft: VisualizationDraft, base: CommonBase): Normalized {
+  const family = draft.family
+  if (typeof family !== 'string' || !DISTRIBUTION_FAMILIES.includes(family as DistributionFamily)) {
+    return { ok: false, reason: 'unsupported-distribution' }
+  }
+  const rawParams = asRecord(draft.params)
+  if (!rawParams) return { ok: false, reason: 'missing-distribution-params' }
+  const params = validateParams(family as DistributionFamily, rawParams)
+  if (!params) return { ok: false, reason: 'invalid-distribution-params' }
+
+  // The interval is optional; an invalid one is dropped, not the whole figure.
+  const rawInterval = asRecord(draft.interval)
+  const end = (value: unknown): number | undefined =>
+    typeof value === 'number' && Number.isFinite(value) && Math.abs(value) <= MAX_MAGNITUDE
+      ? value
+      : undefined
+  let from = end(rawInterval?.from)
+  let to = end(rawInterval?.to)
+  if (from !== undefined && to !== undefined && from > to) [from, to] = [to, from]
+  if (isDiscrete(params)) {
+    if (from !== undefined && !Number.isInteger(from)) from = Math.ceil(from)
+    if (to !== undefined && !Number.isInteger(to)) to = Math.floor(to)
+  }
+  const interval =
+    from !== undefined || to !== undefined
+      ? { ...(from !== undefined ? { from } : {}), ...(to !== undefined ? { to } : {}) }
+      : undefined
+
+  const value: DistributionVisualization = {
+    ...base,
+    type: 'distribution_2d',
+    params,
+    ...(interval ? { interval } : {}),
+  }
+  return { ok: true, value }
+}
+
 function normalizeOne(raw: unknown, index: number): Normalized {
   const draft = asRecord(raw) as VisualizationDraft | null
   if (!draft) return { ok: false, reason: 'not-an-object' }
@@ -714,6 +732,9 @@ function normalizeOne(raw: unknown, index: number): Normalized {
   if (type === 'transform_2d') return normalizeTransform(draft, base)
   if (type === 'venn_2d') return normalizeVenn(draft, base)
   if (type === 'hasse_2d') return normalizeHasse(draft, base)
+  if (type === 'distribution_2d') return normalizeDistribution(draft, base)
+  const science = SCIENCE_NORMALIZERS[type]
+  if (science) return science(draft, base)
 
   const planeBase: CommonBase & { viewport?: VisualizationViewport } = {
     ...base,

@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react'
-import { Outlet } from 'react-router-dom'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { Outlet, useMatches } from 'react-router-dom'
 import { Sidebar } from './Sidebar'
 import { Header } from './Header'
 import { cn } from '@/shared/lib/utils'
@@ -14,6 +14,31 @@ export function AppShell(): JSX.Element {
    * between pages (no persistence, no database table).
    */
   const [navCollapsed, setNavCollapsed] = useState(false)
+
+  /*
+   * Page transition. Plays when the matched route changes (a different page),
+   * not when only its params do (next slide, next topic), and never remounts
+   * the page — it is a Web Animation on the wrapper, so page state is
+   * untouched. Skipped under reduced motion and where WAAPI is missing.
+   */
+  const matches = useMatches()
+  const routeId = matches[matches.length - 1]?.id
+  const pageRef = useRef<HTMLDivElement>(null)
+  const previousRouteId = useRef(routeId)
+  useLayoutEffect(() => {
+    if (previousRouteId.current === routeId) return
+    previousRouteId.current = routeId
+    const el = pageRef.current
+    if (!el || typeof el.animate !== 'function') return
+    if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return
+    el.animate(
+      [
+        { opacity: 0, transform: 'translateY(10px)' },
+        { opacity: 1, transform: 'translateY(0)' },
+      ],
+      { duration: 320, easing: 'cubic-bezier(0.22, 1, 0.36, 1)' },
+    )
+  }, [routeId])
 
   // Close mobile nav when resizing back to desktop
   useEffect(() => {
@@ -63,14 +88,14 @@ export function AppShell(): JSX.Element {
       >
         <div
           className={cn(
-            'absolute inset-0 bg-black/50 transition-opacity',
+            'absolute inset-0 bg-black/50 backdrop-blur-[2px] transition-opacity duration-300',
             mobileNavOpen ? 'opacity-100' : 'opacity-0',
           )}
           onClick={() => setMobileNavOpen(false)}
         />
         <div
           className={cn(
-            'absolute inset-y-0 left-0 transition-transform',
+            'absolute inset-y-0 left-0 transition-transform duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]',
             mobileNavOpen ? 'translate-x-0' : '-translate-x-full',
           )}
         >
@@ -83,7 +108,7 @@ export function AppShell(): JSX.Element {
           onOpenMobileNav={() => setMobileNavOpen(true)}
           {...(navCollapsed ? { onExpandNav: () => setNavCollapsed(false) } : {})}
         />
-        <div className="flex min-h-0 flex-1 flex-col">
+        <div ref={pageRef} className="flex min-h-0 flex-1 flex-col">
           <Outlet />
         </div>
       </div>

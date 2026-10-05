@@ -1,9 +1,10 @@
-import { useState } from 'react'
-import { Link } from 'react-router-dom'
+import { useEffect, useState } from 'react'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { ArrowRight, FolderKanban, MoreHorizontal, Pencil, Plus, Trash2 } from 'lucide-react'
 import { toast } from '@/features/toast/toastStore'
 import { useProjects } from '@/features/project/useProjects'
 import { SUBJECT_LABEL_KEYS, type Project, type Subject } from '@/entities/project/types'
+import { inferSubject } from '@/entities/project/subjectInference'
 import {
   Dialog,
   DialogContent,
@@ -21,14 +22,12 @@ import {
 } from '@/shared/ui/DropdownMenu'
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/shared/ui/Select2'
 import { Button } from '@/shared/ui/Button'
-import { Card, CardContent, CardHeader } from '@/shared/ui/Card'
 import { EmptyState } from '@/shared/ui/EmptyState'
 import { Input } from '@/shared/ui/Input'
 import { Label } from '@/shared/ui/Label'
 import { Textarea } from '@/shared/ui/Textarea'
 import { LoadingState } from '@/shared/ui/LoadingState'
 import { PageContainer, PageContent, PageHeader } from '@/shared/ui/Page'
-import { Badge } from '@/shared/ui/Badge'
 import { TruncatedText } from '@/shared/ui/TruncatedText'
 import { relativeTime } from '@/shared/lib/utils'
 import { useTranslation, type TranslationKey } from '@/i18n'
@@ -42,21 +41,33 @@ export function ProjectsPage(): JSX.Element {
     null | { mode: 'create' } | { mode: 'rename'; id: string; name: string }
   >(null)
   const [name, setName] = useState('')
-  const [subject, setSubject] = useState<Subject>('calculus')
+  const [subject, setSubject] = useState<Subject>('other')
+  // Until the student picks a subject, it follows the name ("线性代数" →
+  // Linear Algebra); unrecognised names stay "Other", never a guess.
+  const [subjectTouched, setSubjectTouched] = useState(false)
   const [description, setDescription] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [deleteCandidate, setDeleteCandidate] = useState<{ id: string; name: string } | null>(null)
+  const navigate = useNavigate()
+  const [searchParams, setSearchParams] = useSearchParams()
 
-  // Hierarchy over uniformity: the most recently studied course is the page's
-  // primary entrance; the rest are a quieter, denser grid beneath it.
+  // `/projects?new=1` (from the homepage) opens the create dialog directly.
+  // The flag is removed at once so a reload or Back does not reopen it.
+  useEffect(() => {
+    if (searchParams.get('new') !== '1') return
+    openCreate()
+    setSearchParams({}, { replace: true })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams])
+
+  // Most recently touched first, the same order as the homepage.
   const sorted = [...projects].sort((a, b) => b.updatedAt - a.updatedAt)
-  const primary = sorted[0]
-  const rest = sorted.slice(1)
 
   function openCreate() {
     setDialog({ mode: 'create' })
     setName('')
-    setSubject('calculus')
+    setSubject('other')
+    setSubjectTouched(false)
     setDescription('')
   }
 
@@ -76,6 +87,10 @@ export function ProjectsPage(): JSX.Element {
           description: description.trim(),
         })
         toast({ variant: 'success', title: t('projects.created'), description: project.name })
+        // A new project is empty: go straight to it, where uploading starts.
+        setDialog(null)
+        navigate(`/projects/${project.id}`)
+        return
       } else {
         await rename(dialog.id, name.trim())
         toast({ variant: 'success', title: t('projects.renamed') })
@@ -130,27 +145,17 @@ export function ProjectsPage(): JSX.Element {
             }
           />
         ) : (
-          <div className="space-y-6">
-            {primary && (
-              <ProjectSpotlight
-                project={primary}
-                onRename={() => openRename(primary.id, primary.name)}
-                onDelete={() => setDeleteCandidate({ id: primary.id, name: primary.name })}
-              />
-            )}
-            {rest.length > 0 && (
-              <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
-                {rest.map((p) => (
-                  <ProjectCard
-                    key={p.id}
-                    project={p}
-                    onRename={() => openRename(p.id, p.name)}
-                    onDelete={() => setDeleteCandidate({ id: p.id, name: p.name })}
-                  />
-                ))}
-              </div>
-            )}
-          </div>
+          <ul className="hairline-list stagger-in max-w-5xl overflow-hidden rounded-2xl border border-border/80 bg-card">
+            {sorted.map((p) => (
+              <li key={p.id}>
+                <ProjectRow
+                  project={p}
+                  onRename={() => openRename(p.id, p.name)}
+                  onDelete={() => setDeleteCandidate({ id: p.id, name: p.name })}
+                />
+              </li>
+            ))}
+          </ul>
         )}
       </PageContent>
 
@@ -180,7 +185,12 @@ export function ProjectsPage(): JSX.Element {
               <Input
                 id="name"
                 value={name}
-                onChange={(e) => setName(e.target.value)}
+                onChange={(e) => {
+                  setName(e.target.value)
+                  if (dialog?.mode === 'create' && !subjectTouched) {
+                    setSubject(inferSubject(e.target.value) ?? 'other')
+                  }
+                }}
                 placeholder={t('projects.namePlaceholder')}
                 autoFocus
                 maxLength={80}
@@ -190,7 +200,13 @@ export function ProjectsPage(): JSX.Element {
               <>
                 <div className="space-y-2">
                   <Label htmlFor="subject">{t('projects.subject')}</Label>
-                  <Select value={subject} onValueChange={(v) => setSubject(v as Subject)}>
+                  <Select
+                    value={subject}
+                    onValueChange={(v) => {
+                      setSubject(v as Subject)
+                      setSubjectTouched(true)
+                    }}
+                  >
                     <SelectTrigger id="subject">
                       <SelectValue />
                     </SelectTrigger>
@@ -297,8 +313,12 @@ function ProjectActionsMenu({
   )
 }
 
-/** The primary entrance: the most recently studied course. */
-function ProjectSpotlight({
+/**
+ * One project per row, matching the homepage list: the row opens the project,
+ * the trailing menu holds rename / delete (kept outside the link so the two
+ * controls never nest).
+ */
+function ProjectRow({
   project,
   onRename,
   onDelete,
@@ -309,104 +329,35 @@ function ProjectSpotlight({
 }): JSX.Element {
   const { t } = useTranslation()
   return (
-    <div className="blueprint-frame relative overflow-hidden rounded-[1.5rem] border border-border/60 bg-card shadow-lift">
-      <div className="flex flex-col gap-5 p-5 sm:flex-row sm:items-center sm:justify-between sm:p-6">
-        <div className="flex min-w-0 items-center gap-4">
-          <span
-            aria-hidden
-            className="plate-grid grid h-14 w-14 shrink-0 place-items-center rounded-xl border border-border/70 bg-background font-mono text-xl font-semibold text-primary"
-          >
-            {project.name.slice(0, 1)}
-          </span>
-          <div className="min-w-0 space-y-1">
-            <div className="flex items-center gap-2">
-              <TruncatedText
-                as="h3"
-                text={project.name}
-                className="text-lg font-semibold tracking-tight text-foreground"
-              />
-              <Badge variant="outline" className="hidden shrink-0 sm:inline-flex">
-                {t(SUBJECT_LABEL_KEYS[project.subject])}
-              </Badge>
-            </div>
-            <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
-              <span className="label-mono">
-                {t('projects.updatedAt', { date: relativeTime(project.updatedAt) })}
-              </span>
-              <span aria-hidden>·</span>
-              <span>{t('projects.createdAt', { date: relativeTime(project.createdAt) })}</span>
-            </div>
-            {project.description && (
-              <p className="line-clamp-2 max-w-xl text-sm text-muted-foreground">
-                {project.description}
-              </p>
-            )}
-          </div>
-        </div>
-        <div className="flex shrink-0 items-center gap-2">
-          <Button asChild>
-            <Link to={`/projects/${project.id}`}>
-              {t('projects.openProject')}
-              <ArrowRight className="h-4 w-4" />
-            </Link>
-          </Button>
-          <ProjectActionsMenu project={project} onRename={onRename} onDelete={onDelete} />
-        </div>
-      </div>
-    </div>
-  )
-}
-
-/** A quieter entry in the grid beneath the spotlight. */
-function ProjectCard({
-  project,
-  onRename,
-  onDelete,
-}: {
-  project: Project
-  onRename: () => void
-  onDelete: () => void
-}): JSX.Element {
-  const { t } = useTranslation()
-  return (
-    <Card variant="interactive" className="overflow-hidden">
-      <div aria-hidden className="subject-plate relative h-20 bg-theme-primary-soft/40">
-        <div className="plate-grid absolute inset-0" />
-        <span className="absolute left-4 top-3 font-mono text-xl font-semibold text-primary">
+    <div className="group flex items-center gap-2 pr-3 transition-colors hover:bg-accent/50">
+      <Link
+        to={`/projects/${project.id}`}
+        className="focus-ring flex min-w-0 flex-1 items-center gap-4 rounded-lg py-4 pl-5"
+      >
+        <span
+          aria-hidden
+          className="grid h-11 w-11 shrink-0 place-items-center rounded-lg bg-theme-primary-soft text-base font-semibold text-secondary-foreground"
+        >
           {project.name.slice(0, 1)}
         </span>
-        <FolderKanban
-          className="absolute bottom-2.5 right-4 h-7 w-7 text-primary opacity-60"
-          strokeWidth={1.4}
-        />
-      </div>
-      <CardHeader className="flex flex-row items-start justify-between gap-2 space-y-0">
-        <div className="min-w-0">
+        <span className="min-w-0 flex-1">
           <TruncatedText
-            as="h3"
+            as="span"
             text={project.name}
-            className="text-base font-semibold leading-none tracking-tight"
+            className="block text-[15px] font-medium text-foreground"
           />
-          <p className="mt-1 text-xs text-muted-foreground">
-            {t('projects.createdAt', { date: relativeTime(project.createdAt) })}
-          </p>
-        </div>
-        <ProjectActionsMenu project={project} onRename={onRename} onDelete={onDelete} />
-      </CardHeader>
-      <CardContent className="space-y-3">
-        <div className="flex items-center gap-2">
-          <Badge variant="outline">{t(SUBJECT_LABEL_KEYS[project.subject])}</Badge>
-          <span className="text-xs text-muted-foreground">
+          <span className="block truncate text-[13px] text-muted-foreground">
+            {t(SUBJECT_LABEL_KEYS[project.subject])} ·{' '}
             {t('projects.updatedAt', { date: relativeTime(project.updatedAt) })}
+            {project.description ? ` · ${project.description}` : ''}
           </span>
-        </div>
-        {project.description && (
-          <p className="line-clamp-2 text-sm text-muted-foreground">{project.description}</p>
-        )}
-        <Button asChild variant="outline" className="w-full">
-          <Link to={`/projects/${project.id}`}>{t('projects.openProject')}</Link>
-        </Button>
-      </CardContent>
-    </Card>
+        </span>
+        <ArrowRight
+          aria-hidden
+          className="h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200 motion-safe:group-hover:translate-x-0.5"
+        />
+      </Link>
+      <ProjectActionsMenu project={project} onRename={onRename} onDelete={onDelete} />
+    </div>
   )
 }

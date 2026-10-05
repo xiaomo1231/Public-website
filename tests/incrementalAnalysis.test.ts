@@ -530,7 +530,7 @@ describe('analyzer writes stable ids and validated dependencies', () => {
     expect(saved.sourceSectionIds).toEqual(['s1', 's2'])
     expect(saved.dependencyHash).toMatch(/^[0-9a-f]{8}$/)
     expect(saved.needsFullReanalysis).toBeUndefined()
-    expect(saved.promptVersion).toBe('v2')
+    expect(saved.promptVersion).toBe('v2+subject-profile/v1:calculus')
   })
 
   it('6 �?a topic with no valid source ids is flagged instead of guessed', async () => {
@@ -582,7 +582,7 @@ describe('analyzer writes stable ids and validated dependencies', () => {
     expect(after.id).toBe(before.id)
     expect(after.sourceChunkIds).toEqual(before.sourceChunkIds)
     expect(after.dependencyHash).toBe(before.dependencyHash)
-    expect(after.promptVersion).toBe('v2')
+    expect(after.promptVersion).toBe('v2+subject-profile/v1:calculus')
   })
 })
 

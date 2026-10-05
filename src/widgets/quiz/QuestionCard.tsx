@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { AlertCircle, CheckCircle2, ChevronRight, Lightbulb, Loader2, XCircle } from 'lucide-react'
-import type { Question } from '@/entities/question/types'
+import { QUESTION_TYPE_LABEL_KEYS, type Question } from '@/entities/question/types'
 import {
   EVAL_METHOD_LABEL_KEYS,
   type QuestionEvaluation,
@@ -8,8 +8,10 @@ import {
 import { Badge } from '@/shared/ui/Badge'
 import { Button } from '@/shared/ui/Button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/ui/Card'
+import { RichText } from '@/shared/ui/RichText'
 import { AnswerInput } from './AnswerInput'
 import { QuestionSource } from './QuestionSource'
+import { ShortAnswerFeedback } from './ShortAnswerFeedback'
 import { cn } from '@/shared/lib/utils'
 import { useTranslation } from '@/i18n'
 
@@ -25,6 +27,9 @@ export interface QuestionCardProps {
   busy?: boolean
   evaluation?: QuestionEvaluation | null
   isLast: boolean
+  /** Short answers: dispute the AI judgement of this answer. */
+  onDispute?: () => void
+  disputing?: boolean
 }
 
 export function QuestionCard({
@@ -39,6 +44,8 @@ export function QuestionCard({
   busy,
   evaluation,
   isLast,
+  onDispute,
+  disputing,
 }: QuestionCardProps): JSX.Element {
   const { t } = useTranslation()
   const [hintIndex, setHintIndex] = useState(0)
@@ -51,11 +58,16 @@ export function QuestionCard({
           {t('question.label', { number: index + 1, total })}
         </CardTitle>
         <Badge variant="outline">{difficulty}</Badge>
-        <Badge variant="outline">{question.type.replace('_', ' ')}</Badge>
+        <Badge variant="outline">{t(QUESTION_TYPE_LABEL_KEYS[question.type])}</Badge>
         <span className="ml-auto text-xs text-muted-foreground">{question.knowledgePoint}</span>
       </CardHeader>
       <CardContent className="space-y-4">
-        <p className="whitespace-pre-wrap text-sm font-medium">{question.prompt}</p>
+        {/* Markdown: code blocks (code-output questions) and LaTeX render. */}
+        <RichText
+          text={question.prompt}
+          format="markdown"
+          paragraphClassName="text-[15px] font-medium leading-[1.7]"
+        />
 
         <AnswerInput
           question={question}
@@ -63,10 +75,13 @@ export function QuestionCard({
           onChange={onChange}
           disabled={busy || answered}
           revealed={answered}
+          onSubmit={() => {
+            if (!busy && !answered && value.trim()) onSubmit()
+          }}
         />
 
         {hintIndex > 0 && (
-          <div className="rounded-md border border-amber-500/30 bg-amber-50/40 p-3 text-sm dark:bg-amber-950/20">
+          <div className="rounded-lg border border-amber-500/30 bg-amber-50/40 p-3 text-sm dark:bg-amber-950/20">
             <div className="mb-1 flex items-center gap-2 font-medium text-amber-800 dark:text-amber-300">
               <Lightbulb className="h-4 w-4" /> {t('question.hints')}
             </div>
@@ -78,7 +93,15 @@ export function QuestionCard({
           </div>
         )}
 
-        {answered && evaluation && <EvaluationBox evaluation={evaluation} />}
+        {answered && evaluation && question.type === 'short_answer' ? (
+          <ShortAnswerFeedback
+            evaluation={evaluation}
+            {...(onDispute ? { onDispute } : {})}
+            {...(disputing !== undefined ? { disputing } : {})}
+          />
+        ) : (
+          answered && evaluation && <EvaluationBox evaluation={evaluation} />
+        )}
 
         {answered && (
           <QuestionSource sourceRefs={question.sourceRefs} projectId={question.projectId} />
@@ -139,7 +162,7 @@ export function EvaluationBox({ evaluation }: { evaluation: QuestionEvaluation }
         : t('question.unverified')
 
   return (
-    <div className={cn('space-y-2 rounded-md border p-3 text-sm', tone)}>
+    <div className={cn('space-y-2 rounded-lg border p-3 text-sm', tone)}>
       <div className="flex items-center gap-2 font-medium">
         {icon}
         {label}
@@ -148,12 +171,28 @@ export function EvaluationBox({ evaluation }: { evaluation: QuestionEvaluation }
           {Math.round(evaluation.confidence * 100)}%
         </span>
       </div>
+      {evaluation.method === 'order_match' && evaluation.score && evaluation.score.total > 0 && (
+        <p className="data-num text-xs font-medium">
+          {t('answerInput.orderScore', {
+            earned: evaluation.score.earned,
+            total: evaluation.score.total,
+            percent: Math.round((evaluation.score.earned / evaluation.score.total) * 100),
+          })}
+        </p>
+      )}
       {evaluation.note && <p className="text-xs text-muted-foreground">{evaluation.note}</p>}
       {evaluation.explanation && <p>{evaluation.explanation}</p>}
       {isCorrect !== true && evaluation.expected && (
-        <p className="text-xs">
-          {t('question.expected', { value: evaluation.expected })}
-        </p>
+        evaluation.method === 'exact_output' ? (
+          <div className="space-y-1 text-xs">
+            <p>{t('question.expected', { value: '' })}</p>
+            <pre className="max-w-full overflow-x-auto rounded-md bg-muted p-2 font-mono text-[12px]">
+              {evaluation.expected}
+            </pre>
+          </div>
+        ) : (
+          <p className="text-xs">{t('question.expected', { value: evaluation.expected })}</p>
+        )
       )}
     </div>
   )

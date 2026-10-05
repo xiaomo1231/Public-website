@@ -36,6 +36,8 @@ export class SettingsService {
       model: row.model,
       temperature: row.temperature,
       maxTokens: row.maxTokens,
+      webImagesEnabled: row.webImagesEnabled === true,
+      webImagesVisionCheck: row.webImagesVisionCheck === true,
       updatedAt: row.updatedAt,
     }
   }
@@ -68,6 +70,9 @@ export class SettingsService {
       next.maxTokens = m
     }
 
+    if (patch.webImagesEnabled !== undefined) next.webImagesEnabled = patch.webImagesEnabled === true
+    if (patch.webImagesVisionCheck !== undefined) next.webImagesVisionCheck = patch.webImagesVisionCheck === true
+
     if (patch.apiKey !== undefined) {
       const trimmed = patch.apiKey.trim()
       if (trimmed) {
@@ -89,6 +94,8 @@ export class SettingsService {
       model: saved.model,
       temperature: saved.temperature,
       maxTokens: saved.maxTokens,
+      webImagesEnabled: saved.webImagesEnabled === true,
+      webImagesVisionCheck: saved.webImagesVisionCheck === true,
       updatedAt: saved.updatedAt,
     }
   }

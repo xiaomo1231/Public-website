@@ -16,7 +16,11 @@ import { prompts } from '@/infrastructure/ai/prompts'
 import { setUILanguage } from '@/i18n/store'
 import type { AIService } from '@/services/aiService'
 
-const PROMPT_VERSION = prompts.documentAnalyzer.VERSION
+// Fixtures are calculus projects, so a current analysis carries its profile.
+const PROMPT_VERSION = prompts.subjectProfile.subjectPromptVersion(
+  prompts.documentAnalyzer.VERSION,
+  'calculus',
+)
 
 async function seedProject(db: AppDatabase, name = 'Calculus') {
   const project = await new ProjectService(db).create({ name, subject: 'calculus' })

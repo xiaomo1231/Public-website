@@ -1,7 +1,10 @@
 import * as DialogPrimitive from '@radix-ui/react-dialog'
 import { X } from 'lucide-react'
 import {
+  createContext,
   forwardRef,
+  useContext,
+  useRef,
   type ComponentPropsWithoutRef,
   type ElementRef,
   type HTMLAttributes,
@@ -9,7 +12,19 @@ import {
 import { useTranslation } from '@/i18n'
 import { cn } from '@/shared/lib/utils'
 
-export const Dialog = DialogPrimitive.Root
+/**
+ * Whether the enclosing dialog is open. `undefined` for uncontrolled dialogs,
+ * whose content never needs freezing (see DialogContent).
+ */
+const DialogOpenContext = createContext<boolean | undefined>(undefined)
+
+export function Dialog(props: ComponentPropsWithoutRef<typeof DialogPrimitive.Root>): JSX.Element {
+  return (
+    <DialogOpenContext.Provider value={props.open}>
+      <DialogPrimitive.Root {...props} />
+    </DialogOpenContext.Provider>
+  )
+}
 export const DialogTrigger = DialogPrimitive.Trigger
 export const DialogPortal = DialogPrimitive.Portal
 export const DialogClose = DialogPrimitive.Close
@@ -21,7 +36,7 @@ export const DialogOverlay = forwardRef<
   <DialogPrimitive.Overlay
     ref={ref}
     className={cn(
-      'fixed inset-0 z-50 bg-black/50 backdrop-blur-sm data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0',
+      'fixed inset-0 z-50 bg-black/50 backdrop-blur-sm data-[state=open]:animate-fade data-[state=closed]:animate-fade-out',
       className,
     )}
     {...props}
@@ -34,19 +49,29 @@ export const DialogContent = forwardRef<
   ComponentPropsWithoutRef<typeof DialogPrimitive.Content>
 >(({ className, children, ...props }, ref) => {
   const { t } = useTranslation()
+  /*
+   * Controlled dialogs usually derive their content from state that the page
+   * clears the moment it closes (`open={item !== null}`). The close animation
+   * would then show that half-cleared content (e.g. the wrong title), so while
+   * closing we keep rendering what was last shown while open.
+   */
+  const open = useContext(DialogOpenContext)
+  const shownChildren = useRef(children)
+  if (open !== false) shownChildren.current = children
+  const content = open === false ? shownChildren.current : children
   return (
     <DialogPortal>
       <DialogOverlay />
       <DialogPrimitive.Content
         ref={ref}
         className={cn(
-          'fixed left-[50%] top-[50%] z-50 grid max-h-[calc(100vh-2rem)] w-[calc(100vw-2rem)] max-w-lg translate-x-[-50%] translate-y-[-50%] gap-4 overflow-y-auto border bg-background p-6 shadow-lg duration-200 sm:rounded-lg',
+          'fixed left-[50%] top-[50%] z-50 grid max-h-[calc(100vh-2rem)] w-[calc(100vw-2rem)] max-w-lg translate-x-[-50%] translate-y-[-50%] gap-4 overflow-y-auto rounded-3xl border border-border/70 bg-card p-6 shadow-lift data-[state=open]:animate-dialog-in data-[state=closed]:animate-dialog-out',
           className,
         )}
         {...props}
       >
-        {children}
-        <DialogPrimitive.Close className="absolute right-4 top-4 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus-ring disabled:pointer-events-none">
+        {content}
+        <DialogPrimitive.Close className="absolute right-3 top-3 rounded-full p-1.5 opacity-70 ring-offset-background transition-[opacity,background-color,transform] duration-200 hover:bg-accent hover:opacity-100 focus-ring disabled:pointer-events-none motion-safe:hover:rotate-90">
           <X className="h-4 w-4" />
           <span className="sr-only">{t('common.close')}</span>
         </DialogPrimitive.Close>

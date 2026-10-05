@@ -3,7 +3,8 @@ import { Loader2, Sparkles } from 'lucide-react'
 import type { CourseAnalysis, Topic } from '@/entities/courseAnalysis/types'
 import type { QuizConfig, QuizDifficulty } from '@/entities/quiz/types'
 import type { QuestionType } from '@/entities/question/types'
-import { QUESTION_TYPES, QUESTION_TYPE_LABEL_KEYS } from '@/entities/question/types'
+import { QUESTION_TYPE_LABEL_KEYS, questionTypesForSubject } from '@/entities/question/types'
+import { useProject } from '@/features/project/useProjects'
 import { CourseContentRepository } from '@/entities/courseContent/repository'
 import { Button } from '@/shared/ui/Button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/shared/ui/Card'
@@ -46,6 +47,8 @@ const STAGE_LABEL_KEYS: Record<string, TranslationKey> = {
 
 export function QuizConfigDialog({ projectId, onStart, busy, progress }: QuizConfigDialogProps): JSX.Element {
   const { t } = useTranslation()
+  const { project } = useProject(projectId)
+  const availableTypes = questionTypesForSubject(project?.subject)
   const [analysis, setAnalysis] = useState<CourseAnalysis | null>(null)
   const [topics, setTopics] = useState<Topic[]>([])
   const [topicId, setTopicId] = useState<string>('__mixed__')
@@ -188,7 +191,7 @@ export function QuizConfigDialog({ projectId, onStart, busy, progress }: QuizCon
         <div className="space-y-2">
           <Label>{t('quizConfig.questionTypes')}</Label>
           <div className="flex flex-wrap gap-2">
-            {QUESTION_TYPES.map((type) => {
+            {availableTypes.map((type) => {
               const active = types.includes(type)
               return (
                 <button
@@ -196,7 +199,7 @@ export function QuizConfigDialog({ projectId, onStart, busy, progress }: QuizCon
                   type="button"
                   onClick={() => toggleType(type)}
                   className={cn(
-                    'rounded-md border px-3 py-1.5 text-xs transition-colors',
+                    'rounded-lg border px-3 py-1.5 text-xs transition-colors',
                     active ? 'border-foreground/40 bg-accent' : 'hover:bg-accent/50',
                   )}
                   aria-pressed={active}

@@ -14,6 +14,7 @@ import type {
 import { COURSE_ANALYSIS_SCHEMA_VERSION } from './types'
 import type { DifficultyLevel } from '@/infrastructure/ai/prompts/types'
 import { prompts } from '@/infrastructure/ai/prompts'
+import type { Subject } from '../project/types'
 import type { PracticeQuestion } from '../practice/types'
 import type { CourseContext } from '../courseContext/types'
 import { logger } from '@/infrastructure/logger/logger'
@@ -224,6 +225,15 @@ export class CourseAnalysisRepository {
     const now = Date.now()
     const lookup = (names: string[]): string[] =>
       names.map((n) => seed.topicsByName.get(n) ?? '').filter(Boolean)
+    // Callers pass the version that actually ran. The fallback is the same
+    // subject-aware version freshness expects, so it is never stale on write.
+    const promptVersion =
+      meta.promptVersion ??
+      prompts.subjectProfile.subjectPromptVersion(
+        prompts.documentAnalyzer.VERSION,
+        (await this.db.table<{ id: string; subject?: Subject }, string>('projects').get(projectId))
+          ?.subject,
+      )
 
     const topics: Topic[] = seed.topics.map((t, idx) => ({
       // Respect the caller-provided id map so downstream references stay valid.
@@ -333,7 +343,7 @@ export class CourseAnalysisRepository {
         startedAt: now,
         finishedAt: now,
         // Never hardcode this: the caller knows which prompt actually ran.
-        promptVersion: meta.promptVersion ?? prompts.documentAnalyzer.VERSION,
+        promptVersion,
         sourceHash: meta.sourceHash ?? '',
         schemaVersion: meta.schemaVersion ?? COURSE_ANALYSIS_SCHEMA_VERSION,
         ...(meta.derivedFromStructureVersion !== undefined

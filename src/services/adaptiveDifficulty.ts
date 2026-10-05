@@ -181,9 +181,10 @@ export function computeMastery(observations: MasteryObservation[]): number {
   let denominator = 0
   graded.forEach((obs, index) => {
     const recency = Math.pow(0.9, graded.length - 1 - index)
-    const weight = recency * difficultyWeight(obs.difficulty)
+    const weight = recency * difficultyWeight(obs.difficulty) * (obs.weight ?? 1)
     denominator += weight
-    if (obs.isCorrect) numerator += weight
+    // Partial credit (short answers) counts in proportion to the points covered.
+    numerator += weight * (obs.credit ?? (obs.isCorrect ? 1 : 0))
   })
   if (denominator === 0) return 0
   return clamp01(numerator / denominator)

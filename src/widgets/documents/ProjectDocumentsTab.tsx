@@ -107,7 +107,7 @@ export function ProjectDocumentsTab({ projectId }: { projectId: string }): JSX.E
         </Button>
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-3">
+      <div className="stagger-in grid gap-4 lg:grid-cols-3">
         {GROUPS.map((group) => {
           const docs = docsOf(group.type)
           const Icon = group.icon

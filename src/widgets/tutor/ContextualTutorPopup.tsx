@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type KeyboardEvent } from 'react'
-import { ArrowRight, Loader2, Send, Sparkles, X } from 'lucide-react'
+import { ArrowRight, Loader2, MessageCircleQuestion, Send, X } from 'lucide-react'
 import { Button } from '@/shared/ui/Button'
 import { Textarea } from '@/shared/ui/Textarea'
 import { RichText } from '@/shared/ui/RichText'
@@ -124,7 +124,7 @@ export function ContextualTutorPopup({
       className="flex w-[22rem] max-w-[calc(100vw-1.5rem)] flex-col rounded-lg border bg-card p-3 text-card-foreground shadow-xl"
     >
       <div className="mb-2 flex items-center gap-2">
-        <Sparkles className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
+        <MessageCircleQuestion className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
         <span className="text-sm font-medium">{t('contextual.title')}</span>
         <Button
           variant="ghost"
@@ -153,7 +153,7 @@ export function ContextualTutorPopup({
                 message.role === 'user' ? (
                   <p
                     key={index}
-                    className="ml-auto w-fit max-w-full rounded-md bg-primary/10 px-2 py-1 text-[13px] text-foreground"
+                    className="ml-auto w-fit max-w-full rounded-lg bg-primary/10 px-2 py-1 text-[13px] text-foreground"
                   >
                     {message.content}
                   </p>

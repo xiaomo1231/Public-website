@@ -132,7 +132,7 @@ export function FunctionPlot(): JSX.Element {
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p
           key={flashKey}
-          className="value-flash data-num -mx-1 rounded-md px-1 font-mono text-base font-semibold text-foreground"
+          className="value-flash data-num -mx-1 rounded-lg px-1 font-mono text-base font-semibold text-foreground"
           dir="ltr"
         >
           {formula}
@@ -177,7 +177,7 @@ export function FunctionPlot(): JSX.Element {
 
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1.7fr)_minmax(0,1fr)] lg:items-start">
         {/* The plane is the instrument; it gets the larger pane on wide screens. */}
-        <div className="rounded-xl border border-border/70 bg-background/60 p-2">
+        <div className="rounded-lg border border-border/70 bg-background/60 p-2">
           <svg
             viewBox={`0 0 ${WIDTH} ${HEIGHT}`}
             className="h-auto w-full touch-pan-y select-none"
@@ -296,9 +296,9 @@ export function FunctionPlot(): JSX.Element {
         <div className="flex flex-col gap-3">
           <div
             key={flashKey}
-            className="value-flash flex items-center justify-between gap-2 rounded-md border border-border/60 bg-muted/40 px-2.5 py-1.5"
+            className="value-flash flex items-center justify-between gap-2 rounded-lg border border-border/60 bg-muted/40 px-2.5 py-1.5"
           >
-            <span className="label-mono">{t('plot.readout')}</span>
+            <span className="text-xs font-medium text-muted-foreground">{t('plot.readout')}</span>
             <span className="data-num font-mono text-sm font-medium text-foreground" dir="ltr">
               {probeReadout}
             </span>

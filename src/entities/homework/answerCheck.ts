@@ -59,10 +59,12 @@ export function currentAnswerCheck(
   question: HomeworkQuestion,
   draft: string,
   language: 'zh' | 'en',
+  /** The version the check must have been produced with (prompt + subject). */
+  promptVersion: string = HOMEWORK_ANSWER_CHECK_VERSION,
 ): HomeworkAnswerCheck | null {
   const check = question.answerCheck
-  return check && check.language === language && check.promptVersion === HOMEWORK_ANSWER_CHECK_VERSION &&
-    check.inputHash === answerCheckInputHash(question, draft, language)
+  return check && check.language === language && check.promptVersion === promptVersion &&
+    check.inputHash === answerCheckInputHash(question, draft, language, promptVersion)
     ? check : null
 }
 

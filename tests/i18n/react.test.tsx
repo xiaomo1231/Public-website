@@ -29,7 +29,7 @@ describe('useTranslation', () => {
   it('renders English by default', () => {
     render(<TranslationProbe />)
     expect(screen.getByTestId('language')).toHaveTextContent('en')
-    expect(screen.getByTestId('nav')).toHaveTextContent('Dashboard')
+    expect(screen.getByTestId('nav')).toHaveTextContent('Home')
   })
 
   it('re-renders immediately when the language changes', () => {
@@ -38,7 +38,7 @@ describe('useTranslation', () => {
     act(() => setUILanguage('zh-CN'))
 
     expect(screen.getByTestId('language')).toHaveTextContent('zh-CN')
-    expect(screen.getByTestId('nav')).toHaveTextContent('仪表盘')
+    expect(screen.getByTestId('nav')).toHaveTextContent('主页')
   })
 
   it('re-renders interpolated strings in the new language', () => {
@@ -53,7 +53,7 @@ describe('useTranslation', () => {
     render(<TranslationProbe />)
     act(() => setUILanguage('zh-CN'))
     act(() => setUILanguage('en'))
-    expect(screen.getByTestId('nav')).toHaveTextContent('Dashboard')
+    expect(screen.getByTestId('nav')).toHaveTextContent('Home')
   })
 })
 

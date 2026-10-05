@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { ArrowLeft, ArrowRight, Brain, Sparkles } from 'lucide-react'
+import { ArrowLeft, ArrowRight, Brain, MessagesSquare } from 'lucide-react'
 import { Button } from '@/shared/ui/Button'
 import { Card, CardDescription, CardHeader, CardTitle } from '@/shared/ui/Card'
 import { EmptyState } from '@/shared/ui/EmptyState'
@@ -75,7 +75,7 @@ export function InteractiveTutorPage(): JSX.Element {
                 <ArrowLeft className="h-4 w-4" />
               </Link>
             </Button>
-            <Sparkles className="h-4 w-4" />
+            <MessagesSquare className="h-4 w-4" />
             {t('tutor.interactiveTitle')}
           </div>
         }
@@ -107,7 +107,7 @@ export function InteractiveTutorPage(): JSX.Element {
             language={language}
           />
 
-          <div className="mt-4 flex flex-col gap-3 rounded-2xl border border-border/70 bg-muted/20 p-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="mt-4 flex flex-col gap-3 rounded-xl border border-border/70 bg-muted/20 p-4 sm:flex-row sm:items-center sm:justify-between">
             <div className="min-w-0">
               <p className="text-sm font-medium text-foreground">{t('tutor.nextStepTitle')}</p>
               <p className="text-xs text-muted-foreground">{t('tutor.nextStepHint')}</p>

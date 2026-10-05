@@ -57,7 +57,7 @@ export function ChunkPreview({
     <>
       <article className="min-w-0 overflow-hidden rounded-lg border border-border/70 bg-card">
         <header className="min-w-0 space-y-0.5 border-b border-border/60 px-4 py-2.5">
-          <p className="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
+          <p className="text-xs font-medium text-muted-foreground">
             {t('documentDetail.chunkNumber', { number: index })}
           </p>
           <TruncatedText text={documentName} className="text-xs font-medium text-foreground" />

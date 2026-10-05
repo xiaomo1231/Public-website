@@ -160,7 +160,8 @@ describe('Course Analysis response contract', () => {
 
     const messages = streamJSON.mock.calls[0]?.[0] as ChatMessage[]
     expect(messages[0]?.role).toBe('system')
-    expect(messages[0]?.content).toBe(prompts.documentAnalyzer.buildSystemPrompt())
+    // The analyzer contract, followed by the course's subject profile.
+    expect(messages[0]?.content.startsWith(prompts.documentAnalyzer.buildSystemPrompt())).toBe(true)
     expect(messages[0]?.content).not.toMatch(/visualization/i)
     expect(prompts.documentAnalyzer.PROMPT_KIND).toBe('document-analyzer')
   })

@@ -9,8 +9,8 @@ describe('translate', () => {
   })
 
   it('resolves a key in the requested language', () => {
-    expect(translate('en', 'nav.dashboard')).toBe('Dashboard')
-    expect(translate('zh-CN', 'nav.dashboard')).toBe('仪表盘')
+    expect(translate('en', 'nav.dashboard')).toBe('Home')
+    expect(translate('zh-CN', 'nav.dashboard')).toBe('主页')
   })
 
   it('interpolates named parameters', () => {

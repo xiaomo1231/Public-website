@@ -263,7 +263,7 @@ export function DocumentList({
               return (
                 <div
                   key={doc.id}
-                  className="flex items-center gap-3 rounded-md border bg-card px-3 py-2 transition-colors hover:bg-accent/50"
+                  className="flex items-center gap-3 rounded-lg border bg-card px-3 py-2 transition-colors hover:bg-accent/50"
                 >
                   <Icon className="h-4 w-4 shrink-0 text-muted-foreground" />
                   <TooltipProvider delayDuration={300}>

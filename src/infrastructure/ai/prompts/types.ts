@@ -103,7 +103,7 @@ export interface DocumentAnalysisOutput {
 
 export interface TutorQuestion {
   prompt: string
-  type: 'multiple_choice' | 'true_false' | 'numeric' | 'math_expr'
+  type: 'multiple_choice' | 'true_false' | 'numeric' | 'math_expr' | 'short_answer'
   options?: string[]
   expectedAnswer: string
   explanation: string
@@ -124,11 +124,22 @@ export interface TutorEvaluation {
   groundedExplanation: string
   /** True when the explanation goes beyond what's in the source documents. */
   isSupplementary: boolean
+  /**
+   * Short answer: the scoring-point result. Present only when the answer was
+   * graded by its points (`ShortAnswerGrader`), never from the model's own
+   * right/wrong verdict.
+   */
+  scoring?: {
+    earned: number
+    total: number
+    rubric: Array<{ pointId: string; text: string; covered: boolean; evidence?: string }>
+    contradictions?: string[]
+  }
 }
 
 export interface GeneratedQuestion {
   prompt: string
-  type: 'multiple_choice' | 'true_false' | 'numeric' | 'math_expr'
+  type: 'multiple_choice' | 'true_false' | 'numeric' | 'math_expr' | 'short_answer'
   options?: string[]
   expectedAnswer: string
   explanation: string

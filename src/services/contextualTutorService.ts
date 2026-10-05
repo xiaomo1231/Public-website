@@ -6,6 +6,7 @@ import { normalizeMathNotation } from '@/infrastructure/files/mathNotation'
 import { AppError } from '@/infrastructure/errors/AppError'
 import { logger } from '@/infrastructure/logger/logger'
 import { t } from '@/i18n'
+import { loadProjectSubject } from './projectSubject'
 
 export interface ContextualTutorInput {
   projectId: string
@@ -64,7 +65,13 @@ export class ContextualTutorService {
 
   private async run(input: ContextualTutorInput): Promise<ContextualTutorAnswer> {
     const messages: ChatMessage[] = [
-      { role: 'system', content: prompts.contextualTutor.buildSystemPrompt(input.contextKind) },
+      {
+        role: 'system',
+        content: prompts.subjectProfile.withSubject(
+          prompts.contextualTutor.buildSystemPrompt(input.contextKind),
+          await loadProjectSubject(input.projectId),
+        ),
+      },
       {
         role: 'user',
         content: prompts.contextualTutor.buildUserPrompt({

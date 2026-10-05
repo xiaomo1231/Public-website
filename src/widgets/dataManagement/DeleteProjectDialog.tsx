@@ -135,7 +135,7 @@ export function DeleteProjectDialog({
               <div
                 role="radiogroup"
                 aria-labelledby="delete-project-label"
-                className="max-h-56 space-y-1 overflow-y-auto rounded-md border p-1"
+                className="max-h-56 space-y-1 overflow-y-auto rounded-lg border p-1"
               >
                 {projects.map((project) => {
                   const active = project.id === selectedId
@@ -151,7 +151,7 @@ export function DeleteProjectDialog({
                         setConfirmInput('')
                       }}
                       className={cn(
-                        'flex w-full flex-col items-start gap-0.5 rounded-md px-3 py-2 text-left text-sm transition-colors',
+                        'flex w-full flex-col items-start gap-0.5 rounded-lg px-3 py-2 text-left text-sm transition-colors',
                         active ? 'bg-accent text-accent-foreground' : 'hover:bg-accent/50',
                       )}
                     >
@@ -181,7 +181,7 @@ export function DeleteProjectDialog({
             </div>
 
             {selected && (
-              <div className="space-y-2 rounded-md border border-destructive/40 bg-destructive/5 p-3">
+              <div className="space-y-2 rounded-lg border border-destructive/40 bg-destructive/5 p-3">
                 <div className="break-words text-sm">
                   {t('deleteProject.project', { name: selected.name })}
                 </div>

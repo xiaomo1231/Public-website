@@ -17,7 +17,6 @@ import { useTranslation } from '@/i18n'
 
 export interface CourseAnalysisPanelProps {
   projectId: string
-  subject?: string
   onStartTutor?: (topicId: string) => void
 }
 
@@ -34,7 +33,6 @@ function describeSources(refs: Topic['sourceRefs']): string {
 
 export function CourseAnalysisPanel({
   projectId,
-  subject,
   onStartTutor,
 }: CourseAnalysisPanelProps): JSX.Element {
   const { t } = useTranslation()
@@ -92,7 +90,6 @@ export function CourseAnalysisPanel({
         return
       }
       await bundle.documentAnalysis.analyzeProject(projectId, {
-        subject,
         onProgress: (p) => {
           setProgress(p.progress)
           setMessage(p.message)
@@ -160,7 +157,10 @@ export function CourseAnalysisPanel({
           </Badge>
         )}
         {analysis?.promptVersion && (
-          <Badge variant="outline">{t('analysis.prompt', { version: analysis.promptVersion })}</Badge>
+          <Badge variant="outline" title={analysis.promptVersion}>
+            {/* Full provenance (with the subject profile) stays in the tooltip. */}
+            {t('analysis.prompt', { version: analysis.promptVersion.split('+')[0] ?? analysis.promptVersion })}
+          </Badge>
         )}
         {analysis && !running && freshness?.fresh && (
           <Badge variant="outline">{t('analysis.saved')}</Badge>
@@ -172,7 +172,7 @@ export function CourseAnalysisPanel({
         freshness &&
         !freshness.fresh &&
         freshness.reasons.some((reason) => reason !== 'missing') && (
-          <div className="space-y-1 rounded-md border border-amber-500/40 bg-amber-500/5 px-3 py-2 text-sm">
+          <div className="space-y-1 rounded-lg border border-amber-500/40 bg-amber-500/5 px-3 py-2 text-sm">
             <p className="font-medium">{t('analysis.stale')}</p>
             <p className="text-muted-foreground">{t('analysis.staleHint')}</p>
           </div>
@@ -187,7 +187,7 @@ export function CourseAnalysisPanel({
       )}
 
       {analysis?.status === 'failed' && analysis.errorMessage && (
-        <div className="space-y-1 rounded-md border border-destructive/40 bg-destructive/5 px-3 py-2 text-sm">
+        <div className="space-y-1 rounded-lg border border-destructive/40 bg-destructive/5 px-3 py-2 text-sm">
           <p className="font-medium text-destructive">{t('analysis.failed')}</p>
           <p className="text-muted-foreground">
             {t('analysis.failedReason', { reason: analysis.errorMessage })}
@@ -211,7 +211,7 @@ export function CourseAnalysisPanel({
               <button
                 key={topic.id}
                 onClick={() => onStartTutor?.(topic.id)}
-                className="flex min-w-0 flex-col gap-1 rounded-md border bg-card p-3 text-left transition-colors hover:bg-accent"
+                className="flex min-w-0 flex-col gap-1 rounded-lg border bg-card p-3 text-left transition-colors hover:bg-accent"
               >
                 <TruncatedText text={topic.name} className="text-sm font-medium" />
                 <span className="line-clamp-2 break-words text-xs text-muted-foreground">
@@ -220,7 +220,7 @@ export function CourseAnalysisPanel({
                 {topic.sourceRefs.length > 0 && (
                   <TruncatedText
                     text={t('analysis.source', { source: describeSources(topic.sourceRefs) })}
-                    className="text-[10px] uppercase tracking-wider text-muted-foreground"
+                    className="text-xs text-muted-foreground"
                   />
                 )}
               </button>
@@ -239,7 +239,7 @@ export function CourseAnalysisPanel({
           </CardHeader>
           <CardContent className="space-y-2 text-sm">
             {formulas.slice(0, 10).map((f) => (
-              <div key={f.id} className="min-w-0 rounded-md border bg-muted/30 px-3 py-2">
+              <div key={f.id} className="min-w-0 rounded-lg border bg-muted/30 px-3 py-2">
                 <div className="flex min-w-0 flex-wrap items-baseline gap-2">
                   <TruncatedText text={f.name} className="font-medium" />
                   <code className="max-w-full break-all rounded bg-background px-1 font-mono text-xs">
@@ -270,7 +270,7 @@ export function CourseAnalysisPanel({
           </CardHeader>
           <CardContent className="grid gap-2 sm:grid-cols-2">
             {symbols.slice(0, 18).map((s) => (
-              <div key={s.id} className="rounded-md border bg-muted/30 px-3 py-2 text-sm">
+              <div key={s.id} className="rounded-lg border bg-muted/30 px-3 py-2 text-sm">
                 <div className="flex items-baseline gap-2">
                   <code className="rounded bg-background px-1 font-mono text-sm">{s.symbol}</code>
                   {s.unit && <span className="text-xs text-muted-foreground">[{s.unit}]</span>}

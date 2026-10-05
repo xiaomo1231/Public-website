@@ -45,7 +45,7 @@ export function QuestionSource({ sourceRefs, projectId }: QuestionSourceProps): 
       className="min-w-0 space-y-2 rounded-lg border border-border/70 bg-muted/20 p-3"
       aria-label={t('questionSource.title')}
     >
-      <h3 className="flex items-center gap-2 text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
+      <h3 className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
         <BookOpen className="h-3.5 w-3.5 shrink-0" aria-hidden />
         {t('questionSource.title')}
       </h3>

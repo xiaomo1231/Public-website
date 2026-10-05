@@ -27,7 +27,7 @@ export function SlideViewer({ content }: SlideViewerProps): JSX.Element {
   return (
     <section
       aria-label={t('slides.viewerLabel', { current: content.slideNumber, total: content.slideTotal })}
-      className="space-y-3 rounded-xl border border-border/70 bg-card p-4 sm:p-5"
+      className="space-y-3 rounded-lg border border-border/70 bg-card p-4 sm:p-5"
     >
       <header className="flex flex-wrap items-baseline justify-between gap-2">
         <h2 className="min-w-0 text-base font-semibold text-foreground">
@@ -74,7 +74,7 @@ export function SlideViewer({ content }: SlideViewerProps): JSX.Element {
 
       {content.notes.trim().length > 0 && (
         <div className="rounded-lg border border-border/60 bg-muted/20 p-3">
-          <p className="label-mono mb-1">{t('slides.speakerNotes')}</p>
+          <p className="text-xs font-medium text-muted-foreground mb-1">{t('slides.speakerNotes')}</p>
           <RichText
             text={content.notes}
             format="markdown"

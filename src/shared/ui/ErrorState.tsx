@@ -22,11 +22,11 @@ export function ErrorState({
   return (
     <div
       className={cn(
-        'flex flex-col items-center justify-center gap-3 rounded-xl border border-destructive/40 bg-destructive/5 p-10 text-center',
+        'flex flex-col items-center justify-center gap-3 rounded-lg border border-destructive/40 bg-destructive/5 p-10 text-center',
         className,
       )}
     >
-      <span className="grid h-14 w-14 place-items-center rounded-2xl border border-destructive/40 bg-destructive/10">
+      <span className="grid h-14 w-14 place-items-center rounded-xl border border-destructive/40 bg-destructive/10">
         <AlertCircle className="h-6 w-6 text-destructive" />
       </span>
       <div className="space-y-1">

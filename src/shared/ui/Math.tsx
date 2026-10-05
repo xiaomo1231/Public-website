@@ -1,5 +1,7 @@
 import { useMemo } from 'react'
 import katex from 'katex'
+// Chemistry: `\ce{2H2 + O2 -> 2H2O}` typesets formulas, charges and arrows.
+import 'katex/contrib/mhchem'
 import 'katex/dist/katex.min.css'
 import { cn } from '@/shared/lib/utils'
 

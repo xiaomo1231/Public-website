@@ -4,6 +4,7 @@ import {
   ArrowUp,
   CheckCircle2,
   ClipboardCheck,
+  ClipboardList,
   ExternalLink,
   Eye,
   EyeOff,
@@ -14,20 +15,20 @@ import {
   MicOff,
   RotateCcw,
   Send,
-  Sparkles,
 } from 'lucide-react'
 import type { HomeworkMessage, HomeworkQuestion } from '@/entities/homework/types'
 import type { SourceReference } from '@/entities/courseAnalysis/types'
 import { formatHomeworkQuestion } from '@/entities/homework/formatQuestion'
 import { suggestLinearAlgebraMethod } from '@/entities/homework/linearAlgebraGuide'
 import { isDeferredProfessorAnswer } from '@/entities/homework/answerMatching'
-import { answerCheckInputHash, answerReference, HOMEWORK_ANSWER_CHECK_VERSION, type HomeworkAnswerCheck } from '@/entities/homework/answerCheck'
+import { answerCheckInputHash, answerReference, type HomeworkAnswerCheck } from '@/entities/homework/answerCheck'
 import type { HomeworkService } from '@/services/homeworkService'
 import { Badge } from '@/shared/ui/Badge'
 import { Button } from '@/shared/ui/Button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/ui/Card'
 import { RichText } from '@/shared/ui/RichText'
-import { Textarea } from '@/shared/ui/Textarea'
+import { MathField } from '@/widgets/mathInput/MathField'
+import { useProject } from '@/features/project/useProjects'
 import { QuestionSource } from '@/widgets/quiz/QuestionSource'
 import { friendlyAIError } from '@/shared/lib/aiErrors'
 import { cn } from '@/shared/lib/utils'
@@ -91,16 +92,19 @@ export function HomeworkQuestionView({
   const [displaySourceRefs, setDisplaySourceRefs] = useState<SourceReference[]>(question.sourceRefs)
 
   const saveTimer = useRef<number | null>(null)
-  const workingRef = useRef<HTMLTextAreaElement>(null)
-  const askRef = useRef<HTMLTextAreaElement>(null)
+  const workingRef = useRef<HTMLInputElement | HTMLTextAreaElement | null>(null)
+  const askRef = useRef<HTMLInputElement | HTMLTextAreaElement | null>(null)
+  const { project } = useProject(question.projectId)
   const suggestedMethod = suggestLinearAlgebraMethod(question.prompt)
   const availableReference = answerReference(question)
   const checkLanguage = language === 'zh-CN' ? 'zh' : 'en'
+  // Shown only while the working is unchanged since it was checked; compared
+  // under the version the check was produced with (prompt + course subject).
   const visibleCheck = answerCheck && answerCheck.inputHash ===
-    answerCheckInputHash(question, draft, checkLanguage, HOMEWORK_ANSWER_CHECK_VERSION)
+    answerCheckInputHash(question, draft, checkLanguage, answerCheck.promptVersion)
     ? answerCheck : null
 
-  function focusField(field: HTMLTextAreaElement | null): void {
+  function focusField(field: HTMLInputElement | HTMLTextAreaElement | null): void {
     field?.scrollIntoView?.({ block: 'center' })
     field?.focus({ preventScroll: true })
   }
@@ -277,8 +281,8 @@ export function HomeworkQuestionView({
         <Card data-selection-context="homework" data-selection-title={question.number ?? question.documentName}>
         <CardHeader className="space-y-2">
           <div className="flex flex-wrap items-center gap-2">
-            <Sparkles className="h-4 w-4 text-muted-foreground" aria-hidden />
-            <span className="label-mono">{t('homework.title')}</span>
+            <ClipboardList className="h-4 w-4 text-muted-foreground" aria-hidden />
+            <span className="text-xs font-medium text-muted-foreground">{t('homework.title')}</span>
             {question.number && <Badge variant="outline">{question.number}</Badge>}
           </div>
           <RichText
@@ -298,7 +302,7 @@ export function HomeworkQuestionView({
           />
           {sourcePages.length > 0 && (
             <details open={displaySourceRefs.some((ref) => ref.quotePending) || /\b(?:figure|diagram|shown|below|network)\b|图|如下图|如图/i.test(question.prompt)}>
-              <summary className="cursor-pointer rounded-md px-1 py-2 text-sm font-medium text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+              <summary className="cursor-pointer rounded-lg px-1 py-2 text-sm font-medium text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
                 {t('homework.originalPages')}
               </summary>
               <div className="grid gap-4 pt-2 lg:grid-cols-2">
@@ -353,7 +357,7 @@ export function HomeworkQuestionView({
             separated from the AI explanation. Hidden while practising. */}
         {mode === 'review' && question.answerText && question.answerStatus === 'matched' && (
           <details
-            className="rounded-2xl border border-border/70 bg-muted/20 p-4"
+            className="rounded-xl border border-border/70 bg-muted/20 p-4"
             onToggle={(event) => {
               setOriginalAnswerOpen(event.currentTarget.open)
               if (!event.currentTarget.open) setAnswerPages([])
@@ -380,7 +384,7 @@ export function HomeworkQuestionView({
                 </div>
               )}
               <details>
-                <summary className="cursor-pointer rounded-md py-2 text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                <summary className="cursor-pointer rounded-lg py-2 text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
                   {t('homework.answer.extractedText')}
                 </summary>
                 <p className="pb-2 text-xs text-muted-foreground">{t('homework.answer.extractedTextCaveat')}</p>
@@ -406,19 +410,25 @@ export function HomeworkQuestionView({
         <CardHeader>
           <CardTitle className="flex items-center justify-between text-base">
             <span>{t('homework.draft')}</span>
-            <span className={cn('label-mono', saved && 'opacity-70')}>
+            <span className={cn('text-xs font-medium text-muted-foreground', saved && 'opacity-70')}>
               {saved ? t('homework.saved') : '…'}
             </span>
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          <Textarea
-            ref={workingRef}
+          <MathField
+            mode="text"
+            multiline
+            subject={project?.subject}
+            fieldRef={workingRef}
             value={draft}
-            onChange={(event) => setDraft(event.target.value)}
+            onChange={setDraft}
             placeholder={t('homework.draftPlaceholder')}
             rows={5}
             aria-label={t('homework.draft')}
+            // Working may mix prose and LaTeX; show it rendered when it does.
+            showRenderedPreview
+            {...(availableReference ? { onSubmit: () => void checkDraft() } : {})}
           />
           <div className="flex flex-wrap items-center gap-3">
             <Button type="button" onClick={() => void checkDraft()} disabled={!draft.trim() || checking || !availableReference}>
@@ -431,7 +441,7 @@ export function HomeworkQuestionView({
           </div>
           {checkError && <p role="alert" className="text-sm text-destructive">{checkError}</p>}
           {visibleCheck && (
-            <section aria-label={t('homework.check.result')} className="space-y-3 rounded-xl border border-border/70 bg-muted/20 p-4">
+            <section aria-label={t('homework.check.result')} className="space-y-3 rounded-lg border border-border/70 bg-muted/20 p-4">
               <div className="flex flex-wrap items-center gap-2">
                 <Badge variant={visibleCheck.verdict === 'incorrect' ? 'destructive' : 'outline'}>
                   {t(`homework.check.verdict.${visibleCheck.verdict}`)}
@@ -491,13 +501,13 @@ export function HomeworkQuestionView({
       </div>
 
       {actionError && (
-        <div className="rounded-xl border border-destructive/40 bg-destructive/5 p-3 text-sm text-destructive">
+        <div className="rounded-lg border border-destructive/40 bg-destructive/5 p-3 text-sm text-destructive">
           {actionError}
         </div>
       )}
 
       {notice && (
-        <div className="rounded-xl border border-border/70 bg-muted/30 p-3 text-sm text-muted-foreground">
+        <div className="rounded-lg border border-border/70 bg-muted/30 p-3 text-sm text-muted-foreground">
           {notice}
         </div>
       )}
@@ -575,7 +585,7 @@ export function HomeworkQuestionView({
                 <li
                   key={message.id}
                   className={cn(
-                    'max-w-[85%] rounded-2xl px-3 py-2 text-sm leading-relaxed',
+                    'max-w-[85%] rounded-xl px-3 py-2 text-sm leading-relaxed',
                     message.role === 'student'
                       ? 'ml-auto bg-primary-strong text-primary-foreground'
                       : 'bg-muted/50 text-foreground',
@@ -605,10 +615,13 @@ export function HomeworkQuestionView({
           )}
           {askError && <p role="alert" className="text-sm text-destructive">{askError}</p>}
           <div className="space-y-2">
-            <Textarea
-              ref={askRef}
+            <MathField
+              mode="text"
+              multiline
+              subject={project?.subject}
+              fieldRef={askRef}
               value={question_}
-              onChange={(event) => setQuestionText(event.target.value)}
+              onChange={setQuestionText}
               placeholder={t('homework.askPlaceholder')}
               rows={2}
               aria-label={t('homework.askTitle')}

@@ -31,17 +31,14 @@ export function PageHeader({
           {icon && (
             <span
               aria-hidden
-              className="page-icon mt-0.5 grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-theme-primary-soft text-foreground [&_svg]:h-5 [&_svg]:w-5"
+              className="mt-0.5 grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-theme-primary-soft text-secondary-foreground [&_svg]:h-5 [&_svg]:w-5"
             >
               {icon}
             </span>
           )}
           <div className="min-w-0 space-y-1.5">
             {eyebrow && (
-              <p className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-                <span aria-hidden className="h-1.5 w-1.5 shrink-0 rounded-full bg-theme-primary" />
-                {eyebrow}
-              </p>
+              <p className="text-sm text-muted-foreground">{eyebrow}</p>
             )}
             <h1 className="break-words text-[26px] font-semibold leading-tight tracking-tight text-foreground sm:text-[28px]">
               {title}

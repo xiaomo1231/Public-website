@@ -33,12 +33,7 @@ export class MasteryService {
   /** Record an attempt and update the estimate. Returns the new row. */
   async record(attempt: QuestionAttempt): Promise<KnowledgeMastery> {
     const existing = await this.repo.get(attempt.projectId, attempt.knowledgePoint)
-    const observation: MasteryObservation = {
-      at: attempt.createdAt,
-      isCorrect: attempt.evaluation.isCorrect,
-      difficulty: attempt.difficulty as MasteryObservation['difficulty'],
-      questionType: attempt.questionType,
-    }
+    const observation = observationFromAttempt(attempt)
     const observations = [...(existing?.observations ?? []), observation].slice(-MAX_OBSERVATIONS)
     const mastery = computeMastery(observations)
     const graded = observations.filter((o) => o.isCorrect !== null)
@@ -72,12 +67,7 @@ export class MasteryService {
     for (const [kp, list] of byKp) {
       const sorted = list.slice().sort((a, b) => a.createdAt - b.createdAt)
       const observations: MasteryObservation[] = sorted
-        .map((a) => ({
-          at: a.createdAt,
-          isCorrect: a.evaluation.isCorrect,
-          difficulty: a.difficulty as MasteryObservation['difficulty'],
-          questionType: a.questionType,
-        }))
+        .map(observationFromAttempt)
         .slice(-MAX_OBSERVATIONS)
       const graded = observations.filter((o) => o.isCorrect !== null)
       rows.push({
@@ -107,5 +97,23 @@ export class MasteryService {
       .filter((r) => r.attempts > 0 && r.mastery < threshold)
       .sort((a, b) => a.mastery - b.mastery)
       .slice(0, limit)
+  }
+}
+/**
+ * One mastery observation per attempt. A short answer carries partial credit
+ * (points covered / total) and half weight, because its grade comes from an AI
+ * reading rather than a deterministic check; a disputed one is ungraded.
+ */
+export function observationFromAttempt(attempt: QuestionAttempt): MasteryObservation {
+  const { evaluation } = attempt
+  const disputed = evaluation.disputed === true
+  const score = evaluation.score
+  return {
+    at: attempt.createdAt,
+    isCorrect: disputed ? null : evaluation.isCorrect,
+    difficulty: attempt.difficulty as MasteryObservation['difficulty'],
+    questionType: attempt.questionType,
+    ...(!disputed && score && score.total > 0 ? { credit: score.earned / score.total } : {}),
+    ...(attempt.questionType === 'short_answer' ? { weight: 0.5 } : {}),
   }
 }

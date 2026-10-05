@@ -4,6 +4,7 @@ import {
   AlertTriangle,
   ArrowLeft,
   ArrowRight,
+  BookOpen,
   ChevronLeft,
   ChevronRight,
   Languages,
@@ -467,7 +468,7 @@ export function SlideStudyPage(): JSX.Element {
                 <Card>
                   <CardHeader>
                     <CardTitle className="flex items-center gap-2 text-base">
-                      <Sparkles className="h-4 w-4 text-muted-foreground" aria-hidden />
+                      <BookOpen className="h-4 w-4 text-muted-foreground" aria-hidden />
                       {t('slides.lessonLabel')}
                     </CardTitle>
                     <CardDescription>
@@ -516,7 +517,7 @@ export function SlideStudyPage(): JSX.Element {
                         paragraphClassName="text-[15px] leading-relaxed"
                       />
                       <div className="rounded-lg border border-border/60 bg-muted/20 p-3">
-                        <p className="label-mono mb-1">{t('slides.guidingQuestion')}</p>
+                        <p className="text-xs font-medium text-muted-foreground mb-1">{t('slides.guidingQuestion')}</p>
                         <RichText
                           text={lesson.question ?? ''}
                           format="markdown"
@@ -553,7 +554,7 @@ export function SlideStudyPage(): JSX.Element {
                             <li
                               key={message.id}
                               className={cn(
-                                'max-w-[85%] rounded-2xl px-3 py-2 text-sm leading-relaxed',
+                                'max-w-[85%] rounded-xl px-3 py-2 text-sm leading-relaxed',
                                 message.role === 'student'
                                   ? 'ml-auto bg-primary-strong text-primary-foreground'
                                   : 'bg-muted/50 text-foreground',

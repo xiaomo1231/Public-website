@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { Languages, Lightbulb, Loader2, Sparkles, X } from 'lucide-react'
+import { Languages, Lightbulb, Loader2, MessageCircleQuestion, X } from 'lucide-react'
 import { Button } from '@/shared/ui/Button'
 import { ContextualTutorPopup, type ContextualTutorContext } from '@/widgets/tutor/ContextualTutorPopup'
 import { buildAIServices } from '@/services/aiServices'
@@ -336,11 +336,11 @@ export function SelectionTranslator(): JSX.Element | null {
       className="fixed z-50 max-w-[calc(100vw-1.5rem)]"
     >
       {selection.tooLong ? (
-        <div className="rounded-md border bg-card px-3 py-2 text-[13px] text-muted-foreground shadow-xl">
+        <div className="rounded-lg border bg-card px-3 py-2 text-[13px] text-muted-foreground shadow-xl">
           {t('contextual.tooLong')}
         </div>
       ) : action === null ? (
-        <div className="flex items-center gap-0.5 rounded-md border bg-card p-1 shadow-xl">
+        <div className="flex items-center gap-0.5 rounded-lg border bg-card p-1 shadow-xl">
           <Button variant="ghost" size="sm" onClick={() => setAction('translate')}>
             <Languages className="h-3.5 w-3.5" />
             {t('contextual.translate')}
@@ -352,14 +352,14 @@ export function SelectionTranslator(): JSX.Element | null {
                 {t('contextual.explain')}
               </Button>
               <Button variant="ghost" size="sm" onClick={() => setAction('ask')}>
-                <Sparkles className="h-3.5 w-3.5" />
+                <MessageCircleQuestion className="h-3.5 w-3.5" />
                 {t('contextual.ask')}
               </Button>
             </>
           )}
         </div>
       ) : action === 'translate' ? (
-        <div className="w-[20rem] max-w-[calc(100vw-1.5rem)] rounded-md border bg-card p-3 text-sm text-card-foreground shadow-xl">
+        <div className="w-[20rem] max-w-[calc(100vw-1.5rem)] rounded-lg border bg-card p-3 text-sm text-card-foreground shadow-xl">
           <div className="mb-2 flex items-center gap-2">
             <Languages className="h-4 w-4 text-muted-foreground" aria-hidden />
             <span className="font-medium">{t('translate.title')}</span>

@@ -303,7 +303,15 @@ export class OpenAICompatibleProvider implements AIProvider {
     const body: Record<string, unknown> = {
       model,
       messages: req.messages.map((m) => {
-        const msg: Record<string, unknown> = { role: m.role, content: m.content }
+        const msg: Record<string, unknown> = {
+          role: m.role,
+          content: m.images?.length
+            ? [
+                { type: 'text', text: m.content },
+                ...m.images.map((url) => ({ type: 'image_url', image_url: { url } })),
+              ]
+            : m.content,
+        }
         if (m.name) msg.name = m.name
         return msg
       }),

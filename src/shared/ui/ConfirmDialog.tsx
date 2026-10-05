@@ -91,7 +91,7 @@ export function ConfirmDialog({
           {description && <DialogDescription>{description}</DialogDescription>}
         </DialogHeader>
 
-        {details && <div className="rounded-md border bg-muted/30 p-3 text-sm">{details}</div>}
+        {details && <div className="rounded-lg border bg-muted/30 p-3 text-sm">{details}</div>}
 
         {needsText && (
           <div className="space-y-2">

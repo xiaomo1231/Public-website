@@ -71,6 +71,15 @@ export class PracticeRepository {
     return this.attempts().where('setId').equals(setId).sortBy('submittedAt')
   }
 
+  getAttempt(id: string): Promise<PracticeAttempt | undefined> {
+    return this.attempts().get(id)
+  }
+
+  async updateAttempt(attempt: PracticeAttempt): Promise<PracticeAttempt> {
+    await this.attempts().put(attempt)
+    return attempt
+  }
+
   async addAttempt(attempt: PracticeAttempt): Promise<PracticeAttempt> {
     await this.attempts().add(attempt)
     return attempt

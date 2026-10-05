@@ -20,7 +20,7 @@ const CARD_VARIANTS: Record<CardVariant, string> = {
   default: 'border-border/80 bg-card shadow-soft',
   elevated: 'border-border/70 bg-card shadow-lift',
   interactive:
-    'border-border/80 bg-card shadow-soft motion-safe:transition-[transform,box-shadow,border-color] motion-safe:duration-200 hover:-translate-y-0.5 hover:border-border hover:shadow-lift',
+    'border-border/80 bg-card shadow-soft motion-safe:transition-[transform,box-shadow,border-color] motion-safe:duration-300 motion-safe:ease-[cubic-bezier(0.22,1,0.36,1)] hover:-translate-y-1 hover:border-primary/30 hover:shadow-lift',
   accent: 'border-theme-primary/25 bg-theme-primary-soft/45 shadow-soft',
   plain: 'border-transparent bg-transparent shadow-none',
 }
@@ -33,7 +33,7 @@ export const Card = forwardRef<HTMLDivElement, CardProps>(
   ({ className, variant = 'default', ...props }, ref) => (
     <div
       ref={ref}
-      className={cn('rounded-[1.5rem] text-card-foreground', CARD_VARIANTS[variant], className)}
+      className={cn('rounded-2xl text-card-foreground', CARD_VARIANTS[variant], className)}
       {...props}
     />
   ),

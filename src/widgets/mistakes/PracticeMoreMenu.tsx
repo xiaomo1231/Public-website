@@ -19,8 +19,8 @@ export interface PracticeMoreMenuProps {
 export function PracticeMoreMenu({ onSelect, busy }: PracticeMoreMenuProps): JSX.Element {
   const { t } = useTranslation()
   return (
-    <div className="rounded-md border bg-muted/20 p-3">
-      <p className="mb-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">{t('practiceMore.title')}</p>
+    <div className="rounded-lg border bg-muted/20 p-3">
+      <p className="mb-2 text-xs font-medium text-muted-foreground">{t('practiceMore.title')}</p>
       <div className="grid gap-1.5 sm:grid-cols-2">
         {OPTIONS.map((opt) => (
           <button
@@ -28,7 +28,7 @@ export function PracticeMoreMenu({ onSelect, busy }: PracticeMoreMenuProps): JSX
             type="button"
             disabled={busy}
             onClick={() => onSelect(opt.mode)}
-            className="flex items-center gap-2 rounded-md border bg-card px-3 py-2 text-left text-sm transition-colors hover:bg-accent/50 disabled:opacity-60"
+            className="flex items-center gap-2 rounded-lg border bg-card px-3 py-2 text-left text-sm transition-colors hover:bg-accent/50 disabled:opacity-60"
           >
             <span className="flex-1">
               <span className="block font-medium">{t(opt.labelKey)}</span>

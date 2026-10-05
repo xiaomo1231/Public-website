@@ -34,7 +34,7 @@ export function SectionHeading({
     >
       <div className="min-w-0 space-y-1">
         {eyebrow && (
-          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+          <p className="text-sm text-muted-foreground">
             {eyebrow}
           </p>
         )}

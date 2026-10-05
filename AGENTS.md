@@ -19,7 +19,7 @@
 
 **这不是"AI PDF 总结工具"。** 教学以题目为主要载体，而不是长篇总结。
 
-当前版本：**V0.3.4（0.3.4）**。
+当前版本：**V0.3.9（0.3.9）**。
 
 ---
 
@@ -106,6 +106,9 @@ Dexie
 
 - 每个 prompt 在 `src/infrastructure/ai/prompts/<family>/v1.ts`，导出 `VERSION` / `buildSystemPrompt()` / `buildUserPrompt()`。
 - `prompts/index.ts` 是唯一注册表。升级 = 加 `v2/` 并切换 import，**调用点不变**。
+- **科目画像 `subject-profile/v1`**：按项目科目（`calculus / linear_algebra / discrete_math / physics / chemistry / biology / cs / stats / other`）给出记号、推理方式、答案格式与常见错误；由 `withSubject()` 追加到教学/判分/分析类 system prompt（课程分析、增量主题分析、导师课时、交互导师、划词提问、测验、错题分析、作业提示/解法/复习讲解/检查答案/逐题问答、幻灯片学习）。`other` 不追加。科目一律由服务端从项目读取（`services/projectSubject.ts`），**不由 UI 传入**。化学记号用 mhchem `$\ce{...}$`（`Math.tsx` 已加载 `katex/contrib/mhchem`）。
+- 画像可带**仅课时用**的 `lesson` 指引，只有 `withSubject(..., { forLesson: true })`（导师课时）才追加：化学/生物要求把可画成图的事实写明（分子名+分子式、各状态能量、滴定浓度/体积/Kₐ、亲本基因型、家系、DNA 序列），并在课程资料有图时引导学生看原图。
+- 带缓存/可比对的产物把科目画像折进版本：`subjectPromptVersion(base, subject)` = `<base>+subject-profile/v1:<subject>`，某科画像修改时在 `PROFILE_REVISIONS` 里给**该科**加修订号（追加 `.rN`，如化学 `.r2`），只让该科的缓存失效（CourseAnalysis、增量 Topic、TutorLesson、SlideLesson、作业复习讲解与检查答案），不会让其它科目全部重生成。
 
 ### 安全模型
 
@@ -115,6 +118,7 @@ Dexie
 - AI 输出：`parse → validate/normalize → 业务逻辑 → 落库`；不可用则抛错，**不落库**。
 - 渲染：无 `dangerouslySetInnerHTML`；Markdown / LaTeX 按文本渲染；CSP 友好（无 eval、无远程脚本）。
 - 明确边界：邀请码是**本地访问门，不是安全边界**；设备密钥**不能**防御同源脚本。
+- **联网参考图片（默认关闭）**：唯一会联系 AI 服务商以外主机的功能。只访问 `pubchem.ncbi.nlm.nih.gov` / `commons.wikimedia.org` / `upload.wikimedia.org`（白名单，仅 https），只发出搜索词；图片只收 PNG/JPEG/GIF/WebP（不收 SVG）、≤3 MB；Commons 只收公有领域 / CC0 / CC BY / CC BY-SA；外链 `rel="noopener noreferrer"`。
 
 ---
 
@@ -129,7 +133,7 @@ Dexie
 | 教材结构 | `CourseStructure` `CourseStructureNode`（章节唯一真相，扁平 + `parentId`） |
 | 教学 | `TutorLesson`（缓存课时）`TutorSession`（交互会话）`TranslationEntry` |
 | 上下文 | `CourseContext`（教授教学风格、班级进度、note/lecture 关联） |
-| 视觉 | `VisualSource` `VisualSourceImage` |
+| 视觉 | `VisualSource` `VisualSourceImage` `ReferenceImage` `ReferenceImageBlobRow`（联网参考图片缓存，Dexie v14） |
 | 教授练习 | `PracticeSet` `PracticeQuestion` `PracticeAttempt` |
 | 练习 | `Question` `QuestionAttempt` `Quiz` `KnowledgeMastery` |
 | 错误 | `Mistake` |
@@ -191,7 +195,7 @@ Upload → validation → (blob 落 IndexedDB `documentBlobs`) → processingJob
 | `CourseAnalysis.sourceHash` | 分析**输入内容**指纹 | 分析行 |
 
 - `sourceHash` 是**内容指纹**（chunk 文本 + order + 页码 + chapterId/sectionId + document id/name/size），**不含 `processedAt`、不含 chunk id**。因此「原样重处理」不会误判为内容变化。
-- freshness 判定（`evaluateFreshness`，纯函数）只看：`sourceHash` / `promptVersion` / `schemaVersion` / 结构（优先 `structureHash`，旧行回退 `structureVersion`）/ `status`。**明暗模式、配色主题、UI 语言、Class Progress、练习记录都不参与。**
+- freshness 判定（`evaluateFreshness`，纯函数）只看：`sourceHash` / `promptVersion` / `schemaVersion` / 结构（优先 `structureHash`，旧行回退 `structureVersion`）/ `status`。期望的 `promptVersion` 按项目科目计算（见 Prompts「科目画像」），所以**改科目 ⇒ `prompt-changed`**。**明暗模式、配色主题、UI 语言、Class Progress、练习记录都不参与。**
 - `staleReason` / `staleAt` **只是注释**，不是 freshness 输入；`markStale()` 不会单独把结果变成 stale。
 - `reseedProject` 是**单事务原子替换**：AI 失败时旧分析原样保留。
 - **`DocumentAnalysisService.analyzeProject()` 仍是项目级**（全量路径不变）。
@@ -257,15 +261,26 @@ Topic
 - 取材料优先级：主题 `sourceRefs` 精确分块 → 引用匹配 → 页码 → 文档开头 → 项目回退。
 - 内容三态标注：Document Content / AI Supplementary / AI Generated Exercise。
 - 导师难度：轻量规则（2 连对升，2 连错或补充说明降）。
-- **缓存失效输入只有**：主题本身（name/description/`chapterId`/`sectionId`/`sourceRefs`）、`promptVersion`、notes/transcript `contextHash`。换主题配色、明暗模式、UI 语言、Class Progress、练习记录**都不会**让课时失效。`TutorLessonService` 与 `CourseContentService` 都有 in-flight 去重（同一 key 并发只发一次请求）。
+- **缓存失效输入只有**：主题本身（name/description/`chapterId`/`sectionId`/`sourceRefs`）、`promptVersion`（含项目科目画像）、notes/transcript `contextHash`。换主题配色、明暗模式、UI 语言、Class Progress、练习记录**都不会**让课时失效。`TutorLessonService` 与 `CourseContentService` 都有 in-flight 去重（同一 key 并发只发一次请求）。
 
 ### Quiz
 
-- 题型：单选、判断、数值（容差）、数学表达式。
-- **简答题已移除**（无法可靠自动判分，避免误判）——与原始需求文档冲突，见第 9 节待决项。
-- 判分 `infrastructure/math/expressionEvaluator.ts`：Unicode 归一 → mathjs 解析 → 符号化简 `simplify(lhs-rhs)===0` → 16 点数值采样 → 去 `+C` → 返回 `true|false|null`。`null` 显示「无法自动判定」且**不计入成绩**。判分不依赖 AI，可复现。
+- 题型：单选、判断、数值（容差）、数学表达式、**代码输出**（`code_output`，仅计算机科目提供：题干含带语言标记的代码块，答案为程序的确切输出，按行尾空白/换行规范化后**精确匹配**）。
+- 数值题可带 `unit`（mathjs 单位语法，如 `m/s^2`）：学生须带单位作答，任意同量纲单位先换算再按 1% **相对**容差比较；缺单位 / 量纲不对给出明确提示，单位无法识别则不判分（`infrastructure/math/quantityAnswer.ts`）。出题 prompt 为 `quiz-generator/v4`。
+- **化学方程式题（`chem_equation`，仅化学科目）**：`infrastructure/chemistry/equation.ts` 本地解析（`->`/`<=>`/`→`/`⇌`/`=`、`[条件]`、电荷 `Fe^3+`、按 mhchem 约定 `NH4+` 为 +1、水合物 `·`、状态符号忽略）。判分：物种一致（顺序无关）+ 原子与电荷守恒 + 系数成比例（整倍数也算对）；缺/多物种、不守恒、系数错误分别给出提示；读不懂则不判分。出题时参考答案本身必须能解析且配平，否则丢弃该题。
+- **排序题（`ordering`，全科可选，默认不勾选）**：`orderItems` 3–8 个互不相同的单行项，参考答案由其重建（换行连接）。作答 `widgets/quiz/OrderingInput`（拖拽 + 上/下按钮，从按题目 id 固定的打乱顺序开始，且绝不是正确顺序）。得分 = 最长保序子序列长度 / 总项数（`infrastructure/math/orderingAnswer.ts`），部分得分走与简答题相同的 `score` 通道。
+- **教授练习题与交互导师的简答题**（第二期）复用同一判分器：练习题从教授参考答案经 `rubric-extractor/v1` 拆出得分点（按 答案+prompt 版本 哈希缓存在题目上），作答写入错题本 / 掌握度并支持异议（`PracticeService.disputeAttempt`）；导师出题 `tutor/v2-question` 可出带得分点的简答题，覆盖率 60–99% 或无法核对时难度不调整。
+- **简答题（`short_answer`）按得分点计分**：出题时生成参考答案 + 2–6 条得分点（`Question.rubric`）。判分 `services/shortAnswerGrader.ts` + `short-answer-check/v1`：AI 逐条判断是否答到（同义、等价表述都算），答到必须**逐字摘出学生原话**作为证据，本地校验证据确实出现在答案里，否则该点不算；得分 = 答到点数 / 总点数（3/5 → 60%），由本地计算，从不采用 AI 的整体结论。空答案不调用 AI；未配置 AI 或核对失败 ⇒ 不计分（展示得分点与参考答案）。
+- 简答题计分：测验百分比 = Σ得分 / 已判题数（简答题按 `earned/total` 计入，`QuizScore.points`）；只有全部答到才算“正确”，其余进入错题本；掌握度按得分比例、**半权重**计入（`observationFromAttempt`）。学生可点“我不同意这个判定”（`QuizService.disputeAttempt`）：该次作答保留展示但不再计分，同时移出错题本、重建该知识点掌握度、已完成测验重新算分。
+- 表达式判分 `infrastructure/math/expressionEvaluator.ts`：Unicode 归一 → mathjs 解析 → 符号化简 `simplify(lhs-rhs)===0` → 16 点数值采样 → 去 `+C` → 返回 `true|false|null`。`null` 显示「无法自动判定」且**不计入成绩**。判分不依赖 AI，可复现。
 - 自适应：`composite = 0.45·近期正确率 + 0.25·难度加权正确率 + 0.20·知识点掌握度 + 0.10·连对连错`；≥2 题才调整；5 档（beginner→challenge）单步移动。
 - 掌握度：`Σ(recencyWeight × difficultyWeight × correct) / Σ(recencyWeight × difficultyWeight)`，`recencyWeight = 0.9^距最新`，难度权重 0.6→1.4，未验证作答不计入。
+
+### 答题输入（符号键盘）
+
+- 所有作答框统一用 `widgets/mathInput/MathField`：符号键盘 + 实时“系统识别为”预览，插入在光标处，模板（√、a/b、xⁿ、sin…）把光标放进括号、有选区时直接包裹选区。
+- 按判分方式选模式（`shared/lib/mathInput.ts`）：`expression`（测验/练习的表达式题，插 mathjs 语法，预览为判分器实际解析结果）、`number`（数值题）、`quantity`（带单位数值题，插单位符号）、`chemistry`（方程式题：箭头/电荷/状态/条件，预览用 mhchem 渲染解析结果）、`text`（作业草稿、导师作答、提问：插 Unicode 符号，分组按项目科目排序，生物有专属分组）。
+- 单行框 Enter 提交，多行框 Ctrl/⌘+Enter 提交；键盘开合状态按模式存 localStorage（仅本机偏好）。预览经 `services/answerPreview.ts` 复用判分器的解析函数，不另立规则。
 
 ### 错题本
 
@@ -357,8 +372,14 @@ docs/             architecture.md
 | 7o | 教授答案对应修复（编号解析 / 手动划分 / 一对一校验）+ PDF 数学排版 + 讲解生成可靠性 +「留给学生」识别 | 已交付（v0.3.4） |
 | 7p | 作业复习完整教学讲解 + 「检查答案」+ 最后检查排版 + 逐题问答常驻 + 浏览器语音输入 | 已交付（v0.3.4） |
 | 7q | 线性代数作业逐题六步学习引导试点 + 题面向量箭头 / 上标显示修复 | 已交付（v0.3.4） |
+| 7r | 界面动效 + 首页重设计 + 风格统一（圆角尺度） | 已交付（v0.3.9） |
+| 7s | 学科适配：科目画像（9 科，含生物）、科目推断、物理单位判分、代码输出题、概率分布图、化学 mhchem | 已交付（v0.3.9） |
+| 7t | 符号键盘 + 实时识别预览；简答题按得分点计分（测验 / 教授练习 / 导师）；化学方程式题、排序题 | 已交付（v0.3.9） |
+| 7u | 化学 / 生物配图三层：课程原图优先、本地计算的六种图（schema v7）、联网参考图片（Dexie v14，默认关闭） | 已交付（v0.3.9） |
 | 8 | Dashboard 强化 | 部分交付（v0.2.8：视觉与交互函数图；v0.3.1：构图与动效打磨；指标类未做） |
 | 9 | PWA · a11y · 导入导出打磨 | 未开始 |
+
+**V0.3.9 已提交并发布**（tag `v0.3.9`，两个远程仓库各一份 Release + 源码压缩包）。本版包含：**界面动效 / 首页重设计 / 风格统一**；**学科适配**（科目画像 9 科含生物、按科目单独失效缓存、科目推断、物理单位判分、代码输出题、概率分布图 `distribution_2d`、化学 mhchem）；**符号键盘与实时识别预览**；**简答题按得分点计分**（测验 / 教授练习 / 导师）；**化学方程式题、排序题**；**化学 / 生物配图三层**（课程原图优先、六种本地计算图、默认关闭的联网参考图片）。新增 Dexie **v14** `referenceImages` / `referenceImageBlobs` 两表；可视化 schema v7；新增依赖 `smiles-drawer`。
 
 **V0.3.4 已提交并发布**（tag `v0.3.4`，两个远程仓库各一份 Release + 源码压缩包）。本版包含：**教授答案对应修复**（编号解析支持 `Problem/Solution/Answer/Q/Sol/Ex` 与裸编号、编号与正文分行；只识别到未分题段落时提供手动划分；Service 层严格一对一校验）；**教授答案 PDF 数学排版还原**（上下标基线分组，可重新读取原 PDF）；**讲解生成可靠性**（最多 2 题并发 / 题目级进度 / 单题 120s 时限 / 输出截断分阶段 / 已完成跳过 / 失败单题重试）；**「留给学生」答案识别**（不发无依据请求）；**作业复习完整教学讲解**；**「检查答案」**（本地核对 + AI 语义估计，百分比为估计值）；**最后检查排版修复**；**逐题问答常驻**；**浏览器语音输入**；**线性代数六步学习引导试点**；**题面向量箭头与上标显示修复**。均未新增 Dexie 表 / 索引。
 
@@ -372,13 +393,18 @@ docs/             architecture.md
 
 ### 待用户拍板的决策点
 
-1. **简答题**：原始需求要求支持，当前已移除。选项：保持移除 / AI 判分并标注低置信 / 仅作不计分练习。
+1. **简答题**：已决定并实现——按得分点覆盖率计分（见 §6 Quiz）；第二期（教授练习题、交互导师）已实现。
 2. **作答时间**：需求提到「回答时间（如果可获得）」，当前**未采集**。是否加 `QuestionAttempt.durationMs` 并纳入难度模型。
 3. **检索策略**：Phase 6 RAG 是否现在做？当前是「按主题 sourceRefs 取块 + 长上下文」，资料量大时才需要向量检索。
 4. **增量分析**：**章节级增量生成已实现**（§5.1）。边界：只支持「按章节/小节」的局部更新，且要求受影响 topic 都已有经本地校验的 `sourceChunkIds`；旧数据缺依赖时返回 `ANALYSIS_SCOPE_UNSUPPORTED`（`dependencies-missing`）而非降级。跨章节 Topic 的**多来源扩展**仍是保守策略（只在其自身来源被证明变化时才重建）。
 5. **`#4C1A2`**：Warm Orange 主题的 `deep` 色按用户原文保留，但它不是合法 hex，无法用作 CSS 颜色。当前处理：保留在 palette metadata 里，**不写入任何 CSS 变量**；主题选择器把它渲染成「不可用」虚线 `?` 色块，不伪造颜色。等待正确色值。
 6. **对比度**：浅色主按钮已改用 `--primary-strong`（Pink Aqua `#1E8F9C` = 3.84:1，Warm Orange `#8C3332` = 7.79:1；Default 15.55:1，Academic 4.82:1）。**Pink Aqua 仍为 AA-large，未达 AA-normal（4.5:1）**——因为 `#1E8F9C` 是用户指定值，达标需要改色。暗色模式主按钮 6.67–14.22:1 全部达标。
 7. **数学可视化 Phase 3.3 进行中**：在 v0.2.6 已发布的 `visualization-generator/v4`、schema v4 类型上，工作区新增 Hasse 图 `hasse_2d`：模型提供明确有限偏序元素与比较关系，本地校验环、计算传递约简并确定分层位置；使用确定性 SVG 和双语无障碍描述。注册表现已切换到 visualization prompt v5，schema 升至 v5；未新增 Dexie 表/索引，也未改 Tutor Lesson 缓存版本。其余考虑项：关系/笛卡尔图、真值表、矩阵步骤；状态机可用已有 `graph_2d` 表示，暂不重复实现。
+8. **概率分布图 `distribution_2d`**：正态 / 二项 / 泊松 / 均匀 / 指数分布，可带阴影区间。模型只给分布族、参数和区间（`visualization-generator/v6`），密度、区间概率、均值、方差全部本地计算（`entities/tutorVisualization/distribution.ts`）；离散分布画柱、连续分布画曲线。schema 升至 v6；导师课时 prompt 升至 `tutor/v5-lesson`（新增“概率分布”示例族），已缓存课时会重新生成一次。
+9. **化学 / 生物图（三层，随 v0.3.9 发布）**：
+   - **第 1 层 课程原图优先**：课时页先显示课程资料里的原图，再显示 AI 生成的图；化学/生物课时的 prompt 附上本主题原图清单（页码 + 说明），讲解按页码引用原图。
+   - **第 2 层 本地计算的图**（schema **v7**，`visualization-generator/v7`；化学/生物规则只对相应科目及 `other`/未设科目追加，数学课不多花 token）。模型只给课时里的事实，其余全部本地计算：`molecule_2d`（SMILES + 课时写明的分子式；smiles-drawer 本地算分子式，不一致就丢弃，按主题色单色绘制）、`energy_2d`（各状态能量 → ΔH、Eₐ；过渡态必须是峰）、`titration_2d`（一元酸被强碱滴定，按电荷守恒二分法逐点解 pH；标出计量点与半计量点 pH = pKₐ）、`punnett_2d`（≤2 对基因，配子 / 基因型 / 表现型比例）、`pedigree_2d`（≤16 人；校验父母存在、性别与环，自动分代，外来配偶排在同胞组外侧）、`translation_2d`（编码链 / 模板链 → mRNA → 标准密码子表翻译，遇终止密码子停止）。计算在 `entities/tutorVisualization/chemistry.ts` / `biology.ts`，校验在 `normalizeScience.ts`，渲染在 `widgets/tutor/TutorChemistryFigure.tsx` / `TutorBiologyFigure.tsx`。是否发第二次请求由 `hasGraphableMath` 加上化学/生物关键词门控决定。细胞周期时间轴价值较低，未做。
+   - **第 3 层 联网参考图片（默认关闭，设置页开启）**：只在化学/生物课时、且本主题没有课程原图时，提供“查找参考图片”按钮（学生点击才联网）。`reference-image-query/v1` 只让模型给搜索词（PubChem 需附分子式，与 PubChem 返回值核对）；`infrastructure/referenceImages/sources.ts` 检索并下载；可选 `reference-image-check/v1` 视觉核对（`ChatMessage.images` 以 OpenAI content 数组发送；模型不支持图片时自动降级为“未核对”）。图片与来源 / 许可 / 作者存入 Dexie **v14** `referenceImages` / `referenceImageBlobs`（每主题缓存，可逐张移除，随项目删除；不纳入导出，可重新获取）。
 
 8. **Markdown 表格渲染（Phase 3.1.1 已实现并验证，随 v0.2.6 发布）**：共享 `RichText` 新增 GFM pipe table block（`shared/lib/markdownTable.ts` 纯解析 + `markdownText.ts` block + `RichText` 语义化渲染）；cell 复用现有 inline 文本/code/LaTeX；宽表仅在容器内横向滚动；普通 `|x|` 不误判；code fence / block math 内不解析表格。Tutor Lesson Prompt 升 **v3**（保留 v1/v2）规范表格输出。旧缓存中的多行 Markdown 表格**无需重新调用 AI 即可正确显示**；Prompt v3 经 `contentHash` 使旧课时自然重生成一次。未改 `TUTOR_LESSON_VERSION` / Visualization schema / Dexie。
 
@@ -392,4 +418,5 @@ docs/             architecture.md
 - OCR 质量取决于图片清晰度；手写内容提取效果有限。
 - 课程分析为项目级（覆盖该项目全部已处理文档），非逐文档结果，也非章节级。
 - 数学可视化范围受控：`eigen_2d` 只支持 2×2 实矩阵的**实**特征值/特征向量；复特征值、3×3、Jordan 形、动画、拖拽均不支持，会安全回退为普通 LaTeX，不绘制误导性的实特征方向。
+- 化学 / 生物图范围受控：滴定只支持一元酸 + 强碱；棋盘格最多两对基因、每个基因一个字母；不画 3D 结构、反应机理、细胞 / 器官示意图（这类交给课程原图或联网参考图片）。
 - 冷启动时外观偏好（明暗 / 配色）要等 `UserProfile` 读出后才应用，可能有一帧默认配色。

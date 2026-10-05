@@ -67,6 +67,13 @@ function looksLikeHasseText(text: string): boolean {
   return /(?:\bHasse diagram\b|\bpartial order\b|\bpartially ordered set\b|\bposet\b|Hasse 图|偏序集|偏序关系)/i.test(text)
 }
 
+/** A named probability distribution (the parameters are checked later). */
+function looksLikeDistributionText(text: string): boolean {
+  return /(?:normal distribution|gaussian|binomial distribution|poisson distribution|uniform distribution|exponential distribution|\\sim\s*(?:N|B|\\mathcal\{N\}|\\operatorname\{(?:Bin|Poisson|Exp)\})\s*\(|正态分布|二项分布|泊松分布|均匀分布|指数分布)/i.test(
+    text,
+  )
+}
+
 /** A set operation only counts when a set context is present (English). */
 function looksLikeVennText(text: string): boolean {
   if (/(?:venn diagram|维恩图|文氏图)/i.test(text)) return true
@@ -76,6 +83,21 @@ function looksLikeVennText(text: string): boolean {
   const hasEnglishOperation =
     /(?:\bunion\b|\bintersection\b|\bdifference\b|symmetric difference|\bcomplement\b)/i.test(text)
   return hasSet && hasEnglishOperation
+}
+
+/** Structures, energy profiles or titrations (chemistry courses only). */
+export function looksLikeChemistryFigureText(text: string): boolean {
+  return /(?:\bSMILES\b|structural formula|skeletal formula|functional group|energy (?:profile|diagram)|activation energy|enthalpy change|transition state|titration|equivalence point|结构式|结构简式|分子结构|官能团|能量图|能量变化图|活化能|反应热|焓变|过渡态|滴定|计量点|等当点)/i.test(
+    text,
+  )
+}
+
+/** Crosses, pedigrees or the central dogma (biology courses only). */
+export function looksLikeBiologyFigureText(text: string): boolean {
+  if (/(?<![A-Z])[ACGT]{9,}(?![A-Z])/.test(text)) return true
+  return /(?:Punnett|genotypes?|phenotypes?|monohybrid|dihybrid|pedigree|\bcodons?\b|\bmRNA\b|transcription|棋盘法|基因型|表现型|杂交|系谱|家系|遗传病|转录|翻译|密码子)/i.test(
+    text,
+  )
 }
 
 export function hasGraphableMath(markdown: string): boolean {
@@ -96,6 +118,7 @@ export function hasGraphableMath(markdown: string): boolean {
     looksLikeTransformText(markdown) ||
     looksLikeVennText(markdown) ||
     looksLikeEigenText(markdown) ||
-    looksLikeHasseText(markdown)
+    looksLikeHasseText(markdown) ||
+    looksLikeDistributionText(markdown)
   )
 }

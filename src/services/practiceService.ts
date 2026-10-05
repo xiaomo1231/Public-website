@@ -23,8 +23,16 @@ import { compareMath, numericEquivalent } from '@/infrastructure/math/expression
 import { matchChunkToTopic, overlapScore } from './classProgressService'
 import { AppError } from '@/infrastructure/errors/AppError'
 import { logger } from '@/infrastructure/logger/logger'
-import { t } from '@/i18n'
+import { getUILanguage, t } from '@/i18n'
 import { fnv1a } from '@/shared/lib/hash'
+import { prompts } from '@/infrastructure/ai/prompts'
+import type { Question, QuestionType, RubricPoint } from '@/entities/question/types'
+import type { QuestionAttempt, QuestionEvaluation } from '@/entities/questionAttempt/types'
+import type { AIService } from './aiService'
+import type { MistakeService } from './mistakeService'
+import type { MasteryService } from './masteryService'
+import { ShortAnswerGrader, unverifiedShortAnswer } from './shortAnswerGrader'
+import { loadProjectSubject } from './projectSubject'
 
 /** Extraction confidence at or above this is imported without a review step. */
 const AUTO_VERIFY_CONFIDENCE = 0.6
@@ -102,9 +110,13 @@ export interface PracticeProgress {
 }
 
 export interface PracticeFeedback {
+  /** The stored attempt, so a short-answer judgement can be disputed. */
+  attemptId: string
   isCorrect?: boolean
   expectedAnswer?: string
   method: PracticeAttempt['method']
+  /** Short answer: scoring points, score and evidence. */
+  evaluation?: QuestionEvaluation
   /** 'professor' when the source document supplied the answer. */
   answerSource: PracticeQuestion['answerSource']
 }
@@ -125,8 +137,23 @@ export class PracticeService {
   private contexts: CourseContextRepository
   private visuals: VisualSourceRepository
 
-  constructor(deps: { db?: AppDatabase } = {}) {
+  private ai: AIService | null
+  private mistakes: MistakeService | null
+  private mastery: MasteryService | null
+
+  constructor(
+    deps: {
+      db?: AppDatabase
+      /** Needed only to grade short answers by scoring points. */
+      ai?: AIService
+      mistakes?: MistakeService
+      mastery?: MasteryService
+    } = {},
+  ) {
     this.db = deps.db ?? getDb()
+    this.ai = deps.ai ?? null
+    this.mistakes = deps.mistakes ?? null
+    this.mastery = deps.mastery ?? null
     this.practice = new PracticeRepository(this.db)
     this.documents = new DocumentRepository(this.db)
     this.chunks = new ChunkRepository(this.db)
@@ -363,9 +390,12 @@ export class PracticeService {
     if (!question) throw new AppError(t('errors.practiceQuestionNotFound'), 'NOT_FOUND')
 
     const previous = await this.practice.listAttemptsByQuestion(questionId)
-    const graded = this.grade(question, userAnswer)
+    const graded: { isCorrect?: boolean; method: PracticeAttempt['method']; evaluation?: QuestionEvaluation } =
+      question.type === 'short_answer'
+        ? await this.gradeShortAnswer(question, userAnswer)
+        : this.grade(question, userAnswer)
 
-    await this.practice.addAttempt({
+    const attempt: PracticeAttempt = {
       id: crypto.randomUUID(),
       projectId: question.projectId,
       setId: question.setId,
@@ -373,16 +403,181 @@ export class PracticeService {
       userAnswer,
       ...(graded.isCorrect !== undefined ? { isCorrect: graded.isCorrect } : {}),
       method: graded.method,
+      ...(graded.evaluation ? { evaluation: graded.evaluation } : {}),
       attemptNumber: previous.length + 1,
       submittedAt: Date.now(),
-    })
+    }
+    await this.practice.addAttempt(attempt)
+    await this.recordLearning(question, attempt)
 
     return {
+      attemptId: attempt.id,
       ...(graded.isCorrect !== undefined ? { isCorrect: graded.isCorrect } : {}),
       ...(question.expectedAnswer ? { expectedAnswer: question.expectedAnswer } : {}),
       method: graded.method,
+      ...(graded.evaluation ? { evaluation: graded.evaluation } : {}),
       answerSource: question.answerSource,
     }
+  }
+
+  /**
+   * The student disputes a short-answer judgement: the attempt stays visible
+   * but stops counting, and is taken back out of the mistake book and mastery.
+   */
+  async disputeAttempt(attemptId: string): Promise<PracticeAttempt> {
+    const attempt = await this.practice.getAttempt(attemptId)
+    if (!attempt) throw new AppError(t('errors.practiceQuestionNotFound'), 'NOT_FOUND')
+    if (!attempt.evaluation || attempt.evaluation.disputed) return attempt
+    const updated = await this.practice.updateAttempt({
+      ...attempt,
+      evaluation: { ...attempt.evaluation, disputed: true },
+    })
+    const question = await this.practice.getQuestion(attempt.questionId)
+    if (question) {
+      await this.mistakes?.removeAttempt(attempt.projectId, question.id, attempt.id)
+      if (this.mastery) {
+        const knowledgePoint = await this.knowledgePointFor(question)
+        const history = (await this.practiceHistory(question.projectId, knowledgePoint))
+        await this.mastery.rebuild(question.projectId, history)
+      }
+    }
+    return updated
+  }
+
+  /**
+   * Short answers are graded by scoring points split from the professor's
+   * answer. Without a reference answer there is nothing to grade against, and
+   * without an AI the answer is shown with its points but not scored.
+   */
+  private async gradeShortAnswer(
+    question: PracticeQuestion,
+    userAnswer: string,
+  ): Promise<{ isCorrect?: boolean; method: PracticeAttempt['method']; evaluation?: QuestionEvaluation }> {
+    if (!question.expectedAnswer?.trim()) return { method: 'none' }
+    if (!this.ai) {
+      return {
+        method: 'none',
+        evaluation: unverifiedShortAnswer(
+          this.asQuizQuestion(question, question.rubric),
+          userAnswer.trim(),
+          t('shortAnswer.needsAi'),
+        ),
+      }
+    }
+    const rubric = await this.ensureRubric(question)
+    const subject = await loadProjectSubject(question.projectId, this.db)
+    const evaluation = await new ShortAnswerGrader(this.ai).grade(
+      this.asQuizQuestion(question, rubric),
+      userAnswer.trim(),
+      subject,
+    )
+    return {
+      ...(evaluation.isCorrect !== null ? { isCorrect: evaluation.isCorrect } : {}),
+      method: evaluation.method === 'rubric_ai' ? 'rubric' : 'none',
+      evaluation,
+    }
+  }
+
+  /** Split the professor's answer into scoring points once, and cache them. */
+  private async ensureRubric(question: PracticeQuestion): Promise<RubricPoint[] | undefined> {
+    const answer = question.expectedAnswer?.trim()
+    if (!answer || !this.ai) return question.rubric
+    const hash = fnv1a(`${prompts.rubricExtractor.VERSION}|${answer}`)
+    if (question.rubric?.length && question.rubricAnswerHash === hash) return question.rubric
+    try {
+      const { data } = await this.ai.chatJSON<unknown>([
+        { role: 'system', content: prompts.rubricExtractor.buildSystemPrompt() },
+        {
+          role: 'user',
+          content: prompts.rubricExtractor.buildUserPrompt({
+            question: question.prompt,
+            referenceAnswer: answer,
+            language: getUILanguage() === 'zh-CN' ? 'zh' : 'en',
+          }),
+        },
+      ])
+      const points = prompts.rubricExtractor.normalizeRubricPoints(data)
+      if (!points) return question.rubric
+      const rubric = points.map((text, index) => ({ id: `p${index + 1}`, text }))
+      await this.practice.updateQuestion(question.id, { rubric, rubricAnswerHash: hash })
+      return rubric
+    } catch (err) {
+      logger.warn('Could not split the reference answer into scoring points', {
+        questionId: question.id,
+        error: (err as Error)?.message,
+      })
+      return question.rubric
+    }
+  }
+
+  /** A practice question in the shape the quiz grader / mistake book expect. */
+  private asQuizQuestion(question: PracticeQuestion, rubric?: RubricPoint[]): Question {
+    return {
+      id: question.id,
+      projectId: question.projectId,
+      ...(question.topicId ? { topicId: question.topicId } : {}),
+      knowledgePoint: question.documentName,
+      type: PRACTICE_TO_QUIZ_TYPE[question.type] ?? 'short_answer',
+      difficulty: 'basic',
+      prompt: question.prompt,
+      ...(question.options.length > 0
+        ? {
+            options: question.options.map((option, index) => ({
+              id: `opt-${index + 1}`,
+              label: option.label,
+              isCorrect: false,
+            })),
+          }
+        : {}),
+      correctAnswer: question.expectedAnswer ?? '',
+      ...(rubric?.length ? { rubric } : {}),
+      ...(question.answerExplanation ? { solution: question.answerExplanation } : {}),
+      hints: [],
+      sourceRefs: [],
+      promptVersion: 'practice',
+      createdAt: question.createdAt,
+    }
+  }
+
+  private async knowledgePointFor(question: PracticeQuestion): Promise<string> {
+    const topic = question.topicId ? await this.analyses.getTopic(question.topicId) : undefined
+    return topic?.name ?? question.documentName
+  }
+
+  /**
+   * Graded practice work counts like quiz work: a wrong (or not fully
+   * covered) answer goes to the mistake book, and every graded answer
+   * updates mastery. Ungraded answers change neither.
+   */
+  private async recordLearning(question: PracticeQuestion, attempt: PracticeAttempt): Promise<void> {
+    if (attempt.isCorrect === undefined || (!this.mistakes && !this.mastery)) return
+    const knowledgePoint = await this.knowledgePointFor(question)
+    const quizQuestion = { ...this.asQuizQuestion(question, question.rubric), knowledgePoint }
+    const asAttempt = practiceToQuizAttempt(attempt, quizQuestion)
+    try {
+      if (this.mistakes) await this.mistakes.recordFromAttempt(asAttempt, quizQuestion)
+      if (this.mastery) await this.mastery.record(asAttempt)
+    } catch (err) {
+      logger.warn('Could not record practice learning progress', {
+        questionId: question.id,
+        error: (err as Error)?.message,
+      })
+    }
+  }
+
+  /** Practice attempts on one knowledge point, as quiz attempts (for a mastery rebuild). */
+  private async practiceHistory(projectId: string, knowledgePoint: string): Promise<QuestionAttempt[]> {
+    const questions = await this.practice.listQuestionsByProject(projectId)
+    const history: QuestionAttempt[] = []
+    for (const question of questions) {
+      if ((await this.knowledgePointFor(question)) !== knowledgePoint) continue
+      const quizQuestion = { ...this.asQuizQuestion(question, question.rubric), knowledgePoint }
+      for (const attempt of await this.practice.listAttemptsByQuestion(question.id)) {
+        if (attempt.isCorrect === undefined) continue
+        history.push(practiceToQuizAttempt(attempt, quizQuestion))
+      }
+    }
+    return history
   }
 
   async progress(setId: string): Promise<PracticeProgress> {
@@ -540,5 +735,36 @@ export class PracticeService {
       (option) => normalizeAnswer(option.label) === normalizeAnswer(trimmed),
     )
     return index >= 0 ? String.fromCharCode(65 + index) : trimmed
+  }
+}
+
+const PRACTICE_TO_QUIZ_TYPE: Partial<Record<PracticeQuestion['type'], QuestionType>> = {
+  single_choice: 'multiple_choice',
+  true_false: 'true_false',
+  numeric: 'numeric',
+  math_expr: 'math_expr',
+  short_answer: 'short_answer',
+}
+
+/** A practice attempt in the quiz-attempt shape used by mastery and mistakes. */
+function practiceToQuizAttempt(attempt: PracticeAttempt, question: Question): QuestionAttempt {
+  const evaluation: QuestionEvaluation = attempt.evaluation ?? {
+    isCorrect: attempt.isCorrect ?? null,
+    method: attempt.method === 'numeric' ? 'numeric' : attempt.method === 'symbolic' ? 'math_equivalent' : 'exact',
+    confidence: 1,
+    ...(question.correctAnswer ? { expected: question.correctAnswer } : {}),
+  }
+  return {
+    id: attempt.id,
+    projectId: attempt.projectId,
+    questionId: question.id,
+    ...(question.topicId ? { topicId: question.topicId } : {}),
+    knowledgePoint: question.knowledgePoint,
+    questionType: question.type,
+    difficulty: question.difficulty,
+    userAnswer: attempt.userAnswer,
+    evaluation,
+    hintsUsed: 0,
+    createdAt: attempt.submittedAt,
   }
 }

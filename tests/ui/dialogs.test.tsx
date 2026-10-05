@@ -128,6 +128,40 @@ describe('ConfirmDialog', () => {
 })
 
 describe('RenameProjectDialog', () => {
+  it('stays a plain rename dialog without a subject handler', () => {
+    render(
+      <RenameProjectDialog open onOpenChange={vi.fn()} project={makeProject()} onRename={vi.fn()} />,
+    )
+    expect(screen.getByRole('heading', { name: 'Rename project' })).toBeInTheDocument()
+    expect(screen.queryByLabelText('Subject')).not.toBeInTheDocument()
+  })
+
+  it('edits the subject too when given a subject handler, and explains the effect', async () => {
+    const onRename = vi.fn()
+    const onChangeSubject = vi.fn()
+    const user = userEvent.setup()
+    render(
+      <RenameProjectDialog
+        open
+        onOpenChange={vi.fn()}
+        project={makeProject()}
+        onRename={onRename}
+        onChangeSubject={onChangeSubject}
+      />,
+    )
+    expect(screen.getByRole('heading', { name: 'Edit project' })).toBeInTheDocument()
+    expect(screen.getByRole('combobox', { name: 'Subject' })).toHaveTextContent('Calculus')
+    expect(screen.getByText(/regenerates the course analysis and lessons/)).toBeInTheDocument()
+
+    // Only the changed field is saved.
+    const input = screen.getByLabelText(/project name/i)
+    await user.clear(input)
+    await user.type(input, 'Calculus II')
+    await user.click(screen.getByRole('button', { name: /save/i }))
+    await waitFor(() => expect(onRename).toHaveBeenCalledWith('Calculus II'))
+    expect(onChangeSubject).not.toHaveBeenCalled()
+  })
+
   it('prefills the current name and disables save until it changes', async () => {
     const onRename = vi.fn()
     const user = userEvent.setup()

@@ -1,10 +1,11 @@
 import { useEffect, useId, useMemo, useRef, useState, type RefObject } from 'react'
-import type {
-  Matrix2x2,
-  TutorVisualization,
-  VisualizationPoint,
-  VisualizationRelation,
-  VisualizationViewport,
+import {
+  isScienceVisualization,
+  type Matrix2x2,
+  type TutorVisualization,
+  type VisualizationPoint,
+  type VisualizationRelation,
+  type VisualizationViewport,
 } from '@/entities/tutorVisualization/types'
 import {
   computeAutoViewport,
@@ -38,6 +39,8 @@ import { layoutForWidth } from './plotLayout'
 import { TutorGraphSvg } from './TutorGraphFigure'
 import { TutorVennSvg } from './TutorVennFigure'
 import { TutorHasseSvg } from './TutorHasseFigure'
+import { DistributionFacts, TutorDistributionSvg } from './TutorDistributionFigure'
+import { ScienceFigureBody, ScienceFigureFacts } from './TutorScienceFigure'
 
 /**
  * The single deterministic renderer for structured 2D visualizations.
@@ -139,9 +142,25 @@ interface PlotGeometry {
   eigen?: EigenGeometry
 }
 
+/** Types drawn by a dedicated renderer rather than the shared plane plot. */
+type OwnRendererVisualization = Exclude<
+  TutorVisualization,
+  { type: 'function_2d' | 'equation_2d' | 'inequality_2d' | 'points_2d' | 'table_2d' | 'vectors_2d' | 'transform_2d' | 'eigen_2d' }
+>
+
+function hasOwnRendererType(visualization: TutorVisualization): visualization is OwnRendererVisualization {
+  return (
+    visualization.type === 'graph_2d' ||
+    visualization.type === 'venn_2d' ||
+    visualization.type === 'hasse_2d' ||
+    visualization.type === 'distribution_2d' ||
+    isScienceVisualization(visualization)
+  )
+}
+
 function buildGeometry(visualization: TutorVisualization, aspect: number): PlotGeometry | null {
   // graph_2d and venn_2d have their own content renderers.
-  if (visualization.type === 'graph_2d' || visualization.type === 'venn_2d' || visualization.type === 'hasse_2d') return null
+  if (hasOwnRendererType(visualization)) return null
 
   if (visualization.type === 'transform_2d') {
     const viewport =
@@ -376,7 +395,7 @@ function buildAriaLabel(visualization: TutorVisualization, t: UseTranslationResu
     return t('viz.vectorsAria', { count: visualization.vectors.length })
   }
   // graph_2d / venn_2d build their own accessible labels.
-  if (visualization.type === 'graph_2d' || visualization.type === 'venn_2d' || visualization.type === 'hasse_2d') return ''
+  if (hasOwnRendererType(visualization)) return ''
   if (visualization.type === 'transform_2d') return t('viz.transformAria')
   if (visualization.type === 'eigen_2d') return t('viz.eigenAria')
   const expressions = visualization.expressions.map((expression) => expression.latex).join(', ')
@@ -392,7 +411,7 @@ export interface TutorVisualizationFigureProps {
 export function TutorVisualizationFigure({
   visualization,
 }: TutorVisualizationFigureProps): JSX.Element | null {
-  const { t } = useTranslation()
+  const { t, language } = useTranslation()
   const rawId = useId()
   const idBase = rawId.replace(/[^a-zA-Z0-9_-]/g, '')
   const clipId = `viz-clip-${idBase}`
@@ -404,7 +423,7 @@ export function TutorVisualizationFigure({
   const plotH = layout.height - layout.pad.top - layout.pad.bottom
   const aspect = plotW / plotH
 
-  const hasOwnRenderer = visualization.type === 'graph_2d' || visualization.type === 'venn_2d' || visualization.type === 'hasse_2d'
+  const hasOwnRenderer = hasOwnRendererType(visualization)
   const geometry = useMemo(
     () => (hasOwnRenderer ? null : buildGeometry(visualization, aspect)),
     [visualization, aspect, hasOwnRenderer],
@@ -420,7 +439,7 @@ export function TutorVisualizationFigure({
       <figure data-tutor-visualization={visualization.id} className="my-5 min-w-0 space-y-2">
         <div
           ref={cardRef}
-          className="w-full max-w-full overflow-hidden rounded-md border border-border/70 bg-card p-2"
+          className="w-full max-w-full overflow-hidden rounded-lg border border-border/70 bg-card p-2"
         >
           <TutorGraphSvg visualization={visualization} layout={layout} idBase={idBase} t={t} />
         </div>
@@ -438,7 +457,7 @@ export function TutorVisualizationFigure({
       <figure data-tutor-visualization={visualization.id} className="my-5 min-w-0 space-y-2">
         <div
           ref={cardRef}
-          className="w-full max-w-full overflow-hidden rounded-md border border-border/70 bg-card p-2"
+          className="w-full max-w-full overflow-hidden rounded-lg border border-border/70 bg-card p-2"
         >
           <TutorVennSvg visualization={visualization} layout={layout} idBase={idBase} t={t} />
         </div>
@@ -454,9 +473,33 @@ export function TutorVisualizationFigure({
   if (visualization.type === 'hasse_2d') {
     return (
       <figure data-tutor-visualization={visualization.id} className="my-5 min-w-0 space-y-2">
-        <div ref={cardRef} className="w-full max-w-full overflow-hidden rounded-md border border-border/70 bg-card p-2">
+        <div ref={cardRef} className="w-full max-w-full overflow-hidden rounded-lg border border-border/70 bg-card p-2">
           <TutorHasseSvg visualization={visualization} layout={layout} t={t} />
         </div>
+        {visualization.caption && <figcaption className="text-center text-[13px] text-muted-foreground">{visualization.caption}</figcaption>}
+      </figure>
+    )
+  }
+
+  if (visualization.type === 'distribution_2d') {
+    return (
+      <figure data-tutor-visualization={visualization.id} className="my-5 min-w-0 space-y-2">
+        <div ref={cardRef} className="w-full max-w-full overflow-hidden rounded-lg border border-border/70 bg-card p-2">
+          <TutorDistributionSvg visualization={visualization} layout={layout} t={t} />
+        </div>
+        <DistributionFacts visualization={visualization} t={t} />
+        {visualization.caption && <figcaption className="text-center text-[13px] text-muted-foreground">{visualization.caption}</figcaption>}
+      </figure>
+    )
+  }
+
+  if (isScienceVisualization(visualization)) {
+    return (
+      <figure data-tutor-visualization={visualization.id} className="my-5 min-w-0 space-y-2">
+        <div ref={cardRef} className="w-full max-w-full overflow-hidden rounded-lg border border-border/70 bg-card p-2">
+          <ScienceFigureBody visualization={visualization} layout={layout} t={t} language={language} />
+        </div>
+        <ScienceFigureFacts visualization={visualization} t={t} />
         {visualization.caption && <figcaption className="text-center text-[13px] text-muted-foreground">{visualization.caption}</figcaption>}
       </figure>
     )
@@ -509,7 +552,7 @@ export function TutorVisualizationFigure({
     <figure data-tutor-visualization={visualization.id} className="my-5 min-w-0 space-y-2">
       <div
         ref={cardRef}
-        className="w-full max-w-full overflow-hidden rounded-md border border-border/70 bg-card p-2"
+        className="w-full max-w-full overflow-hidden rounded-lg border border-border/70 bg-card p-2"
       >
         {showPlot && (
           <svg

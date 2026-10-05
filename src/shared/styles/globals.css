@@ -21,7 +21,17 @@
     --border: 220 13% 91%;
     --input: 220 13% 91%;
     --ring: 250 60% 48%;
-    --radius: 0.9rem;
+    /*
+     * Radius scale (tailwind.config.ts maps rounded-* onto these). Kept as
+     * variables so overall roundness can be tuned in one place.
+     */
+    --radius-sm: 0.25rem;
+    --radius-xs: 0.375rem;
+    --radius-md: 0.5rem;
+    --radius-lg: 0.75rem;
+    --radius-xl: 1rem;
+    --radius-2xl: 1.25rem;
+    --radius-3xl: 1.5rem;
 
     /*
      * Color-theme tokens.
@@ -31,7 +41,7 @@
      * the semantic tokens; the aliases follow automatically because `var()`
      * is substituted after the cascade. Components reference either the
      * semantic token (bg-primary, bg-accent, …) or the theme alias
-     * (bg-theme-accent-soft, tech-grid) — never a literal colour.
+     * (bg-theme-accent-soft, bg-theme-primary-soft) — never a literal colour.
      */
     --theme-primary: var(--primary);
     --theme-primary-soft: var(--secondary);
@@ -340,7 +350,7 @@
 
   ::-webkit-scrollbar-thumb {
     background: hsl(var(--border));
-    border-radius: 5px;
+    border-radius: 9999px;
   }
 
   ::-webkit-scrollbar-thumb:hover {
@@ -376,43 +386,46 @@
   }
 
   /*
-   * Precision grid — the shell's decorative ground. A blueprint rule set
-   * (fine minor squares over a coarser major grid) drawn from theme tokens,
-   * masked so it fades before it reaches any reading surface. Purely
-   * presentational: `pointer-events: none`, no text, never on a card. This is
-   * the instrument-paper surface the whole product sits on.
+   * Sliding highlight (see `useSlidingIndicator`): one pill that glides to the
+   * active tab / nav link. Positioned by inline transform + size; it only
+   * transitions once the first position has painted, so it never sweeps in
+   * from the corner on load.
    */
-  .tech-grid {
+  .slide-indicator {
     position: absolute;
-    inset: 0;
-    z-index: 0;
-    overflow: hidden;
+    left: 0;
+    top: 0;
     pointer-events: none;
-    -webkit-mask-image: radial-gradient(115% 82% at 50% 0%, #000 30%, transparent 80%);
-    mask-image: radial-gradient(115% 82% at 50% 0%, #000 30%, transparent 80%);
+  }
+  .slide-indicator[data-animate='true'] {
+    transition:
+      transform 420ms cubic-bezier(0.22, 1, 0.36, 1),
+      width 420ms cubic-bezier(0.22, 1, 0.36, 1),
+      height 420ms cubic-bezier(0.22, 1, 0.36, 1);
   }
 
-  .tech-grid::before,
-  .tech-grid::after {
-    content: '';
-    position: absolute;
-    inset: 0;
+  /*
+   * Staggered entrance for a group of cards / rows: each direct child rises in
+   * a beat after the previous one. `backwards` fill releases the transform
+   * when done, so hover lifts keep working afterwards.
+   */
+  .stagger-in > * {
+    animation: stagger-rise 0.5s cubic-bezier(0.22, 1, 0.36, 1) backwards;
   }
-
-  /* Fine graph-paper squares. */
-  .tech-grid::before {
-    background-image:
-      linear-gradient(to right, hsl(var(--theme-primary) / 0.1) 1px, transparent 1px),
-      linear-gradient(to bottom, hsl(var(--theme-primary) / 0.1) 1px, transparent 1px);
-    background-size: 26px 26px;
+  .stagger-in > :nth-child(2) {
+    animation-delay: 60ms;
   }
-
-  /* Major rules, on the theme accent, every five cells. */
-  .tech-grid::after {
-    background-image:
-      linear-gradient(to right, hsl(var(--theme-accent) / 0.22) 1px, transparent 1px),
-      linear-gradient(to bottom, hsl(var(--theme-accent) / 0.22) 1px, transparent 1px);
-    background-size: 130px 130px;
+  .stagger-in > :nth-child(3) {
+    animation-delay: 120ms;
+  }
+  .stagger-in > :nth-child(4) {
+    animation-delay: 180ms;
+  }
+  .stagger-in > :nth-child(5) {
+    animation-delay: 240ms;
+  }
+  .stagger-in > :nth-child(n + 6) {
+    animation-delay: 300ms;
   }
 
   /* A quiet divider for lists that should not become a stack of cards. */
@@ -460,78 +473,6 @@
   .sidebar-link--active {
     box-shadow: 0 4px 14px -8px hsl(var(--primary) / 0.4);
   }
-  .page-icon {
-    box-shadow: var(--shadow-soft);
-  }
-  /*
-   * Hero panel: a crisp instrument surface with restrained depth and a
-   * hairline edge, rather than a soft "floating card".
-   */
-  .lab-hero {
-    border-radius: 24px;
-    border: 1px solid hsl(var(--border) / 0.7);
-    box-shadow: var(--shadow-lift);
-  }
-
-  /*
-   * Blueprint frame: hairline registration brackets at the top-left and
-   * bottom-right corners, like a plan drawing. Two bracket marks, not a
-   * coloured side bar (which is banned as a card accent).
-   */
-  .blueprint-frame {
-    position: relative;
-  }
-  .blueprint-frame::before,
-  .blueprint-frame::after {
-    content: '';
-    position: absolute;
-    width: 13px;
-    height: 13px;
-    border: 1px solid hsl(var(--primary) / 0.6);
-    pointer-events: none;
-  }
-  .blueprint-frame::before {
-    top: -1px;
-    left: -1px;
-    border-right: 0;
-    border-bottom: 0;
-    border-top-left-radius: inherit;
-  }
-  .blueprint-frame::after {
-    right: -1px;
-    bottom: -1px;
-    border-left: 0;
-    border-top: 0;
-    border-bottom-right-radius: inherit;
-  }
-
-  /*
-   * Instrument tick scale: fine ticks with rarer major ticks. A measurement
-   * rule used as a section device — never decoration on body copy.
-   */
-  .tick-rule {
-    height: 6px;
-    background-repeat: no-repeat;
-    background-position: left bottom;
-    background-image:
-      repeating-linear-gradient(to right, hsl(var(--border)) 0 1px, transparent 1px 14px),
-      repeating-linear-gradient(to right, hsl(var(--border) / 0.55) 0 1px, transparent 1px 70px);
-    background-size: 100% 4px, 100% 6px;
-  }
-
-  /* Graph-paper plate for project covers. */
-  .plate-grid {
-    background-image:
-      linear-gradient(to right, hsl(var(--primary) / 0.14) 1px, transparent 1px),
-      linear-gradient(to bottom, hsl(var(--primary) / 0.14) 1px, transparent 1px);
-    background-size: 14px 14px;
-  }
-
-  /* Monospace micro-label — only for measured / technical data. */
-  .label-mono {
-    @apply font-mono text-[10px] font-medium uppercase tracking-[0.18em] text-muted-foreground;
-  }
-
   /* Numeric readouts align in columns. */
   .data-num {
     font-variant-numeric: tabular-nums;
@@ -545,47 +486,18 @@
     animation: graph-draw 1.6s cubic-bezier(0.22, 1, 0.36, 1) forwards;
   }
   /*
-   * Homepage entrance: one short, staggered rise per element — transform and
-   * opacity only, so nothing reflows and controls are clickable throughout.
-   * Played once (see the dashboard) and switched off under reduced motion.
-   */
-  .intro-item {
-    animation: intro-rise 0.55s cubic-bezier(0.22, 1, 0.36, 1) both;
-  }
-  /*
    * A brief ring on a value that just changed (function switch / reset). It is
    * a state cue, not a loop; the number itself is never delayed.
    */
   .value-flash {
     animation: value-flash 0.55s ease-out;
   }
-  .floating-course {
-    transition:
-      transform 220ms ease,
-      box-shadow 220ms ease;
-  }
-  /* Instrument plate at the top of a course card (grid + subject glyph). */
-  .subject-plate {
-    position: relative;
-    overflow: hidden;
-    border-bottom: 1px solid hsl(var(--border) / 0.6);
-  }
   @media (min-width: 1024px) {
     .floating-sidebar {
-      border-radius: 28px;
-    }
-  }
-  @media (max-width: 767px) {
-    .lab-hero {
-      border-radius: 20px;
+      border-radius: var(--radius-3xl);
     }
   }
   @media (prefers-reduced-motion: no-preference) {
-    /* Only the single "continue learning" entry lifts — the quiet list rows do
-       not, so the primary entry reads as the one interactive surface. */
-    .floating-course:hover {
-      transform: translateY(-2px);
-    }
     .sidebar-link:hover {
       transform: translateX(3px);
     }
@@ -599,8 +511,8 @@
   }
 }
 
-/* A short rise used for the homepage entrance. */
-@keyframes intro-rise {
+/* Staggered entrance for groups of cards / rows (see `.stagger-in`). */
+@keyframes stagger-rise {
   from {
     opacity: 0;
     transform: translateY(10px);
@@ -661,13 +573,13 @@
 
   .animate-rise,
   .animate-fade,
+  .animate-tab-in,
+  .animate-float,
+  .stagger-in > *,
   .progress-reveal,
   .progress-indeterminate,
   .graph-draw,
-  .intro-item,
-  .value-flash,
-  .tech-grid::before,
-  .tech-grid::after {
+  .value-flash {
     animation: none !important;
   }
 

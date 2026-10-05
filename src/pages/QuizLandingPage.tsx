@@ -131,7 +131,7 @@ export function QuizLandingPage(): JSX.Element {
           </CardContent>
         </Card>
 
-        <div ref={configRef} tabIndex={-1} className="scroll-mt-4 rounded-[1.5rem] outline-none">
+        <div ref={configRef} tabIndex={-1} className="scroll-mt-4 rounded-2xl outline-none">
           <QuizConfigDialog projectId={projectId} onStart={handleStart} busy={busy} progress={progress} />
         </div>
 
@@ -139,7 +139,7 @@ export function QuizLandingPage(): JSX.Element {
           <LoadingState label={t('quiz.loading')} />
         ) : quizzes.length === 0 ? (
           <EmptyState
-            icon={<Sparkles className="h-10 w-10" />}
+            icon={<ListChecks className="h-10 w-10" />}
             title={t('quiz.empty')}
             description={t('quiz.emptyHint')}
             action={
@@ -160,7 +160,7 @@ export function QuizLandingPage(): JSX.Element {
                 <Link
                   key={q.id}
                   to={q.status === 'completed' ? `/projects/${projectId}/quiz/${q.id}/result` : `/projects/${projectId}/quiz/${q.id}`}
-                  className="flex flex-wrap items-center gap-3 rounded-md border px-3 py-2 text-sm transition-colors hover:bg-accent/50"
+                  className="flex flex-wrap items-center gap-3 rounded-lg border px-3 py-2 text-sm transition-colors hover:bg-accent/50"
                 >
                   <span className="min-w-0 flex-1 truncate font-medium">{q.title}</span>
                   <Badge variant={q.status === 'completed' ? 'default' : q.status === 'failed' ? 'destructive' : 'secondary'}>

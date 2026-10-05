@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { ProjectDetailPage } from '@/pages/ProjectDetailPage'
@@ -53,51 +53,68 @@ beforeEach(() => {
 })
 
 describe('ProjectDetailPage', () => {
-  it('renders the project header, tabs and the default documents tab', () => {
+  it('renders the project header, its two tabs and the default documents tab', () => {
     renderPage()
 
     expect(screen.getByText('Physics 101')).toBeInTheDocument()
     expect(screen.getByText('Mechanics and waves')).toBeInTheDocument()
-    for (const label of ['Documents', 'Analysis', 'Overview', 'Quiz', 'Mistakes']) {
-      expect(screen.getByRole('tab', { name: label })).toBeInTheDocument()
-    }
-    // Documents is the default tab.
+    // Only real content tabs: quiz / mistakes live on their own pages, not as
+    // placeholder tabs that always look empty.
+    expect(screen.getAllByRole('tab').map((tab) => tab.textContent)).toEqual([
+      'Documents',
+      'Analysis',
+    ])
     expect(screen.getByTestId('documents-tab')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Rename' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Edit' })).toBeInTheDocument()
   })
 
-  it('switches to the overview tab', async () => {
+  it('opens the analysis tab from the URL and keeps the tab in the URL', async () => {
+    const user = userEvent.setup()
+    useProjectStore.setState({
+      projects: [PROJECT],
+      currentProjectId: null,
+      loading: false,
+      error: null,
+      loaded: true,
+    })
+    render(
+      <MemoryRouter initialEntries={['/projects/p1?tab=analysis']}>
+        <Routes>
+          <Route path="/projects/:id" element={<ProjectDetailPage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+    expect(await screen.findByTestId('analysis-panel')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('tab', { name: 'Documents' }))
+    expect(await screen.findByTestId('documents-tab')).toBeInTheDocument()
+  })
+
+  it('uses the shared course navigation, with a clear primary action', async () => {
     const user = userEvent.setup()
     renderPage()
 
-    await user.click(screen.getByRole('tab', { name: 'Overview' }))
-
-    expect(await screen.findByText('About this project')).toBeInTheDocument()
-    expect(screen.getByText('Upcoming in this project')).toBeInTheDocument()
-  })
-
-  it('keeps every learned destination reachable from the workspace, with a clear primary', async () => {
-    const user = userEvent.setup()
-    renderPage()
-
-    // The course path is always visible on the course home.
-    expect(screen.getByText('Course path')).toBeInTheDocument()
-    const tutorLinks = screen.getAllByRole('link', { name: /Open Tutor/ })
-    expect(tutorLinks.length).toBeGreaterThanOrEqual(1)
-    for (const link of tutorLinks) {
-      expect(link).toHaveAttribute('href', '/projects/p1/tutor')
-    }
+    const nav = screen.getByRole('navigation', { name: 'Course sections' })
+    expect(within(nav).getByRole('link', { name: 'Course home' })).toHaveAttribute(
+      'aria-current',
+      'page',
+    )
     const links: Record<string, string> = {
-      Tutor: '/projects/p1/tutor',
+      Files: '/projects/p1/files',
       Homework: '/projects/p1/homework',
+      Tutor: '/projects/p1/tutor',
       Quiz: '/projects/p1/quiz',
       Mistakes: '/projects/p1/mistakes',
       Mastery: '/projects/p1/mastery',
-      'Chat History': '/projects/p1/history',
+      History: '/projects/p1/history',
     }
     for (const [name, href] of Object.entries(links)) {
-      expect(screen.getAllByRole('link', { name })[0]).toHaveAttribute('href', href)
+      expect(within(nav).getByRole('link', { name })).toHaveAttribute('href', href)
     }
+    expect(screen.getByRole('link', { name: /Open Tutor/ })).toHaveAttribute(
+      'href',
+      '/projects/p1/tutor',
+    )
 
     await user.click(screen.getByRole('tab', { name: 'Analysis' }))
     expect(await screen.findByTestId('analysis-panel')).toBeInTheDocument()

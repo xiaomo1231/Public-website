@@ -121,11 +121,14 @@ describe('DocumentAnalysisService', () => {
       chunks: chunksRepo,
       analyses: analysesRepo,
     })
-    const result = await svc.analyzeProject(p.id, { subject: 'calculus' })
+    // The subject comes from the project itself, not from the caller.
+    const result = await svc.analyzeProject(p.id)
     void result
 
     const analysis = await analysesRepo.getByProject(p.id)
     expect(analysis?.status).toBe('ready')
+    // Provenance records the subject profile, so a subject change makes it stale.
+    expect(analysis?.promptVersion).toBe('v2+subject-profile/v1:calculus')
     expect(analysis?.topicCount).toBe(1)
     expect(analysis?.formulaCount).toBe(1)
     expect(analysis?.symbolCount).toBe(1)

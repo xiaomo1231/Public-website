@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { ArrowLeft, ArrowRight, Brain, Languages, Sigma, Sparkles } from 'lucide-react'
+import { ArrowLeft, ArrowRight, Brain, GraduationCap, Languages, Sigma } from 'lucide-react'
 import { Button } from '@/shared/ui/Button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/shared/ui/Card'
 import { EmptyState } from '@/shared/ui/EmptyState'
@@ -135,7 +135,7 @@ export function TutorPage(): JSX.Element {
                 <ArrowLeft className="h-4 w-4" />
               </Link>
             </Button>
-            <Sparkles className="h-4 w-4" />
+            <GraduationCap className="h-4 w-4" />
             {t('tutor.title')}
           </div>
         }
@@ -193,7 +193,7 @@ export function TutorPage(): JSX.Element {
                       setActiveTopicId(topic.id)
                       navigate(`/projects/${projectId}/tutor/${topic.id}`)
                     }}
-                    className={`flex w-full min-w-0 items-start gap-2 rounded-md px-2 py-2 text-left text-sm transition-colors ${
+                    className={`flex w-full min-w-0 items-start gap-2 rounded-lg px-2 py-2 text-left text-sm transition-colors ${
                       activeTopic?.id === topic.id
                         ? 'bg-accent text-accent-foreground'
                         : 'hover:bg-accent/50'
@@ -217,7 +217,7 @@ export function TutorPage(): JSX.Element {
                 topicDescription={activeTopic.description}
                 state={lessonState}
                 footer={
-                  <div className="blueprint-frame mt-2 rounded-xl border border-border/70 bg-muted/20 p-5">
+                  <div className="mt-2 rounded-lg border border-border/70 bg-muted/20 p-5">
                     <h2 className="text-base font-semibold text-foreground">
                       {t('tutor.readyToPractice')}
                     </h2>

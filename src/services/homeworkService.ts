@@ -91,6 +91,8 @@ import {
   isRetryableHomeworkError,
   type HomeworkErrorKind,
 } from '@/entities/homework/errorKind'
+import { loadProjectSubject } from './projectSubject'
+import type { Subject } from '@/entities/project/types'
 
 /** Hard cap on questions extracted from one assignment. */
 const MAX_QUESTIONS = 50
@@ -231,11 +233,18 @@ export class HomeworkService {
       question = await this.homework.updateQuestion(questionId, { draftText: draft })
       if (!question) throw new AppError(t('homework.questionMissing'), 'NOT_FOUND')
     }
-    const cached = currentAnswerCheck(question, draft, language)
+    // The check prompt plus the course subject profile; a subject change makes
+    // a stored check stale.
+    const subject = await loadProjectSubject(question.projectId, this.db)
+    const checkVersion = prompts.subjectProfile.subjectPromptVersion(
+      prompts.homeworkAnswerCheck.VERSION,
+      subject,
+    )
+    const cached = currentAnswerCheck(question, draft, language, checkVersion)
     if (cached) return cached
     const reference = answerReference(question)
     if (!reference) throw new AppError(t('homework.check.noReference'), 'VALIDATION_ERROR')
-    const inputHash = answerCheckInputHash(question, draft, language, prompts.homeworkAnswerCheck.VERSION)
+    const inputHash = answerCheckInputHash(question, draft, language, checkVersion)
     const local = reference.kind === 'professor'
       ? checkObjectiveAnswer(question, reference.text, submittedDraft) : null
     let check: HomeworkAnswerCheck
@@ -243,13 +252,16 @@ export class HomeworkService {
       check = {
         method: 'local', verdict: local.verdict, expectedAnswer: local.expectedAnswer,
         feedback: t(local.verdict === 'correct' ? 'homework.check.objectiveCorrect' : 'homework.check.objectiveIncorrect'),
-        referenceKind: reference.kind, inputHash, language, promptVersion: prompts.homeworkAnswerCheck.VERSION,
+        referenceKind: reference.kind, inputHash, language, promptVersion: checkVersion,
         questionSourceRefs: question.sourceRefs, answerChunkIds: question.answerChunkIds ?? [], createdAt: Date.now(),
       }
     } else {
       const ai = this.requireAI()
       const messages: ChatMessage[] = [
-        { role: 'system', content: prompts.homeworkAnswerCheck.buildSystemPrompt() },
+        {
+          role: 'system',
+          content: prompts.subjectProfile.withSubject(prompts.homeworkAnswerCheck.buildSystemPrompt(), subject),
+        },
         { role: 'user', content: prompts.homeworkAnswerCheck.buildUserPrompt({
           question: question.prompt, studentAnswer: submittedDraft,
           referenceAnswer: reference.text, referenceKind: reference.kind,
@@ -266,7 +278,7 @@ export class HomeworkService {
       check = {
         method: 'ai', verdict: assessed.verdict, similarityPercent: assessed.similarityPercent,
         feedback: assessed.feedback, matchedPoints: assessed.matchedPoints, missingPoints: assessed.missingPoints,
-        referenceKind: reference.kind, inputHash, language, promptVersion: prompts.homeworkAnswerCheck.VERSION,
+        referenceKind: reference.kind, inputHash, language, promptVersion: checkVersion,
         questionSourceRefs: question.sourceRefs,
         answerChunkIds: reference.kind === 'professor' ? (question.answerChunkIds ?? []) : [],
         createdAt: Date.now(),
@@ -287,14 +299,19 @@ export class HomeworkService {
     if (!question) throw new AppError(t('homework.questionMissing'), 'NOT_FOUND')
     const set = await this.homework.getSet(question.setId)
     if (!set || set.projectId !== question.projectId) throw new AppError(t('homework.questionMissing'), 'NOT_FOUND')
-    const cached = currentHomeworkReview(question, language, prompts.homeworkReview.VERSION)
+    const subject = await loadProjectSubject(question.projectId, this.db)
+    const reviewVersion = prompts.subjectProfile.subjectPromptVersion(
+      prompts.homeworkReview.VERSION,
+      subject,
+    )
+    const cached = currentHomeworkReview(question, language, reviewVersion)
     if (cached && !force) return cached
 
-    const inputHash = homeworkReviewInputHash(question, language, prompts.homeworkReview.VERSION)
+    const inputHash = homeworkReviewInputHash(question, language, reviewVersion)
     const runKey = `${questionId}:${inputHash}`
     const existing = reviewRuns.get(runKey)
     if (existing) return existing
-    const run = this.generateReviewGuide(question, language, inputHash).finally(() => reviewRuns.delete(runKey))
+    const run = this.generateReviewGuide(question, language, inputHash, reviewVersion, subject).finally(() => reviewRuns.delete(runKey))
     reviewRuns.set(runKey, run)
     return run
   }
@@ -303,6 +320,8 @@ export class HomeworkService {
     question: HomeworkQuestion,
     language: 'zh' | 'en',
     inputHash: string,
+    promptVersion: string,
+    subject: Subject | undefined,
   ): Promise<HomeworkReviewGuide> {
     const ai = this.requireAI()
     const deferredAnswer = question.answerStatus === 'matched' &&
@@ -317,7 +336,10 @@ export class HomeworkService {
       ...(!deferredAnswer && question.solution ? { previousSolution: question.solution } : {}),
     }
     const messages: ChatMessage[] = [
-      { role: 'system', content: prompts.homeworkReview.buildSystemPrompt() },
+      {
+        role: 'system',
+        content: prompts.subjectProfile.withSubject(prompts.homeworkReview.buildSystemPrompt(), subject),
+      },
       { role: 'user', content: prompts.homeworkReview.buildUserPrompt(input) },
     ]
     const budget = planQuestionOutputBudget(messages[0]!.content.length + messages[1]!.content.length, ai.maxOutputTokens)
@@ -337,7 +359,7 @@ export class HomeworkService {
       interpretation: formatHomeworkReviewText(normalized.interpretation),
       check: formatHomeworkReviewText(normalized.check),
       language,
-      promptVersion: prompts.homeworkReview.VERSION,
+      promptVersion,
       inputHash,
       questionSourceRefs: question.sourceRefs,
       answerChunkIds: hasProfessorAnswer ? (question.answerChunkIds ?? []) : [],
@@ -963,7 +985,13 @@ export class HomeworkService {
       content: item.content,
     }))
     const messages: ChatMessage[] = [
-      { role: 'system', content: prompts.homeworkQa.buildSystemPrompt() },
+      {
+        role: 'system',
+        content: prompts.subjectProfile.withSubject(
+          prompts.homeworkQa.buildSystemPrompt(),
+          await loadProjectSubject(question.projectId, this.db),
+        ),
+      },
       {
         role: 'user',
         content: prompts.homeworkQa.buildUserPrompt({
@@ -1532,10 +1560,11 @@ export class HomeworkService {
     try {
       const ai = this.requireAI()
       const sourceText = await this.sourceText(question)
+      const subject = await loadProjectSubject(question.projectId, this.db)
       let content: { hints: string[]; solution: string }
       try {
         content = normalizeQuestionContent(await requestHomeworkQuestionJSON(
-          ai, question.prompt, sourceText, currentLanguage(), 'combined',
+          ai, question.prompt, sourceText, currentLanguage(), subject, 'combined',
           splitHomeworkSubparts(question.prompt).length >= 2 ? 1 : 6,
         ))
       } catch (err) {
@@ -1548,7 +1577,7 @@ export class HomeworkService {
           const results: Array<{ label: string; hints: string[]; solution: string }> = []
           for (const part of parts) {
             results.push({ label: part.label, ...await prepareHomeworkQuestion(
-              ai, part.prompt, '', currentLanguage(),
+              ai, part.prompt, '', currentLanguage(), subject,
             ) })
           }
           const hintGroups: string[][] = [[], [], [], []]
@@ -1564,7 +1593,7 @@ export class HomeworkService {
           // Prepare hints and solution in separate requests, then commit both
           // together so a partial result never replaces the student's record.
           content = await prepareHomeworkQuestionInStages(
-            ai, question.prompt, sourceText, currentLanguage(),
+            ai, question.prompt, sourceText, currentLanguage(), subject,
           )
         } else {
           throw err
@@ -1618,10 +1647,11 @@ export class HomeworkService {
     try {
       const ai = this.requireAI()
       const sourceText = await this.sourceText(question)
+      const subject = await loadProjectSubject(question.projectId, this.db)
       let content: { hints: string[]; solution: string }
       try {
         content = normalizeQuestionContent(await requestHomeworkQuestionJSON(
-          ai, question.prompt, sourceText, currentLanguage(), 'combined', 2, answer, controller.signal,
+          ai, question.prompt, sourceText, currentLanguage(), subject, 'combined', 2, answer, controller.signal,
         ))
       } catch (err) {
         const kind = classifyHomeworkError(err)
@@ -1631,7 +1661,7 @@ export class HomeworkService {
         // finish the combined hints + worked solution. Commit only when both
         // stages succeed; previous help and student work stay untouched.
         content = await prepareHomeworkQuestionInStages(
-          ai, question.prompt, sourceText, currentLanguage(), answer, controller.signal,
+          ai, question.prompt, sourceText, currentLanguage(), subject, answer, controller.signal,
         )
       }
       const previousSolution =
@@ -1759,6 +1789,7 @@ async function requestHomeworkQuestionJSON(
   question: string,
   sourceText: string,
   language: 'zh' | 'en',
+  subject: Subject | undefined,
   mode: HomeworkQuestionMode,
   maxAttempts = 6,
   professorAnswer?: string,
@@ -1771,7 +1802,10 @@ async function requestHomeworkQuestionJSON(
     language,
     ...(hasProfessorAnswer ? { professorAnswer } : {}),
   })
-  const initialSystem = prompts.homeworkQuestion.buildSystemPrompt(mode, false, hasProfessorAnswer)
+  const initialSystem = prompts.subjectProfile.withSubject(
+    prompts.homeworkQuestion.buildSystemPrompt(mode, false, hasProfessorAnswer),
+    subject,
+  )
   const userCap = Number.isFinite(ai.maxOutputTokens) && ai.maxOutputTokens > 0
     ? ai.maxOutputTokens : 4_096
   let budget = planQuestionOutputBudget(initialSystem.length + userPrompt.length, ai.maxOutputTokens)
@@ -1785,7 +1819,10 @@ async function requestHomeworkQuestionJSON(
     const messages: ChatMessage[] = [
       {
         role: 'system',
-        content: prompts.homeworkQuestion.buildSystemPrompt(mode, compact, hasProfessorAnswer),
+        content: prompts.subjectProfile.withSubject(
+          prompts.homeworkQuestion.buildSystemPrompt(mode, compact, hasProfessorAnswer),
+          subject,
+        ),
       },
       { role: 'user', content: userPrompt },
     ]
@@ -1829,14 +1866,15 @@ async function prepareHomeworkQuestion(
   question: string,
   sourceText: string,
   language: 'zh' | 'en',
+  subject: Subject | undefined,
 ): Promise<{ hints: string[]; solution: string }> {
   try {
     return normalizeQuestionContent(await requestHomeworkQuestionJSON(
-      ai, question, sourceText, language, 'combined',
+      ai, question, sourceText, language, subject, 'combined',
     ))
   } catch (err) {
     if (classifyHomeworkError(err) !== 'truncated') throw err
-    return prepareHomeworkQuestionInStages(ai, question, sourceText, language)
+    return prepareHomeworkQuestionInStages(ai, question, sourceText, language, subject)
   }
 }
 
@@ -1845,17 +1883,18 @@ async function prepareHomeworkQuestionInStages(
   question: string,
   sourceText: string,
   language: 'zh' | 'en',
+  subject: Subject | undefined,
   professorAnswer?: string,
   signal?: AbortSignal,
 ): Promise<{ hints: string[]; solution: string }> {
   const hintData = asRecord(await requestHomeworkQuestionJSON(
-    ai, question, sourceText, language, 'hints', professorAnswer ? 3 : 6, professorAnswer, signal,
+    ai, question, sourceText, language, subject, 'hints', professorAnswer ? 3 : 6, professorAnswer, signal,
   ))
   const hints = asStringArray(hintData?.hints).map((hint) => hint.trim())
     .filter(Boolean).slice(0, HOMEWORK_MAX_HINTS)
   if (hints.length === 0) throw new AppError(t('homework.contentIncomplete'), 'INVALID_RESPONSE')
   const solutionData = asRecord(await requestHomeworkQuestionJSON(
-    ai, question, sourceText, language, 'solution', professorAnswer ? 3 : 6, professorAnswer, signal,
+    ai, question, sourceText, language, subject, 'solution', professorAnswer ? 3 : 6, professorAnswer, signal,
   ))
   const solution = asTrimmedString(solutionData?.solution)
   if (!solution) throw new AppError(t('homework.contentIncomplete'), 'INVALID_RESPONSE')

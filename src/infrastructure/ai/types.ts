@@ -9,6 +9,11 @@ export interface ChatMessage {
   content: string
   /** Optional name for multi-user / function-calling style prompts. */
   name?: string
+  /**
+   * Images for a vision-capable model, as `data:` URLs. When present the
+   * message is sent as an OpenAI content array (text part + image parts).
+   */
+  images?: string[]
 }
 
 export type ResponseFormat = { type: 'text' } | { type: 'json_object' }

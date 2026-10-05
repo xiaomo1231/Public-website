@@ -10,6 +10,7 @@ import { MISTAKE_TYPES } from '@/entities/mistake/types'
 import { collectSourceSnippets } from './sourceContext'
 import { AppError } from '@/infrastructure/errors/AppError'
 import { t } from '@/i18n'
+import { loadProjectSubject } from './projectSubject'
 
 /** Resolved lazily so it follows the current UI language. */
 const fallbackCause = (): string => t('mistakeAnalysis.fallbackCause')
@@ -98,7 +99,13 @@ export class MistakeAnalysisService {
       .map((m) => `Q: ${m.question.slice(0, 120)} | answered: ${m.studentAnswer.slice(0, 60)} | expected: ${m.correctAnswer.slice(0, 60)}`)
 
     const messages: ChatMessage[] = [
-      { role: 'system', content: prompts.mistakeAnalyzer.buildSystemPrompt() },
+      {
+        role: 'system',
+        content: prompts.subjectProfile.withSubject(
+          prompts.mistakeAnalyzer.buildSystemPrompt(),
+          await loadProjectSubject(mistake.projectId),
+        ),
+      },
       {
         role: 'user',
         content: prompts.mistakeAnalyzer.buildUserPrompt({

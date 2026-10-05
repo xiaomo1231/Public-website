@@ -206,7 +206,7 @@ export function HomeworkPage(): JSX.Element {
         ) : (
           <>
             {summary && (
-              <Card className="blueprint-frame border-border/70">
+              <Card className="border-border/70">
                 <CardHeader>
                   <CardTitle className="text-base">{t('homework.reanalysis.title')}</CardTitle>
                   <CardDescription>
@@ -251,7 +251,7 @@ export function HomeworkPage(): JSX.Element {
                 {/* Compact question navigator: a single horizontal row so the
                     question and the working area are not squeezed into a third
                     column. The active chip scrolls itself into view. */}
-                <Card className="blueprint-frame border-border/70">
+                <Card className="border-border/70">
                   <CardContent className="flex items-center gap-2 p-2 sm:p-3">
                     <Button
                       variant="outline"

@@ -32,6 +32,8 @@ import { logger } from '@/infrastructure/logger/logger'
 import { normalizeMathNotation } from '@/infrastructure/files/mathNotation'
 import { friendlyTutorError } from '@/shared/lib/aiErrors'
 import { t } from '@/i18n'
+import { loadProjectSubject } from './projectSubject'
+import { ShortAnswerGrader } from './shortAnswerGrader'
 
 const SOURCE_CHUNK_LIMIT = 6
 const MAX_HINTS = 3
@@ -228,7 +230,13 @@ export class TutorService {
     const session = await this.getSession(sessionId)
     const sources = await this.collectSources(session)
     const introMessages: ChatMessage[] = [
-      { role: 'system', content: prompts.tutorIntroduce.buildSystemPrompt() },
+      {
+        role: 'system',
+        content: prompts.subjectProfile.withSubject(
+          prompts.tutorIntroduce.buildSystemPrompt(),
+          await loadProjectSubject(session.projectId, this.db),
+        ),
+      },
       {
         role: 'user',
         content: prompts.tutorIntroduce.buildUserPrompt({
@@ -309,7 +317,13 @@ export class TutorService {
       .join('\n')
 
     const messages: ChatMessage[] = [
-      { role: 'system', content: prompts.tutorQuestion.buildSystemPrompt() },
+      {
+        role: 'system',
+        content: prompts.subjectProfile.withSubject(
+          prompts.tutorQuestion.buildSystemPrompt(),
+          await loadProjectSubject(session.projectId, this.db),
+        ),
+      },
       {
         role: 'user',
         content: prompts.tutorQuestion.buildUserPrompt({
@@ -348,6 +362,7 @@ export class TutorService {
             return options ? { options } : {}
           })(),
           correctAnswer: question.expectedAnswer,
+          ...(question.rubric ? { rubric: question.rubric } : {}),
           ...(question.explanation ? { solution: question.explanation } : {}),
           hints: question.hints.slice(0, MAX_HINTS),
           sourceRefs: question.sourceRefs as SourceReference[],
@@ -378,6 +393,7 @@ export class TutorService {
       difficulty: question.difficulty,
       sourceRefs: question.sourceRefs as SourceReference[],
       hints: question.hints.slice(0, MAX_HINTS),
+      ...(question.rubric ? { rubric: question.rubric } : {}),
     }
     session.hintsRevealed = 0
     session.messages.push(
@@ -419,28 +435,47 @@ export class TutorService {
     if (!session.pendingQuestion) {
       throw new AppError(t('errors.noActiveQuestion'), 'NO_ACTIVE_QUESTION')
     }
-    const sources = await this.collectSources(session)
     const question = session.pendingQuestion
-    const messages: ChatMessage[] = [
-      { role: 'system', content: prompts.tutorEvaluate.buildSystemPrompt() },
-      {
-        role: 'user',
-        content: prompts.tutorEvaluate.buildUserPrompt({
-          topicName: session.topicName,
-          question: question.prompt,
-          expectedAnswer: question.expectedAnswer,
-          studentAnswer,
-          language: session.language,
-          sourceSnippets: sources,
-          sourceRefs: question.sourceRefs,
-        }),
-      },
-    ]
-    const { data } = await this.ai.chatJSON<unknown>(messages, {
-      ...(signal ? { signal } : {}),
-    })
-    // Validate + sanitise before the verdict drives difficulty or the book.
-    const evaluationTyped: TutorEvaluation = normalizeTutorEvaluation(data)
+    // Short answers are graded by their scoring points (verified evidence,
+    // local score), never by the model's own right/wrong verdict.
+    let scored: QuestionEvaluation | null = null
+    let evaluationTyped: TutorEvaluation
+    if (question.type === 'short_answer' && question.rubric?.length) {
+      scored = await new ShortAnswerGrader(this.ai).grade(
+        tutorQuestionAsQuiz(session, question),
+        studentAnswer,
+        await loadProjectSubject(session.projectId, this.db),
+      )
+      evaluationTyped = tutorEvaluationFromScore(scored, question.expectedAnswer)
+    } else {
+      const sources = await this.collectSources(session)
+      const messages: ChatMessage[] = [
+        {
+          role: 'system',
+          content: prompts.subjectProfile.withSubject(
+            prompts.tutorEvaluate.buildSystemPrompt(),
+            await loadProjectSubject(session.projectId, this.db),
+          ),
+        },
+        {
+          role: 'user',
+          content: prompts.tutorEvaluate.buildUserPrompt({
+            topicName: session.topicName,
+            question: question.prompt,
+            expectedAnswer: question.expectedAnswer,
+            studentAnswer,
+            language: session.language,
+            sourceSnippets: sources,
+            sourceRefs: question.sourceRefs,
+          }),
+        },
+      ]
+      const { data } = await this.ai.chatJSON<unknown>(messages, {
+        ...(signal ? { signal } : {}),
+      })
+      // Validate + sanitise before the verdict drives difficulty or the book.
+      evaluationTyped = normalizeTutorEvaluation(data)
+    }
 
     const answerTurn: TutorTurn = {
       role: 'student',
@@ -461,17 +496,23 @@ export class TutorService {
     }
     session.turns.push(answerTurn, feedbackTurn)
 
-    const adj = adjustDifficulty(
-      session.currentDifficulty,
-      evaluationTyped.isCorrect,
-      session.streakCorrect,
-      session.streakWrong,
-      evaluationTyped.isSupplementary,
-    )
-    session.currentDifficulty = adj.difficulty
-    session.streakCorrect = adj.streakCorrect
-    session.streakWrong = adj.streakWrong
-    session.mastery = clampMastery(session.mastery + adj.masteryDelta)
+    // A short answer counts as right when every point is covered and as wrong
+    // below 60%; in between it moves neither the streak nor the difficulty.
+    const ratio = scored?.score && scored.score.total > 0 ? scored.score.earned / scored.score.total : null
+    const neutral = scored !== null && (scored.isCorrect === null || (ratio !== null && ratio >= 0.6 && ratio < 1))
+    if (!neutral) {
+      const adj = adjustDifficulty(
+        session.currentDifficulty,
+        evaluationTyped.isCorrect,
+        session.streakCorrect,
+        session.streakWrong,
+        evaluationTyped.isSupplementary,
+      )
+      session.currentDifficulty = adj.difficulty
+      session.streakCorrect = adj.streakCorrect
+      session.streakWrong = adj.streakWrong
+      session.mastery = clampMastery(session.mastery + adj.masteryDelta)
+    }
     session.pendingQuestion = undefined
     session.hintsRevealed = 0
     session.messages.push({ role: 'user', content: studentAnswer }, { role: 'assistant', content: JSON.stringify(evaluationTyped) })
@@ -479,8 +520,8 @@ export class TutorService {
 
     // Wrong tutor answers go to the mistake book through the same service the
     // quiz uses — one persistence path, one deduplication strategy.
-    if (evaluationTyped.isCorrect === false && this.mistakes) {
-      await this.recordMistake(session, question, studentAnswer, evaluationTyped)
+    if (evaluationTyped.isCorrect === false && (scored === null || scored.isCorrect === false) && this.mistakes) {
+      await this.recordMistake(session, question, studentAnswer, evaluationTyped, scored)
     }
 
     return { session, turn: feedbackTurn, finished: session.mastery >= 0.8 && evaluationTyped.isCorrect }
@@ -498,9 +539,10 @@ export class TutorService {
     question: NonNullable<TutorSession['pendingQuestion']>,
     studentAnswer: string,
     evaluation: TutorEvaluation,
+    scored: QuestionEvaluation | null = null,
   ): Promise<void> {
     try {
-      const evaluationForAttempt: QuestionEvaluation = {
+      const evaluationForAttempt: QuestionEvaluation = scored ?? {
         isCorrect: evaluation.isCorrect,
         method: 'ai',
         confidence: 0.8,
@@ -574,5 +616,53 @@ export class TutorService {
       SOURCE_CHUNK_LIMIT,
     )
     return formatTopicSources(sources)
+  }
+}
+/** A tutor question in the quiz shape the short-answer grader expects. */
+function tutorQuestionAsQuiz(
+  session: TutorSession,
+  question: NonNullable<TutorSession['pendingQuestion']>,
+): Question {
+  return {
+    id: question.id,
+    projectId: session.projectId,
+    ...(session.topicId ? { topicId: session.topicId } : {}),
+    knowledgePoint: question.knowledgePoint,
+    type: 'short_answer',
+    difficulty: question.difficulty,
+    prompt: question.prompt,
+    correctAnswer: question.expectedAnswer,
+    ...(question.rubric ? { rubric: question.rubric } : {}),
+    hints: question.hints,
+    sourceRefs: question.sourceRefs as SourceReference[],
+    promptVersion: prompts.tutorQuestion.VERSION,
+    createdAt: Date.now(),
+  }
+}
+
+/** The scoring-point result in the tutor's feedback shape. */
+function tutorEvaluationFromScore(scored: QuestionEvaluation, expectedAnswer: string): TutorEvaluation {
+  const score = scored.score
+  const feedback = scored.explanation ?? scored.note ?? ''
+  return {
+    isCorrect: scored.isCorrect === true,
+    ...(score ? { partialCredit: `${score.earned}/${score.total}` } : {}),
+    feedback,
+    breakdown: (scored.rubric ?? []).map(
+      (point) => `${point.covered ? '✓' : '✗'} ${point.text}`,
+    ),
+    nextSteps: '',
+    groundedExplanation: expectedAnswer,
+    isSupplementary: false,
+    ...(score
+      ? {
+          scoring: {
+            earned: score.earned,
+            total: score.total,
+            rubric: scored.rubric ?? [],
+            ...(scored.contradictions ? { contradictions: scored.contradictions } : {}),
+          },
+        }
+      : {}),
   }
 }

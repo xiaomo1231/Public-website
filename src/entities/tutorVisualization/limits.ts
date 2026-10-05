@@ -31,6 +31,12 @@ export const VISUALIZATION_LIMITS = {
   maxSetElements: 12,
   maxUniverseElements: 24,
   maxElementLength: 20,
+  /** Per molecule_2d visualization. */
+  maxMolecules: 3,
+  /** Per energy_2d visualization (species and transition states). */
+  maxEnergyStates: 7,
+  /** Per pedigree_2d visualization. */
+  maxPedigreeMembers: 16,
   /** Text. */
   maxCaptionLength: 300,
   maxLabelLength: 40,

@@ -61,9 +61,6 @@ export function Header({ onOpenMobileNav, onExpandNav }: HeaderProps): JSX.Eleme
             <PanelLeftOpen className="h-5 w-5" />
           </Button>
         )}
-        <div className="min-w-0 truncate text-sm text-muted-foreground">
-          {profile ? t('header.welcomeNamed', { name: profile.name }) : t('header.welcome')}
-        </div>
       </div>
 
       <div className="header-controls flex shrink-0 items-center gap-1 rounded-full border border-border/50 bg-card/90 p-1 shadow-soft">

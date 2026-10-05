@@ -1,3 +1,4 @@
+import type { RubricPoint } from '@/entities/question/types'
 import type { ChatMessage } from '@/infrastructure/ai/types'
 import type { DifficultyLevel, SourceReference, TutorEvaluation } from '@/infrastructure/ai/prompts/types'
 import type { TranslationKey } from '@/i18n/types'
@@ -27,7 +28,7 @@ export type SourceRef = SourceReference
 export interface TutorQuestion {
   id: string
   prompt: string
-  type: 'multiple_choice' | 'true_false' | 'numeric' | 'math_expr'
+  type: 'multiple_choice' | 'true_false' | 'numeric' | 'math_expr' | 'short_answer'
   options?: string[]
   expectedAnswer: string
   explanation: string
@@ -35,6 +36,8 @@ export interface TutorQuestion {
   difficulty: DifficultyLevel
   sourceRefs: SourceRef[]
   hints: string[]
+  /** Short answer: scoring points; the answer is graded by their coverage. */
+  rubric?: RubricPoint[]
 }
 
 export interface TutorTurn {

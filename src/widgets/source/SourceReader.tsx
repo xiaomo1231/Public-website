@@ -72,7 +72,7 @@ export function SourceReader({
         aria-describedby={undefined}
       >
         <header className="shrink-0 space-y-1 border-b px-5 py-4 pr-14 sm:px-7">
-          <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground">
+          <p className="text-xs font-medium text-muted-foreground">
             {t('sourceReader.eyebrow')}
           </p>
           <DialogTitle className="text-base font-semibold leading-snug">

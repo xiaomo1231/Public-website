@@ -16,6 +16,7 @@ import { CourseStructureRepository } from '../courseStructure/repository'
 import type { CourseStructure, CourseStructureNode } from '../courseStructure/types'
 import { DocumentRepository } from '../document/repository'
 import { ChunkRepository } from '../chunk/repository'
+import { ProjectRepository } from '../project/repository'
 import type { DocumentChunk } from '../chunk/types'
 import { prompts } from '@/infrastructure/ai/prompts'
 import {
@@ -74,7 +75,9 @@ export class CourseContentRepository {
   private structures: CourseStructureRepository
   private documents: DocumentRepository
   private chunks: ChunkRepository
-  private expectedPromptVersion: string
+  private projects: ProjectRepository
+  /** Fixed expectation (tests); otherwise derived per project, see below. */
+  private promptVersionOverride: string | undefined
   private expectedSchemaVersion: string
 
   constructor(deps: CourseContentRepositoryDeps = {}) {
@@ -83,7 +86,8 @@ export class CourseContentRepository {
     this.structures = deps.structures ?? new CourseStructureRepository(db)
     this.documents = deps.documents ?? new DocumentRepository(db)
     this.chunks = deps.chunks ?? new ChunkRepository(db)
-    this.expectedPromptVersion = deps.promptVersion ?? prompts.documentAnalyzer.VERSION
+    this.projects = new ProjectRepository(db)
+    this.promptVersionOverride = deps.promptVersion
     this.expectedSchemaVersion = deps.schemaVersion ?? COURSE_ANALYSIS_SCHEMA_VERSION
   }
 
@@ -237,19 +241,34 @@ export class CourseContentRepository {
     return computeAnalysisSourceHash(fingerprints)
   }
 
+  /**
+   * The analyzer version a current analysis must carry: the analyzer prompt
+   * plus the subject profile for the project's subject. Changing the project's
+   * subject (or the profile) therefore makes the stored analysis stale.
+   */
+  private async expectedPromptVersion(projectId: string): Promise<string> {
+    if (this.promptVersionOverride) return this.promptVersionOverride
+    const subject = await this.projects
+      .get(projectId)
+      .then((project) => project.subject)
+      .catch(() => undefined)
+    return prompts.subjectProfile.subjectPromptVersion(prompts.documentAnalyzer.VERSION, subject)
+  }
+
   /** The versions the stored analysis is compared against right now. */
   async getVersions(
     projectId: string,
     overrides: Partial<CourseContentVersions> = {},
   ): Promise<CourseContentVersions> {
-    const [sourceHash, structureVersion, structureHash] = await Promise.all([
+    const [sourceHash, structureVersion, structureHash, promptVersion] = await Promise.all([
       this.computeSourceHash(projectId),
       this.getContentVersion(projectId),
       this.getStructureHash(projectId),
+      this.expectedPromptVersion(projectId),
     ])
     return {
       sourceHash: overrides.sourceHash ?? sourceHash,
-      promptVersion: overrides.promptVersion ?? this.expectedPromptVersion,
+      promptVersion: overrides.promptVersion ?? promptVersion,
       schemaVersion: overrides.schemaVersion ?? this.expectedSchemaVersion,
       structureVersion: overrides.structureVersion ?? structureVersion,
       structureHash: overrides.structureHash ?? structureHash,

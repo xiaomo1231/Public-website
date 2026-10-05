@@ -80,6 +80,10 @@ export interface AISettingsRow {
   model: string
   temperature: number
   maxTokens: number
+  /** Opt-in: search the web for chemistry / biology reference images. */
+  webImagesEnabled?: boolean
+  /** Ask the (vision-capable) model whether each image fits its purpose. */
+  webImagesVisionCheck?: boolean
   updatedAt: number
 }
 
@@ -99,6 +103,9 @@ export interface AISettings {
   model: string
   temperature: number
   maxTokens: number
+  /** Off by default; see `AISettingsRow.webImagesEnabled`. */
+  webImagesEnabled: boolean
+  webImagesVisionCheck: boolean
   updatedAt: number
 }
 
@@ -109,4 +116,6 @@ export interface UpdateAISettingsInput {
   model?: string
   temperature?: number
   maxTokens?: number
+  webImagesEnabled?: boolean
+  webImagesVisionCheck?: boolean
 }

@@ -1,3 +1,7 @@
+import type { DistributionParams, ProbabilityInterval } from './distribution'
+import type { EnergyState, TitrationSetup } from './chemistry'
+import type { Dominance, PedigreeMember } from './biology'
+
 /**
  * Structured 2D mathematical visualizations attached to a `TutorLesson`.
  *
@@ -16,10 +20,13 @@
  * Deliberately separate from the Dexie database version and from
  * `TUTOR_LESSON_VERSION`: this only changes when the visualization *data*
  * shape changes. v2 added `vectors_2d` and `graph_2d`; v3 added `transform_2d`
- * and `venn_2d`; v4 added `eigen_2d`; v5 added `hasse_2d`. Older rows are still read and rendered
+ * and `venn_2d`; v4 added `eigen_2d`; v5 added `hasse_2d`; v6 added
+ * `distribution_2d`; v7 added the chemistry figures (`molecule_2d`,
+ * `energy_2d`, `titration_2d`) and the biology figures (`punnett_2d`,
+ * `pedigree_2d`, `translation_2d`). Older rows are still read and rendered
  * unchanged.
  */
-export const TUTOR_VISUALIZATION_SCHEMA_VERSION = 5
+export const TUTOR_VISUALIZATION_SCHEMA_VERSION = 7
 
 export type TutorVisualizationType =
   | 'function_2d'
@@ -33,6 +40,13 @@ export type TutorVisualizationType =
   | 'venn_2d'
   | 'eigen_2d'
   | 'hasse_2d'
+  | 'distribution_2d'
+  | 'molecule_2d'
+  | 'energy_2d'
+  | 'titration_2d'
+  | 'punnett_2d'
+  | 'pedigree_2d'
+  | 'translation_2d'
 
 export type VisualizationRelation = '=' | '<' | '<=' | '>' | '>='
 
@@ -294,6 +308,80 @@ export interface HasseVisualization extends TutorVisualizationBase {
   relations: { lower: string; upper: string }[]
 }
 
+/**
+ * A probability distribution (normal, binomial, Poisson, uniform,
+ * exponential), optionally with a shaded interval. The model supplies only the
+ * family, parameters and interval from the lesson; densities, the interval
+ * probability, mean and variance are computed locally.
+ */
+export interface DistributionVisualization extends TutorVisualizationBase {
+  type: 'distribution_2d'
+  params: DistributionParams
+  interval?: ProbabilityInterval
+}
+
+/** One structure in a molecule figure; `formula` is computed from `smiles`. */
+export interface MoleculeEntry {
+  smiles: string
+  formula: string
+  name?: string
+}
+
+/**
+ * Skeletal structures drawn locally from SMILES. The model also names the
+ * formula the lesson states; a SMILES string whose computed formula disagrees
+ * is rejected, so a mistyped structure never reaches the student.
+ */
+export interface MoleculeVisualization extends TutorVisualizationBase {
+  type: 'molecule_2d'
+  molecules: MoleculeEntry[]
+}
+
+/** A reaction energy profile; ΔH and Eₐ are computed from the states. */
+export interface EnergyVisualization extends TutorVisualizationBase {
+  type: 'energy_2d'
+  states: EnergyState[]
+  unit: string
+}
+
+/** A monoprotic acid titrated with a strong base; every pH is computed. */
+export interface TitrationVisualization extends TutorVisualizationBase {
+  type: 'titration_2d'
+  setup: TitrationSetup
+  acidLabel?: string
+  baseLabel?: string
+}
+
+/** Optional phenotype names for one gene of a Punnett square. */
+export interface PunnettTrait {
+  gene: string
+  dominant: string
+  recessive: string
+  intermediate?: string
+}
+
+/** A Punnett square; gametes, offspring and ratios are computed. */
+export interface PunnettVisualization extends TutorVisualizationBase {
+  type: 'punnett_2d'
+  mother: string
+  father: string
+  dominance: Dominance
+  traits: PunnettTrait[]
+}
+
+/** A family pedigree; generations and layout are computed. */
+export interface PedigreeVisualization extends TutorVisualizationBase {
+  type: 'pedigree_2d'
+  members: PedigreeMember[]
+}
+
+/** DNA → mRNA → amino acids, transcribed and translated locally. */
+export interface TranslationVisualization extends TutorVisualizationBase {
+  type: 'translation_2d'
+  dna: string
+  strand: 'coding' | 'template'
+}
+
 export type TutorVisualization =
   | LineVisualization
   | PointsVisualization
@@ -304,6 +392,37 @@ export type TutorVisualization =
   | VennVisualization
   | Eigen2DVisualization
   | HasseVisualization
+  | DistributionVisualization
+  | MoleculeVisualization
+  | EnergyVisualization
+  | TitrationVisualization
+  | PunnettVisualization
+  | PedigreeVisualization
+  | TranslationVisualization
+
+/** Chemistry and biology figures, drawn by their own renderer. */
+export const SCIENCE_VISUALIZATION_TYPES = [
+  'molecule_2d',
+  'energy_2d',
+  'titration_2d',
+  'punnett_2d',
+  'pedigree_2d',
+  'translation_2d',
+] as const
+
+export type ScienceVisualization =
+  | MoleculeVisualization
+  | EnergyVisualization
+  | TitrationVisualization
+  | PunnettVisualization
+  | PedigreeVisualization
+  | TranslationVisualization
+
+export function isScienceVisualization(
+  visualization: TutorVisualization,
+): visualization is ScienceVisualization {
+  return (SCIENCE_VISUALIZATION_TYPES as readonly string[]).includes(visualization.type)
+}
 
 export const LINE_VISUALIZATION_TYPES = ['function_2d', 'equation_2d', 'inequality_2d'] as const
 
@@ -358,6 +477,32 @@ export interface VisualizationDraft {
   // hasse_2d
   elements?: unknown
   relations?: unknown
+  // distribution_2d
+  family?: unknown
+  params?: unknown
+  interval?: unknown
+  // molecule_2d
+  molecules?: unknown
+  // energy_2d
+  states?: unknown
+  unit?: unknown
+  // titration_2d
+  acidConcentration?: unknown
+  acidVolume?: unknown
+  baseConcentration?: unknown
+  ka?: unknown
+  acidLabel?: unknown
+  baseLabel?: unknown
+  // punnett_2d
+  mother?: unknown
+  father?: unknown
+  dominance?: unknown
+  traits?: unknown
+  // pedigree_2d
+  members?: unknown
+  // translation_2d
+  dna?: unknown
+  strand?: unknown
   // placement (all types)
   placement?: unknown
 }

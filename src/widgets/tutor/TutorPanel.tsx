@@ -1,9 +1,18 @@
 import { useEffect, useState } from 'react'
-import { CheckCircle2, ChevronRight, Lightbulb, Loader2, Sparkles, XCircle } from 'lucide-react'
+import {
+  CheckCircle2,
+  ChevronRight,
+  GraduationCap,
+  Lightbulb,
+  Loader2,
+  XCircle,
+} from 'lucide-react'
 import { Button } from '@/shared/ui/Button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/ui/Card'
 import { Badge } from '@/shared/ui/Badge'
-import { Textarea } from '@/shared/ui/Textarea'
+import { MathField } from '@/widgets/mathInput/MathField'
+import { ShortAnswerFeedback } from '@/widgets/quiz/ShortAnswerFeedback'
+import { useProject } from '@/features/project/useProjects'
 import { LoadingState } from '@/shared/ui/LoadingState'
 import { EmptyState } from '@/shared/ui/EmptyState'
 import { TruncatedText } from '@/shared/ui/TruncatedText'
@@ -39,6 +48,7 @@ async function buildTutorBundle(): Promise<TutorBundle | null> {
 
 export function TutorPanel(props: TutorPanelProps): JSX.Element {
   const { t } = useTranslation()
+  const { project } = useProject(props.projectId)
   const [session, setSession] = useState<TutorSession | null>(null)
   const [answer, setAnswer] = useState('')
   const [busy, setBusy] = useState(false)
@@ -196,7 +206,7 @@ export function TutorPanel(props: TutorPanelProps): JSX.Element {
       <Card>
         <CardHeader>
           <CardTitle className="flex flex-wrap items-center gap-2 text-base">
-            <Sparkles className="h-4 w-4 shrink-0" />
+            <GraduationCap className="h-4 w-4 shrink-0" />
             <TruncatedText text={props.topicName} className="min-w-0 max-w-full" />
             <Badge variant="outline" className="shrink-0">{session.currentDifficulty}</Badge>
             <Badge variant="outline" className="shrink-0">
@@ -243,9 +253,12 @@ export function TutorPanel(props: TutorPanelProps): JSX.Element {
             <CardTitle className="text-base">{t('tutor.question')}</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
-            <p className="whitespace-pre-wrap text-[17px] font-medium leading-[1.7]">
-              {lastQuestion.prompt}
-            </p>
+            {/* Markdown + LaTeX, like every other question surface. */}
+            <RichText
+              text={lastQuestion.prompt}
+              format="markdown"
+              paragraphClassName="text-[17px] font-medium leading-[1.7]"
+            />
             {lastQuestion.options && (
               <ul className="ml-5 list-disc space-y-2 text-[16px] leading-[1.7]">
                 {lastQuestion.options.map((o) => (
@@ -253,12 +266,20 @@ export function TutorPanel(props: TutorPanelProps): JSX.Element {
                 ))}
               </ul>
             )}
-            <Textarea
+            <MathField
+              // An expression answer gets the maths keyboard and a "read as"
+              // preview; everything else is free working with Unicode symbols.
+              mode={lastQuestion.type === 'math_expr' ? 'expression' : lastQuestion.type === 'numeric' ? 'number' : 'text'}
+              subject={project?.subject}
+              multiline={lastQuestion.type !== 'math_expr' && lastQuestion.type !== 'numeric'}
               rows={4}
-              className="text-[16px] leading-[1.7]"
+              inputClassName="text-[16px] leading-[1.7]"
               value={answer}
-              onChange={(e) => setAnswer(e.target.value)}
+              onChange={setAnswer}
               placeholder={t('tutor.answerPlaceholder')}
+              onSubmit={() => {
+                if (!busy) void submit()
+              }}
             />
             <div className="flex flex-wrap items-center gap-2">
               <Button onClick={submit} disabled={busy}>
@@ -310,6 +331,23 @@ export function TutorPanel(props: TutorPanelProps): JSX.Element {
 function FeedbackCard({ evaluation }: { evaluation: TutorEvaluation }) {
   const { t } = useTranslation()
   const correct = evaluation.isCorrect
+  // Short answers show their scoring points, the same view as in quizzes.
+  if (evaluation.scoring) {
+    return (
+      <ShortAnswerFeedback
+        evaluation={{
+          isCorrect: evaluation.isCorrect,
+          method: 'rubric_ai',
+          confidence: 0.8,
+          score: { earned: evaluation.scoring.earned, total: evaluation.scoring.total },
+          rubric: evaluation.scoring.rubric,
+          ...(evaluation.scoring.contradictions ? { contradictions: evaluation.scoring.contradictions } : {}),
+          ...(evaluation.feedback ? { explanation: evaluation.feedback } : {}),
+          expected: evaluation.groundedExplanation,
+        }}
+      />
+    )
+  }
   return (
     <Card
       className={cn(
@@ -330,7 +368,7 @@ function FeedbackCard({ evaluation }: { evaluation: TutorEvaluation }) {
             {t('tutor.partialCredit', { value: evaluation.partialCredit })}
           </p>
         )}
-        <div className="rounded-md border bg-card p-4">
+        <div className="rounded-lg border bg-card p-4">
           <p className="mb-1.5 font-medium">{t('tutor.explanation')}</p>
           <p className="whitespace-pre-wrap">{evaluation.groundedExplanation}</p>
           {evaluation.isSupplementary && (

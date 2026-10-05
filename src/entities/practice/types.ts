@@ -1,3 +1,5 @@
+import type { RubricPoint } from '@/entities/question/types'
+import type { QuestionEvaluation } from '@/entities/questionAttempt/types'
 /**
  * Professor Practice: questions imported from material the professor handed
  * out, plus the learner's attempts and the derived question-style profile.
@@ -56,6 +58,13 @@ export interface PracticeQuestion {
   expectedAnswer?: string
   answerExplanation?: string
   answerSource: PracticeAnswerSource
+  /**
+   * Short answer: scoring points split from the professor's reference answer
+   * (generated once, on first grading). `rubricAnswerHash` fingerprints the
+   * answer they came from, so an edited answer regenerates them.
+   */
+  rubric?: RubricPoint[]
+  rubricAnswerHash?: string
   /** Preserved figure the question depends on, when there was one. */
   visualSourceId?: string
   difficulty?: string
@@ -91,7 +100,9 @@ export interface PracticeAttempt {
   questionId: string
   userAnswer: string
   isCorrect?: boolean
-  method?: 'exact' | 'numeric' | 'symbolic' | 'manual' | 'none'
+  method?: 'exact' | 'numeric' | 'symbolic' | 'manual' | 'rubric' | 'none'
+  /** Short answer: the scoring-point result (score, evidence, dispute). */
+  evaluation?: QuestionEvaluation
   attemptNumber: number
   submittedAt: number
 }

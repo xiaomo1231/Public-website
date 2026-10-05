@@ -14,6 +14,15 @@ export class QuestionAttemptRepository {
     return attempt
   }
 
+  get(id: string): Promise<QuestionAttempt | undefined> {
+    return this.db.table<QuestionAttempt, string>('questionAttempts').get(id)
+  }
+
+  async update(attempt: QuestionAttempt): Promise<QuestionAttempt> {
+    await this.db.table<QuestionAttempt, string>('questionAttempts').put(attempt)
+    return attempt
+  }
+
   async listByProject(projectId: string, limit = 500): Promise<QuestionAttempt[]> {
     const rows = await this.db
       .table<QuestionAttempt, string>('questionAttempts')

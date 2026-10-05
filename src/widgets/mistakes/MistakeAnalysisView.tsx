@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { AlertCircle, ArrowRight, BookOpen, Lightbulb, Sparkles } from 'lucide-react'
+import { AlertCircle, ArrowRight, BookOpen, Lightbulb, Target } from 'lucide-react'
 import type { MistakeAnalysis } from '@/entities/mistake/types'
 import { MISTAKE_TYPE_LABEL_KEYS } from '@/entities/mistake/types'
 import { Badge } from '@/shared/ui/Badge'
@@ -55,12 +55,12 @@ export function MistakeAnalysisView({ analysis, onPractice }: MistakeAnalysisVie
           <li
             key={step.key}
             className={cn(
-              'rounded-md border p-3 text-sm',
+              'rounded-lg border p-3 text-sm',
               step.tone === 'warn' && 'border-amber-500/40 bg-amber-50/40 dark:bg-amber-950/20',
               step.tone === 'good' && 'border-emerald-500/40 bg-emerald-50/40 dark:bg-emerald-950/20',
             )}
           >
-            <div className="mb-1 flex items-center gap-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">
+            <div className="mb-1 flex items-center gap-2 text-xs font-medium text-muted-foreground">
               <span className="grid h-5 w-5 place-items-center rounded-full bg-muted text-[10px] text-foreground">
                 {i + 1}
               </span>
@@ -79,7 +79,7 @@ export function MistakeAnalysisView({ analysis, onPractice }: MistakeAnalysisVie
       ) : (
         <div className="space-y-3">
           {analysis.similarExample && (
-            <div className="rounded-md border border-primary/30 bg-primary/5 p-3 text-sm">
+            <div className="rounded-lg border border-primary/30 bg-primary/5 p-3 text-sm">
               <div className="mb-1 flex items-center gap-2 font-medium">
                 <Lightbulb className="h-4 w-4" />
                 {t('mistakeAnalysis.trySimilar')}
@@ -93,8 +93,8 @@ export function MistakeAnalysisView({ analysis, onPractice }: MistakeAnalysisVie
             </div>
           )}
 
-          <div className="flex flex-wrap items-center gap-2 rounded-md border bg-muted/30 p-3 text-sm">
-            <Sparkles className="h-4 w-4 text-muted-foreground" />
+          <div className="flex flex-wrap items-center gap-2 rounded-lg border bg-muted/30 p-3 text-sm">
+            <Target className="h-4 w-4 text-muted-foreground" />
             <span>{analysis.continuePrompt}</span>
             {onPractice && (
               <Button size="sm" className="ml-auto" onClick={onPractice}>
@@ -117,7 +117,7 @@ export function MistakeAnalysisView({ analysis, onPractice }: MistakeAnalysisVie
 
 export function AnalysisPlaceholder({ message }: { message: string }): JSX.Element {
   return (
-    <div className="flex items-start gap-2 rounded-md border bg-muted/30 p-3 text-sm text-muted-foreground">
+    <div className="flex items-start gap-2 rounded-lg border bg-muted/30 p-3 text-sm text-muted-foreground">
       <BookOpen className="mt-0.5 h-4 w-4" />
       <span>{message}</span>
     </div>

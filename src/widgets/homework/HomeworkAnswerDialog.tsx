@@ -412,17 +412,17 @@ export function HomeworkAnswerDialog({
         </DialogHeader>
 
         {error && (
-          <div className="rounded-md border border-destructive/40 bg-destructive/5 p-3 text-sm text-destructive">
+          <div className="rounded-lg border border-destructive/40 bg-destructive/5 p-3 text-sm text-destructive">
             {error}
           </div>
         )}
         {notice && (
-          <div className="rounded-md border border-border/70 bg-muted/30 p-3 text-sm text-muted-foreground">
+          <div className="rounded-lg border border-border/70 bg-muted/30 p-3 text-sm text-muted-foreground">
             {notice}
           </div>
         )}
         {generationProgress && generationProgress.total > 0 && (
-          <div className="space-y-2 rounded-md border border-border/70 bg-muted/20 p-3" aria-live="polite">
+          <div className="space-y-2 rounded-lg border border-border/70 bg-muted/20 p-3" aria-live="polite">
             <p className="text-sm font-medium">
               {t('homework.answer.generationProgress', {
                 completed: generationProgress.completed,
@@ -452,7 +452,7 @@ export function HomeworkAnswerDialog({
           <div className="space-y-4">
             <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border/70 bg-muted/20 p-3">
               <div className="min-w-0">
-                <p className="text-xs uppercase tracking-wide text-muted-foreground">
+                <p className="text-xs text-muted-foreground">
                   {t('homework.answer.linked')}
                 </p>
                 <p className="min-w-0 text-sm font-medium">
@@ -505,7 +505,7 @@ export function HomeworkAnswerDialog({
                     return (
                       <li
                         key={`${line.chunkId}-${index}`}
-                        className={`flex items-start gap-2 rounded-md border p-2 ${
+                        className={`flex items-start gap-2 rounded-lg border p-2 ${
                           isStart ? 'border-primary/50 bg-primary/5' : 'border-border/60'
                         }`}
                       >
@@ -580,13 +580,13 @@ export function HomeworkAnswerDialog({
                 </div>
 
                 {manual && (
-                  <p className="rounded-md border border-primary/40 bg-primary/5 p-2 text-xs text-foreground">
+                  <p className="rounded-lg border border-primary/40 bg-primary/5 p-2 text-xs text-foreground">
                     {t('homework.answer.manualActive')}
                   </p>
                 )}
 
                 {summary.unsplit && (
-                  <div className="space-y-2 rounded-md border border-amber-500/40 bg-amber-500/5 p-3">
+                  <div className="space-y-2 rounded-lg border border-amber-500/40 bg-amber-500/5 p-3">
                     <p className="flex items-center gap-2 text-sm font-medium text-amber-700 dark:text-amber-400">
                       <AlertTriangle className="h-4 w-4" />
                       {t('homework.answer.singleFragmentTitle')}
@@ -614,7 +614,7 @@ export function HomeworkAnswerDialog({
                 )}
 
                 {duplicateSelection && (
-                  <p className="rounded-md border border-destructive/40 bg-destructive/5 p-2 text-xs text-destructive">
+                  <p className="rounded-lg border border-destructive/40 bg-destructive/5 p-2 text-xs text-destructive">
                     {t('homework.answer.duplicateSelection')}
                   </p>
                 )}
@@ -693,8 +693,8 @@ export function HomeworkAnswerDialog({
                               </div>
                             )}
                             {preview && (
-                              <div className="rounded-md border border-border/60 bg-muted/20 p-2">
-                                <p className="mb-1 text-[11px] uppercase tracking-wide text-muted-foreground">
+                              <div className="rounded-lg border border-border/60 bg-muted/20 p-2">
+                                <p className="mb-1 text-xs text-muted-foreground">
                                   {t('homework.answer.preview')} · {pageLabel(preview)}
                                 </p>
                                 <RichText

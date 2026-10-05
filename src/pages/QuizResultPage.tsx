@@ -16,6 +16,7 @@ import {
 import { Button } from '@/shared/ui/Button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/shared/ui/Card'
 import { Badge } from '@/shared/ui/Badge'
+import { RichText } from '@/shared/ui/RichText'
 import { EmptyState } from '@/shared/ui/EmptyState'
 import { ErrorState } from '@/shared/ui/ErrorState'
 import { LoadingState } from '@/shared/ui/LoadingState'
@@ -25,7 +26,11 @@ import { buildOfflineQuizService, buildAIServices } from '@/services/aiServices'
 import { QuestionSource } from '@/widgets/quiz/QuestionSource'
 import { ProjectFlowNav } from '@/widgets/project/ProjectFlowNav'
 import type { Quiz } from '@/entities/quiz/types'
-import type { Question } from '@/entities/question/types'
+import {
+  QUESTION_TYPE_LABEL_KEYS,
+  expectedAnswerText as expectedText,
+  type Question,
+} from '@/entities/question/types'
 import type { QuestionAttempt } from '@/entities/questionAttempt/types'
 import { toast } from '@/features/toast/toastStore'
 import { friendlyAIError } from '@/shared/lib/aiErrors'
@@ -134,13 +139,14 @@ export function QuizResultPage(): JSX.Element {
 
   const score = quiz.score
   const attemptByQuestion = new Map(attempts.map((a) => [a.questionId, a]))
+  // A disputed short answer is not scored: it is listed with the unverified ones.
   const mistakes = questions.filter((q) => {
     const a = attemptByQuestion.get(q.id)
-    return a && a.evaluation.isCorrect === false
+    return a && a.evaluation.isCorrect === false && !a.evaluation.disputed
   })
   const unverified = questions.filter((q) => {
     const a = attemptByQuestion.get(q.id)
-    return !a || a.evaluation.isCorrect === null
+    return !a || a.evaluation.isCorrect === null || a.evaluation.disputed
   })
 
   return (
@@ -184,7 +190,11 @@ export function QuizResultPage(): JSX.Element {
                   <HelpCircle className="h-4 w-4" /> {t('quizResult.unverifiedCount', { count: score.unverified })}
                 </span>
                 <span className="text-muted-foreground">
-                  {t('quizResult.scoreLine', { correct: score.correct, total: score.total })}
+                  {t('quizResult.scoreLine', {
+                    // Partial credit from short answers (3 of 5 points → 0.6).
+                    correct: Math.round((score.points ?? score.correct) * 100) / 100,
+                    total: score.total,
+                  })}
                 </span>
               </div>
               {score.unverified > 0 && (
@@ -312,23 +322,39 @@ export function QuizResultPage(): JSX.Element {
                 {mistakes.map((q) => {
                   const attempt = attemptByQuestion.get(q.id)!
                   return (
-                    <div key={q.id} className="rounded-md border p-3 text-sm">
+                    <div key={q.id} className="rounded-lg border p-3 text-sm">
                       <div className="flex items-center gap-2">
                         <Badge variant="outline">{q.knowledgePoint}</Badge>
-                        <Badge variant="outline">{q.type.replace('_', ' ')}</Badge>
+                        <Badge variant="outline">{t(QUESTION_TYPE_LABEL_KEYS[q.type])}</Badge>
                         <Badge variant="outline">
                           {t(difficultyLabelKey(attempt.difficulty))}
                         </Badge>
                       </div>
-                      <p className="mt-2 font-medium">{q.prompt}</p>
+                      <RichText
+                        text={q.prompt}
+                        format="markdown"
+                        className="mt-2"
+                        paragraphClassName="text-sm font-medium leading-[1.7]"
+                      />
+                      {attempt.evaluation.score && attempt.evaluation.score.total > 0 && (
+                        <p className="data-num mt-1 text-xs font-medium">
+                          {t('shortAnswer.score', {
+                            earned: attempt.evaluation.score.earned,
+                            total: attempt.evaluation.score.total,
+                            percent: Math.round(
+                              (attempt.evaluation.score.earned / attempt.evaluation.score.total) * 100,
+                            ),
+                          })}
+                        </p>
+                      )}
                       <p className="mt-1 text-xs text-muted-foreground">
                         {t('quizResult.yourAnswer', {
                           value: attempt.userAnswer || t('quizResult.blank'),
                         })}
                       </p>
-                      <p className="text-xs text-muted-foreground">
+                      <p className="whitespace-pre-wrap text-xs text-muted-foreground">
                         {t('quizResult.expected', {
-                          value: attempt.evaluation.expected ?? q.correctAnswer,
+                          value: attempt.evaluation.expected ?? expectedText(q),
                         })}
                       </p>
                       {q.solution && (
@@ -362,12 +388,16 @@ export function QuizResultPage(): JSX.Element {
               {unverified.map((q) => {
                 const attempt = attemptByQuestion.get(q.id)
                 return (
-                  <div key={q.id} className="rounded-md border p-2">
-                    <p className="font-medium">{q.prompt}</p>
+                  <div key={q.id} className="rounded-lg border p-2">
+                    <RichText
+                      text={q.prompt}
+                      format="markdown"
+                      paragraphClassName="text-sm font-medium leading-[1.7]"
+                    />
                     <p className="text-xs text-muted-foreground">
                       {t('quizResult.answerExpected', {
                         yours: attempt?.userAnswer ?? t('quizResult.blank'),
-                        expected: q.correctAnswer,
+                        expected: expectedText(q),
                       })}
                     </p>
                   </div>
@@ -393,7 +423,7 @@ export function QuizResultPage(): JSX.Element {
                 disabled={moreBusy !== null}
                 onClick={() => generateMore(opt.mode)}
                 className={cn(
-                  'flex flex-col items-start gap-1 rounded-md border p-3 text-left text-sm transition-colors hover:bg-accent/50 disabled:opacity-60',
+                  'flex flex-col items-start gap-1 rounded-lg border p-3 text-left text-sm transition-colors hover:bg-accent/50 disabled:opacity-60',
                 )}
               >
                 <span className="flex w-full items-center gap-2 font-medium">

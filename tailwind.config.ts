@@ -51,10 +51,27 @@ export default {
           heading: 'hsl(var(--theme-heading))',
         },
       },
+      /*
+       * One monotonic radius scale (see `--radius-*` in globals.css). Pick by
+       * the role of the surface, not by eye:
+       *   md   8px  items inside a container (menu items, tab triggers, chips)
+       *   lg  12px  controls and small containers (inputs, selects, menus,
+       *             tab lists, icon tiles)
+       *   xl  16px  nav links, toasts, inner panels
+       *   2xl 20px  content panels (Card, lists, notices)
+       *   3xl 24px  feature surfaces and overlays (dialogs, sidebar, resume card)
+       *   full      buttons, badges-as-pills, avatars, progress tracks
+       * A nested surface uses (outer radius − its inset), e.g. a 12px tab list
+       * with 4px padding holds 8px triggers.
+       */
       borderRadius: {
-        lg: 'var(--radius)',
-        md: 'calc(var(--radius) - 2px)',
-        sm: 'calc(var(--radius) - 4px)',
+        sm: 'var(--radius-sm)',
+        DEFAULT: 'var(--radius-xs)',
+        md: 'var(--radius-md)',
+        lg: 'var(--radius-lg)',
+        xl: 'var(--radius-xl)',
+        '2xl': 'var(--radius-2xl)',
+        '3xl': 'var(--radius-3xl)',
       },
       /*
        * Elevation reads from CSS variables so each light/dark (and colour
@@ -74,11 +91,65 @@ export default {
           from: { opacity: '0' },
           to: { opacity: '1' },
         },
+        'fade-out': {
+          from: { opacity: '1' },
+          to: { opacity: '0' },
+        },
+        /*
+         * The keyframes below animate the individual `translate` / `scale`
+         * properties rather than `transform`, so they compose with a
+         * component's own positioning transform (e.g. the centred dialog's
+         * translate(-50%, -50%), or a toast's swipe offset) instead of
+         * replacing it.
+         */
+        'tab-in': {
+          from: { opacity: '0', translate: '0 6px' },
+          to: { opacity: '1', translate: '0 0' },
+        },
+        'dialog-in': {
+          from: { opacity: '0', scale: '0.96', translate: '0 10px' },
+          to: { opacity: '1', scale: '1', translate: '0 0' },
+        },
+        'dialog-out': {
+          from: { opacity: '1', scale: '1' },
+          to: { opacity: '0', scale: '0.97' },
+        },
+        'pop-in': {
+          from: { opacity: '0', scale: '0.95' },
+          to: { opacity: '1', scale: '1' },
+        },
+        'pop-out': {
+          from: { opacity: '1', scale: '1' },
+          to: { opacity: '0', scale: '0.96' },
+        },
+        'toast-in': {
+          from: { opacity: '0', translate: 'calc(100% + 1rem) 0' },
+          to: { opacity: '1', translate: '0 0' },
+        },
+        'toast-out': {
+          from: { opacity: '1', translate: '0 0' },
+          to: { opacity: '0', translate: '30% 0' },
+        },
+        float: {
+          '0%, 100%': { translate: '0 0' },
+          '50%': { translate: '0 -5px' },
+        },
       },
       animation: {
         // Short, one-shot entrances used sparingly (sections, tab panels).
         rise: 'rise 0.45s cubic-bezier(0.22, 1, 0.36, 1) both',
         fade: 'fade 0.22s ease-out both',
+        'fade-out': 'fade-out 0.18s ease-in both',
+        // `backwards`, not `both`: once finished it lets go, so hover
+        // transforms on the element keep working.
+        'tab-in': 'tab-in 0.32s cubic-bezier(0.22, 1, 0.36, 1) backwards',
+        'dialog-in': 'dialog-in 0.28s cubic-bezier(0.22, 1, 0.36, 1) both',
+        'dialog-out': 'dialog-out 0.16s ease-in both',
+        'pop-in': 'pop-in 0.18s cubic-bezier(0.22, 1, 0.36, 1) both',
+        'pop-out': 'pop-out 0.12s ease-in both',
+        'toast-in': 'toast-in 0.42s cubic-bezier(0.22, 1, 0.36, 1) both',
+        'toast-out': 'toast-out 0.2s ease-in both',
+        float: 'float 4.5s ease-in-out infinite',
       },
       fontFamily: {
         // Text fonts first, then dedicated symbol / maths fallbacks so that

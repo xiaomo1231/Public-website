@@ -1,16 +1,16 @@
 import { NavLink, useLocation } from 'react-router-dom'
 import {
   FolderKanban,
-  LayoutDashboard,
+  House,
   PanelLeftClose,
   Settings as SettingsIcon,
   ShieldCheck,
-  Sparkles,
 } from 'lucide-react'
 import type { ComponentType } from 'react'
 import { Button } from '@/shared/ui/Button'
 import { useTranslation, type TranslationKey } from '@/i18n'
 import { cn } from '@/shared/lib/utils'
+import { useSlidingIndicator } from '@/shared/lib/useSlidingIndicator'
 
 interface NavItem {
   to: string
@@ -20,7 +20,7 @@ interface NavItem {
 }
 
 const NAV_ITEMS: NavItem[] = [
-  { to: '/dashboard', labelKey: 'nav.dashboard', icon: LayoutDashboard },
+  { to: '/dashboard', labelKey: 'nav.dashboard', icon: House },
   { to: '/projects', labelKey: 'nav.projects', icon: FolderKanban },
   { to: '/settings', labelKey: 'nav.settings', icon: SettingsIcon },
 ]
@@ -37,19 +37,17 @@ export interface SidebarProps {
 export function Sidebar({ onNavigate, onCollapse }: SidebarProps): JSX.Element {
   const { t } = useTranslation()
   const location = useLocation()
-  // The homepage already states "local-first" in its own content, so the shared
-  // sidebar note is redundant there. It stays on every other page.
-  const isDashboard = location.pathname === '/dashboard'
+  const indicator = useSlidingIndicator<HTMLElement>('[data-active="true"]')
 
   return (
     <aside className="floating-sidebar flex h-full w-60 flex-col bg-card">
       <div className="flex items-center gap-3 px-5 pb-8 pt-7">
-        <div className="brand-mark grid h-9 w-9 shrink-0 place-items-center rounded-xl shadow-soft">
-          <Sparkles className="h-4 w-4" />
+        <div className="brand-mark grid h-9 w-9 shrink-0 place-items-center rounded-lg shadow-soft">
+          <BrandGlyph />
         </div>
         <div className="flex min-w-0 flex-1 flex-col leading-tight">
           <span className="truncate text-sm font-semibold text-foreground">{t('app.name')}</span>
-          <span className="truncate text-[10px] uppercase tracking-wider text-muted-foreground">
+          <span className="truncate text-xs text-muted-foreground">
             {t('app.tagline')}
           </span>
         </div>
@@ -67,7 +65,21 @@ export function Sidebar({ onNavigate, onCollapse }: SidebarProps): JSX.Element {
         )}
       </div>
 
-      <nav className="flex-1 space-y-2 px-3">
+      <nav
+        ref={indicator.containerRef}
+        data-indicator={indicator.ready ? 'ready' : undefined}
+        className="group/nav relative mx-3 flex flex-1 flex-col gap-2"
+      >
+        {/* The active pill glides between links instead of jumping. */}
+        <span
+          aria-hidden
+          data-animate={indicator.animate}
+          className={cn(
+            'slide-indicator sidebar-link--active rounded-xl bg-theme-primary-soft',
+            !indicator.ready && 'hidden',
+          )}
+          style={indicator.style}
+        />
         {NAV_ITEMS.map((item) => {
           const Icon = item.icon
           const active =
@@ -79,26 +91,27 @@ export function Sidebar({ onNavigate, onCollapse }: SidebarProps): JSX.Element {
               key={item.to}
               to={item.to}
               onClick={onNavigate}
+              data-active={active}
               className={cn(
-                'sidebar-link focus-ring group relative flex items-center gap-3 rounded-2xl px-3 py-3 text-sm font-medium transition-colors',
+                'sidebar-link focus-ring group relative flex items-center gap-3 rounded-xl px-3 py-3 text-sm font-medium transition-colors',
                 active
-                  ? 'sidebar-link--active bg-theme-primary-soft text-foreground'
+                  ? 'sidebar-link--active bg-theme-primary-soft text-foreground group-data-[indicator=ready]/nav:bg-transparent group-data-[indicator=ready]/nav:shadow-none'
                   : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground',
               )}
             >
               {active && (
                 <span
                   aria-hidden
-                  className="absolute right-4 h-1.5 w-1.5 rounded-full bg-theme-primary"
+                  className="absolute right-4 h-1.5 w-1.5 animate-fade rounded-full bg-theme-primary"
                 />
               )}
               <span
                 aria-hidden
                 className={cn(
-                  'grid h-7 w-7 shrink-0 place-items-center rounded-md transition-colors',
+                  'grid h-7 w-7 shrink-0 place-items-center rounded-lg transition-[color,background-color,box-shadow,transform] duration-300',
                   active
                     ? 'bg-card text-foreground shadow-soft'
-                    : 'text-muted-foreground group-hover:text-accent-foreground',
+                    : 'text-muted-foreground group-hover:text-accent-foreground motion-safe:group-hover:-rotate-6 motion-safe:group-hover:scale-110',
                 )}
               >
                 <Icon className="h-4 w-4" />
@@ -109,34 +122,29 @@ export function Sidebar({ onNavigate, onCollapse }: SidebarProps): JSX.Element {
         })}
       </nav>
 
-      <div aria-hidden className="mx-4 mb-1">
-        <div className="plate-grid rounded-xl border border-border/60 p-3">
-          <svg viewBox="0 0 120 60" className="h-auto w-full text-primary" fill="none">
-            <path
-              d="M6 52h108M6 52V8"
-              className="text-muted-foreground"
-              stroke="currentColor"
-              strokeWidth="1.2"
-              strokeLinecap="round"
-            />
-            <path
-              d="M14 48c14 0 16-30 34-30s22 18 34 8 18-14 24-14"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-            />
-            <circle cx="48" cy="18" r="3" fill="currentColor" />
-          </svg>
+      <div className="p-4">
+        <div className="flex items-start gap-2 px-2 py-2 text-xs text-muted-foreground">
+          <ShieldCheck className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden />
+          <span>{t('app.dataStaysLocal')}</span>
         </div>
       </div>
-      {!isDashboard && (
-        <div className="p-4">
-          <div className="flex items-start gap-2 rounded-lg bg-muted/50 px-3 py-2 text-xs text-muted-foreground">
-            <ShieldCheck className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden />
-            <span>{t('app.dataStaysLocal')}</span>
-          </div>
-        </div>
-      )}
     </aside>
+  )
+}
+
+/**
+ * The product mark: an integral sign, drawn as one stroke. Course maths is
+ * what the app is for, so the mark says that instead of a generic "AI" spark.
+ */
+function BrandGlyph(): JSX.Element {
+  return (
+    <svg viewBox="0 0 20 20" className="h-[18px] w-[18px]" fill="none" aria-hidden>
+      <path
+        d="M13.2 3.2c-1.6-.9-3 .1-3.3 2l-1.8 9.6c-.3 1.9-1.7 2.9-3.3 2"
+        stroke="currentColor"
+        strokeWidth="1.9"
+        strokeLinecap="round"
+      />
+    </svg>
   )
 }

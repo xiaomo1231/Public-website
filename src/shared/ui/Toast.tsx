@@ -28,7 +28,7 @@ export const ToastViewport = forwardRef<
 ToastViewport.displayName = ToastPrimitive.Viewport.displayName
 
 const toastVariants = cva(
-  'group pointer-events-auto relative flex w-full items-center justify-between gap-3 overflow-hidden rounded-md border p-4 pr-8 shadow-lg transition-[transform,opacity]',
+  'group pointer-events-auto relative flex w-full items-center justify-between gap-3 overflow-hidden rounded-xl border p-4 pr-8 shadow-lift transition-[transform,opacity] data-[state=open]:animate-toast-in data-[state=closed]:animate-toast-out data-[swipe=move]:translate-x-[var(--radix-toast-swipe-move-x)] data-[swipe=move]:transition-none data-[swipe=cancel]:translate-x-0 data-[swipe=end]:translate-x-[var(--radix-toast-swipe-end-x)]',
   {
     variants: {
       variant: {
@@ -67,7 +67,7 @@ export const Toast = forwardRef<ElementRef<typeof ToastPrimitive.Root>, ToastPro
           )}
           {children}
         </div>
-        <ToastPrimitive.Close className="absolute right-2 top-2 rounded-md p-1 opacity-60 transition-opacity hover:opacity-100 focus-ring">
+        <ToastPrimitive.Close className="absolute right-2 top-2 rounded-lg p-1 opacity-60 transition-opacity hover:opacity-100 focus-ring">
           <X className="h-4 w-4" />
         </ToastPrimitive.Close>
       </ToastPrimitive.Root>

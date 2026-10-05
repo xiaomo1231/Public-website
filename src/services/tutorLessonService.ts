@@ -2,12 +2,17 @@ import type { AppDatabase } from '@/infrastructure/db/database'
 import { getDb } from '@/infrastructure/db/database'
 import { CourseAnalysisRepository } from '@/entities/courseAnalysis/repository'
 import type { Topic } from '@/entities/courseAnalysis/types'
+import type { Subject } from '@/entities/project/types'
 import { ChunkRepository } from '@/entities/chunk/repository'
 import type { DocumentChunk } from '@/entities/chunk/types'
 import { TutorLessonRepository } from '@/entities/tutorLesson/repository'
 import type { TutorLesson, TutorLessonKey, TutorVisual } from '@/entities/tutorLesson/types'
 import { TUTOR_LESSON_VERSION } from '@/entities/tutorLesson/types'
-import { hasGraphableMath } from '@/entities/tutorVisualization/graphable'
+import {
+  hasGraphableMath,
+  looksLikeBiologyFigureText,
+  looksLikeChemistryFigureText,
+} from '@/entities/tutorVisualization/graphable'
 import type { TutorVisualization } from '@/entities/tutorVisualization/types'
 import { VisualSourceRepository } from '@/entities/visualSource/repository'
 import { TutorVisualizationService } from './tutorVisualizationService'
@@ -24,6 +29,7 @@ import { AppError } from '@/infrastructure/errors/AppError'
 import { logger } from '@/infrastructure/logger/logger'
 import { t } from '@/i18n'
 import { fnv1a } from '@/shared/lib/hash'
+import { loadProjectSubject } from './projectSubject'
 
 const MAX_LESSON_SOURCES = 8
 /** Notes / transcript excerpts pulled in alongside the textbook for a topic. */
@@ -177,7 +183,13 @@ export class TutorLessonService {
     const topic = await this.analyses.getTopic(input.topicId)
     if (!topic) throw new AppError(t('errors.topicNotFound'), 'NOT_FOUND')
 
-    const promptVersion = prompts.tutorLesson.VERSION
+    // The lesson prompt plus the course's subject profile: changing either
+    // (including the project's subject) invalidates the cached lesson.
+    const subject = await loadProjectSubject(input.projectId, this.db)
+    const promptVersion = prompts.subjectProfile.subjectPromptVersion(
+      prompts.tutorLesson.VERSION,
+      subject,
+    )
     // The hash must include the notes/transcript context this topic would use,
     // otherwise a stored lesson could never match.
     const { contextHash } = await this.topicContext(input, topic)
@@ -221,6 +233,11 @@ export class TutorLessonService {
   ): Promise<TutorLessonResult> {
     const topic = await this.analyses.getTopic(input.topicId)
     if (!topic) throw new AppError(t('errors.topicNotFound'), 'NOT_FOUND')
+    const subject = await loadProjectSubject(input.projectId, this.db)
+    const promptVersion = prompts.subjectProfile.subjectPromptVersion(
+      prompts.tutorLesson.VERSION,
+      subject,
+    )
 
     const sources = await collectTopicSources(
       { analyses: this.analyses, chunks: this.chunks },
@@ -247,14 +264,22 @@ export class TutorLessonService {
     )
 
     const messages: ChatMessage[] = [
-      { role: 'system', content: prompts.tutorLesson.buildSystemPrompt() },
+      {
+        role: 'system',
+        content: prompts.subjectProfile.withSubject(prompts.tutorLesson.buildSystemPrompt(), subject, {
+          forLesson: true,
+        }),
+      },
       {
         role: 'user',
         content: prompts.tutorLesson.buildUserPrompt({
           topicName: input.topicName,
           topicDescription: input.topicDescription,
           language: input.language,
-          sourceSnippets: this.buildSourceSnippets(textbookSources, visuals),
+          sourceSnippets: [
+            ...this.buildSourceSnippets(textbookSources, visuals),
+            ...courseFigureSnippet(subject, visuals),
+          ],
           ...(notesSnippets.length > 0 ? { notesSnippets } : {}),
           ...(transcriptSnippets.length > 0 ? { transcriptSnippets } : {}),
           ...(topic.chapterNumber || topic.chapterTitle
@@ -302,7 +327,7 @@ export class TutorLessonService {
     // Structured 2D visualizations come from a second, isolated AI call. The
     // local gate skips it entirely when the lesson has nothing plottable, so
     // set theory and prose lessons cost no extra tokens.
-    const visualizations = await this.generateVisualizations(content, input, topic)
+    const visualizations = await this.generateVisualizations(content, input, topic, subject)
 
     const now = Date.now()
     const lesson: TutorLesson = {
@@ -322,8 +347,8 @@ export class TutorLessonService {
         ...notesChunks.map((chunk) => chunk.id),
         ...transcriptChunks.map((chunk) => chunk.id),
       ],
-      contentHash: computeLessonContentHash(topic, prompts.tutorLesson.VERSION, contextHash),
-      promptVersion: prompts.tutorLesson.VERSION,
+      contentHash: computeLessonContentHash(topic, promptVersion, contextHash),
+      promptVersion,
       ...(response.model ? { model: response.model } : {}),
       generatedAt: now,
       updatedAt: now,
@@ -357,13 +382,20 @@ export class TutorLessonService {
     content: string,
     input: TutorLessonInput,
     topic: Pick<Topic, 'name' | 'description'>,
+    subject: Subject | undefined,
   ): Promise<TutorVisualization[]> {
-    if (!hasGraphableMath(content)) return []
+    const science = prompts.visualizationGenerator.scienceFiguresFor(subject)
+    const worthAsking =
+      hasGraphableMath(content) ||
+      (science.chemistry && looksLikeChemistryFigureText(content)) ||
+      (science.biology && looksLikeBiologyFigureText(content))
+    if (!worthAsking) return []
     return this.visualizationService.generate({
       topicName: input.topicName,
       topicDescription: input.topicDescription || topic.description || '',
       language: input.language,
       lessonContent: content,
+      ...(subject ? { subject } : {}),
     })
   }
 
@@ -446,4 +478,19 @@ export class TutorLessonService {
       return `[${source.label}] ${normalizeMathNotation(source.text).text}`
     })
   }
+}
+
+/**
+ * Chemistry and biology lean on pictures. When the course material has
+ * figures for this topic, list them so the lesson points the student to the
+ * real figure (shown under the lesson) instead of describing one from memory.
+ */
+function courseFigureSnippet(subject: Subject | undefined, visuals: TutorVisual[]): string[] {
+  if (subject !== 'chemistry' && subject !== 'biology') return []
+  const shown = visuals.filter((visual) => visual.hasImage).slice(0, 8)
+  if (shown.length === 0) return []
+  const list = shown.map((visual) => `page ${visual.pageNumber}: ${visual.caption}`).join('; ')
+  return [
+    `[Course figures] These figures from the course material are shown to the student below the lesson — ${list}. Refer to them by page where they help (e.g. "see the figure on page ${shown[0]!.pageNumber}") instead of describing a figure from memory.`,
+  ]
 }

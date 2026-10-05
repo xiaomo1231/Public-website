@@ -48,7 +48,7 @@ describe('translation catalogs', () => {
   })
 
   it('uses natural Simplified Chinese, not raw English, for navigation labels', () => {
-    expect(zhCN['nav.dashboard']).toBe('仪表盘')
+    expect(zhCN['nav.dashboard']).toBe('主页')
     expect(zhCN['nav.projects']).toBe('项目')
     expect(zhCN['nav.settings']).toBe('设置')
     expect(zhCN['tutor.title']).toBe('AI 导师')

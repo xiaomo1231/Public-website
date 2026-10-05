@@ -43,6 +43,8 @@ import { ANALYSIS_MIN_OUTPUT_TOKENS, type DocumentAnalysisProgress } from './doc
 import { AppError, isAppError } from '@/infrastructure/errors/AppError'
 import { logger } from '@/infrastructure/logger/logger'
 import { t } from '@/i18n'
+import type { Subject } from '@/entities/project/types'
+import { loadProjectSubject } from './projectSubject'
 
 /** How a re-analysis would have to be run. */
 export type IncrementalMode = 'none' | 'full' | 'incremental'
@@ -110,7 +112,7 @@ export interface IncrementalExecutionResult {
  */
 const inFlight = new Map<string, Promise<EnsureAnalyzedResult>>()
 
-/** Test helper �?drops any pending deduplication entry. */
+/** Test helper — drops any pending deduplication entry. */
 export function clearEnsureAnalyzedInFlightForTesting(): void {
   inFlight.clear()
 }
@@ -175,7 +177,7 @@ export class CourseContentService {
   /**
    * Work out what a re-analysis would have to cover.
    *
-   * Planning only �?it reads, it never writes and never calls the AI.
+   * Planning only — it reads, it never writes and never calls the AI.
    */
   async planIncrementalUpdate(projectId: string): Promise<IncrementalPlan> {
     const freshness = await this.content.isFresh(projectId)
@@ -242,7 +244,7 @@ export class CourseContentService {
   /**
    * Analyse the project when its persisted content is missing or stale.
    *
-   * Intended to be called from the upload / processing flow �?never from a
+   * Intended to be called from the upload / processing flow — never from a
    * page-open path. A failure leaves whatever was already stored untouched.
    *
    * Concurrent calls for the same project are coalesced: the second caller
@@ -267,7 +269,7 @@ export class CourseContentService {
    * Analyse an explicit scope.
    *
    * `project` runs the full analyzer. `chapter` / `section` run a **scoped,
-   * local** update �?but only when every affected topic carries a locally
+   * local** update — but only when every affected topic carries a locally
    * validated dependency. Otherwise the call is refused with a structured
    * reason; it never silently degrades to a whole-project analysis.
    */
@@ -359,7 +361,7 @@ export class CourseContentService {
     const flaggedForFullReanalysis: string[] = []
     const skipped: Array<{ topicId: string; reason: string }> = []
 
-    // Re-pointed dependencies need no AI at all �?the content fingerprint proved
+    // Re-pointed dependencies need no AI at all — the content fingerprint proved
     // the passage is the same, only its chunk id changed.
     for (const op of plan.ops) {
       if (op.kind !== 'relinkOnly' || op.entity !== 'topic' || op.inputChunkIds.length === 0) {
@@ -381,6 +383,7 @@ export class CourseContentService {
       relinkedTopics.push(next)
     }
 
+    const subject = regeneratableOps.length > 0 ? await loadProjectSubject(projectId) : undefined
     for (const op of regeneratableOps) {
       const topic = topicById.get(op.id)
       if (!topic) {
@@ -400,6 +403,7 @@ export class CourseContentService {
         candidateChunks,
         services!.ai,
         analysisLanguage,
+        subject,
         options.signal,
       )
       if (!staged) {
@@ -481,13 +485,20 @@ export class CourseContentService {
     candidateChunks: DocumentChunk[],
     ai: AIService,
     language: 'zh' | 'en' | 'mixed',
+    subject: Subject | undefined,
     signal?: AbortSignal,
   ) {
-    const chapterLabel = [topic.chapterNumber, topic.chapterTitle].filter(Boolean).join(' �?')
-    const sectionLabel = [topic.sectionNumber, topic.sectionTitle].filter(Boolean).join(' �?')
+    const chapterLabel = [topic.chapterNumber, topic.chapterTitle].filter(Boolean).join(' — ')
+    const sectionLabel = [topic.sectionNumber, topic.sectionTitle].filter(Boolean).join(' — ')
 
     const messages = [
-      { role: 'system' as const, content: prompts.topicAnalyzer.buildSystemPrompt() },
+      {
+        role: 'system' as const,
+        content: prompts.subjectProfile.withSubject(
+          prompts.topicAnalyzer.buildSystemPrompt(),
+          subject,
+        ),
+      },
       {
         role: 'user' as const,
         content: prompts.topicAnalyzer.buildUserPrompt({
@@ -529,7 +540,10 @@ export class CourseContentService {
         sourceChapterIds: dependency.sourceChapterIds,
         sourceSectionIds: dependency.sourceSectionIds,
         dependencyHash: dependency.dependencyHash,
-        promptVersion: prompts.topicAnalyzer.VERSION,
+        promptVersion: prompts.subjectProfile.subjectPromptVersion(
+          prompts.topicAnalyzer.VERSION,
+          subject,
+        ),
         createdAt: topic.createdAt,
       }
       delete topicRow.needsFullReanalysis
@@ -630,7 +644,7 @@ export class CourseContentService {
     const freshness = await this.content.isFresh(projectId)
     if (freshness.fresh) return { analyzed: false, reason: 'fresh' }
 
-    // No API key is a distinct state from "analysis failed" �?it is simply
+    // No API key is a distinct state from "analysis failed" — it is simply
     // "not configured", and must never mark the stored analysis as failed.
     const services = await buildAIServices()
     if (!services) return { analyzed: false, reason: 'no-provider' }

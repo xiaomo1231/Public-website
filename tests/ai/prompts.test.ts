@@ -6,7 +6,7 @@ describe('Prompt registry', () => {
     expect(PROMPT_VERSIONS.documentAnalyzer).toBe('v2')
     expect(PROMPT_VERSIONS.topicAnalyzer).toBe('v1')
     expect(PROMPT_VERSIONS.tutorIntroduce).toBe('v1')
-    expect(PROMPT_VERSIONS.tutorQuestion).toBe('v1')
+    expect(PROMPT_VERSIONS.tutorQuestion).toBe('v2')
     expect(PROMPT_VERSIONS.tutorEvaluate).toBe('v1')
     expect(PROMPT_VERSIONS.translator).toBe('v2')
     expect(PROMPT_VERSIONS.mistakeAnalyzer).toBe('v2')

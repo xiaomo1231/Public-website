@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from 'react'
-import { AlertCircle, Loader2, RefreshCw, Sparkles } from 'lucide-react'
+import { AlertCircle, HardDrive, Loader2, RefreshCw } from 'lucide-react'
 import { Button } from '@/shared/ui/Button'
 import { Card, CardContent } from '@/shared/ui/Card'
 import { ConfirmDialog } from '@/shared/ui/ConfirmDialog'
@@ -7,6 +7,8 @@ import { LoadingState } from '@/shared/ui/LoadingState'
 import { RichText } from '@/shared/ui/RichText'
 import { VisualSourceFigure } from '@/widgets/source/VisualSourceFigure'
 import { TutorVisualizationFigure } from '@/widgets/tutor/TutorVisualizationFigure'
+import { ReferenceImageGallery } from '@/widgets/tutor/ReferenceImageGallery'
+import { useReferenceImages } from '@/features/tutor/useReferenceImages'
 import { stripDuplicateTitle, parseLessonSections } from '@/shared/lib/lessonDocument'
 import { anchorVisualizations } from '@/entities/tutorVisualization/placement'
 import { useTranslation } from '@/i18n'
@@ -34,6 +36,7 @@ export function TutorLessonView({
 }: TutorLessonViewProps): JSX.Element {
   const { t } = useTranslation()
   const [confirmOpen, setConfirmOpen] = useState(false)
+  const referenceImages = useReferenceImages(state.lesson, { name: topicName, description: topicDescription })
 
   if (state.status === 'loading') {
     return (
@@ -84,7 +87,7 @@ export function TutorLessonView({
               {topicName}
             </h1>
             <span className="inline-flex shrink-0 items-center gap-1 rounded-full border border-border/70 px-2 py-0.5 text-[11px] text-muted-foreground">
-              <Sparkles className="h-3 w-3" aria-hidden />
+              <HardDrive className="h-3 w-3" aria-hidden />
               {t('tutor.savedLocally')}
             </span>
           </div>
@@ -120,6 +123,19 @@ export function TutorLessonView({
           }}
         />
 
+        {/* Figures preserved from the course material come first: they are the
+            primary source, ahead of anything drawn or found for the lesson. */}
+        {lesson.visuals && lesson.visuals.length > 0 && (
+          <section className="space-y-2" aria-label={t('tutor.visualSources')}>
+            <h2 className="text-[22px] font-semibold leading-snug tracking-tight text-foreground">
+              {t('tutor.visualSources')}
+            </h2>
+            {lesson.visuals.map((visual) => (
+              <VisualSourceFigure key={visual.id} visual={visual} />
+            ))}
+          </section>
+        )}
+
         {/* Lesson-level figures, or figures whose anchor did not resolve. */}
         {trailing.length > 0 && (
           <section className="space-y-3" aria-label={t('tutor.visualizations')}>
@@ -132,17 +148,12 @@ export function TutorLessonView({
           </section>
         )}
 
-        {/* Figures preserved from the source, shown as the original image. */}
-        {lesson.visuals && lesson.visuals.length > 0 && (
-          <section className="space-y-2" aria-label={t('tutor.visualSources')}>
-            <h2 className="text-[22px] font-semibold leading-snug tracking-tight text-foreground">
-              {t('tutor.visualSources')}
-            </h2>
-            {lesson.visuals.map((visual) => (
-              <VisualSourceFigure key={visual.id} visual={visual} />
-            ))}
-          </section>
-        )}
+
+        {/* Opt-in web reference pictures (chemistry / biology). */}
+        <ReferenceImageGallery
+          state={referenceImages}
+          hasCourseFigures={Boolean(lesson.visuals?.some((visual) => visual.hasImage))}
+        />
 
         <div className="flex flex-wrap items-center gap-2 border-t border-border/60 pt-4">
           <Button

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Eye, EyeOff, Languages, Loader2, RotateCcw, Save, Wifi } from 'lucide-react'
+import { Eye, EyeOff, ImageIcon, Languages, Loader2, RotateCcw, Save, Wifi } from 'lucide-react'
 import { useAISettings } from '@/features/settings/useAISettings'
 import { useUILanguage } from '@/features/settings/useUILanguage'
 import {
@@ -13,6 +13,7 @@ import { Input } from '@/shared/ui/Input'
 import { Label } from '@/shared/ui/Label'
 import { LoadingState } from '@/shared/ui/LoadingState'
 import { PageContainer, PageContent, PageHeader } from '@/shared/ui/Page'
+import { ThemePicker } from '@/widgets/theme/ThemePicker'
 import {
   Select,
   SelectContent,
@@ -189,6 +190,9 @@ export function SettingsPage(): JSX.Element {
           </CardContent>
         </Card>
 
+        {/* Appearance applies instantly; it is not part of the Save button. */}
+        <ThemePicker />
+
         <Card>
           <CardHeader>
             <CardTitle>{t('settings.provider.title')}</CardTitle>
@@ -335,6 +339,48 @@ export function SettingsPage(): JSX.Element {
                 {t('settings.sampling.maxTokensHint')}
               </p>
             </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <ImageIcon className="h-4 w-4" aria-hidden />
+              {t('settings.webImages.title')}
+            </CardTitle>
+            <CardDescription>{t('settings.webImages.description')}</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <label className="flex cursor-pointer items-start gap-3">
+              <input
+                type="checkbox"
+                className="focus-ring mt-0.5 h-4 w-4 shrink-0 accent-primary"
+                checked={draft.webImagesEnabled}
+                onChange={(e) => patch('webImagesEnabled', e.target.checked)}
+              />
+              <span className="space-y-0.5">
+                <span className="block text-sm font-medium">{t('settings.webImages.enable')}</span>
+                <span className="block text-xs text-muted-foreground">{t('settings.webImages.enableHint')}</span>
+              </span>
+            </label>
+            <label
+              className={cn(
+                'flex items-start gap-3 pl-7',
+                draft.webImagesEnabled ? 'cursor-pointer' : 'cursor-not-allowed opacity-50',
+              )}
+            >
+              <input
+                type="checkbox"
+                className="focus-ring mt-0.5 h-4 w-4 shrink-0 accent-primary"
+                checked={draft.webImagesVisionCheck}
+                disabled={!draft.webImagesEnabled}
+                onChange={(e) => patch('webImagesVisionCheck', e.target.checked)}
+              />
+              <span className="space-y-0.5">
+                <span className="block text-sm font-medium">{t('settings.webImages.vision')}</span>
+                <span className="block text-xs text-muted-foreground">{t('settings.webImages.visionHint')}</span>
+              </span>
+            </label>
           </CardContent>
         </Card>
 

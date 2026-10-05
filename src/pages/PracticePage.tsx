@@ -4,15 +4,18 @@ import { ArrowLeft, Check, ClipboardList, Loader2, Upload, X } from 'lucide-reac
 import { Button } from '@/shared/ui/Button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/ui/Card'
 import { Badge } from '@/shared/ui/Badge'
-import { Input } from '@/shared/ui/Input'
 import { EmptyState } from '@/shared/ui/EmptyState'
 import { LoadingState } from '@/shared/ui/LoadingState'
 import { PageContainer, PageContent, PageHeader } from '@/shared/ui/Page'
 import { RichText } from '@/shared/ui/RichText'
+import { MathField } from '@/widgets/mathInput/MathField'
+import { useProject } from '@/features/project/useProjects'
 import { VisualSourceFigure } from '@/widgets/source/VisualSourceFigure'
 import { DocumentUploadDialog } from '@/widgets/documents/DocumentUploadDialog'
 import { ProjectFlowNav } from '@/widgets/project/ProjectFlowNav'
 import { PracticeService, type PracticeFeedback, type PracticeProgress } from '@/services/practiceService'
+import { buildPracticeService } from '@/services/aiServices'
+import { ShortAnswerFeedback } from '@/widgets/quiz/ShortAnswerFeedback'
 import { CourseContextService } from '@/services/courseContextService'
 import type { PracticeQuestion, PracticeSet, ProfessorQuestionStyleProfile } from '@/entities/practice/types'
 import type { TutorVisual } from '@/entities/tutorLesson/types'
@@ -27,9 +30,24 @@ function QuestionCard({
   onChecked: () => void
 }): JSX.Element {
   const { t } = useTranslation()
+  const { project } = useProject(question.projectId)
   const [answer, setAnswer] = useState('')
   const [feedback, setFeedback] = useState<PracticeFeedback | null>(null)
   const [busy, setBusy] = useState(false)
+  const [disputing, setDisputing] = useState(false)
+
+  async function dispute(): Promise<void> {
+    if (!feedback) return
+    setDisputing(true)
+    try {
+      const updated = await (await buildPracticeService()).disputeAttempt(feedback.attemptId)
+      setFeedback((current) =>
+        current && updated.evaluation ? { ...current, evaluation: updated.evaluation } : current,
+      )
+    } finally {
+      setDisputing(false)
+    }
+  }
 
   const isChoice = question.type === 'single_choice' || question.type === 'true_false'
   const visual: TutorVisual | null = question.visualSourceId
@@ -49,7 +67,7 @@ function QuestionCard({
     if (!answer.trim()) return
     setBusy(true)
     try {
-      setFeedback(await new PracticeService().recordAttempt(question.id, answer.trim()))
+      setFeedback(await (await buildPracticeService()).recordAttempt(question.id, answer.trim()))
       onChecked()
     } finally {
       setBusy(false)
@@ -86,7 +104,7 @@ function QuestionCard({
                     type="button"
                     onClick={() => setAnswer(label)}
                     className={cn(
-                      'flex w-full items-start gap-2 rounded-md border px-3 py-2 text-left text-[15px] transition-colors',
+                      'flex w-full items-start gap-2 rounded-lg border px-3 py-2 text-left text-[15px] transition-colors',
                       answer === label ? 'border-primary bg-primary/5' : 'hover:bg-accent/50',
                     )}
                     aria-pressed={answer === label}
@@ -103,12 +121,20 @@ function QuestionCard({
             <label htmlFor={`answer-${question.id}`} className="text-sm font-medium">
               {t('practice.yourAnswer')}
             </label>
-            <Input
+            <MathField
               id={`answer-${question.id}`}
+              // Graded types get the matching keyboard and a "read as"
+              // preview; a short answer is free text with Unicode symbols.
+              mode={question.type === 'math_expr' ? 'expression' : question.type === 'numeric' ? 'number' : 'text'}
+              subject={project?.subject}
+              multiline={question.type === 'short_answer' || question.type === 'unknown'}
               value={answer}
-              onChange={(event) => setAnswer(event.target.value)}
+              onChange={setAnswer}
               placeholder={t('practice.placeholder')}
-              className="text-[16px]"
+              inputClassName="text-[16px]"
+              onSubmit={() => {
+                if (!busy && answer.trim()) void check()
+              }}
             />
           </div>
         )}
@@ -118,10 +144,18 @@ function QuestionCard({
           {t('practice.check')}
         </Button>
 
-        {feedback && (
+        {feedback?.evaluation ? (
+          <ShortAnswerFeedback
+            evaluation={feedback.evaluation}
+            {...(feedback.evaluation.method === 'rubric_ai' && !feedback.evaluation.disputed
+              ? { onDispute: () => void dispute() }
+              : {})}
+            disputing={disputing}
+          />
+        ) : feedback && (
           <div
             className={cn(
-              'space-y-1.5 rounded-md border p-3 text-sm',
+              'space-y-1.5 rounded-lg border p-3 text-sm',
               feedback.isCorrect === true && 'border-emerald-500/40 bg-emerald-50/40 dark:bg-emerald-950/20',
               feedback.isCorrect === false && 'border-destructive/40 bg-destructive/5',
               feedback.isCorrect === undefined && 'border-border',

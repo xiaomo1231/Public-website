@@ -1,7 +1,7 @@
 import { Fragment, useMemo, type ReactNode } from 'react'
 import { cn } from '@/shared/lib/utils'
 import { splitMathSegments, splitParagraphs } from '@/shared/lib/mathText'
-import type { InlineSpan, MarkdownBlock, TableBlock } from '@/shared/lib/markdownText'
+import { splitInline, type InlineSpan, type MarkdownBlock, type TableBlock } from '@/shared/lib/markdownText'
 import type { TableAlignment } from '@/shared/lib/markdownTable'
 import { parseLessonSections, type LessonSection } from '@/shared/lib/lessonDocument'
 import { useTranslation } from '@/i18n'
@@ -55,13 +55,13 @@ function Inline({ spans }: { spans: InlineSpan[] }): JSX.Element {
           case 'strong':
             return (
               <strong key={i} className="font-semibold text-foreground">
-                {span.value}
+                <Inline spans={splitInline(span.value)} />
               </strong>
             )
           case 'em':
             return (
               <em key={i} className="italic">
-                {span.value}
+                <Inline spans={splitInline(span.value)} />
               </em>
             )
           case 'code':
@@ -130,9 +130,16 @@ function Block({
       )
     case 'code':
       return (
-        <pre className="max-w-full overflow-x-auto rounded-md bg-muted p-3 text-[13px] leading-relaxed">
-          <code className="font-mono">{block.value}</code>
-        </pre>
+        <div className="max-w-full overflow-hidden rounded-lg bg-muted">
+          {block.language && (
+            <div className="border-b border-border/70 px-3 py-1 font-mono text-[11px] text-muted-foreground">
+              {block.language}
+            </div>
+          )}
+          <pre className="max-w-full overflow-x-auto p-3 text-[13px] leading-relaxed">
+            <code className="font-mono">{block.value}</code>
+          </pre>
+        </div>
       )
     case 'math':
       return <Math latex={block.value} display />

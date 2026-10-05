@@ -74,7 +74,7 @@ export function SourceQuote({
           {/* A single source sits under the caller's own heading; multiple
               sources each need their own label to stay distinguishable. */}
           {total !== undefined && total > 1 && index !== undefined && (
-            <span className="flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
+            <span className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
               <BookOpen className="h-3.5 w-3.5 shrink-0" aria-hidden />
               {t('questionSource.sourceN', { index })}
             </span>

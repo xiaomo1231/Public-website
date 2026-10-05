@@ -284,3 +284,28 @@ export function numericEquivalent(userAnswer: string, expectedAnswer: string, re
   const diff = Math.abs(u - e)
   return diff <= relTol * Math.max(Math.abs(e), 1)
 }
+
+/** How a typed expression will be read, for a live preview under the field. */
+export type ExpressionPreview =
+  | { status: 'empty' }
+  | { status: 'ok'; latex: string }
+  | { status: 'error' }
+
+/**
+ * Parse exactly as `compareMath` does and render the result as LaTeX, so the
+ * student sees what the grader will read (`x^3/3 + C` → x³/3 + C) before
+ * submitting. Never throws.
+ */
+export function previewExpression(input: string): ExpressionPreview {
+  if (!input.trim()) return { status: 'empty' }
+  const { expr, hadConstant } = stripIntegrationConstant(normalizeExpression(input))
+  const toTex = (source: string): string =>
+    parse(source).toTex({ parenthesis: 'auto', implicit: 'hide' })
+  try {
+    const sides = splitEquation(expr)
+    const latex = sides ? `${toTex(sides[0])} = ${toTex(sides[1])}` : toTex(expr)
+    return { status: 'ok', latex: hadConstant ? `${latex} + C` : latex }
+  } catch {
+    return { status: 'error' }
+  }
+}

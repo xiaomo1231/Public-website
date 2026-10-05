@@ -104,6 +104,7 @@ describe('HomeworkQuestionView professor answer', () => {
     const { service } = stubService()
     vi.mocked(service.getOrGenerateReviewGuide).mockResolvedValue({
       ...REVIEW,
+      steps: ['步骤 4：代入 $P(x)=ax^2+bx+c$：\\n$$P(x)=\\frac32x^2+5$$\\n即得到完整函数。'],
       check: '正确性核对\\n- $P(0)=5$\\n- $P(1)=8$\\n\\n三个点均符合。',
     })
     render(<MemoryRouter><HomeworkQuestionView question={ANSWERED} service={service} mode="review" /></MemoryRouter>)
@@ -112,6 +113,21 @@ describe('HomeworkQuestionView professor answer', () => {
     expect(section?.querySelectorAll('li')).toHaveLength(2)
     expect(section?.textContent).not.toContain('\\n-')
     expect(section?.textContent).toContain('三个点均符合。')
+    expect(screen.getByText('Worked steps').closest('section')?.textContent).not.toContain('\\n')
+  })
+
+  it('renders bold math and encoded spaces as readable review text', async () => {
+    const { service } = stubService()
+    vi.mocked(service.getOrGenerateReviewGuide).mockResolvedValue({
+      ...REVIEW,
+      method: '**$a$&#x20;**&#x20;与 **$b$** 比较。',
+    })
+    render(<MemoryRouter><HomeworkQuestionView question={ANSWERED} service={service} mode="review" /></MemoryRouter>)
+    const heading = await screen.findByText('Method and why it fits')
+    const section = heading.closest('section')
+    expect(section?.textContent).not.toContain('&#x20;')
+    expect(section?.textContent).not.toContain('$a$')
+    expect(section?.querySelectorAll('strong .katex')).toHaveLength(2)
   })
 
   it('regenerates from the professor answer for a matched question', async () => {

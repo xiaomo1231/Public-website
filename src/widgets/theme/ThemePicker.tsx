@@ -59,7 +59,7 @@ export function ThemePicker(): JSX.Element {
                   />
                   <span
                     className={cn(
-                      'inline-flex items-center gap-2 rounded-md border px-3 py-1.5 text-sm transition-colors',
+                      'inline-flex items-center gap-2 rounded-lg border px-3 py-1.5 text-sm transition-colors',
                       'peer-focus-visible:ring-2 peer-focus-visible:ring-ring peer-focus-visible:ring-offset-2 peer-focus-visible:ring-offset-background',
                       selected
                         ? 'border-primary bg-theme-primary-soft font-medium text-foreground'

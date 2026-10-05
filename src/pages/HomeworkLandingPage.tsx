@@ -251,7 +251,7 @@ export function HomeworkLandingPage(): JSX.Element {
         ) : (
           <>
             {summary && (
-              <Card className="blueprint-frame border-border/70">
+              <Card className="border-border/70">
                 <CardHeader>
                   <CardTitle className="text-base">{t('homework.reanalysis.title')}</CardTitle>
                   <CardDescription>

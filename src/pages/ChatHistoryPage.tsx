@@ -95,7 +95,7 @@ export function ChatHistoryPage(): JSX.Element {
                 <button
                   key={s.id}
                   onClick={() => setActiveId(s.id)}
-                  className={`block w-full rounded-md border px-3 py-2 text-left text-sm transition-colors ${
+                  className={`block w-full rounded-lg border px-3 py-2 text-left text-sm transition-colors ${
                     activeId === s.id ? 'border-foreground/30 bg-accent' : 'hover:bg-accent/50'
                   }`}
                 >
@@ -164,7 +164,7 @@ function TurnCard({ turn }: { turn: TutorTurn }) {
       }
     >
       <CardContent className="space-y-2 p-4 text-sm">
-        <div className="flex items-center gap-2 text-xs uppercase tracking-wider text-muted-foreground">
+        <div className="flex items-center gap-2 text-xs text-muted-foreground">
           {isStudent ? t('chatHistory.student') : t('chatHistory.tutor')}
           <span>·</span>
           <span>{t(TURN_KIND_LABEL_KEYS[turn.kind])}</span>
@@ -181,7 +181,7 @@ function TurnCard({ turn }: { turn: TutorTurn }) {
         </div>
         <p className="whitespace-pre-wrap">{turn.content}</p>
         {turn.question?.sourceRefs && turn.question.sourceRefs.length > 0 && (
-          <div className="min-w-0 truncate rounded-md bg-muted/40 px-2 py-1 text-[11px] text-muted-foreground">
+          <div className="min-w-0 truncate rounded-lg bg-muted/40 px-2 py-1 text-[11px] text-muted-foreground">
             {t('chatHistory.source', {
               value: turn.question.sourceRefs
                 .map((r) => `${r.documentName}${r.page ? ` p${r.page}` : ''}`)

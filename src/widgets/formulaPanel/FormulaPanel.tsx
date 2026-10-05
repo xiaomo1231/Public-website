@@ -85,7 +85,7 @@ export function FormulaPanel({ projectId, topicId }: FormulaPanelProps): JSX.Ele
                 key={f.id}
                 type="button"
                 onClick={() => navigator.clipboard?.writeText(f.latex).catch(() => undefined)}
-                className="block w-full min-w-0 rounded-md border bg-card p-2 text-left transition-colors hover:bg-accent"
+                className="block w-full min-w-0 rounded-lg border bg-card p-2 text-left transition-colors hover:bg-accent"
               >
                 <div className="flex min-w-0 flex-wrap items-baseline gap-2">
                   <TruncatedText text={f.name} className="text-sm font-medium" />
@@ -112,13 +112,13 @@ export function FormulaPanel({ projectId, topicId }: FormulaPanelProps): JSX.Ele
             <p className="text-xs text-muted-foreground">{t('formula.noSymbols')}</p>
           ) : (
             filteredSymbols.slice(0, 40).map((s) => (
-              <div key={s.id} className="rounded-md border bg-card p-2 text-sm">
+              <div key={s.id} className="rounded-lg border bg-card p-2 text-sm">
                 <div className="flex items-baseline gap-2">
                   <code className="rounded bg-muted px-1 font-mono">{s.symbol}</code>
                   {s.unit && <Badge variant="outline">{s.unit}</Badge>}
                 </div>
                 <p className="text-xs">{s.meaning}</p>
-                <p className="text-[10px] uppercase tracking-wider text-muted-foreground">{s.context}</p>
+                <p className="text-xs text-muted-foreground">{s.context}</p>
               </div>
             ))
           )}

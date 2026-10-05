@@ -5,6 +5,10 @@ export interface MasteryObservation {
   isCorrect: boolean | null
   difficulty: DifficultyLevel
   questionType: string
+  /** Partial credit 0–1 (short answer); absent ⇒ 1 when correct, 0 when not. */
+  credit?: number
+  /** Evidence weight; AI-judged short answers count half. Absent ⇒ 1. */
+  weight?: number
 }
 
 /**

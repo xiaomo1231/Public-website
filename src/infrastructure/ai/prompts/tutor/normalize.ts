@@ -18,7 +18,7 @@ import { AppError } from '@/infrastructure/errors/AppError'
 import { normalizeMathNotation } from '@/infrastructure/files/mathNotation'
 import { t } from '@/i18n'
 
-const QUESTION_TYPES = ['multiple_choice', 'true_false', 'numeric', 'math_expr'] as const
+const QUESTION_TYPES = ['multiple_choice', 'true_false', 'numeric', 'math_expr', 'short_answer'] as const
 
 /**
  * Canonicalise the maths in model-authored text before it is stored or shown.
@@ -49,10 +49,24 @@ export function normalizeTutorQuestion(raw: unknown): TutorQuestion {
     throw new AppError(t('errors.aiNoQuestion'), 'MALFORMED_QUESTION')
   }
   const options = asStringArray(record.options).map(cleanMath)
+  const type = asEnum(record.type, QUESTION_TYPES, 'multiple_choice')
+  // A short answer is graded by its scoring points; without at least two
+  // distinct ones it cannot be graded fairly, so the question is rejected.
+  const seen = new Set<string>()
+  const rubric = asStringArray(record.rubric)
+    .map((point) => cleanMath(point).slice(0, 200))
+    .filter((point) => point && !seen.has(point.toLowerCase()) && seen.add(point.toLowerCase()))
+    .slice(0, 6)
+  if (type === 'short_answer' && rubric.length < 2) {
+    throw new AppError(t('errors.aiNoQuestion'), 'MALFORMED_QUESTION')
+  }
   return {
     id: '',
     prompt,
-    type: asEnum(record.type, QUESTION_TYPES, 'multiple_choice'),
+    type,
+    ...(type === 'short_answer'
+      ? { rubric: rubric.map((text, index) => ({ id: `p${index + 1}`, text })) }
+      : {}),
     ...(options.length > 0 ? { options } : {}),
     expectedAnswer,
     explanation: cleanMath(asTrimmedString(record.explanation)),

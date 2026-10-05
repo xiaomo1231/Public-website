@@ -7,13 +7,15 @@ import * as VisualizationGeneratorV1 from '@/infrastructure/ai/prompts/visualiza
 import * as VisualizationGeneratorV2 from '@/infrastructure/ai/prompts/visualization-generator/v2'
 import * as VisualizationGeneratorV3 from '@/infrastructure/ai/prompts/visualization-generator/v3'
 import * as VisualizationGeneratorV4 from '@/infrastructure/ai/prompts/visualization-generator/v4'
+import * as VisualizationGeneratorV5 from '@/infrastructure/ai/prompts/visualization-generator/v5'
 import { prompts, PROMPT_VERSIONS } from '@/infrastructure/ai/prompts'
 import { hasGraphableMath } from '@/entities/tutorVisualization/graphable'
 
 describe('visualization prompt contract', () => {
-  it('is registered at v5 and keeps v1/v2/v3/v4 available', () => {
-    expect(PROMPT_VERSIONS.visualizationGenerator).toBe('v5')
-    expect(prompts.visualizationGenerator.VERSION).toBe('v5')
+  it('is registered at v7 and keeps v1–v6 available', () => {
+    expect(PROMPT_VERSIONS.visualizationGenerator).toBe('v7')
+    expect(prompts.visualizationGenerator.VERSION).toBe('v7')
+    expect(VisualizationGeneratorV5.VERSION).toBe('v5')
     expect(VisualizationGeneratorV1.VERSION).toBe('v1')
     expect(VisualizationGeneratorV2.VERSION).toBe('v2')
     expect(VisualizationGeneratorV3.VERSION).toBe('v3')
