@@ -19,7 +19,7 @@
 
 **这不是"AI PDF 总结工具"。** 教学以题目为主要载体，而不是长篇总结。
 
-当前版本：**V0.4.0（0.4.0）**。
+当前版本：**V0.5.0（0.5.0）**。
 
 ---
 
@@ -394,9 +394,11 @@ docs/             architecture.md
 | 7u | 化学 / 生物配图三层：课程原图优先、本地计算的六种图（schema v7）、联网参考图片（Dexie v14，默认关闭） | 已交付（v0.3.9） |
 | 7v | 大学深度：转录方向与起始密码子、有机方程式与同分异构体、大学单位；t / χ² / F 与卡方检验、伴性与复等位遗传、系谱遗传方式分析、多元酸与弱碱滴定（schema v8） | 已交付（v0.4.0） |
 | 7w | 其它理科可交互图：公式探索器、微积分（切线 / 黎曼和 / 泰勒）、物理（受力 / 运动 / 光路 / 电路）、统计（回归 / 置信区间）、化学动力学、酶动力学、种群增长、排序与 BST（schema v9） | 已交付（v0.4.0） |
-| 7x | 医学适配（临床 + 口腔，大一大二）：医学科目画像与安全边界、X / B / 填空题型、医学单位、生理 / 生化 / 药动 / 形态共 14 种图（schema v10）、医学联网参考图片、复习卡片（Dexie v15） | 工作区已完成，未提交 / 未发布 |
+| 7x | 医学适配（临床 + 口腔，大一大二）：医学科目画像与安全边界、X / B / 填空题型、医学单位、生理 / 生化 / 药动 / 形态共 14 种图（schema v10）、医学联网参考图片、复习卡片（Dexie v15） | 已交付（v0.5.0） |
 | 8 | Dashboard 强化 | 部分交付（v0.2.8：视觉与交互函数图；v0.3.1：构图与动效打磨；指标类未做） |
 | 9 | PWA · a11y · 导入导出打磨 | 未开始 |
+
+**V0.5.0 已提交并发布**（tag `v0.5.0`，两个远程仓库各一份 Release + 源码压缩包）。本版包含：**医学科目**（临床 + 口腔，大一大二；科目画像与安全边界、科目推断、医学单位与符号键盘分组）；**X 型多选（部分得分）/ B 型配伍 / 填空题**（`quiz-generator/v5`、`fill-blank-check/v1`）；**14 种医学图**（生理 / 生化 / 药动 / 形态，schema v10，`visualization-generator/v10`）；**医学联网参考图片**（`reference-image-query/v2`）；**复习卡片**（间隔重复，新增 Dexie **v15** `reviewCards` 表）。其它科目画像未改，已缓存讲解不重新生成。
 
 **V0.4.0 已提交并发布**（tag `v0.4.0`，两个远程仓库各一份 Release + 源码压缩包）。本版包含：**化学 / 生物正确性修复**（转录方向与起始密码子、有机结构式与同分异构体提示、大学单位）；**化学 / 生物 / 统计科目画像按大学深度改写**，物理 / 微积分 / 计算机画像同步升级；**更深入的图**（t / χ² / F 分布、卡方拟合优度检验、伴性与复等位遗传、系谱遗传方式分析、多元酸与弱碱滴定，schema v8）；**其它理科可交互图**（公式探索器、微积分、物理、统计、化学动力学、酶动力学、种群增长、排序与 BST，schema v9，`visualization-generator/v9`）。未新增 Dexie 表 / 索引。
 
@@ -441,7 +443,7 @@ docs/             architecture.md
      - **生物**：`enzyme_2d`（米氏曲线 + 双倒数图，竞争 / 非竞争 / 反竞争 / 混合抑制的表观常数）、`population_2d`（指数 / 逻辑斯谛，拐点 t*、最大速率 rK/4、dN/dt–N 图）。
      - **计算机**：`sorting_2d`（冒泡 / 插入 / 选择 / 归并 / 快排逐步回放，比较与写入计数）、`bst_2d`（按插入顺序建树，插入数滑块，中 / 前 / 后 / 层序遍历与高度）。
      - 计算在 `formula.ts` / `physics.ts` / `models.ts` / `algorithms.ts`，校验在 `normalizeSubjects.ts`，渲染在 `TutorFormulaFigure` / `TutorPhysicsFigure` / `TutorModelFigure` / `TutorAlgorithmFigure`（共用 `PlotFrame` + `plotUtils`）。门控：各图族关键词 + 理科科目讲解中出现带 `=` 的公式（`looksLikeFormulaText`）。科目画像：物理 / 微积分 / 计算机升至 r2，并为各理科补充“讲解中写明可画图数据”的课时指引。
-   - **医学（schema v10，`visualization-generator/v10`，工作区未发布）**：新增图族开关 `physiology`（医学 / 生物）、`biochemistry`（医学 / 生物 / 化学）、`pharmacokinetics`、`morphology`（仅医学）；医学同时获得生物、χ² 检验、回归、酶动力学图族。模型只给课时数值，其余本地计算（`entities/tutorVisualization/medicine.ts`，校验 `normalizeMedicine.ts` 含生理范围检查）：
+   - **医学（schema v10，`visualization-generator/v10`，随 v0.5.0 发布）**：新增图族开关 `physiology`（医学 / 生物）、`biochemistry`（医学 / 生物 / 化学）、`pharmacokinetics`、`morphology`（仅医学）；医学同时获得生物、χ² 检验、回归、酶动力学图族。模型只给课时数值，其余本地计算（`entities/tutorVisualization/medicine.ts`，校验 `normalizeMedicine.ts` 含生理范围检查）：
      - **生理**（`TutorPhysiologyFigure`）：`membrane_potential_2d`（Nernst 平衡电位 + GHK 静息电位，[K⁺]ₒ 滑块）、`action_potential_2d`（神经 / 心室肌 / 窦房结示意，分期标注）、`oxygen_2d`（Hill 方程氧解离曲线、血氧含量与动静脉差）、`cardiac_2d`（左室压力–容积环，SV / EF / CO / 每搏功）、`lung_volumes_2d`（肺量计曲线与各肺容量）、`renal_2d`（Starling 力与有效滤过压、清除率 C = U·V/P、滤过分数）、`acid_base_2d`（Davenport 图 + 国内病理生理教材代偿公式：代酸 PaCO₂ = 1.5·HCO₃⁻ + 8 ± 2，代碱 ΔPaCO₂ = 0.7·ΔHCO₃⁻ ± 5，呼酸急性 0.1 ± 1.5 / 慢性 0.35 ± 3，呼碱急性 0.2 ± 2.5 / 慢性 0.5 ± 2.5；超出范围提示合并紊乱，数值不符合 H–H 方程时警告）。
      - **生化 / 药动**（`TutorBiochemFigure`）：`amino_acid_2d`（净电荷–pH 曲线与 pI）、`metabolism_2d`（逐步 ATP / NADH / FADH₂，P/O 现行 2.5/1.5 与旧教材 3/2、苹果酸–天冬氨酸 / α-磷酸甘油穿梭切换；糖酵解 + 有氧氧化 32 / 30 或 38）、`pharmacokinetics_2d`（一室模型静注 / 口服、多次给药叠加，MEC / MTC 带，剂量与间隔滑块，CL / AUC / Css / 蓄积因子 / 达稳态时间；注明不构成用药建议）。
      - **形态**（`TutorMorphologyFigure`）：`dental_chart_2d`（FDI / Universal / Palmer 切换，患者右侧在左）、`timeline_2d`（胚胎 / 萌出时间轴，≤4 条泳道）、`neural_pathway_2d`（逐级神经元，皮质–周围分层与中线，交叉后换侧；`crossesAt` 表示轴突在胞体以外的平面交叉，如皮质脊髓束在延髓）、`anatomy_table_2d`（起止点 / 神经支配等对照表，课时内可一键加入复习卡片，经 `LessonFigureContext` 取得项目与主题）。
