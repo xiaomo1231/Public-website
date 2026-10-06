@@ -64,3 +64,17 @@ describe('unit helpers', () => {
     expect(isValidUnit('')).toBe(false)
   })
 })
+
+describe('medical units', () => {
+  it('converts heart rate, osmolarity and equivalents', () => {
+    expect(compareQuantity('72 bpm', '1.2', 'Hz').isCorrect).toBe(true)
+    expect(compareQuantity('0.3 Osm/L', '300', 'mOsm/L').isCorrect).toBe(true)
+    expect(compareQuantity('140 mEq/L', '0.14', 'Eq/L').isCorrect).toBe(true)
+    expect(compareQuantity('5 mmHg', '5', 'mmHg').isCorrect).toBe(true)
+  })
+
+  it('keeps osmoles apart from moles', () => {
+    expect(compareQuantity('300 mmol/L', '300', 'mOsm/L').isCorrect).toBe(false)
+    expect(isValidUnit('mOsm/L')).toBe(true)
+  })
+})

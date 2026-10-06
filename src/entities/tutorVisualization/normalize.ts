@@ -30,6 +30,7 @@ import { VISUALIZATION_LIMITS } from './limits'
 import { asRecord, readNumber, sanitizeText } from './sanitize'
 import { SCIENCE_NORMALIZERS } from './normalizeScience'
 import { SUBJECT_NORMALIZERS } from './normalizeSubjects'
+import { MEDICAL_NORMALIZERS } from './normalizeMedicine'
 import { DISTRIBUTION_FAMILIES, isDiscrete, validateParams, type DistributionFamily } from './distribution'
 import { normalizeViewport, parseRelationLatex } from './linear'
 import { normalizeFunctionDomain, parseExplicitFunction } from './nonlinear'
@@ -734,7 +735,7 @@ function normalizeOne(raw: unknown, index: number): Normalized {
   if (type === 'venn_2d') return normalizeVenn(draft, base)
   if (type === 'hasse_2d') return normalizeHasse(draft, base)
   if (type === 'distribution_2d') return normalizeDistribution(draft, base)
-  const science = SCIENCE_NORMALIZERS[type] ?? SUBJECT_NORMALIZERS[type]
+  const science = SCIENCE_NORMALIZERS[type] ?? SUBJECT_NORMALIZERS[type] ?? MEDICAL_NORMALIZERS[type]
   if (science) return science(draft, base)
 
   const planeBase: CommonBase & { viewport?: VisualizationViewport } = {

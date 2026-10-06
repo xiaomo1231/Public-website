@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { QuizService } from '@/services/quizService'
 import type { AIService } from '@/services/aiService'
-import type { QuizGenerationOutput } from '@/infrastructure/ai/prompts/quiz-generator/v4'
+import type { QuizGenerationOutput } from '@/infrastructure/ai/prompts/quiz-generator/v5'
 
 /**
  * A multiple-choice question with blank options used to be accepted and

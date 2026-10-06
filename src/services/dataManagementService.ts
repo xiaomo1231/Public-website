@@ -10,6 +10,7 @@ import { QuestionAttemptRepository } from '@/entities/questionAttempt/repository
 import { TutorSessionRepository } from '@/entities/tutorSession/repository'
 import { VisualSourceRepository } from '@/entities/visualSource/repository'
 import { ReferenceImageRepository } from '@/entities/referenceImage/repository'
+import { ReviewCardRepository } from '@/entities/reviewCard/repository'
 import { CourseContextRepository } from '@/entities/courseContext/repository'
 import { CourseStructureRepository } from '@/entities/courseStructure/repository'
 import { TranslationRepository } from '@/entities/translation/repository'
@@ -138,7 +139,7 @@ export class DataManagementService {
       'courseExercises', 'prerequisites', 'tutorSessions', 'tutorLessons',
       'visualSources', 'courseContexts', 'courseStructures', 'courseStructureNodes',
       'practiceSets', 'practiceQuestions', 'practiceAttempts',
-      'homeworkSets', 'homeworkQuestions', 'slideLessons', 'translations',
+      'homeworkSets', 'homeworkQuestions', 'slideLessons', 'translations', 'reviewCards',
       'questions', 'questionAttempts', 'quizzes', 'knowledgeMastery', 'mistakes',
       'inviteKeys', 'user', 'settings',
     ] as const
@@ -192,6 +193,7 @@ export class DataManagementService {
     const translationRepo = new TranslationRepository(this.db)
     const visualRepo = new VisualSourceRepository(this.db)
     const referenceRepo = new ReferenceImageRepository(this.db)
+    const cardRepo = new ReviewCardRepository(this.db)
     const contextRepo = new CourseContextRepository(this.db)
     const structureRepo = new CourseStructureRepository(this.db)
     const practiceRepo = new PracticeRepository(this.db)
@@ -204,6 +206,7 @@ export class DataManagementService {
       await docRepo.deleteByProject(projectId)
       await visualRepo.deleteByProject(projectId)
       await referenceRepo.deleteByProject(projectId)
+      await cardRepo.deleteByProject(projectId)
       await contextRepo.deleteByProject(projectId)
       await structureRepo.deleteByProject(projectId)
       await this.db.table('chunks').where('projectId').equals(projectId).delete()

@@ -8,7 +8,7 @@ import type {
   MistakeStats,
   MistakeType,
 } from '@/entities/mistake/types'
-import type { Question } from '@/entities/question/types'
+import { displayAnswer, expectedAnswerText, type Question } from '@/entities/question/types'
 import type { QuestionAttempt } from '@/entities/questionAttempt/types'
 import { ValidationError } from '@/infrastructure/errors/AppError'
 import { logger } from '@/infrastructure/logger/logger'
@@ -46,7 +46,7 @@ export class MistakeService {
       return this.repo.update(existing.id, {
         attemptCount: existing.attemptCount + 1,
         attemptIds: [...existing.attemptIds, attempt.id],
-        studentAnswer: attempt.userAnswer,
+        studentAnswer: displayAnswer(question, attempt.userAnswer),
         // A re-occurrence resets "understood" back to active.
         status: 'active',
         resolvedAt: undefined,
@@ -64,8 +64,11 @@ export class MistakeService {
       questionType: question.type,
       question: question.prompt,
       ...(question.options ? { options: question.options } : {}),
-      studentAnswer: attempt.userAnswer,
-      correctAnswer: question.correctAnswer,
+      // Stored as the student reads them (option letters, not internal ids).
+      studentAnswer: displayAnswer(question, attempt.userAnswer),
+      correctAnswer: ['multiple_select', 'matching', 'fill_blank'].includes(question.type)
+        ? expectedAnswerText(question)
+        : question.correctAnswer,
       ...(question.solution ? { solution: question.solution } : {}),
       // Snapshot the citation so the mistake book can show the course excerpt.
       ...(question.sourceRefs?.length ? { sourceRefs: question.sourceRefs } : {}),

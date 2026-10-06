@@ -171,6 +171,30 @@ export function EvaluationBox({ evaluation }: { evaluation: QuestionEvaluation }
           {Math.round(evaluation.confidence * 100)}%
         </span>
       </div>
+      {(evaluation.method === 'multi_select' || evaluation.method === 'match_items' || evaluation.method === 'blank_match') &&
+        evaluation.score &&
+        evaluation.score.total > 0 && (
+          <p className="data-num text-xs font-medium">
+            {t('answerInput.partialScore', {
+              earned: evaluation.score.earned,
+              total: evaluation.score.total,
+              percent: Math.round((evaluation.score.earned / evaluation.score.total) * 100),
+            })}
+            {evaluation.normalizedUser && <span className="ml-2 font-normal text-muted-foreground">{t('answerInput.yourAnswer', { value: evaluation.normalizedUser })}</span>}
+          </p>
+        )}
+      {evaluation.blanks && (
+        <ul className="space-y-0.5 text-xs">
+          {evaluation.blanks.map((blank, i) => (
+            <li key={i} className="flex flex-wrap items-center gap-x-2">
+              {blank.correct ? <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" /> : <XCircle className="h-3.5 w-3.5 text-destructive" />}
+              <span>({i + 1}) {blank.given || '—'}</span>
+              {blank.byAi && <span className="text-muted-foreground">{t('fillBlank.byAi')}</span>}
+              {!blank.correct && <span className="text-muted-foreground">{t('fillBlank.accepted', { answers: blank.accepted.join(' / ') })}</span>}
+            </li>
+          ))}
+        </ul>
+      )}
       {evaluation.method === 'order_match' && evaluation.score && evaluation.score.total > 0 && (
         <p className="data-num text-xs font-medium">
           {t('answerInput.orderScore', {

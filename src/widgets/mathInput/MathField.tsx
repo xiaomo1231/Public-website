@@ -34,6 +34,7 @@ const GROUP_LABEL_KEYS: Record<SymbolGroupId, TranslationKey> = {
   arrows: 'symbolGroup.arrows',
   chemistry: 'symbolGroup.chemistry',
   biology: 'symbolGroup.biology',
+  medicine: 'symbolGroup.medicine',
   chemEquation: 'symbolGroup.chemEquation',
   operators: 'symbolGroup.operators',
   functions: 'symbolGroup.functions',

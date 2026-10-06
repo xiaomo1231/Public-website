@@ -6,6 +6,7 @@ import { cn } from '@/shared/lib/utils'
 import { useProject } from '@/features/project/useProjects'
 import { MathField } from '@/widgets/mathInput/MathField'
 import { OrderingInput } from './OrderingInput'
+import { FillBlankInput, MatchingInput, MultipleSelectInput } from './ExamFormatInputs'
 import { useTranslation, type TranslationKey } from '@/i18n'
 
 export interface AnswerInputProps {
@@ -69,6 +70,15 @@ export function AnswerInput({
         <p className="text-xs text-muted-foreground">{t('answerInput.codeOutputHint')}</p>
       </div>
     )
+  }
+  if (question.type === 'multiple_select') {
+    return <MultipleSelectInput question={question} value={value} onChange={onChange} disabled={disabled} revealed={revealed} />
+  }
+  if (question.type === 'matching') {
+    return <MatchingInput question={question} value={value} onChange={onChange} disabled={disabled} revealed={revealed} />
+  }
+  if (question.type === 'fill_blank') {
+    return <FillBlankInput question={question} value={value} onChange={onChange} disabled={disabled} {...(onSubmit ? { onSubmit } : {})} />
   }
   if (question.type === 'ordering') {
     return <OrderingInput question={question} value={value} onChange={onChange} disabled={disabled} />

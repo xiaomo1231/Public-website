@@ -28,6 +28,7 @@ export type SymbolGroupId =
   | 'arrows'
   | 'chemistry'
   | 'biology'
+  | 'medicine'
   | 'chemEquation'
   | 'operators'
   | 'functions'
@@ -115,6 +116,7 @@ const TEXT_GROUPS: Record<SymbolGroupId, SymbolItem[]> = {
   arrows: each('→←↔⇒⇐⇔↑↓↦'),
   chemistry: [...each('→⇌↑↓Δ°'), sym('·'), ...each('⁺⁻²³'), ...each('₂₃₄')],
   biology: [...each('♂♀×→⇌'), sym('F₁'), sym('F₂'), sym('P'), sym(':'), ...each('αβγΔ'), sym('5′'), sym('3′'), sym('ATP'), sym('CO₂'), sym('O₂')],
+  medicine: [...each('↑↓→⇌±≈≥≤'), sym('Na⁺'), sym('K⁺'), sym('Ca²⁺'), sym('Cl⁻'), sym('HCO₃⁻'), sym('O₂'), sym('CO₂'), sym('pH'), sym('mmHg'), sym('mmol/L'), sym('°C')],
   chemEquation: [],
   operators: [],
   functions: [],
@@ -131,6 +133,7 @@ const TEXT_ORDER: Record<string, SymbolGroupId[]> = {
   chemistry: ['chemistry', 'basic', 'scripts', 'greek'],
   biology: ['biology', 'basic', 'scripts', 'greek', 'arrows'],
   cs: ['basic', 'sets', 'arrows', 'scripts', 'greek'],
+  medicine: ['medicine', 'biology', 'basic', 'scripts', 'greek'],
   other: ['basic', 'greek', 'calculus', 'sets', 'scripts', 'arrows'],
 }
 

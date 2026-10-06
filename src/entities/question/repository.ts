@@ -54,6 +54,8 @@ export class QuestionRepository {
         ...(input.type === 'numeric' && input.unit ? { unit: input.unit } : {}),
         ...(input.type === 'short_answer' && input.rubric?.length ? { rubric: input.rubric } : {}),
         ...(input.type === 'ordering' && input.orderItems?.length ? { orderItems: input.orderItems } : {}),
+        ...(input.type === 'matching' && input.matchItems?.length ? { matchItems: input.matchItems } : {}),
+        ...(input.type === 'fill_blank' && input.blanks?.length ? { blanks: input.blanks } : {}),
         ...(input.solution ? { solution: input.solution } : {}),
         hints: input.hints ?? [],
         sourceRefs: input.sourceRefs ?? [],

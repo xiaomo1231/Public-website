@@ -12,9 +12,9 @@ import { prompts, PROMPT_VERSIONS } from '@/infrastructure/ai/prompts'
 import { hasGraphableMath } from '@/entities/tutorVisualization/graphable'
 
 describe('visualization prompt contract', () => {
-  it('is registered at v9 and keeps v1–v8 available', () => {
-    expect(PROMPT_VERSIONS.visualizationGenerator).toBe('v9')
-    expect(prompts.visualizationGenerator.VERSION).toBe('v9')
+  it('is registered at v10 and keeps v1–v9 available', () => {
+    expect(PROMPT_VERSIONS.visualizationGenerator).toBe('v10')
+    expect(prompts.visualizationGenerator.VERSION).toBe('v10')
     expect(VisualizationGeneratorV5.VERSION).toBe('v5')
     expect(VisualizationGeneratorV1.VERSION).toBe('v1')
     expect(VisualizationGeneratorV2.VERSION).toBe('v2')

@@ -36,6 +36,14 @@ describe('subject profile prompt', () => {
     expect(block).toContain('bare number')
   })
 
+  it('keeps medicine to education: no diagnosis or dosing advice', () => {
+    const block = buildSubjectBlock('medicine')
+    expect(block).toContain('Boundaries (always apply):')
+    expect(block).toMatch(/never diagnose/i)
+    expect(block).toMatch(/dosage/i)
+    expect(buildSubjectBlock('physics')).not.toContain('Boundaries')
+  })
+
   it('keeps the non-judgemental mistake wording', () => {
     for (const subject of SUBJECTS.filter((s) => s !== 'other')) {
       expect(buildSubjectBlock(subject)).toContain('never as carelessness')
@@ -71,6 +79,15 @@ describe('inferSubject', () => {
     ['分析化学', 'chemistry'],
     ['数据结构与算法', 'cs'],
     ['Intro to Python Programming', 'cs'],
+    ['系统解剖学', 'medicine'],
+    ['组织学与胚胎学', 'medicine'],
+    ['人体生理学', 'medicine'],
+    ['口腔解剖生理学', 'medicine'],
+    ['Oral Biology', 'medicine'],
+    ['Human Anatomy', 'medicine'],
+    ['医用化学', 'chemistry'],
+    ['医用高等数学', 'calculus'],
+    ['植物生理学', 'biology'],
   ] as const)('%s → %s', (name, expected) => {
     expect(inferSubject(name)).toBe(expected)
   })

@@ -1,7 +1,7 @@
 import type { AIService } from './aiService'
 import { loadProjectSubject } from './projectSubject'
 import { prompts } from '@/infrastructure/ai/prompts'
-import type { ReferenceImageQuery } from '@/infrastructure/ai/prompts/reference-image-query/v1'
+import type { ReferenceImageQuery } from '@/infrastructure/ai/prompts/reference-image-query/v2'
 import {
   downloadImage,
   findPubChemCompound,
@@ -42,9 +42,11 @@ export interface ReferenceImageOptions {
 }
 
 /** Which sources a subject may use; null when the subject gets no web images. */
-export function referenceSourcesFor(subject: Subject | undefined): { allowPubChem: boolean } | null {
+export function referenceSourcesFor(subject: Subject | undefined): { allowPubChem: boolean; medical?: boolean } | null {
   if (subject === 'chemistry') return { allowPubChem: true }
   if (subject === 'biology') return { allowPubChem: false }
+  // Anatomy and histology are learnt from images; drugs come from PubChem.
+  if (subject === 'medicine') return { allowPubChem: true, medical: true }
   return null
 }
 
@@ -119,6 +121,7 @@ export class ReferenceImageService {
             language: input.language,
             lessonContent: input.lessonContent,
             allowPubChem: sources.allowPubChem,
+            ...(sources.medical ? { medical: true } : {}),
           }),
         },
       ],

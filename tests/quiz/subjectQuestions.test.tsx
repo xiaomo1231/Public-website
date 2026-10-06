@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import { QuizService } from '@/services/quizService'
 import type { AIService } from '@/services/aiService'
-import type { QuizGenerationOutput } from '@/infrastructure/ai/prompts/quiz-generator/v4'
+import type { QuizGenerationOutput } from '@/infrastructure/ai/prompts/quiz-generator/v5'
 import { evaluateDeterministic, normalizeProgramOutput } from '@/services/answerEvaluationService'
 import {
   expectedAnswerText,
@@ -118,7 +118,7 @@ describe('quiz generator output validation', () => {
 
   it('describes both in the generator prompt', () => {
     const system = prompts.quizGenerator.buildSystemPrompt()
-    expect(prompts.quizGenerator.VERSION).toBe('v4')
+    expect(prompts.quizGenerator.VERSION).toBe('v5')
     expect(system).toContain('`unit`')
     expect(system).toContain('`code_output`')
   })

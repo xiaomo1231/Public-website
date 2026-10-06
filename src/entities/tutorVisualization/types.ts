@@ -6,6 +6,18 @@ import type { RiemannMethod } from './formula'
 import type { CircuitNode, Force, MotionSegment, OpticalElement } from './physics'
 import type { GrowthModel, Inhibitor, ReactionOrder } from './models'
 import type { SortAlgorithm } from './algorithms'
+import type {
+  CardiacInput,
+  Dentition,
+  DosingRegimen,
+  IonConcentration,
+  IonizableGroup,
+  LungVolumes,
+  MetabolicStep,
+  PoConvention,
+  Shuttle,
+  StarlingForces,
+} from './medicine'
 
 /**
  * Structured 2D mathematical visualizations attached to a `TutorLesson`.
@@ -35,10 +47,13 @@ import type { SortAlgorithm } from './algorithms'
  * calculus (tangent, Riemann sums, Taylor), physics (forces, motion, optics,
  * circuits), statistics (regression, confidence intervals), chemistry
  * (kinetics, Arrhenius), biology (enzyme kinetics, population growth) and
- * computer science (sorting, BSTs). Older rows are still read and rendered
- * unchanged.
+ * computer science (sorting, BSTs); v10 added the medical figures (membrane
+ * and action potentials, oxygen binding, the cardiac PV loop, lung volumes,
+ * renal filtration, acid–base, amino acids, energy yield, pharmacokinetics,
+ * the dental chart, timelines, neural pathways and anatomy tables). Older
+ * rows are still read and rendered unchanged.
  */
-export const TUTOR_VISUALIZATION_SCHEMA_VERSION = 9
+export const TUTOR_VISUALIZATION_SCHEMA_VERSION = 10
 
 export type TutorVisualizationType =
   | 'function_2d'
@@ -76,6 +91,20 @@ export type TutorVisualizationType =
   | 'population_2d'
   | 'sorting_2d'
   | 'bst_2d'
+  | 'membrane_potential_2d'
+  | 'action_potential_2d'
+  | 'oxygen_2d'
+  | 'cardiac_2d'
+  | 'lung_volumes_2d'
+  | 'renal_2d'
+  | 'acid_base_2d'
+  | 'amino_acid_2d'
+  | 'metabolism_2d'
+  | 'pharmacokinetics_2d'
+  | 'dental_chart_2d'
+  | 'timeline_2d'
+  | 'neural_pathway_2d'
+  | 'anatomy_table_2d'
 
 export type VisualizationRelation = '=' | '<' | '<=' | '>' | '>='
 
@@ -599,6 +628,118 @@ export interface BstVisualization extends TutorVisualizationBase {
   keys: number[]
 }
 
+/** Equilibrium potentials (Nernst) and, with permeabilities, the GHK resting potential. */
+export interface MembranePotentialVisualization extends TutorVisualizationBase {
+  type: 'membrane_potential_2d'
+  ions: IonConcentration[]
+  celsius: number
+}
+
+/** A schematic action potential with the lesson's resting, threshold and peak values. */
+export interface ActionPotentialVisualization extends TutorVisualizationBase {
+  type: 'action_potential_2d'
+  cell: 'neuron' | 'ventricular' | 'pacemaker'
+  resting: number
+  threshold: number
+  peak: number
+}
+
+/** Oxyhaemoglobin dissociation curves (Hill), with O₂ content at marked PO₂ values. */
+export interface OxygenVisualization extends TutorVisualizationBase {
+  type: 'oxygen_2d'
+  curves: Array<{ label: string; p50: number; n: number }>
+  hb: number
+  markers: number[]
+}
+
+/** Left-ventricular pressure–volume loop; SV, EF, CO and stroke work are computed. */
+export interface CardiacVisualization extends TutorVisualizationBase, CardiacInput {
+  type: 'cardiac_2d'
+}
+
+/** Spirogram with lung volumes and the derived capacities. */
+export interface LungVolumesVisualization extends TutorVisualizationBase, LungVolumes {
+  type: 'lung_volumes_2d'
+}
+
+/** Glomerular Starling forces and / or renal clearance. */
+export interface RenalVisualization extends TutorVisualizationBase {
+  type: 'renal_2d'
+  forces?: StarlingForces
+  substances?: Array<{ name: string; urine: number; plasma: number }>
+  /** mL/min */
+  urineFlow?: number
+}
+
+/** Blood-gas analysis on a Davenport diagram. */
+export interface AcidBaseVisualization extends TutorVisualizationBase {
+  type: 'acid_base_2d'
+  ph: number
+  paco2: number
+  hco3: number
+  chronicity?: 'acute' | 'chronic'
+}
+
+/** Net charge against pH and the isoelectric point of an amino acid. */
+export interface AminoAcidVisualization extends TutorVisualizationBase {
+  type: 'amino_acid_2d'
+  name: string
+  groups: IonizableGroup[]
+}
+
+/** A metabolic pathway with its ATP / NADH / FADH₂ tally. */
+export interface MetabolismVisualization extends TutorVisualizationBase {
+  type: 'metabolism_2d'
+  pathway: string
+  steps: MetabolicStep[]
+  convention: PoConvention
+  shuttle: Shuttle
+}
+
+/** One-compartment plasma concentration–time curve (single or repeated doses). */
+export interface PharmacokineticsVisualization extends TutorVisualizationBase, DosingRegimen {
+  type: 'pharmacokinetics_2d'
+  drug?: string
+  /** Minimum effective / minimum toxic concentration (mg/L) from the lesson. */
+  mec?: number
+  mtc?: number
+}
+
+/** A dental chart with the lesson's teeth highlighted; notations are converted locally. */
+export interface DentalChartVisualization extends TutorVisualizationBase {
+  type: 'dental_chart_2d'
+  dentition: Dentition
+  teeth: Array<{ code: number; label?: string }>
+}
+
+/** Events and periods on a time axis (embryology, tooth eruption). */
+export interface TimelineVisualization extends TutorVisualizationBase {
+  type: 'timeline_2d'
+  unit: 'day' | 'week' | 'month' | 'year'
+  events: Array<{ label: string; start: number; end?: number; group?: string }>
+}
+
+export type NervousLevel = 'periphery' | 'spinal_cord' | 'medulla' | 'pons' | 'midbrain' | 'thalamus' | 'cortex'
+
+/** A sensory or motor pathway traced neuron by neuron, with its decussation. */
+export interface NeuralPathwayVisualization extends TutorVisualizationBase {
+  type: 'neural_pathway_2d'
+  name: string
+  kind: 'sensory' | 'motor'
+  /** The body side of the stimulus (sensory) or of the cortex of origin (motor). */
+  side: 'left' | 'right'
+  /** `crossesAt`: where a decussating axon crosses, when not at its cell body (corticospinal: cortex → medulla). */
+  neurons: Array<{ cellBody: string; level: NervousLevel; tract?: string; decussates?: boolean; crossesAt?: NervousLevel }>
+}
+
+/** A relation table (e.g. muscles: origin, insertion, action, innervation, blood supply). */
+export interface AnatomyTableVisualization extends TutorVisualizationBase {
+  type: 'anatomy_table_2d'
+  title?: string
+  columns: string[]
+  rows: Array<{ name: string; cells: string[] }>
+}
+
 export type TutorVisualization =
   | LineVisualization
   | PointsVisualization
@@ -637,6 +778,24 @@ export type SubjectVisualization =
   | PopulationVisualization
   | SortingVisualization
   | BstVisualization
+  | MedicalVisualization
+
+/** Figures for the basic medical sciences (schema v10). */
+export type MedicalVisualization =
+  | MembranePotentialVisualization
+  | ActionPotentialVisualization
+  | OxygenVisualization
+  | CardiacVisualization
+  | LungVolumesVisualization
+  | RenalVisualization
+  | AcidBaseVisualization
+  | AminoAcidVisualization
+  | MetabolismVisualization
+  | PharmacokineticsVisualization
+  | DentalChartVisualization
+  | TimelineVisualization
+  | NeuralPathwayVisualization
+  | AnatomyTableVisualization
 
 /** Science and subject figures, drawn by their own renderers. */
 export const SCIENCE_VISUALIZATION_TYPES = [
@@ -663,6 +822,20 @@ export const SCIENCE_VISUALIZATION_TYPES = [
   'population_2d',
   'sorting_2d',
   'bst_2d',
+  'membrane_potential_2d',
+  'action_potential_2d',
+  'oxygen_2d',
+  'cardiac_2d',
+  'lung_volumes_2d',
+  'renal_2d',
+  'acid_base_2d',
+  'amino_acid_2d',
+  'metabolism_2d',
+  'pharmacokinetics_2d',
+  'dental_chart_2d',
+  'timeline_2d',
+  'neural_pathway_2d',
+  'anatomy_table_2d',
 ] as const
 
 export type ScienceVisualization =
@@ -822,6 +995,56 @@ export interface VisualizationDraft {
   algorithm?: unknown
   values?: unknown
   keys?: unknown
+  // v10 medical figures
+  ions?: unknown
+  celsius?: unknown
+  cell?: unknown
+  resting?: unknown
+  threshold?: unknown
+  peak?: unknown
+  hb?: unknown
+  markers?: unknown
+  edv?: unknown
+  esv?: unknown
+  edp?: unknown
+  aorticOpen?: unknown
+  endSystolic?: unknown
+  minimum?: unknown
+  hr?: unknown
+  tv?: unknown
+  irv?: unknown
+  erv?: unknown
+  rv?: unknown
+  substances?: unknown
+  urineFlow?: unknown
+  ph?: unknown
+  paco2?: unknown
+  hco3?: unknown
+  chronicity?: unknown
+  name?: unknown
+  groups?: unknown
+  pathway?: unknown
+  steps?: unknown
+  convention?: unknown
+  shuttle?: unknown
+  route?: unknown
+  dose?: unknown
+  vd?: unknown
+  halfLife?: unknown
+  bioavailability?: unknown
+  doses?: unknown
+  drug?: unknown
+  mec?: unknown
+  mtc?: unknown
+  dentition?: unknown
+  teeth?: unknown
+  events?: unknown
+  kind?: unknown
+  side?: unknown
+  neurons?: unknown
+  title?: unknown
+  columns?: unknown
+  rows?: unknown
   // placement (all types)
   placement?: unknown
 }

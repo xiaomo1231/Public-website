@@ -23,7 +23,7 @@ import { questionTypesForSubject, type Question } from '@/entities/question/type
 import type { QuestionAttempt, QuestionEvaluation } from '@/entities/questionAttempt/types'
 import type { Quiz } from '@/entities/quiz/types'
 import type { AIService } from '@/services/aiService'
-import type { QuizGenerationOutput } from '@/infrastructure/ai/prompts/quiz-generator/v4'
+import type { QuizGenerationOutput } from '@/infrastructure/ai/prompts/quiz-generator/v5'
 import { prompts } from '@/infrastructure/ai/prompts'
 import type { ShortAnswerCheckOutput } from '@/infrastructure/ai/prompts/short-answer-check/v1'
 import { ShortAnswerFeedback } from '@/widgets/quiz/ShortAnswerFeedback'
@@ -204,7 +204,7 @@ describe('quiz generation', () => {
   it('is offered for every subject and described in the generator prompt', () => {
     expect(questionTypesForSubject('physics')).toContain('short_answer')
     expect(prompts.quizGenerator.buildSystemPrompt()).toContain('`short_answer`')
-    expect(prompts.quizGenerator.VERSION).toBe('v4')
+    expect(prompts.quizGenerator.VERSION).toBe('v5')
   })
 })
 

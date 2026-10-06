@@ -15,6 +15,13 @@ const RULES: ReadonlyArray<[Subject, RegExp]> = [
   ['linear_algebra', /线性代数|线代|矩阵论|linear\s*algebra|matrix\s+theory/i],
   ['stats', /概率|统计|随机过程|probab|statistic|stochastic/i],
   ['discrete_math', /离散|组合数学|图论|集合论|数理逻辑|discrete|combinatoric|graph\s+theory|set\s+theory/i],
+  // Medicine (clinical and dental basic sciences) before biology, so 人体解剖 /
+  // 生理学 / 医学生物化学 of a medical curriculum are not read as biology.
+  // Plant / animal physiology stays biology.
+  [
+    'medicine',
+    /医学|人体|临床|口腔|牙|系统解剖|局部解剖|解剖学|组织学|胚胎学|组织胚胎|病理|药理|免疫学|微生物学|诊断学|护理|(?<![植动]物)生理学|medic|clinical|anatomy|histolog|embryolog|patholog|pharmacolog|immunolog|dental|dentist|odont|stomatolog|oral\s+(?:biology|anatomy)/i,
+  ],
   // Biochemistry is taught as biology; "化学" alone stays chemistry.
   ['biology', /生物|细胞|遗传|基因|生理|生态|微生物|解剖|分子生物|biolog|genetic|\bcells?\b|physiolog|ecolog|microbio|anatomy/i],
   ['chemistry', /化学|chemi/i],

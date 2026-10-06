@@ -28,6 +28,7 @@ import { ProjectFlowNav } from '@/widgets/project/ProjectFlowNav'
 import type { Quiz } from '@/entities/quiz/types'
 import {
   QUESTION_TYPE_LABEL_KEYS,
+  displayAnswer,
   expectedAnswerText as expectedText,
   type Question,
 } from '@/entities/question/types'
@@ -349,7 +350,7 @@ export function QuizResultPage(): JSX.Element {
                       )}
                       <p className="mt-1 text-xs text-muted-foreground">
                         {t('quizResult.yourAnswer', {
-                          value: attempt.userAnswer || t('quizResult.blank'),
+                          value: displayAnswer(q, attempt.userAnswer) || t('quizResult.blank'),
                         })}
                       </p>
                       <p className="whitespace-pre-wrap text-xs text-muted-foreground">
@@ -396,7 +397,7 @@ export function QuizResultPage(): JSX.Element {
                     />
                     <p className="text-xs text-muted-foreground">
                       {t('quizResult.answerExpected', {
-                        yours: attempt?.userAnswer ?? t('quizResult.blank'),
+                        yours: (attempt && displayAnswer(q, attempt.userAnswer)) || t('quizResult.blank'),
                         expected: expectedText(q),
                       })}
                     </p>

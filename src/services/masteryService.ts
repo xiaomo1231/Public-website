@@ -32,8 +32,21 @@ export class MasteryService {
 
   /** Record an attempt and update the estimate. Returns the new row. */
   async record(attempt: QuestionAttempt): Promise<KnowledgeMastery> {
+    return this.recordObservation(attempt.projectId, attempt.knowledgePoint, attempt.topicId, observationFromAttempt(attempt))
+  }
+
+  /**
+   * Add one observation (a quiz attempt, or a flashcard review) to a
+   * knowledge point and recompute its estimate.
+   */
+  async recordObservation(
+    projectId: string,
+    knowledgePoint: string,
+    topicId: string | undefined,
+    observation: MasteryObservation,
+  ): Promise<KnowledgeMastery> {
+    const attempt = { projectId, knowledgePoint, ...(topicId ? { topicId } : {}) }
     const existing = await this.repo.get(attempt.projectId, attempt.knowledgePoint)
-    const observation = observationFromAttempt(attempt)
     const observations = [...(existing?.observations ?? []), observation].slice(-MAX_OBSERVATIONS)
     const mastery = computeMastery(observations)
     const graded = observations.filter((o) => o.isCorrect !== null)

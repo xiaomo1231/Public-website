@@ -22,6 +22,22 @@ import {
   TutorRegressionFigure,
 } from './TutorModelFigure'
 import { TutorBstFigure, TutorSortingFigure } from './TutorAlgorithmFigure'
+import {
+  TutorAcidBaseFigure,
+  TutorActionPotentialFigure,
+  TutorCardiacFigure,
+  TutorLungFigure,
+  TutorMembraneFigure,
+  TutorOxygenFigure,
+  TutorRenalFigure,
+} from './TutorPhysiologyFigure'
+import { TutorAminoAcidFigure, TutorMetabolismFigure, TutorPharmacokineticsFigure } from './TutorBiochemFigure'
+import {
+  TutorAnatomyTableFigure,
+  TutorDentalChartFigure,
+  TutorNeuralPathwayFigure,
+  TutorTimelineFigure,
+} from './TutorMorphologyFigure'
 
 interface ScienceProps {
   visualization: ScienceVisualization
@@ -79,6 +95,34 @@ export function ScienceFigureBody({ visualization, layout, t, language }: Scienc
       return <TutorSortingFigure visualization={visualization} layout={layout} t={t} />
     case 'bst_2d':
       return <TutorBstFigure visualization={visualization} layout={layout} t={t} />
+    case 'membrane_potential_2d':
+      return <TutorMembraneFigure visualization={visualization} layout={layout} t={t} />
+    case 'action_potential_2d':
+      return <TutorActionPotentialFigure visualization={visualization} layout={layout} t={t} />
+    case 'oxygen_2d':
+      return <TutorOxygenFigure visualization={visualization} layout={layout} t={t} />
+    case 'cardiac_2d':
+      return <TutorCardiacFigure visualization={visualization} layout={layout} t={t} />
+    case 'lung_volumes_2d':
+      return <TutorLungFigure visualization={visualization} layout={layout} t={t} />
+    case 'renal_2d':
+      return <TutorRenalFigure visualization={visualization} layout={layout} t={t} />
+    case 'acid_base_2d':
+      return <TutorAcidBaseFigure visualization={visualization} layout={layout} t={t} />
+    case 'amino_acid_2d':
+      return <TutorAminoAcidFigure visualization={visualization} layout={layout} t={t} />
+    case 'metabolism_2d':
+      return <TutorMetabolismFigure visualization={visualization} t={t} />
+    case 'pharmacokinetics_2d':
+      return <TutorPharmacokineticsFigure visualization={visualization} layout={layout} t={t} />
+    case 'dental_chart_2d':
+      return <TutorDentalChartFigure visualization={visualization} t={t} language={language} />
+    case 'timeline_2d':
+      return <TutorTimelineFigure visualization={visualization} layout={layout} t={t} />
+    case 'neural_pathway_2d':
+      return <TutorNeuralPathwayFigure visualization={visualization} layout={layout} t={t} />
+    case 'anatomy_table_2d':
+      return <TutorAnatomyTableFigure visualization={visualization} t={t} />
   }
 }
 

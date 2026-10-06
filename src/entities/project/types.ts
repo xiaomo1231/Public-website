@@ -7,6 +7,7 @@ export type Subject =
   | 'biology'
   | 'cs'
   | 'stats'
+  | 'medicine'
   | 'other'
 
 import type { TranslationKey } from '@/i18n/types'
@@ -20,6 +21,7 @@ export const SUBJECT_LABEL_KEYS: Record<Subject, TranslationKey> = {
   biology: 'subject.biology',
   cs: 'subject.computerScience',
   stats: 'subject.statistics',
+  medicine: 'subject.medicine',
   other: 'subject.other',
 }
 

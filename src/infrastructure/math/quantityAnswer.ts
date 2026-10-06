@@ -45,6 +45,12 @@ math.createUnit('M', { definition: '1 mol/L', prefixes: 'short' })
 math.createUnit('Da', { definition: '1.66053906660e-27 kg', prefixes: 'short' })
 math.createUnit('cal', { definition: '4.184 J', prefixes: 'short' })
 math.createUnit('ppm', { definition: '0.000001' })
+// Clinical units. Osmoles and equivalents count particles / charges, which
+// depend on the substance, so they are their own dimensions: 300 mOsm/L
+// compares with mOsm/L and Osm/L, never with mol/L.
+math.createUnit('bpm', { definition: '1 / min' })
+math.createUnit('Osm', { prefixes: 'short' })
+math.createUnit('Eq', { prefixes: 'short' })
 math.createUnit('ppb', { definition: '0.000000001' })
 const mathUnit = (value: number | string, unitText?: string): Unit =>
   unitText === undefined ? math.unit(value as string) : math.unit(value as number, unitText)

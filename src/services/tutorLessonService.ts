@@ -11,6 +11,10 @@ import { TUTOR_LESSON_VERSION } from '@/entities/tutorLesson/types'
 import {
   hasGraphableMath,
   looksLikeAlgorithmText,
+  looksLikeBiochemistryText,
+  looksLikeMorphologyText,
+  looksLikePharmacokineticsText,
+  looksLikePhysiologyText,
   looksLikeBiologyFigureText,
   looksLikeCalculusFigureText,
   looksLikeChemistryFigureText,
@@ -23,7 +27,7 @@ import {
 } from '@/entities/tutorVisualization/graphable'
 
 /** Subjects whose lessons may offer any stated formula to the formula explorer. */
-const FORMULA_SUBJECTS = new Set<Subject>(['physics', 'chemistry', 'biology', 'stats', 'calculus', 'cs'])
+const FORMULA_SUBJECTS = new Set<Subject>(['physics', 'chemistry', 'biology', 'stats', 'calculus', 'cs', 'medicine'])
 import type { TutorVisualization } from '@/entities/tutorVisualization/types'
 import { VisualSourceRepository } from '@/entities/visualSource/repository'
 import { TutorVisualizationService } from './tutorVisualizationService'
@@ -407,6 +411,10 @@ export class TutorLessonService {
       (science.enzyme && looksLikeEnzymeText(content)) ||
       (science.population && looksLikePopulationText(content)) ||
       (science.algorithms && looksLikeAlgorithmText(content)) ||
+      (science.physiology && looksLikePhysiologyText(content)) ||
+      (science.biochemistry && looksLikeBiochemistryText(content)) ||
+      (science.pharmacokinetics && looksLikePharmacokineticsText(content)) ||
+      (science.morphology && looksLikeMorphologyText(content)) ||
       // Science lessons are built on formulas: any stated relation is worth
       // offering to the interactive formula explorer.
       (subject !== undefined && FORMULA_SUBJECTS.has(subject) && looksLikeFormulaText(content))
@@ -502,12 +510,12 @@ export class TutorLessonService {
 }
 
 /**
- * Chemistry and biology lean on pictures. When the course material has
+ * Chemistry, biology and medicine (anatomy, histology) lean on pictures. When the course material has
  * figures for this topic, list them so the lesson points the student to the
  * real figure (shown under the lesson) instead of describing one from memory.
  */
 function courseFigureSnippet(subject: Subject | undefined, visuals: TutorVisual[]): string[] {
-  if (subject !== 'chemistry' && subject !== 'biology') return []
+  if (subject !== 'chemistry' && subject !== 'biology' && subject !== 'medicine') return []
   const shown = visuals.filter((visual) => visual.hasImage).slice(0, 8)
   if (shown.length === 0) return []
   const list = shown.map((visual) => `page ${visual.pageNumber}: ${visual.caption}`).join('; ')

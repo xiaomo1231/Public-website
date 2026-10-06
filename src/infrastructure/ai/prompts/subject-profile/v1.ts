@@ -24,6 +24,8 @@ interface SubjectProfile {
   pitfalls: string[]
   /** Extra guidance for teaching lessons only (see `withSubject`'s `forLesson`). */
   lesson?: string[]
+  /** Limits that apply to every call for this subject (e.g. medical safety). */
+  boundaries?: string[]
 }
 
 const COURSE_FIGURES =
@@ -191,6 +193,44 @@ const PROFILES: Record<Exclude<Subject, 'other'>, SubjectProfile> = {
       COURSE_FIGURES,
     ],
   },
+  medicine: {
+    name: 'Basic medical sciences for clinical medicine and dentistry (years 1–2: systematic and regional anatomy, histology and embryology, physiology, medical biochemistry and molecular biology, medical cell biology, immunology, medical microbiology, oral anatomy and physiology, introductory pharmacology)',
+    notation: [
+      'Give each term in Chinese followed by English (and the Latin name for anatomical structures where the course uses it), e.g. 三角肌（deltoid）; define abbreviations on first use (ACh, GFR, CO).',
+      'Directions are relative to the anatomical position (superior / inferior, medial / lateral, proximal / distal, superficial / deep, anterior / posterior); left and right are the body\'s own, never the viewer\'s.',
+      'Dentistry: FDI two-digit tooth notation unless the course uses another system (11 = upper right permanent central incisor, 55 = upper right primary second molar); tooth surfaces mesial, distal, buccal / labial, lingual / palatal, occlusal / incisal.',
+      'Units: mmHg (and kPa), mmol/L, mL/min, L/min, bpm; reference ranges are approximate and laboratory-dependent.',
+    ],
+    reasoning: [
+      'Connect structure to function and name the level (molecule, cell, tissue, organ, system).',
+      'Describe regulation as a loop: stimulus, receptor, afferent pathway, integrating centre, efferent pathway, effector, and whether the feedback is negative or positive.',
+      'Write mechanisms as cause → effect chains, and quantify with the governing equation where one exists (Nernst / GHK, Fick, Starling forces, Henderson–Hasselbalch, clearance C = U·V/P, CO = HR × SV, one-compartment pharmacokinetics).',
+      'Anatomy: position and relations (毗邻), blood supply, innervation and lymphatic drainage; trace nerve pathways neuron by neuron and name where each decussates.',
+      'Biochemistry: the pathway, its rate-limiting enzyme, regulation, energy yield and a clinical link.',
+      'Use a clinical example only to illustrate a basic-science principle.',
+    ],
+    answers: [
+      'Follow Chinese medical exam styles: 名词解释 (a concise definition with its key qualifier), 简答 (numbered points), 论述 (a structured argument); compare easily confused concepts in a table.',
+    ],
+    pitfalls: [
+      'left and right taken from the viewer instead of the body',
+      'confusing afferent / efferent, sympathetic / parasympathetic, or a muscle\'s origin / insertion',
+      'mixing up similar structures (layers of an organ wall, arteries and veins in histology)',
+      'unit errors (mmHg vs kPa, mmol/L vs mg/dL)',
+      'getting the direction of a shift wrong (e.g. oxyhaemoglobin curve to the right)',
+      'reading a correlation in a clinical observation as a cause',
+      'confusing primary and permanent tooth notation, or mesial and distal',
+    ],
+    lesson: [
+      'When a quantitative physiology or biochemistry topic is central, state the values a diagram needs: ion concentrations (and permeabilities) for membrane potentials; P50 for oxygen binding; EDV, ESV and pressures for the cardiac cycle; lung volumes; Starling forces or clearance data; pH, PaCO₂ and HCO₃⁻ for acid–base; pKa values for an amino acid; the steps of a pathway with their ATP / NADH / FADH₂ changes; dose, volume of distribution, half-life and dosing interval for pharmacokinetics.',
+      'For anatomy give relations as a table (a muscle\'s origin, insertion, action, innervation and blood supply); trace sensory and motor pathways neuron by neuron with the level of each decussation; for embryology and tooth eruption give a timeline with ages.',
+      'Anatomy and histology are learnt from images: refer the student to the course figures by page rather than describing them from memory.',
+    ],
+    boundaries: [
+      'This is education, not medical care: never diagnose the student or anyone they describe, and never give treatment or dosage advice for a real person; if the student describes their own symptoms, suggest seeing a doctor.',
+      'Reference ranges and drug doses in examples are illustrative and vary by laboratory, guideline and patient — say so when you use them.',
+    ],
+  },
   cs: {
     name: 'Computer science (university level: data structures, algorithms, systems, theory)',
     notation: [
@@ -266,6 +306,7 @@ export function buildSubjectBlock(subject: Subject | undefined, options: Subject
     'Answers:',
     list(profile.answers),
     `Typical mistakes in this subject (watch for them; name them neutrally, never as carelessness): ${profile.pitfalls.join('; ')}.`,
+    ...(profile.boundaries?.length ? ['Boundaries (always apply):', list(profile.boundaries)] : []),
     ...lesson,
   ].join('\n')
 }

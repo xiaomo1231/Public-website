@@ -14,8 +14,8 @@ import * as TranslatorV2 from './translator/v2'
 import * as ContextualTutorV2 from './contextual-tutor/v2'
 import * as ProfessorProfileV1 from './professor-profile/v1'
 import * as MistakeAnalyzerV2 from './mistake-analyzer/v2'
-import * as QuizGeneratorV4 from './quiz-generator/v4'
-import * as VisualizationGeneratorV9 from './visualization-generator/v9'
+import * as QuizGeneratorV5 from './quiz-generator/v5'
+import * as VisualizationGeneratorV10 from './visualization-generator/v10'
 import * as HomeworkAnalyzerV2 from './homework-analyzer/v2'
 import * as HomeworkQuestionV3 from './homework-question/v3'
 import * as HomeworkQaV1 from './homework-qa/v1'
@@ -25,8 +25,9 @@ import * as SlideLessonV1 from './slide-lesson/v1'
 import * as SubjectProfileV1 from './subject-profile/v1'
 import * as ShortAnswerCheckV1 from './short-answer-check/v1'
 import * as RubricExtractorV1 from './rubric-extractor/v1'
-import * as ReferenceImageQueryV1 from './reference-image-query/v1'
+import * as ReferenceImageQueryV2 from './reference-image-query/v2'
 import * as ReferenceImageCheckV1 from './reference-image-check/v1'
+import * as FillBlankCheckV1 from './fill-blank-check/v1'
 
 export const PROMPT_VERSIONS = {
   documentAnalyzer: 'v2',
@@ -39,8 +40,8 @@ export const PROMPT_VERSIONS = {
   contextualTutor: 'v2',
   professorProfile: 'v1',
   mistakeAnalyzer: 'v2',
-  quizGenerator: 'v4',
-  visualizationGenerator: 'v9',
+  quizGenerator: 'v5',
+  visualizationGenerator: 'v10',
   homeworkAnalyzer: 'v2',
   homeworkQuestion: 'v3',
   homeworkQa: 'v1',
@@ -50,8 +51,9 @@ export const PROMPT_VERSIONS = {
   subjectProfile: 'v1',
   shortAnswerCheck: 'v1',
   rubricExtractor: 'v1',
-  referenceImageQuery: 'v1',
+  referenceImageQuery: 'v2',
   referenceImageCheck: 'v1',
+  fillBlankCheck: 'v1',
 } as const
 
 export const prompts = {
@@ -65,8 +67,8 @@ export const prompts = {
   contextualTutor: ContextualTutorV2,
   professorProfile: ProfessorProfileV1,
   mistakeAnalyzer: MistakeAnalyzerV2,
-  quizGenerator: QuizGeneratorV4,
-  visualizationGenerator: VisualizationGeneratorV9,
+  quizGenerator: QuizGeneratorV5,
+  visualizationGenerator: VisualizationGeneratorV10,
   homeworkAnalyzer: HomeworkAnalyzerV2,
   homeworkQuestion: HomeworkQuestionV3,
   homeworkQa: HomeworkQaV1,
@@ -77,8 +79,9 @@ export const prompts = {
   subjectProfile: SubjectProfileV1,
   shortAnswerCheck: ShortAnswerCheckV1,
   rubricExtractor: RubricExtractorV1,
-  referenceImageQuery: ReferenceImageQueryV1,
+  referenceImageQuery: ReferenceImageQueryV2,
   referenceImageCheck: ReferenceImageCheckV1,
+  fillBlankCheck: FillBlankCheckV1,
 } as const
 
 export type {
@@ -101,8 +104,8 @@ export type {
   QuizGenerationOutput,
   GeneratedQuizQuestion,
   QuizQuestionType,
-} from './quiz-generator/v4'
-export type { VisualizationInput, VisualizationOutput } from './visualization-generator/v9'
+} from './quiz-generator/v5'
+export type { VisualizationInput, VisualizationOutput } from './visualization-generator/v10'
 export type {
   HomeworkAnalyzerInput,
   HomeworkAnalyzerOutput,

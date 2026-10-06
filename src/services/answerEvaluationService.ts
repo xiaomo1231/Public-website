@@ -8,7 +8,7 @@ import {
 import { compareQuantity, splitQuantity } from '@/infrastructure/math/quantityAnswer'
 import { compareEquations, parseEquation } from '@/infrastructure/chemistry/equation'
 import { orderingItems, scoreOrdering } from '@/infrastructure/math/orderingAnswer'
-import { expectedAnswerText } from '@/entities/question/types'
+import { expectedAnswerText, optionLetter } from '@/entities/question/types'
 import { logger } from '@/infrastructure/logger/logger'
 import { unverifiedShortAnswer } from './shortAnswerGrader'
 import { t } from '@/i18n'
@@ -39,6 +39,12 @@ export function evaluateDeterministic(question: Question, userAnswer: string): Q
       return evaluateChemEquation(question, userAnswer)
     case 'ordering':
       return evaluateOrdering(question, userAnswer)
+    case 'multiple_select':
+      return evaluateMultipleSelect(question, userAnswer)
+    case 'matching':
+      return evaluateMatching(question, userAnswer)
+    case 'fill_blank':
+      return evaluateFillBlank(question, userAnswer)
     case 'short_answer':
       // Graded by scoring points with AI (ShortAnswerGrader); offline it is
       // shown with its points but not scored.
@@ -271,6 +277,98 @@ function evaluateChemEquation(question: Question, userAnswer: string): QuestionE
         confidence: 0,
         note: t('chemEquation.isomers', { species: result.species.join(', ') }),
       }
+  }
+}
+
+/**
+ * X-type: every correct option must be chosen. Partial credit is the number
+ * of correct options chosen minus the wrong ones chosen (never below zero),
+ * out of the number of correct options.
+ */
+function evaluateMultipleSelect(question: Question, userAnswer: string): QuestionEvaluation {
+  const options = question.options ?? []
+  const correct = new Set(options.filter((o) => o.isCorrect).map((o) => o.id))
+  const chosen = new Set(userAnswer.split(',').map((id) => id.trim()).filter((id) => options.some((o) => o.id === id)))
+  const right = [...chosen].filter((id) => correct.has(id)).length
+  const wrong = chosen.size - right
+  const total = correct.size
+  const letters = (ids: Set<string>) =>
+    options.map((o, i) => (ids.has(o.id) ? optionLetter(i) : '')).filter(Boolean).join('')
+  return {
+    isCorrect: total > 0 ? right === total && wrong === 0 : null,
+    method: 'multi_select',
+    confidence: 1,
+    score: { earned: Math.max(0, right - wrong), total },
+    expected: expectedAnswerText(question),
+    normalizedUser: letters(chosen) || '—',
+    normalizedExpected: letters(correct),
+  }
+}
+
+/** B-type: one option per stem; credit per stem matched correctly. */
+function evaluateMatching(question: Question, userAnswer: string): QuestionEvaluation {
+  const options = question.options ?? []
+  const expectedLabels = question.correctAnswer.split(' | ')
+  const given = userAnswer.split(',')
+  const items = question.matchItems ?? expectedLabels
+  let earned = 0
+  const userLetters = items.map((_, i) => {
+    const index = options.findIndex((o) => o.id === given[i]?.trim())
+    if (index >= 0 && options[index]!.label === expectedLabels[i]) earned++
+    return index >= 0 ? optionLetter(index) : '—'
+  })
+  return {
+    isCorrect: items.length > 0 ? earned === items.length : null,
+    method: 'match_items',
+    confidence: 1,
+    score: { earned, total: items.length },
+    expected: expectedAnswerText(question),
+    normalizedUser: userLetters.map((letter, i) => `${i + 1}${letter}`).join(' '),
+    normalizedExpected: expectedLabels
+      .map((label, i) => `${i + 1}${optionLetter(Math.max(0, options.findIndex((o) => o.label === label)))}`)
+      .join(' '),
+  }
+}
+
+/** A term reduced for comparison: width, case, spaces and punctuation ignored. */
+export function normalizeTerm(text: string): string {
+  return text
+    .normalize('NFKC')
+    .toLowerCase()
+    .replace(/[\s\p{P}\p{S}]+/gu, '')
+}
+
+/** "乙酰胆碱（ACh）" is accepted when either part is an accepted answer and neither contradicts it. */
+export function blankAccepted(given: string, accepted: string[]): boolean {
+  const targets = new Set(accepted.map(normalizeTerm).filter(Boolean))
+  const whole = normalizeTerm(given)
+  if (!whole) return false
+  if (targets.has(whole)) return true
+  const inner = /[（(]([^（）()]*)[）)]/.exec(given.normalize('NFKC'))
+  if (!inner) return false
+  const outside = normalizeTerm(given.normalize('NFKC').replace(inner[0], ''))
+  const inside = normalizeTerm(inner[1] ?? '')
+  return (targets.has(outside) || !outside) && (targets.has(inside) || !inside) && Boolean(outside || inside)
+}
+
+/** Fill-blank: each blank against its accepted answers; credit per blank. */
+function evaluateFillBlank(question: Question, userAnswer: string): QuestionEvaluation {
+  const blanks = question.blanks ?? []
+  const given = userAnswer.split('\n')
+  const results = blanks.map((accepted, i) => {
+    const answer = (given[i] ?? '').trim()
+    return { given: answer, accepted, correct: blankAccepted(answer, accepted) }
+  })
+  const earned = results.filter((r) => r.correct).length
+  return {
+    isCorrect: blanks.length > 0 ? earned === blanks.length : null,
+    method: 'blank_match',
+    confidence: 1,
+    score: { earned, total: blanks.length },
+    blanks: results,
+    expected: expectedAnswerText(question),
+    normalizedUser: results.map((r, i) => `(${i + 1}) ${r.given || '—'}`).join('  '),
+    normalizedExpected: expectedAnswerText(question),
   }
 }
 

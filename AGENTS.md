@@ -6,7 +6,7 @@
 
 ## 1. 项目是什么
 
-**Local-first AI Learning Platform**，面向理工科本科生（微积分 / 线代 / 物理 / 化学 / CS / 统计）。
+**Local-first AI Learning Platform**，面向理工科与医学本科生（微积分 / 线代 / 物理 / 化学 / 生物 / CS / 统计；医学以临床与口腔的大一大二基础课为主）。
 
 纯前端 PWA，**无第一方后端**。用户上传课程资料（PDF / DOCX / PPTX / 图片 / 文本），由**用户自己配置的 AI** 把资料转成结构化知识，再通过**提问驱动式导师**、自适应测验和错题本来学习。
 
@@ -106,7 +106,8 @@ Dexie
 
 - 每个 prompt 在 `src/infrastructure/ai/prompts/<family>/v1.ts`，导出 `VERSION` / `buildSystemPrompt()` / `buildUserPrompt()`。
 - `prompts/index.ts` 是唯一注册表。升级 = 加 `v2/` 并切换 import，**调用点不变**。
-- **科目画像 `subject-profile/v1`**：按项目科目（`calculus / linear_algebra / discrete_math / physics / chemistry / biology / cs / stats / other`）给出记号、推理方式、答案格式与常见错误；由 `withSubject()` 追加到教学/判分/分析类 system prompt（课程分析、增量主题分析、导师课时、交互导师、划词提问、测验、错题分析、作业提示/解法/复习讲解/检查答案/逐题问答、幻灯片学习）。`other` 不追加。科目一律由服务端从项目读取（`services/projectSubject.ts`），**不由 UI 传入**。化学记号用 mhchem `$\ce{...}$`（`Math.tsx` 已加载 `katex/contrib/mhchem`）。
+- **科目画像 `subject-profile/v1`**：按项目科目（`calculus / linear_algebra / discrete_math / physics / chemistry / biology / medicine / cs / stats / other`）给出记号、推理方式、答案格式与常见错误；由 `withSubject()` 追加到教学/判分/分析类 system prompt（课程分析、增量主题分析、导师课时、交互导师、划词提问、测验、错题分析、作业提示/解法/复习讲解/检查答案/逐题问答、幻灯片学习）。`other` 不追加。科目一律由服务端从项目读取（`services/projectSubject.ts`），**不由 UI 传入**。化学记号用 mhchem `$\ce{...}$`（`Math.tsx` 已加载 `katex/contrib/mhchem`）。
+- 画像可带 `boundaries`（渲染为 `Boundaries (always apply):`，每次都追加）：目前只有**医学**使用——这是教育不是医疗，不对真实个人做诊断、不给治疗或剂量建议，遇到个人健康问题建议就医；例题中的参考值与剂量仅为示意。医学画像中英（拉丁）术语并列、解剖学姿势、FDI 牙位、名词解释 / 简答 / 论述的答题格式。科目推断：解剖 / 组织胚胎 / 生理学 / 病理 / 药理 / 口腔 / 牙等归为医学（在生物之前判断；“医用化学 / 医用物理 / 医用高数”仍归化学 / 物理 / 微积分，“植物生理学”仍归生物）。
 - 画像可带**仅课时用**的 `lesson` 指引，只有 `withSubject(..., { forLesson: true })`（导师课时）才追加：化学/生物要求把可画成图的事实写明（分子名+分子式、各状态能量、滴定浓度/体积/Kₐ、亲本基因型、家系、DNA 序列），并在课程资料有图时引导学生看原图。
 - 带缓存/可比对的产物把科目画像折进版本：`subjectPromptVersion(base, subject)` = `<base>+subject-profile/v1:<subject>`，某科画像修改时在 `PROFILE_REVISIONS` 里给**该科**加修订号（追加 `.rN`；当前化学 `.r3`、生物 `.r2`、概率统计 `.r2`、物理 `.r2`、微积分 `.r2`、计算机 `.r2`——均已按大学深度改写或补充课时指引），只让该科的缓存失效（CourseAnalysis、增量 Topic、TutorLesson、SlideLesson、作业复习讲解与检查答案），不会让其它科目全部重生成。
 
@@ -136,6 +137,7 @@ Dexie
 | 视觉 | `VisualSource` `VisualSourceImage` `ReferenceImage` `ReferenceImageBlobRow`（联网参考图片缓存，Dexie v14） |
 | 教授练习 | `PracticeSet` `PracticeQuestion` `PracticeAttempt` |
 | 练习 | `Question` `QuestionAttempt` `Quiz` `KnowledgeMastery` |
+| 复习 | `ReviewCard`（复习卡片 / 间隔重复，Dexie v15） |
 | 错误 | `Mistake` |
 
 关键约定：
@@ -266,9 +268,14 @@ Topic
 ### Quiz
 
 - 题型：单选、判断、数值（容差）、数学表达式、**代码输出**（`code_output`，仅计算机科目提供：题干含带语言标记的代码块，答案为程序的确切输出，按行尾空白/换行规范化后**精确匹配**）。
-- 数值题可带 `unit`（mathjs 单位语法，如 `m/s^2`）：学生须带单位作答，任意同量纲单位先换算再按 1% **相对**容差比较；缺单位 / 量纲不对给出明确提示，单位无法识别则不判分（`infrastructure/math/quantityAnswer.ts`）。出题 prompt 为 `quiz-generator/v4`。
+- 数值题可带 `unit`（mathjs 单位语法，如 `m/s^2`）：学生须带单位作答，任意同量纲单位先换算再按 1% **相对**容差比较；缺单位 / 量纲不对给出明确提示，单位无法识别则不判分（`infrastructure/math/quantityAnswer.ts`）。出题 prompt 为 `quiz-generator/v5`（v4 保留）。
 - **化学方程式题（`chem_equation`，仅化学科目）**：`infrastructure/chemistry/equation.ts` 本地解析（`->`/`<=>`/`→`/`⇌`/`=`、`[条件]`、电荷 `Fe^3+`、按 mhchem 约定 `NH4+` 为 +1、水合物 `·`、状态符号忽略）。判分：物种一致（顺序无关）+ 原子与电荷守恒 + 系数成比例（整倍数也算对）；缺/多物种、不守恒、系数错误分别给出提示；读不懂则不判分。出题时参考答案本身必须能解析且配平，否则丢弃该题。**有机结构式**：物种内可写键（`CH2=CH2`、`HC#CH`/`HC≡CH`、`CH3-CH3`）；没有其它箭头时裸 `=` 才可能是反应箭头，取能配平的那个 `=`。物种按分子式匹配；参考答案写了 ≥2 个碳的结构式而作答结构写法不同（如乙醇 vs 二甲醚）时，判定为 `isomers`：不计分并提示可能是同分异构体（简单基团 `(CH2)3` 展开、键符号忽略后再比较）。
-- 单位（`quantityAnswer.ts` 使用独立 mathjs 实例，不影响表达式判分）额外支持 `M/mM/µM/nM`（mol/L）、`Da/kDa`、`cal/kcal`、`ppm/ppb`、`Å`。
+- 单位（`quantityAnswer.ts` 使用独立 mathjs 实例，不影响表达式判分）额外支持 `M/mM/µM/nM`（mol/L）、`Da/kDa`、`cal/kcal`、`ppm/ppb`、`Å`，以及医学的 `bpm`（1/min）、`Osm/mOsm`（独立量纲，与 mol 不互换）、`Eq/mEq`（独立量纲）；`mmHg` 为 mathjs 自带。
+- **医学考试题型（`quiz-generator/v5`，全科可选，医学默认可用）**：
+  - **X 型多选（`multiple_select`）**：4–6 个选项、至少 2 个正确；作答为选项 id（按选项顺序逗号连接）。**部分得分** = max(0, 选对数 − 选错数) / 正确数，只有全对才算“正确”。
+  - **B 型配伍（`matching`）**：共用 3–6 个备选答案 + 2–5 个题干，`matchAnswers` 为每个题干对应的选项下标（同一选项可重复使用）；参考答案由下标重建；逐题干计分。
+  - **填空（`fill_blank`）**：题干中每个 `____` 对应一组可接受答案（1–4 空，每空 ≤6 个）；本地按 NFKC + 小写 + 去空白标点比较，`乙酰胆碱（ACh）` 这类“术语（缩写）”两部分都须可接受；仍不匹配且已配置 AI 时，`fill-blank-check/v1` 只对未匹配的空判断是否**完全等价**（同义词 / 英文 / 缩写），计分仍在本地（`services/fillBlankChecker.ts`），AI 不可用则保持本地结果。
+  - A2 型病例题只作为基础课的情境题：题干不要求诊断或治疗方案。三种题型的参考答案均由结构重建，`correctAnswer` 缺失不会导致丢题。作答组件在 `widgets/quiz/ExamFormatInputs.tsx`；结果页 / 错题本用 `displayAnswer` 把 id 显示为字母（`1→B`、`(1) …`）。
 - **排序题（`ordering`，全科可选，默认不勾选）**：`orderItems` 3–8 个互不相同的单行项，参考答案由其重建（换行连接）。作答 `widgets/quiz/OrderingInput`（拖拽 + 上/下按钮，从按题目 id 固定的打乱顺序开始，且绝不是正确顺序）。得分 = 最长保序子序列长度 / 总项数（`infrastructure/math/orderingAnswer.ts`），部分得分走与简答题相同的 `score` 通道。
 - **教授练习题与交互导师的简答题**（第二期）复用同一判分器：练习题从教授参考答案经 `rubric-extractor/v1` 拆出得分点（按 答案+prompt 版本 哈希缓存在题目上），作答写入错题本 / 掌握度并支持异议（`PracticeService.disputeAttempt`）；导师出题 `tutor/v2-question` 可出带得分点的简答题，覆盖率 60–99% 或无法核对时难度不调整。
 - **简答题（`short_answer`）按得分点计分**：出题时生成参考答案 + 2–6 条得分点（`Question.rubric`）。判分 `services/shortAnswerGrader.ts` + `short-answer-check/v1`：AI 逐条判断是否答到（同义、等价表述都算），答到必须**逐字摘出学生原话**作为证据，本地校验证据确实出现在答案里，否则该点不算；得分 = 答到点数 / 总点数（3/5 → 60%），由本地计算，从不采用 AI 的整体结论。空答案不调用 AI；未配置 AI 或核对失败 ⇒ 不计分（展示得分点与参考答案）。
@@ -291,6 +298,13 @@ Topic
 - 练习选项：不练 / 练本知识点 / 练相似题 / 薄弱点训练。
 - 薄弱点：`0.45·错题占比 + 0.20·未掌握占比 + 0.15·近期错题 + 0.20·(1−掌握度)`。
 
+### 复习卡片（间隔重复）
+
+- `ReviewCard`（Dexie **v15** `reviewCards`，索引 `[projectId+due]`）：正面 / 背面 / 来源（`concept` 课程概念 · `table` 解剖对照表 · `manual` 手写）/ 可选 `knowledgePoint`。全部本地，不调用 AI。
+- 调度（`entities/reviewCard/types.ts`，SM-2 家族）：忘了 → 10 分钟后重学、ease −0.2、计一次遗忘；新卡“困难” → 6 小时后（仍在学习阶段）；困难 → 间隔 ×1.2、ease −0.15；记得 → 1 天 → 3 天 → 间隔 × ease；简单 → 间隔 × ease × 1.3、ease +0.15；ease 下限 1.3。
+- 页面 `/projects/:id/cards`（`ReviewCardsPage`）：统计（待复习 / 总数 / 新卡 / 已熟记 ≥21 天）、复习会话（空格显示答案，1–4 评分，按钮上显示各评分的下次间隔）、搜索 / 编辑 / 删除、从课程概念生成（名词 → 定义，按正面去重）、手写新建。课时中的 `anatomy_table_2d` 可一键加入（“行 — 列” → 单元格）。
+- 掌握度：带 `knowledgePoint` 的卡片复习以**半权重**观测计入（`MasteryService.recordObservation`，忘了 0 / 困难 0.6 / 其余 1）。随项目删除；纳入导出。
+
 ---
 
 ## 7. 路由与目录
@@ -305,6 +319,7 @@ Topic
 | `/projects/:id/history` | 对话记录 |
 | `/projects/:id/quiz` `/quiz/:quizId` `/result` | 测验 |
 | `/projects/:id/mastery` `/mistakes` | 掌握度 / 错题本 |
+| `/projects/:id/cards` | 复习卡片（间隔重复） |
 | `/projects/:id/documents/:did` | 文档详情 |
 | `/settings` | AI 设置 / 数据管理 |
 
@@ -379,6 +394,7 @@ docs/             architecture.md
 | 7u | 化学 / 生物配图三层：课程原图优先、本地计算的六种图（schema v7）、联网参考图片（Dexie v14，默认关闭） | 已交付（v0.3.9） |
 | 7v | 大学深度：转录方向与起始密码子、有机方程式与同分异构体、大学单位；t / χ² / F 与卡方检验、伴性与复等位遗传、系谱遗传方式分析、多元酸与弱碱滴定（schema v8） | 已交付（v0.4.0） |
 | 7w | 其它理科可交互图：公式探索器、微积分（切线 / 黎曼和 / 泰勒）、物理（受力 / 运动 / 光路 / 电路）、统计（回归 / 置信区间）、化学动力学、酶动力学、种群增长、排序与 BST（schema v9） | 已交付（v0.4.0） |
+| 7x | 医学适配（临床 + 口腔，大一大二）：医学科目画像与安全边界、X / B / 填空题型、医学单位、生理 / 生化 / 药动 / 形态共 14 种图（schema v10）、医学联网参考图片、复习卡片（Dexie v15） | 工作区已完成，未提交 / 未发布 |
 | 8 | Dashboard 强化 | 部分交付（v0.2.8：视觉与交互函数图；v0.3.1：构图与动效打磨；指标类未做） |
 | 9 | PWA · a11y · 导入导出打磨 | 未开始 |
 
@@ -425,7 +441,12 @@ docs/             architecture.md
      - **生物**：`enzyme_2d`（米氏曲线 + 双倒数图，竞争 / 非竞争 / 反竞争 / 混合抑制的表观常数）、`population_2d`（指数 / 逻辑斯谛，拐点 t*、最大速率 rK/4、dN/dt–N 图）。
      - **计算机**：`sorting_2d`（冒泡 / 插入 / 选择 / 归并 / 快排逐步回放，比较与写入计数）、`bst_2d`（按插入顺序建树，插入数滑块，中 / 前 / 后 / 层序遍历与高度）。
      - 计算在 `formula.ts` / `physics.ts` / `models.ts` / `algorithms.ts`，校验在 `normalizeSubjects.ts`，渲染在 `TutorFormulaFigure` / `TutorPhysicsFigure` / `TutorModelFigure` / `TutorAlgorithmFigure`（共用 `PlotFrame` + `plotUtils`）。门控：各图族关键词 + 理科科目讲解中出现带 `=` 的公式（`looksLikeFormulaText`）。科目画像：物理 / 微积分 / 计算机升至 r2，并为各理科补充“讲解中写明可画图数据”的课时指引。
-   - **第 3 层 联网参考图片（默认关闭，设置页开启）**：只在化学/生物课时、且本主题没有课程原图时，提供“查找参考图片”按钮（学生点击才联网）。`reference-image-query/v1` 只让模型给搜索词（PubChem 需附分子式，与 PubChem 返回值核对）；`infrastructure/referenceImages/sources.ts` 检索并下载；可选 `reference-image-check/v1` 视觉核对（`ChatMessage.images` 以 OpenAI content 数组发送；模型不支持图片时自动降级为“未核对”）。图片与来源 / 许可 / 作者存入 Dexie **v14** `referenceImages` / `referenceImageBlobs`（每主题缓存，可逐张移除，随项目删除；不纳入导出，可重新获取）。
+   - **医学（schema v10，`visualization-generator/v10`，工作区未发布）**：新增图族开关 `physiology`（医学 / 生物）、`biochemistry`（医学 / 生物 / 化学）、`pharmacokinetics`、`morphology`（仅医学）；医学同时获得生物、χ² 检验、回归、酶动力学图族。模型只给课时数值，其余本地计算（`entities/tutorVisualization/medicine.ts`，校验 `normalizeMedicine.ts` 含生理范围检查）：
+     - **生理**（`TutorPhysiologyFigure`）：`membrane_potential_2d`（Nernst 平衡电位 + GHK 静息电位，[K⁺]ₒ 滑块）、`action_potential_2d`（神经 / 心室肌 / 窦房结示意，分期标注）、`oxygen_2d`（Hill 方程氧解离曲线、血氧含量与动静脉差）、`cardiac_2d`（左室压力–容积环，SV / EF / CO / 每搏功）、`lung_volumes_2d`（肺量计曲线与各肺容量）、`renal_2d`（Starling 力与有效滤过压、清除率 C = U·V/P、滤过分数）、`acid_base_2d`（Davenport 图 + 国内病理生理教材代偿公式：代酸 PaCO₂ = 1.5·HCO₃⁻ + 8 ± 2，代碱 ΔPaCO₂ = 0.7·ΔHCO₃⁻ ± 5，呼酸急性 0.1 ± 1.5 / 慢性 0.35 ± 3，呼碱急性 0.2 ± 2.5 / 慢性 0.5 ± 2.5；超出范围提示合并紊乱，数值不符合 H–H 方程时警告）。
+     - **生化 / 药动**（`TutorBiochemFigure`）：`amino_acid_2d`（净电荷–pH 曲线与 pI）、`metabolism_2d`（逐步 ATP / NADH / FADH₂，P/O 现行 2.5/1.5 与旧教材 3/2、苹果酸–天冬氨酸 / α-磷酸甘油穿梭切换；糖酵解 + 有氧氧化 32 / 30 或 38）、`pharmacokinetics_2d`（一室模型静注 / 口服、多次给药叠加，MEC / MTC 带，剂量与间隔滑块，CL / AUC / Css / 蓄积因子 / 达稳态时间；注明不构成用药建议）。
+     - **形态**（`TutorMorphologyFigure`）：`dental_chart_2d`（FDI / Universal / Palmer 切换，患者右侧在左）、`timeline_2d`（胚胎 / 萌出时间轴，≤4 条泳道）、`neural_pathway_2d`（逐级神经元，皮质–周围分层与中线，交叉后换侧；`crossesAt` 表示轴突在胞体以外的平面交叉，如皮质脊髓束在延髓）、`anatomy_table_2d`（起止点 / 神经支配等对照表，课时内可一键加入复习卡片，经 `LessonFigureContext` 取得项目与主题）。
+     - 门控关键词：`looksLikePhysiologyText` / `looksLikeBiochemistryText` / `looksLikePharmacokineticsText` / `looksLikeMorphologyText`；医学加入 `FORMULA_SUBJECTS`。课程原图优先（第 1 层）同样适用于医学。
+   - **第 3 层 联网参考图片（默认关闭，设置页开启）**：只在化学 / 生物 / 医学课时、且本主题没有课程原图时，提供“查找参考图片”按钮（学生点击才联网）。`reference-image-query/v2`（v1 保留）对医学追加：优先 Wikimedia 上公有领域的格氏解剖学图版（Gray's Anatomy）、CC 授权组织切片 / 胚胎 / 牙体图，药物结构用 PubChem，**绝不检索患者照片 / 病灶 / 手术 / 可识别个人**。模型只给搜索词（PubChem 需附分子式，与 PubChem 返回值核对）；`infrastructure/referenceImages/sources.ts` 检索并下载；可选 `reference-image-check/v1` 视觉核对（`ChatMessage.images` 以 OpenAI content 数组发送；模型不支持图片时自动降级为“未核对”）。图片与来源 / 许可 / 作者存入 Dexie **v14** `referenceImages` / `referenceImageBlobs`（每主题缓存，可逐张移除，随项目删除；不纳入导出，可重新获取）。
 
 8. **Markdown 表格渲染（Phase 3.1.1 已实现并验证，随 v0.2.6 发布）**：共享 `RichText` 新增 GFM pipe table block（`shared/lib/markdownTable.ts` 纯解析 + `markdownText.ts` block + `RichText` 语义化渲染）；cell 复用现有 inline 文本/code/LaTeX；宽表仅在容器内横向滚动；普通 `|x|` 不误判；code fence / block math 内不解析表格。Tutor Lesson Prompt 升 **v3**（保留 v1/v2）规范表格输出。旧缓存中的多行 Markdown 表格**无需重新调用 AI 即可正确显示**；Prompt v3 经 `contentHash` 使旧课时自然重生成一次。未改 `TUTOR_LESSON_VERSION` / Visualization schema / Dexie。
 
@@ -440,4 +461,6 @@ docs/             architecture.md
 - 课程分析为项目级（覆盖该项目全部已处理文档），非逐文档结果，也非章节级。
 - 数学可视化范围受控：`eigen_2d` 只支持 2×2 实矩阵的**实**特征值/特征向量；复特征值、3×3、Jordan 形、动画、拖拽均不支持，会安全回退为普通 LaTeX，不绘制误导性的实特征方向。
 - 化学 / 生物图范围受控：滴定只支持 ≤三元酸 + 强碱、一元弱碱 + 强酸（不含活度校正）；棋盘格最多两对基因、至多一个 X 连锁基因，不含连锁交换 / 上位效应；遗传方式分析假设完全外显；同分异构体无法自动区分（不计分并提示）；不画 3D 结构、反应机理、细胞 / 器官示意图（这类交给课程原图或联网参考图片）。
+- 医学图为教学模型：动作电位为示意形状；氧解离曲线用 Hill 方程近似；压力–容积环为分段示意；药动学只做一室模型（无非线性消除）；酸碱判读只覆盖单纯性紊乱与一层合并紊乱提示（不含阴离子间隙 / 三重紊乱）；神经通路最多 4 级神经元、一次交叉。不画器官 / 切片 / 影像，这类交给课程原图或联网参考图片。
+- 复习卡片计入掌握度，但对错题判定提出异议后的 `MasteryService.rebuild()` 只按测验作答重算，会丢掉该知识点此前的卡片观测（之后的复习会继续计入）。
 - 冷启动时外观偏好（明暗 / 配色）要等 `UserProfile` 读出后才应用，可能有一帧默认配色。

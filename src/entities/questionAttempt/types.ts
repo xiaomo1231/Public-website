@@ -11,6 +11,9 @@ export type EvaluationMethod =
   | 'rubric_ai'
   | 'chem_equation'
   | 'order_match'
+  | 'multi_select'
+  | 'match_items'
+  | 'blank_match'
   | 'option_id'
   | 'ai'
   | 'unverified'
@@ -26,6 +29,9 @@ export const EVAL_METHOD_LABEL_KEYS: Record<EvaluationMethod, TranslationKey> = 
   rubric_ai: 'evalMethod.rubric_ai',
   chem_equation: 'evalMethod.chem_equation',
   order_match: 'evalMethod.order_match',
+  multi_select: 'evalMethod.multi_select',
+  match_items: 'evalMethod.match_items',
+  blank_match: 'evalMethod.blank_match',
   option_id: 'evalMethod.option_id',
   ai: 'evalMethod.ai',
   unverified: 'evalMethod.unverified',
@@ -53,11 +59,21 @@ export interface QuestionEvaluation {
   rubric?: RubricPointResult[]
   /** Short answer: statements in the answer that contradict the reference. */
   contradictions?: string[]
+  /** Fill-blank: each blank's answer, whether it was accepted, and how. */
+  blanks?: BlankResult[]
   /**
    * The student disputed this AI judgement. A disputed answer is kept for
    * reference but excluded from the score, the mistake book and mastery.
    */
   disputed?: boolean
+}
+
+export interface BlankResult {
+  given: string
+  accepted: string[]
+  correct: boolean
+  /** Accepted by the AI as an equivalent term (not in the accepted list). */
+  byAi?: boolean
 }
 
 export interface RubricPointResult {

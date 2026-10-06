@@ -2,7 +2,7 @@ import 'fake-indexeddb/auto'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { AppDatabase, setDbForTesting } from '@/infrastructure/db/database'
 import { ProjectService } from '@/services/projectService'
-import { ReferenceImageService } from '@/services/referenceImageService'
+import { ReferenceImageService, referenceSourcesFor } from '@/services/referenceImageService'
 import { SettingsService } from '@/services/settingsService'
 import { DataManagementService } from '@/services/dataManagementService'
 import { ReferenceImageRepository } from '@/entities/referenceImage/repository'
@@ -14,7 +14,7 @@ import {
   searchCommons,
   type FetchLike,
 } from '@/infrastructure/referenceImages/sources'
-import { normalizeReferenceQueries } from '@/infrastructure/ai/prompts/reference-image-query/v1'
+import { buildSystemPrompt as buildReferenceQueryPrompt, normalizeReferenceQueries } from '@/infrastructure/ai/prompts/reference-image-query/v2'
 import { OpenAICompatibleProvider } from '@/infrastructure/ai/openaiCompatible'
 import type { AIService } from '@/services/aiService'
 import type { ChatMessage } from '@/infrastructure/ai/types'
@@ -283,6 +283,15 @@ describe('reference image service', () => {
     const biology = await project('biology')
     const images = await service.search(input(biology))
     expect(images.map((image) => image.source)).toEqual(['wikimedia'])
+  })
+
+  it('offers medicine Gray plates, histology and drug structures, never patient photos', () => {
+    expect(referenceSourcesFor('medicine')).toEqual({ allowPubChem: true, medical: true })
+    const prompt = buildReferenceQueryPrompt({ allowPubChem: true, medical: true })
+    expect(prompt).toContain("Gray's Anatomy")
+    expect(prompt).toMatch(/histology/)
+    expect(prompt).toMatch(/patient/i)
+    expect(buildReferenceQueryPrompt({ allowPubChem: false })).not.toContain("Gray's Anatomy")
   })
 
   it('is removed with its project and stays off by default in settings', async () => {

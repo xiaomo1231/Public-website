@@ -19,6 +19,7 @@ import { HomeworkLandingPage } from '@/pages/HomeworkLandingPage'
 import { HomeworkPage } from '@/pages/HomeworkPage'
 import { MasteryPage } from '@/pages/MasteryPage'
 import { MistakeBookPage } from '@/pages/MistakeBookPage'
+import { ReviewCardsPage } from '@/pages/ReviewCardsPage'
 import { SettingsPage } from '@/pages/SettingsPage'
 import { RequireAuth } from './RequireAuth'
 
@@ -53,6 +54,7 @@ export const routes: RouteObject[] = [
       { path: 'projects/:id/homework/:assignmentId', element: <HomeworkPage /> },
       { path: 'projects/:id/mastery', element: <MasteryPage /> },
       { path: 'projects/:id/mistakes', element: <MistakeBookPage /> },
+      { path: 'projects/:id/cards', element: <ReviewCardsPage /> },
       { path: 'projects/:id/documents/:did', element: <DocumentDetailPage /> },
       { path: 'settings', element: <SettingsPage /> },
     ],

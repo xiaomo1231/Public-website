@@ -135,6 +135,30 @@ export function looksLikeAlgorithmText(text: string): boolean {
   return /(?:\bsort(?:ing)?\b|quicksort|merge sort|binary search tree|\bBST\b|traversal|in-?order|排序|冒泡|快速排序|归并|二叉搜索树|二叉排序树|遍历)/i.test(text)
 }
 
+/** Membrane, cardiac, respiratory, renal or acid–base physiology. */
+export function looksLikePhysiologyText(text: string): boolean {
+  return /(?:membrane potential|resting potential|equilibrium potential|Nernst|Goldman|\bGHK\b|action potential|oxygen dissociation|oxyh(?:a)?emoglobin|\bP50\b|pressure[-–]volume loop|cardiac cycle|ejection fraction|stroke volume|tidal volume|vital capacity|spirom|lung volumes?|glomerular filtration|filtration pressure|\bGFR\b|renal clearance|acidosis|alkalosis|acid[-–]base|Henderson|膜电位|静息电位|平衡电位|能斯特|动作电位|氧解离|血氧饱和度|压力[-–]容积|心动周期|射血分数|每搏输出量|心输出量|潮气量|肺活量|肺容量|肺容积|功能残气量|肾小球滤过|有效滤过压|清除率|酸中毒|碱中毒|酸碱平衡|血气分析)/i.test(
+    text,
+  )
+}
+
+/** Amino-acid charge or the energy yield of a metabolic pathway. */
+export function looksLikeBiochemistryText(text: string): boolean {
+  return /(?:isoelectric|\bpI\b|glycolysis|citric acid cycle|\bTCA\b|Krebs|β-oxidation|beta-oxidation|oxidative phosphorylation|ATP yield|等电点|糖酵解|三羧酸循环|柠檬酸循环|β-?氧化|氧化磷酸化|ATP\s*(?:的)?生成|净生成.{0,6}ATP|穿梭)/i.test(text)
+}
+
+/** Dosing and plasma-concentration models. */
+export function looksLikePharmacokineticsText(text: string): boolean {
+  return /(?:pharmacokinetic|plasma concentration|volume of distribution|bioavailability|loading dose|dosing interval|steady[- ]state concentration|药代动力学|药动学|血药浓度|表观分布容积|生物利用度|负荷剂量|给药间隔|稳态血药|坪值)/i.test(text)
+}
+
+/** Tooth notation, developmental timelines, conduction pathways or relation tables. */
+export function looksLikeMorphologyText(text: string): boolean {
+  return /(?:\bFDI\b|Palmer|tooth eruption|deciduous|primary teeth|permanent teeth|decussat|spinothalamic|corticospinal|dorsal column|medial lemniscus|origin and insertion|innervat|embryonic (?:week|period)|牙位|萌出|乳牙|恒牙|传导通路|传导路|交叉|脊髓丘脑|皮质脊髓|薄束|楔束|内侧丘系|起点|止点|神经支配|胚胎第\s*\d|胚期|胎期)/i.test(
+    text,
+  )
+}
+
 /**
  * A formula worth exploring: some maths segment states a relation between
  * named quantities (`F = ma`, `x(t) = A\cos(\omega t)`). Used only for the

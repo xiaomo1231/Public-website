@@ -16,7 +16,7 @@ import type {
 } from '@/entities/quiz/types'
 import type { DifficultyLevel } from '@/infrastructure/ai/prompts/types'
 import { prompts } from '@/infrastructure/ai/prompts'
-import type { QuizGenerationOutput, GeneratedQuizQuestion } from '@/infrastructure/ai/prompts/quiz-generator/v4'
+import type { QuizGenerationOutput, GeneratedQuizQuestion } from '@/infrastructure/ai/prompts/quiz-generator/v5'
 import type { ChatMessage } from '@/infrastructure/ai/types'
 import type { AIService } from './aiService'
 import { evaluateDeterministic } from './answerEvaluationService'
@@ -39,6 +39,7 @@ import { AppError } from '@/infrastructure/errors/AppError'
 import { t } from '@/i18n'
 import { loadProjectSubject } from './projectSubject'
 import { ShortAnswerGrader } from './shortAnswerGrader'
+import { checkBlanksWithAi } from './fillBlankChecker'
 import { imbalances, parseEquation } from '@/infrastructure/chemistry/equation'
 import { isValidUnit } from '@/infrastructure/math/quantityAnswer'
 import { normalizeProgramOutput } from './answerEvaluationService'
@@ -116,6 +117,22 @@ function normalizeChoiceOptions(
   if (options.length < 2) return null
   if (options.filter((o) => o.isCorrect).length !== 1) return null
   return options
+}
+
+/** 2–6 options with distinct labels (no "|"), any number flagged correct. */
+function normalizeOptionSet(value: unknown): Array<{ label: string; isCorrect: boolean }> | null {
+  if (!Array.isArray(value)) return null
+  const seen = new Set<string>()
+  const options: Array<{ label: string; isCorrect: boolean }> = []
+  for (const raw of value) {
+    const label = raw && typeof raw === 'object' ? (raw as { label?: unknown }).label : undefined
+    if (typeof label !== 'string') return null
+    const trimmed = label.trim()
+    if (!trimmed || trimmed.includes('|') || seen.has(trimmed)) return null
+    seen.add(trimmed)
+    options.push({ label: trimmed, isCorrect: (raw as { isCorrect?: unknown }).isCorrect === true })
+  }
+  return options.length >= 2 && options.length <= 6 ? options : null
 }
 
 /** How much of a chunk to show when the model's quote cannot be verified. */
@@ -346,6 +363,8 @@ export class QuizService {
             ? { rubric: q.rubric.map((text, index) => ({ id: `p${index + 1}`, text })) }
             : {}),
           ...(q.orderItems?.length ? { orderItems: q.orderItems } : {}),
+          ...(q.matchItems?.length ? { matchItems: q.matchItems } : {}),
+          ...(q.blanks?.length ? { blanks: q.blanks } : {}),
           ...(q.solution ? { solution: q.solution } : {}),
           hints: q.hints ?? [],
           sourceRefs: resolveSourceReferences(q.sourceChunkId, q.quote, snippetIndex),
@@ -413,12 +432,16 @@ export class QuizService {
       if (!raw || typeof raw !== 'object') continue
       const q = raw as Partial<GeneratedQuizQuestion>
       if (typeof q.prompt !== 'string' || q.prompt.trim().length === 0) continue
-      if (typeof q.correctAnswer !== 'string' || q.correctAnswer.trim().length === 0) continue
       const type = (q.type ?? DEFAULT_QUESTION_TYPE) as QuestionType
       // Reject anything outside the supported quiz types.
       if (!QUESTION_TYPES.includes(type)) continue
+      // X / B / fill-blank answers are rebuilt from their structure below, so
+      // a missing `correctAnswer` does not disqualify them.
+      const rebuilt = type === 'multiple_select' || type === 'matching' || type === 'fill_blank'
+      const rawAnswer = typeof q.correctAnswer === 'string' ? q.correctAnswer.trim() : ''
+      if (!rawAnswer && !rebuilt) continue
 
-      let correctAnswer = q.correctAnswer.trim()
+      let correctAnswer = rawAnswer
       let options: Array<{ label: string; isCorrect: boolean }> | undefined
       if (type === 'multiple_choice') {
         const parsed = normalizeChoiceOptions(q.options)
@@ -479,11 +502,50 @@ export class QuizService {
         if (orderItems.length < 3 || orderItems.length > 8) continue
         correctAnswer = orderItems.join('\n')
       }
+      // X-type: 4–6 distinct options, at least two correct; the answer text
+      // is rebuilt from the flagged options.
+      if (type === 'multiple_select') {
+        const parsed = normalizeOptionSet(q.options)
+        if (!parsed || parsed.length < 4 || parsed.filter((o) => o.isCorrect).length < 2) continue
+        options = parsed
+        correctAnswer = parsed.filter((o) => o.isCorrect).map((o) => o.label).join(' | ')
+      }
+      // B-type: shared options, 2–5 stems, one valid option index per stem.
+      let matchItems: string[] | undefined
+      if (type === 'matching') {
+        const parsed = normalizeOptionSet(q.options)
+        const stems = (Array.isArray(q.matchItems) ? q.matchItems : [])
+          .filter((item): item is string => typeof item === 'string')
+          .map((item) => item.replace(/\s+/g, ' ').trim().slice(0, 200))
+          .filter(Boolean)
+        const answers = Array.isArray(q.matchAnswers) ? q.matchAnswers : []
+        if (!parsed || parsed.length < 3 || stems.length < 2 || stems.length > 5 || answers.length !== stems.length) continue
+        if (answers.some((a) => !Number.isInteger(a) || a < 0 || a >= parsed.length)) continue
+        options = parsed.map((o) => ({ label: o.label, isCorrect: false }))
+        matchItems = stems
+        correctAnswer = answers.map((a) => parsed[a]!.label).join(' | ')
+      }
+      // Fill-blank: one accepted-answer list per ____ in the prompt.
+      let blanks: string[][] | undefined
+      if (type === 'fill_blank') {
+        const count = (q.prompt.match(/_{3,}/g) ?? []).length
+        blanks = (Array.isArray(q.blanks) ? q.blanks : [])
+          .map((list) =>
+            (Array.isArray(list) ? list : [])
+              .filter((answer): answer is string => typeof answer === 'string')
+              .map((answer) => answer.trim().slice(0, 60))
+              .filter((answer) => answer && !answer.includes('\n'))
+              .slice(0, 6),
+          )
+        if (count < 1 || count > 4 || blanks.length !== count || blanks.some((list) => list.length === 0)) continue
+        correctAnswer = blanks.map((list) => list[0]!).join(' | ')
+      }
       // Code output needs the program in the prompt; without it the question
       // cannot be answered, so it is dropped.
       if (type === 'code_output') {
         if (!/```/.test(q.prompt)) continue
-        correctAnswer = normalizeProgramOutput(q.correctAnswer)
+        // The untrimmed text: leading spaces on the first line are output.
+        correctAnswer = normalizeProgramOutput(q.correctAnswer as string)
         if (!correctAnswer) continue
       }
 
@@ -495,6 +557,8 @@ export class QuizService {
         ...(unit ? { unit } : {}),
         ...(rubric ? { rubric } : {}),
         ...(orderItems ? { orderItems } : {}),
+        ...(matchItems ? { matchItems } : {}),
+        ...(blanks ? { blanks } : {}),
         solution: typeof q.solution === 'string' ? q.solution : '',
         knowledgePoint: typeof q.knowledgePoint === 'string' && q.knowledgePoint.trim() ? q.knowledgePoint.trim() : 'General',
         difficulty: (q.difficulty ?? 'basic') as DifficultyLevel,
@@ -545,7 +609,10 @@ export class QuizService {
       durationMs?: number
       hintsUsed?: number
       aiFallback?: boolean
-      /** Grade a short answer by its scoring points (needs a configured AI). */
+      /**
+       * A configured AI is available: grade short answers by their scoring
+       * points and check unmatched fill-blank terms for exact equivalents.
+       */
       gradeShortAnswer?: boolean
     } = {},
   ): Promise<SubmitAnswerResult> {
@@ -561,6 +628,11 @@ export class QuizService {
             await loadProjectSubject(quiz.projectId, this.db),
           )
         : evaluateDeterministic(question, userAnswer)
+    // Blanks that did not match locally may be exact synonyms: the AI says
+    // which (only when one is configured); the score stays local.
+    if (question.type === 'fill_blank' && opts.gradeShortAnswer && evaluation.isCorrect === false) {
+      evaluation = await checkBlanksWithAi(this.ai, question, evaluation)
+    }
     if (evaluation.isCorrect === null && opts.aiFallback && question.type !== 'short_answer') {
       evaluation = await this.evaluateWithAI(question, userAnswer, evaluation)
     }

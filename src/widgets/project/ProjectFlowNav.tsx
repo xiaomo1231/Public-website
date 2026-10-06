@@ -7,6 +7,7 @@ import {
   FolderOpen,
   GraduationCap,
   History,
+  Layers,
   Home,
   ListChecks,
   type LucideIcon,
@@ -22,6 +23,7 @@ export type ProjectFlowSection =
   | 'tutor'
   | 'quiz'
   | 'mistakes'
+  | 'cards'
   | 'mastery'
   | 'history'
 
@@ -70,6 +72,12 @@ const ITEMS: FlowItem[] = [
     labelKey: 'projectNav.mistakes',
     icon: BookX,
     path: (id) => `/projects/${id}/mistakes`,
+  },
+  {
+    key: 'cards',
+    labelKey: 'projectNav.cards',
+    icon: Layers,
+    path: (id) => `/projects/${id}/cards`,
   },
   {
     key: 'mastery',

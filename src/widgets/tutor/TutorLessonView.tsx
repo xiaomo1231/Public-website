@@ -9,6 +9,7 @@ import { VisualSourceFigure } from '@/widgets/source/VisualSourceFigure'
 import { TutorVisualizationFigure } from '@/widgets/tutor/TutorVisualizationFigure'
 import { ReferenceImageGallery } from '@/widgets/tutor/ReferenceImageGallery'
 import { useReferenceImages } from '@/features/tutor/useReferenceImages'
+import { LessonFigureContext } from '@/features/tutor/lessonFigureContext'
 import { stripDuplicateTitle, parseLessonSections } from '@/shared/lib/lessonDocument'
 import { anchorVisualizations } from '@/entities/tutorVisualization/placement'
 import { useTranslation } from '@/i18n'
@@ -36,7 +37,10 @@ export function TutorLessonView({
 }: TutorLessonViewProps): JSX.Element {
   const { t } = useTranslation()
   const [confirmOpen, setConfirmOpen] = useState(false)
-  const referenceImages = useReferenceImages(state.lesson, { name: topicName, description: topicDescription })
+  const referenceImages = useReferenceImages(state.lesson, {
+    name: topicName,
+    description: topicDescription,
+  })
 
   if (state.status === 'loading') {
     return (
@@ -79,110 +83,118 @@ export function TutorLessonView({
   )
 
   return (
-    <div className="mx-auto w-full max-w-[46rem]">
-      <article className="space-y-5">
-        <header className="space-y-2">
-          <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-            <h1 className="min-w-0 text-[32px] font-semibold leading-tight tracking-tight text-foreground">
-              {topicName}
-            </h1>
-            <span className="inline-flex shrink-0 items-center gap-1 rounded-full border border-border/70 px-2 py-0.5 text-[11px] text-muted-foreground">
-              <HardDrive className="h-3 w-3" aria-hidden />
-              {t('tutor.savedLocally')}
-            </span>
-          </div>
-          {topicDescription ? (
-            <p className="min-w-0 break-words text-sm text-muted-foreground">{topicDescription}</p>
-          ) : null}
-        </header>
+    <LessonFigureContext.Provider value={{ projectId: lesson.projectId, topicId: lesson.topicId }}>
+      <div className="mx-auto w-full max-w-[46rem]">
+        <article className="space-y-5">
+          <header className="space-y-2">
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+              <h1 className="min-w-0 text-[32px] font-semibold leading-tight tracking-tight text-foreground">
+                {topicName}
+              </h1>
+              <span className="inline-flex shrink-0 items-center gap-1 rounded-full border border-border/70 px-2 py-0.5 text-[11px] text-muted-foreground">
+                <HardDrive className="h-3 w-3" aria-hidden />
+                {t('tutor.savedLocally')}
+              </span>
+            </div>
+            {topicDescription ? (
+              <p className="min-w-0 break-words text-sm text-muted-foreground">
+                {topicDescription}
+              </p>
+            ) : null}
+          </header>
 
-        {state.refreshError && (
-          <div className="rounded-lg border border-amber-500/40 bg-amber-50/50 px-3 py-2.5 text-xs dark:bg-amber-950/20">
-            <p className="font-medium text-amber-900 dark:text-amber-200">
-              {t('tutor.lessonRefreshFailed')}
-            </p>
-            <p className="mt-0.5 text-amber-800 dark:text-amber-300/90">{t('tutor.showingSaved')}</p>
-          </div>
-        )}
+          {state.refreshError && (
+            <div className="rounded-lg border border-amber-500/40 bg-amber-50/50 px-3 py-2.5 text-xs dark:bg-amber-950/20">
+              <p className="font-medium text-amber-900 dark:text-amber-200">
+                {t('tutor.lessonRefreshFailed')}
+              </p>
+              <p className="mt-0.5 text-amber-800 dark:text-amber-300/90">
+                {t('tutor.showingSaved')}
+              </p>
+            </div>
+          )}
 
-        {/* The lesson is the visual subject: constrained measure, generous leading. */}
-        <RichText
-          text={lessonContent}
-          format="markdown"
-          paragraphClassName="text-[16.5px] leading-[1.8]"
-          renderAfterSection={(_section, index) => {
-            const list = bySection.get(index)
-            if (!list || list.length === 0) return null
-            return (
-              <div className="space-y-3">
-                {list.map((visualization) => (
-                  <TutorVisualizationFigure key={visualization.id} visualization={visualization} />
-                ))}
-              </div>
-            )
+          {/* The lesson is the visual subject: constrained measure, generous leading. */}
+          <RichText
+            text={lessonContent}
+            format="markdown"
+            paragraphClassName="text-[16.5px] leading-[1.8]"
+            renderAfterSection={(_section, index) => {
+              const list = bySection.get(index)
+              if (!list || list.length === 0) return null
+              return (
+                <div className="space-y-3">
+                  {list.map((visualization) => (
+                    <TutorVisualizationFigure
+                      key={visualization.id}
+                      visualization={visualization}
+                    />
+                  ))}
+                </div>
+              )
+            }}
+          />
+
+          {/* Figures preserved from the course material come first: they are the
+            primary source, ahead of anything drawn or found for the lesson. */}
+          {lesson.visuals && lesson.visuals.length > 0 && (
+            <section className="space-y-2" aria-label={t('tutor.visualSources')}>
+              <h2 className="text-[22px] font-semibold leading-snug tracking-tight text-foreground">
+                {t('tutor.visualSources')}
+              </h2>
+              {lesson.visuals.map((visual) => (
+                <VisualSourceFigure key={visual.id} visual={visual} />
+              ))}
+            </section>
+          )}
+
+          {/* Lesson-level figures, or figures whose anchor did not resolve. */}
+          {trailing.length > 0 && (
+            <section className="space-y-3" aria-label={t('tutor.visualizations')}>
+              <h2 className="text-[22px] font-semibold leading-snug tracking-tight text-foreground">
+                {t('tutor.visualizations')}
+              </h2>
+              {trailing.map((visualization) => (
+                <TutorVisualizationFigure key={visualization.id} visualization={visualization} />
+              ))}
+            </section>
+          )}
+
+          {/* Opt-in web reference pictures (chemistry / biology). */}
+          <ReferenceImageGallery
+            state={referenceImages}
+            hasCourseFigures={Boolean(lesson.visuals?.some((visual) => visual.hasImage))}
+          />
+
+          <div className="flex flex-wrap items-center gap-2 border-t border-border/60 pt-4">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-xs text-muted-foreground"
+              onClick={() => setConfirmOpen(true)}
+              disabled={state.regenerating}
+            >
+              {state.regenerating ? <Loader2 className="animate-spin" /> : <RefreshCw />}
+              {state.regenerating ? t('tutor.regenerating') : t('tutor.regenerate')}
+            </Button>
+          </div>
+
+          {footer}
+        </article>
+
+        <ConfirmDialog
+          open={confirmOpen}
+          onOpenChange={setConfirmOpen}
+          title={t('tutor.regenerateTitle')}
+          description={t('tutor.regenerateBody')}
+          confirmLabel={t('tutor.regenerate')}
+          busy={state.regenerating}
+          onConfirm={async () => {
+            setConfirmOpen(false)
+            await state.regenerate()
           }}
         />
-
-        {/* Figures preserved from the course material come first: they are the
-            primary source, ahead of anything drawn or found for the lesson. */}
-        {lesson.visuals && lesson.visuals.length > 0 && (
-          <section className="space-y-2" aria-label={t('tutor.visualSources')}>
-            <h2 className="text-[22px] font-semibold leading-snug tracking-tight text-foreground">
-              {t('tutor.visualSources')}
-            </h2>
-            {lesson.visuals.map((visual) => (
-              <VisualSourceFigure key={visual.id} visual={visual} />
-            ))}
-          </section>
-        )}
-
-        {/* Lesson-level figures, or figures whose anchor did not resolve. */}
-        {trailing.length > 0 && (
-          <section className="space-y-3" aria-label={t('tutor.visualizations')}>
-            <h2 className="text-[22px] font-semibold leading-snug tracking-tight text-foreground">
-              {t('tutor.visualizations')}
-            </h2>
-            {trailing.map((visualization) => (
-              <TutorVisualizationFigure key={visualization.id} visualization={visualization} />
-            ))}
-          </section>
-        )}
-
-
-        {/* Opt-in web reference pictures (chemistry / biology). */}
-        <ReferenceImageGallery
-          state={referenceImages}
-          hasCourseFigures={Boolean(lesson.visuals?.some((visual) => visual.hasImage))}
-        />
-
-        <div className="flex flex-wrap items-center gap-2 border-t border-border/60 pt-4">
-          <Button
-            variant="ghost"
-            size="sm"
-            className="text-xs text-muted-foreground"
-            onClick={() => setConfirmOpen(true)}
-            disabled={state.regenerating}
-          >
-            {state.regenerating ? <Loader2 className="animate-spin" /> : <RefreshCw />}
-            {state.regenerating ? t('tutor.regenerating') : t('tutor.regenerate')}
-          </Button>
-        </div>
-
-        {footer}
-      </article>
-
-      <ConfirmDialog
-        open={confirmOpen}
-        onOpenChange={setConfirmOpen}
-        title={t('tutor.regenerateTitle')}
-        description={t('tutor.regenerateBody')}
-        confirmLabel={t('tutor.regenerate')}
-        busy={state.regenerating}
-        onConfirm={async () => {
-          setConfirmOpen(false)
-          await state.regenerate()
-        }}
-      />
-    </div>
+      </div>
+    </LessonFigureContext.Provider>
   )
 }

@@ -68,8 +68,8 @@ export function QuizPage(): JSX.Element {
     try {
       // Every type grades locally except short answers, which are checked
       // point by point by AI when one is configured (otherwise: not scored).
-      const shortAnswer = current.type === 'short_answer'
-      const graded = shortAnswer ? ((await buildAIServices())?.quiz ?? null) : null
+      const needsAi = current.type === 'short_answer' || current.type === 'fill_blank'
+      const graded = needsAi ? ((await buildAIServices())?.quiz ?? null) : null
       const result = await (graded ?? service).submitAnswer(quizId, current.id, answer, {
         durationMs: Date.now() - startedAt,
         ...(graded ? { gradeShortAnswer: true } : {}),

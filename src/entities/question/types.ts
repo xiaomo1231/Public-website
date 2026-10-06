@@ -12,6 +12,9 @@ export type QuestionType =
   | 'short_answer'
   | 'chem_equation'
   | 'ordering'
+  | 'multiple_select'
+  | 'matching'
+  | 'fill_blank'
 
 export const QUESTION_TYPES: QuestionType[] = [
   'multiple_choice',
@@ -22,6 +25,9 @@ export const QUESTION_TYPES: QuestionType[] = [
   'short_answer',
   'chem_equation',
   'ordering',
+  'multiple_select',
+  'matching',
+  'fill_blank',
 ]
 
 export const QUESTION_TYPE_LABEL_KEYS: Record<QuestionType, TranslationKey> = {
@@ -33,6 +39,9 @@ export const QUESTION_TYPE_LABEL_KEYS: Record<QuestionType, TranslationKey> = {
   short_answer: 'questionType.shortAnswer',
   chem_equation: 'questionType.chemEquation',
   ordering: 'questionType.ordering',
+  multiple_select: 'questionType.multipleSelect',
+  matching: 'questionType.matching',
+  fill_blank: 'questionType.fillBlank',
 }
 
 /** One scoring point of a short-answer question. */
@@ -78,6 +87,16 @@ export interface Question {
    * items joined by newlines; the field shows them shuffled.
    */
   orderItems?: string[]
+  /**
+   * Matching (B-type) only: the stems that share `options`. `correctAnswer`
+   * holds the matched option labels in stem order, joined by " | ".
+   */
+  matchItems?: string[]
+  /**
+   * Fill-blank only: per blank (written ____ in the prompt), the accepted
+   * answers — the standard term first, then exact synonyms / abbreviations.
+   */
+  blanks?: string[][]
   solution?: string
   hints: string[]
   sourceRefs: SourceReference[]
@@ -98,6 +117,8 @@ export interface NewQuestionInput {
   unit?: string
   rubric?: RubricPoint[]
   orderItems?: string[]
+  matchItems?: string[]
+  blanks?: string[][]
   solution?: string
   hints?: string[]
   sourceRefs?: SourceReference[]
@@ -116,10 +137,62 @@ export function normalizeQuestionOptions(
 }
 /** The canonical answer as shown to the student, with its unit when it has one. */
 export function expectedAnswerText(
-  question: Pick<Question, 'correctAnswer' | 'unit' | 'type'>,
+  question: Pick<Question, 'correctAnswer' | 'unit' | 'type'> & Partial<Pick<Question, 'options' | 'matchItems' | 'blanks'>>,
 ): string {
   if (question.type === 'ordering') return question.correctAnswer.split('\n').join(' → ')
+  if (question.type === 'multiple_select' && question.options) {
+    return question.options
+      .map((option, i) => (option.isCorrect ? `${optionLetter(i)}. ${option.label}` : ''))
+      .filter(Boolean)
+      .join('；')
+  }
+  if (question.type === 'matching' && question.matchItems) {
+    const labels = question.correctAnswer.split(' | ')
+    return question.matchItems
+      .map((item, i) => {
+        const index = question.options?.findIndex((option) => option.label === labels[i]) ?? -1
+        return `${i + 1}. ${item} → ${index >= 0 ? optionLetter(index) : labels[i] ?? ''}`
+      })
+      .join('；')
+  }
+  if (question.type === 'fill_blank' && question.blanks) {
+    return question.blanks.map((answers, i) => `(${i + 1}) ${answers[0] ?? ''}`).join('  ')
+  }
   return question.unit ? `${question.correctAnswer} ${question.unit}` : question.correctAnswer
+}
+
+/** A, B, C … for option positions. */
+export function optionLetter(index: number): string {
+  return String.fromCharCode(65 + index)
+}
+
+/**
+ * A stored answer as the student should read it: option ids become letters
+ * and labels ("A. …"), matching answers "1→B", blanks "(1) … (2) …".
+ */
+export function displayAnswer(
+  question: Pick<Question, 'type'> & Partial<Pick<Question, 'options' | 'matchItems'>>,
+  userAnswer: string,
+): string {
+  const options = question.options ?? []
+  const describe = (id: string) => {
+    const index = options.findIndex((o) => o.id === id.trim())
+    return index >= 0 ? `${optionLetter(index)}. ${options[index]!.label}` : id
+  }
+  if (!userAnswer.trim()) return ''
+  if (question.type === 'multiple_choice') return describe(userAnswer)
+  if (question.type === 'multiple_select') return userAnswer.split(',').filter(Boolean).map(describe).join('；')
+  if (question.type === 'matching') {
+    return userAnswer
+      .split(',')
+      .map((id, i) => {
+        const index = options.findIndex((o) => o.id === id.trim())
+        return `${i + 1}→${index >= 0 ? optionLetter(index) : '—'}`
+      })
+      .join('  ')
+  }
+  if (question.type === 'fill_blank') return userAnswer.split('\n').map((answer, i) => `(${i + 1}) ${answer || '—'}`).join('  ')
+  return userAnswer
 }
 
 /**
