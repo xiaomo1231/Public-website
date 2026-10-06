@@ -46,7 +46,7 @@ describe('chemistry normalisation', () => {
   it('validates a titration set-up', () => {
     expect(
       one({ type: 'titration_2d', acidConcentration: 0.1, acidVolume: 25, baseConcentration: 0.1, ka: 1.8e-5 }),
-    ).toMatchObject({ setup: { acidConcentration: 0.1, acidVolume: 25, baseConcentration: 0.1, ka: 1.8e-5 } })
+    ).toMatchObject({ setup: { analyte: 'acid', concentration: 0.1, volume: 25, titrantConcentration: 0.1, ka: [1.8e-5] } })
     expect(one({ type: 'titration_2d', acidConcentration: 0, acidVolume: 25, baseConcentration: 0.1 })).toBe('invalid-titration-setup')
     expect(one({ type: 'titration_2d', acidConcentration: 0.1, acidVolume: 25, baseConcentration: 0.1, ka: -1 })).toBe('invalid-titration-ka')
   })
@@ -163,8 +163,7 @@ describe('science figures', () => {
         }}
       />,
     )
-    expect(screen.getByText('Equivalence volume 25 mL')).toBeInTheDocument()
-    expect(screen.getByText('pH at equivalence 7')).toBeInTheDocument()
+    expect(screen.getByText('Equivalence point: 25 mL, pH 7')).toBeInTheDocument()
   })
 
   it('renders a Punnett square with its ratios', () => {
@@ -208,7 +207,7 @@ describe('science figures', () => {
         visualization={{ ...base, id: 'd', type: 'translation_2d', dna: 'ATGTTTTAA', strand: 'coding' }}
       />,
     )
-    expect(screen.getByText('Met–Phe')).toBeInTheDocument()
+    expect(screen.getByText('N–Met–Phe–C')).toBeInTheDocument()
   })
 
   it('renders a molecule caption with its formula', () => {

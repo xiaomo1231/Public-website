@@ -1,11 +1,14 @@
 import {
+  alleleTokens,
   genotypePairs,
+  inheritanceAnalysis,
+  isDominant,
   pedigreeLayout,
-  phenotypeKey,
   punnettSquare,
   ratioText,
   romanNumeral,
   translateDna,
+  type InheritanceVerdict,
 } from '@/entities/tutorVisualization/biology'
 import type {
   PedigreeVisualization,
@@ -30,19 +33,102 @@ const CLASS_SWATCHES = [1, 2, 3, 4].map((slot) => `hsl(var(--viz-series-${slot})
 
 // --- Punnett square ----------------------------------------------------------
 
-/** "a:dominant b:recessive" → "Tall, wrinkled" or "A_ bb". */
-function phenotypeName(key: string, traits: PunnettTrait[], t: T): string {
-  return key
-    .split(' ')
-    .map((part) => {
-      const [gene = '', kind] = part.split(':')
-      const trait = traits.find((item) => item.gene === gene)
-      const upper = gene.toUpperCase()
-      if (kind === 'dominant') return trait?.dominant ?? `${upper}_`
-      if (kind === 'recessive') return trait?.recessive ?? `${gene}${gene}`
-      return trait?.intermediate ?? (trait ? t('viz.punnettIntermediate', { dominant: trait.dominant, recessive: trait.recessive }) : `${upper}${gene}`)
-    })
-    .join(traits.length ? ', ' : ' ')
+/** A genotype or gamete with its superscripts set as superscripts (I^A → Iᴬ). */
+export function GenotypeText({ text }: { text: string }): JSX.Element {
+  const tokens = alleleTokens(text) ?? [text]
+  return (
+    <span className="whitespace-nowrap">
+      {tokens.map((token, i) => {
+        const caret = token.indexOf('^')
+        if (caret < 0) return <span key={i}>{token}</span>
+        return (
+          <span key={i}>
+            {token.slice(0, caret)}
+            <sup className="text-[0.7em]">{token.slice(caret + 1).replace(/[{}]/g, '')}</sup>
+          </span>
+        )
+      })}
+    </span>
+  )
+}
+
+/** One gene's part of a phenotype key: `a:A`, `i:I^A+I^B`, `X:b:X^b`, `a:intermediate`. */
+function splitPart(part: string): { gene: string; expr: string } {
+  if (part.startsWith('X:')) return { gene: part.slice(2, 3), expr: part.slice(4) }
+  return { gene: part.slice(0, 1), expr: part.slice(2) }
+}
+
+/** The display name of a phenotype class, from the lesson's trait names where given. */
+function PhenotypeName({ phenotype, traits, t }: { phenotype: string; traits: PunnettTrait[]; t: T }): JSX.Element {
+  const [sexPart, genesPart] = phenotype.includes('|') ? phenotype.split('|') : ['', phenotype]
+  const male = sexPart === 'male'
+  const parts = genesPart!.split(' ').map((part, index) => {
+    const { gene, expr } = splitPart(part)
+    const trait = traits.find((item) => item.gene === gene)
+    const xLinked = part.startsWith('X:')
+    if (expr === 'intermediate') {
+      if (trait?.intermediate) return trait.intermediate
+      if (trait?.dominant && trait.recessive) return t('viz.punnettIntermediate', { dominant: trait.dominant, recessive: trait.recessive })
+      return <GenotypeText key={index} text={`${gene.toUpperCase()}${gene}`} />
+    }
+    const tokens = expr.split('+')
+    if (trait?.alleles?.length) {
+      const names = tokens.map((token) => trait.alleles!.find((entry) => entry.allele === token)?.name)
+      if (names.every(Boolean)) return names.every((name) => name!.length === 1) ? names.join('') : names.join(' + ')
+    }
+    if (trait?.dominant && trait.recessive) {
+      if (tokens.length === 1) return isDominant(tokens[0]!) ? trait.dominant : trait.recessive
+      return trait.intermediate ?? `${trait.dominant} + ${trait.recessive}`
+    }
+    // No names: the genotype class, e.g. A_, aa, I^AI^B, X^aY.
+    if (tokens.length > 1) return <GenotypeText key={index} text={tokens.join('')} />
+    const token = tokens[0]!
+    if (xLinked && male) return <GenotypeText key={index} text={`${token}Y`} />
+    return <GenotypeText key={index} text={isDominant(token) ? `${token}_` : `${token}${token}`} />
+  })
+  return (
+    <span>
+      {sexPart ? <span className="mr-1">{male ? '♂' : '♀'}</span> : null}
+      {parts.map((part, i) => (
+        <span key={i}>
+          {i > 0 ? (traits.length ? ', ' : ' ') : null}
+          {part}
+        </span>
+      ))}
+    </span>
+  )
+}
+
+function PhenotypeList({
+  phenotypes,
+  total,
+  classIndex,
+  traits,
+  t,
+}: {
+  phenotypes: Array<{ key: string; count: number }>
+  total: number
+  classIndex: Map<string, number>
+  traits: PunnettTrait[]
+  t: T
+}): JSX.Element {
+  return (
+    <ul className="flex flex-wrap justify-center gap-x-4 gap-y-1">
+      {phenotypes.map((entry) => (
+        <li key={entry.key} className="inline-flex items-center gap-1.5">
+          <span
+            aria-hidden
+            className="inline-block h-2.5 w-2.5 rounded-sm"
+            style={{ background: CLASS_SWATCHES[(classIndex.get(entry.key) ?? 0) % CLASS_SWATCHES.length] }}
+          />
+          <PhenotypeName phenotype={entry.key} traits={traits} t={t} />
+          <span className="data-num">
+            {entry.count}/{total}
+          </span>
+        </li>
+      ))}
+    </ul>
+  )
 }
 
 export function TutorPunnettFigure({ visualization, t }: { visualization: PunnettVisualization; t: T }): JSX.Element | null {
@@ -66,7 +152,7 @@ export function TutorPunnettFigure({ visualization, t }: { visualization: Punnet
               </th>
               {result.columns.map((gamete, index) => (
                 <th key={`c-${index}`} scope="col" className="data-num min-w-12 p-2 font-medium">
-                  {gamete}
+                  <GenotypeText text={gamete} />
                 </th>
               ))}
             </tr>
@@ -75,52 +161,57 @@ export function TutorPunnettFigure({ visualization, t }: { visualization: Punnet
             {result.rows.map((gamete, row) => (
               <tr key={`r-${row}`}>
                 <th scope="row" className="data-num p-2 font-medium">
-                  {gamete}
+                  <GenotypeText text={gamete} />
                 </th>
-                {result.cells[row]!.map((genotype, column) => {
-                  const index = classIndex.get(phenotypeKey(genotype, visualization.dominance)) ?? 0
-                  return (
-                    <td
-                      key={`${row}-${column}`}
-                      className="data-num min-w-12 border border-border/80 p-2"
-                      style={{ background: CLASS_TINTS[index % CLASS_TINTS.length] }}
-                    >
-                      {genotype}
-                    </td>
-                  )
-                })}
+                {result.cells[row]!.map((cell, column) => (
+                  <td
+                    key={`${row}-${column}`}
+                    className="data-num min-w-12 border border-border/80 p-2"
+                    style={{ background: CLASS_TINTS[(classIndex.get(cell.phenotype) ?? 0) % CLASS_TINTS.length] }}
+                  >
+                    <GenotypeText text={cell.genotype} />
+                    {cell.sex ? <span className="ml-0.5 text-[10px] text-muted-foreground">{cell.sex === 'male' ? '♂' : '♀'}</span> : null}
+                  </td>
+                ))}
               </tr>
             ))}
           </tbody>
         </table>
       </div>
       <div className="space-y-1 text-center text-[13px] text-muted-foreground">
-        <p>
-          <span className="font-medium text-foreground">{t('viz.punnettCross', { mother: visualization.mother, father: visualization.father })}</span>
+        <p className="font-medium text-foreground">
+          {t('viz.punnettCrossLabel')} <GenotypeText text={visualization.mother} /> × <GenotypeText text={visualization.father} />
         </p>
         <p className="data-num">
           {t('viz.punnettGenotypes')}{' '}
-          {result.genotypes.map((entry) => entry.genotype).join(' : ')} = {ratioText(result.genotypes.map((entry) => entry.count))}
+          {result.genotypes.map((entry, i) => (
+            <span key={entry.genotype}>
+              {i > 0 ? ' : ' : ''}
+              <GenotypeText text={entry.genotype} />
+            </span>
+          ))}{' '}
+          = {ratioText(result.genotypes.map((entry) => entry.count))}
         </p>
-        <ul className="flex flex-wrap justify-center gap-x-4 gap-y-1">
-          <li className="sr-only">{t('viz.punnettPhenotypes')}</li>
-          {result.phenotypes.map((entry, index) => (
-            <li key={entry.key} className="inline-flex items-center gap-1.5">
-              <span
-                aria-hidden
-                className="inline-block h-2.5 w-2.5 rounded-sm"
-                style={{ background: CLASS_SWATCHES[index % CLASS_SWATCHES.length] }}
-              />
-              {phenotypeName(entry.key, visualization.traits, t)}
-              <span className="data-num">
-                {entry.count}/{result.total}
-              </span>
-            </li>
-          ))}
-        </ul>
-        <p className="data-num font-medium text-foreground">
-          {t('viz.punnettPhenotypeRatio', { ratio: ratioText(result.phenotypes.map((entry) => entry.count)) })}
-        </p>
+        {result.bySex ? (
+          (['female', 'male'] as const).map((sex) => (
+            <div key={sex} className="space-y-0.5">
+              <p className="font-medium text-foreground">
+                {sex === 'female' ? t('viz.punnettDaughters') : t('viz.punnettSons')}{' '}
+                {result.bySex![sex].phenotypes.length > 1 && (
+                  <span className="data-num">{t('viz.punnettPhenotypeRatio', { ratio: ratioText(result.bySex![sex].phenotypes.map((entry) => entry.count)) })}</span>
+                )}
+              </p>
+              <PhenotypeList phenotypes={result.bySex![sex].phenotypes} total={result.bySex![sex].total} classIndex={classIndex} traits={visualization.traits} t={t} />
+            </div>
+          ))
+        ) : (
+          <>
+            <PhenotypeList phenotypes={result.phenotypes} total={result.total} classIndex={classIndex} traits={visualization.traits} t={t} />
+            <p className="data-num font-medium text-foreground">
+              {t('viz.punnettPhenotypeRatio', { ratio: ratioText(result.phenotypes.map((entry) => entry.count)) })}
+            </p>
+          </>
+        )}
       </div>
     </div>
   )
@@ -250,6 +341,75 @@ export function TutorPedigreeSvg({
         )}
         <li>{t('viz.pedigreeShapes')}</li>
       </ul>
+      <InheritanceSummary
+        verdicts={inheritanceAnalysis(visualization.members)}
+        nameOf={(id) => {
+          const p = pedigree.positions.get(id)
+          if (!p) return id
+          const row = pedigree.rows[p.generation]!
+          return `${romanNumeral(p.generation + 1)}-${row.indexOf(id) + 1}`
+        }}
+        t={t}
+      />
+    </div>
+  )
+}
+
+const MODE_KEYS = {
+  AD: 'viz.inheritanceAD',
+  AR: 'viz.inheritanceAR',
+  XD: 'viz.inheritanceXD',
+  XR: 'viz.inheritanceXR',
+  YL: 'viz.inheritanceYL',
+} as const
+
+const WITNESS_KEYS = {
+  'unaffected-parents-affected-child': 'viz.witnessUnaffectedParents',
+  'affected-parents-unaffected-child': 'viz.witnessAffectedParents',
+  'affected-mother-unaffected-son': 'viz.witnessAffectedMother',
+  'affected-daughter-unaffected-father': 'viz.witnessAffectedDaughter',
+  'affected-father-unaffected-daughter': 'viz.witnessAffectedFather',
+  'affected-son-unaffected-mother': 'viz.witnessAffectedSon',
+  'affected-female': 'viz.witnessAffectedFemale',
+  'father-son-differ': 'viz.witnessFatherSon',
+  'carrier-in-dominant': 'viz.witnessCarrierDominant',
+  'male-carrier': 'viz.witnessMaleCarrier',
+  'no-assignment': 'viz.witnessNoAssignment',
+} as const
+
+/** Which modes of inheritance the pedigree allows, with the reason for each exclusion. */
+function InheritanceSummary({
+  verdicts,
+  nameOf,
+  t,
+}: {
+  verdicts: InheritanceVerdict[] | null
+  nameOf: (id: string) => string
+  t: T
+}): JSX.Element | null {
+  if (!verdicts) return null
+  return (
+    <div className="space-y-1 rounded-md border border-border/70 px-3 py-2 text-[13px]">
+      <p className="font-medium text-foreground">{t('viz.inheritanceTitle')}</p>
+      <ul className="space-y-0.5">
+        {verdicts.map((verdict) => (
+          <li key={verdict.mode} className={verdict.possible ? 'text-foreground' : 'text-muted-foreground'}>
+            <span className="mr-1.5 inline-block w-4 text-center" aria-hidden>
+              {verdict.possible ? '✓' : '✗'}
+            </span>
+            {t(MODE_KEYS[verdict.mode])}
+            {verdict.possible ? (
+              <span className="ml-1">{t('viz.inheritancePossible')}</span>
+            ) : (
+              <span className="ml-1">
+                {t('viz.inheritanceExcluded')}
+                {verdict.reason ? ` — ${t(WITNESS_KEYS[verdict.reason.kind], { who: verdict.reason.ids.map(nameOf).join(', ') })}` : ''}
+              </span>
+            )}
+          </li>
+        ))}
+      </ul>
+      <p className="text-xs text-muted-foreground">{t('viz.inheritanceAssumption')}</p>
     </div>
   )
 }
@@ -263,6 +423,16 @@ const AMINO_ACIDS_ZH: Record<string, string> = {
   Arg: '精氨酸', Gly: '甘氨酸',
 }
 
+function BaseRun({ dna, mrna, label }: { dna: string; mrna: string; label: string }): JSX.Element {
+  return (
+    <li className="data-num flex flex-col items-center justify-start rounded-md border border-dashed border-border px-1.5 py-1 text-center text-muted-foreground">
+      <span className="font-mono text-xs tracking-wider">{dna}</span>
+      <span className="font-mono text-sm tracking-wider">{mrna}</span>
+      <span className="text-[10px]">{label}</span>
+    </li>
+  )
+}
+
 export function TutorTranslationFigure({
   visualization,
   t,
@@ -272,36 +442,55 @@ export function TutorTranslationFigure({
   t: T
   language: UILanguage
 }): JSX.Element | null {
-  const result = translateDna(visualization.dna, visualization.strand)
+  const result = translateDna(visualization.dna, visualization.strand, {
+    ...(visualization.direction ? { direction: visualization.direction } : {}),
+    ...(visualization.start ? { start: visualization.start } : {}),
+  })
   if (!result) return null
-  const used = result.codons.length * 3
-  const rest = visualization.dna.slice(used)
-  const restMrna = result.mrna.slice(used)
-  const strandLabel = visualization.strand === 'coding' ? t('viz.translationCoding') : t('viz.translationTemplate')
+  const start = Math.max(0, result.startIndex)
+  const end = result.startIndex < 0 ? 0 : start + result.codons.length * 3
+  const leader = result.startIndex > 0 ? { dna: result.alignedDna.slice(0, start), mrna: result.mrna.slice(0, start) } : null
+  const trailing =
+    end < result.mrna.length && result.startIndex >= 0
+      ? { dna: result.alignedDna.slice(end), mrna: result.mrna.slice(end) }
+      : null
+  const writtenDirection = visualization.direction ?? (visualization.strand === 'coding' ? '5to3' : '3to5')
+  const alignedLabel = visualization.strand === 'coding' ? t('viz.translationCoding') : t('viz.translationTemplate')
   const chain = result.codons.filter((codon) => codon.aminoAcid !== 'Stop').map((codon) => codon.aminoAcid)
 
   return (
     <div className="space-y-3 px-1 py-2">
+      <p className="break-all text-xs text-muted-foreground">
+        {t('viz.translationGiven', {
+          strand: visualization.strand === 'coding' ? t('viz.translationCodingShort') : t('viz.translationTemplateShort'),
+          direction: writtenDirection === '5to3' ? "5′→3′" : "3′→5′",
+        })}{' '}
+        <span className="font-mono tracking-wider text-foreground">{visualization.dna}</span>
+        {result.reversed ? <span className="ml-1">{t('viz.translationReversed')}</span> : null}
+      </p>
       <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
         <dt className="font-medium">1</dt>
-        <dd>{strandLabel}</dd>
+        <dd>{alignedLabel}</dd>
         <dt className="font-medium">2</dt>
         <dd>{t('viz.translationMrna')}</dd>
         <dt className="font-medium">3</dt>
         <dd>{t('viz.translationAminoAcid')}</dd>
       </dl>
+      {result.startIndex < 0 ? (
+        <p className="text-sm text-muted-foreground">{t('viz.translationNoStart')}</p>
+      ) : null}
       <ol className="flex flex-wrap gap-1.5" aria-label={t('viz.translationAria')}>
+        {leader ? <BaseRun dna={leader.dna} mrna={leader.mrna} label={t('viz.translationLeader')} /> : null}
         {result.codons.map((codon, index) => {
           const stop = codon.aminoAcid === 'Stop'
+          const from = start + index * 3
           return (
             <li
               key={index}
               className="data-num flex min-w-[3.75rem] flex-col items-center rounded-md border border-border/80 px-1.5 py-1 text-center"
               style={{ background: stop ? 'hsl(var(--viz-series-2) / 0.12)' : 'hsl(var(--viz-series-1) / 0.08)' }}
             >
-              <span className="font-mono text-xs tracking-wider text-muted-foreground">
-                {visualization.dna.slice(index * 3, index * 3 + 3)}
-              </span>
+              <span className="font-mono text-xs tracking-wider text-muted-foreground">{result.alignedDna.slice(from, from + 3)}</span>
               <span className="font-mono text-sm font-semibold tracking-wider">{codon.codon}</span>
               <span className="text-xs">
                 {stop ? t('viz.translationStop') : codon.aminoAcid}
@@ -312,18 +501,13 @@ export function TutorTranslationFigure({
             </li>
           )
         })}
-        {rest && (
-          <li className="data-num flex flex-col items-center justify-start rounded-md border border-dashed border-border px-1.5 py-1 text-center text-muted-foreground">
-            <span className="font-mono text-xs tracking-wider">{rest}</span>
-            <span className="font-mono text-sm tracking-wider">{restMrna}</span>
-            <span className="text-[10px]">{t('viz.translationUntranslated')}</span>
-          </li>
-        )}
+        {trailing ? <BaseRun dna={trailing.dna} mrna={trailing.mrna} label={t('viz.translationUntranslated')} /> : null}
+        {result.startIndex < 0 ? <BaseRun dna={result.alignedDna} mrna={result.mrna} label={t('viz.translationUntranslated')} /> : null}
       </ol>
       <p className="text-center text-[13px] text-muted-foreground">
         <span className="font-medium text-foreground">{t('viz.translationChain')}</span>{' '}
-        <span className="data-num">{chain.length ? chain.join('–') : '—'}</span>
-        {!result.stopped && <span className="ml-2">{t('viz.translationNoStop')}</span>}
+        <span className="data-num">{chain.length ? `N–${chain.join('–')}–C` : '—'}</span>
+        {result.startIndex >= 0 && !result.stopped && <span className="ml-2">{t('viz.translationNoStop')}</span>}
       </p>
     </div>
   )

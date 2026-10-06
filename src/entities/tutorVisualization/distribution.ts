@@ -6,7 +6,15 @@
  * figure can never show a number the maths does not support.
  */
 
-export type DistributionFamily = 'normal' | 'binomial' | 'poisson' | 'uniform' | 'exponential'
+export type DistributionFamily =
+  | 'normal'
+  | 'binomial'
+  | 'poisson'
+  | 'uniform'
+  | 'exponential'
+  | 't'
+  | 'chisquare'
+  | 'f'
 
 export const DISTRIBUTION_FAMILIES: readonly DistributionFamily[] = [
   'normal',
@@ -14,6 +22,9 @@ export const DISTRIBUTION_FAMILIES: readonly DistributionFamily[] = [
   'poisson',
   'uniform',
   'exponential',
+  't',
+  'chisquare',
+  'f',
 ]
 
 export type DistributionParams =
@@ -22,6 +33,9 @@ export type DistributionParams =
   | { family: 'poisson'; lambda: number }
   | { family: 'uniform'; a: number; b: number }
   | { family: 'exponential'; lambda: number }
+  | { family: 't'; df: number }
+  | { family: 'chisquare'; df: number }
+  | { family: 'f'; df1: number; df2: number }
 
 /** A closed interval [from, to]; either end may be open-ended (±∞). */
 export interface ProbabilityInterval {
@@ -32,6 +46,7 @@ export interface ProbabilityInterval {
 export const DISTRIBUTION_LIMITS = {
   maxBinomialN: 60,
   maxPoissonLambda: 50,
+  maxDegreesOfFreedom: 1000,
   maxMagnitude: 1e6,
 } as const
 
@@ -80,7 +95,22 @@ export function validateParams(
       const lambda = num('lambda')
       return lambda !== null && lambda > 0 ? { family, lambda } : null
     }
+    case 't':
+    case 'chisquare': {
+      const df = degreesOfFreedom(num('df'))
+      return df !== null ? { family, df } : null
+    }
+    case 'f': {
+      const df1 = degreesOfFreedom(num('df1'))
+      const df2 = degreesOfFreedom(num('df2'))
+      return df1 !== null && df2 !== null ? { family, df1, df2 } : null
+    }
   }
+}
+
+/** Degrees of freedom: positive (Welch's t may be fractional), bounded. */
+function degreesOfFreedom(value: number | null): number | null {
+  return value !== null && value > 0 && value <= DISTRIBUTION_LIMITS.maxDegreesOfFreedom ? value : null
 }
 
 // --- special functions -------------------------------------------------------
@@ -107,6 +137,103 @@ function logChoose(n: number, k: number): number {
   return logFactorial(n) - logFactorial(k) - logFactorial(n - k)
 }
 
+/** ln Γ(x) for x > 0 (Lanczos, g = 7). */
+export function logGamma(x: number): number {
+  const c = [
+    0.99999999999980993, 676.5203681218851, -1259.1392167224028, 771.32342877765313,
+    -176.61502916214059, 12.507343278686905, -0.13857109526572012, 9.9843695780195716e-6,
+    1.5056327351493116e-7,
+  ]
+  if (x < 0.5) return Math.log(Math.PI / Math.sin(Math.PI * x)) - logGamma(1 - x)
+  const z = x - 1
+  let a = c[0]!
+  const t = z + 7.5
+  for (let i = 1; i < 9; i++) a += c[i]! / (z + i)
+  return 0.5 * Math.log(2 * Math.PI) + (z + 0.5) * Math.log(t) - t + Math.log(a)
+}
+
+function logBeta(a: number, b: number): number {
+  return logGamma(a) + logGamma(b) - logGamma(a + b)
+}
+
+const TINY = 1e-300
+
+/** Regularized lower incomplete gamma P(a, x). */
+export function gammaP(a: number, x: number): number {
+  if (x <= 0) return 0
+  if (x < a + 1) {
+    // Series.
+    let sum = 1 / a
+    let term = sum
+    for (let n = 1; n < 500; n++) {
+      term *= x / (a + n)
+      sum += term
+      if (Math.abs(term) < Math.abs(sum) * 1e-15) break
+    }
+    return clamp01(sum * Math.exp(-x + a * Math.log(x) - logGamma(a)))
+  }
+  // Continued fraction for Q(a, x) (modified Lentz).
+  let b = x + 1 - a
+  let c = 1 / TINY
+  let d = 1 / b
+  let h = d
+  for (let i = 1; i < 500; i++) {
+    const an = -i * (i - a)
+    b += 2
+    d = an * d + b
+    if (Math.abs(d) < TINY) d = TINY
+    c = b + an / c
+    if (Math.abs(c) < TINY) c = TINY
+    d = 1 / d
+    const delta = d * c
+    h *= delta
+    if (Math.abs(delta - 1) < 1e-15) break
+  }
+  return clamp01(1 - Math.exp(-x + a * Math.log(x) - logGamma(a)) * h)
+}
+
+/** Continued fraction for the incomplete beta function (modified Lentz). */
+function betaContinuedFraction(a: number, b: number, x: number): number {
+  const qab = a + b
+  const qap = a + 1
+  const qam = a - 1
+  let c = 1
+  let d = 1 - (qab * x) / qap
+  if (Math.abs(d) < TINY) d = TINY
+  d = 1 / d
+  let h = d
+  for (let m = 1; m < 500; m++) {
+    const m2 = 2 * m
+    let aa = (m * (b - m) * x) / ((qam + m2) * (a + m2))
+    d = 1 + aa * d
+    if (Math.abs(d) < TINY) d = TINY
+    c = 1 + aa / c
+    if (Math.abs(c) < TINY) c = TINY
+    d = 1 / d
+    h *= d * c
+    aa = (-(a + m) * (qab + m) * x) / ((a + m2) * (qap + m2))
+    d = 1 + aa * d
+    if (Math.abs(d) < TINY) d = TINY
+    c = 1 + aa / c
+    if (Math.abs(c) < TINY) c = TINY
+    d = 1 / d
+    const delta = d * c
+    h *= delta
+    if (Math.abs(delta - 1) < 1e-15) break
+  }
+  return h
+}
+
+/** Regularized incomplete beta I_x(a, b). */
+export function betaI(a: number, b: number, x: number): number {
+  if (x <= 0) return 0
+  if (x >= 1) return 1
+  const front = Math.exp(a * Math.log(x) + b * Math.log(1 - x) - logBeta(a, b))
+  return x < (a + 1) / (a + b + 2)
+    ? clamp01((front * betaContinuedFraction(a, b, x)) / a)
+    : clamp01(1 - (front * betaContinuedFraction(b, a, 1 - x)) / b)
+}
+
 // --- density / mass and distribution functions -----------------------------
 
 /** Density (continuous) or mass (discrete) at x. */
@@ -131,6 +258,24 @@ export function density(params: DistributionParams, x: number): number {
       return x >= params.a && x <= params.b ? 1 / (params.b - params.a) : 0
     case 'exponential':
       return x < 0 ? 0 : params.lambda * Math.exp(-params.lambda * x)
+    case 't': {
+      const v = params.df
+      return Math.exp(
+        logGamma((v + 1) / 2) - logGamma(v / 2) - 0.5 * Math.log(v * Math.PI) - ((v + 1) / 2) * Math.log(1 + (x * x) / v),
+      )
+    }
+    case 'chisquare': {
+      if (x <= 0) return 0
+      const k = params.df / 2
+      return Math.exp((k - 1) * Math.log(x) - x / 2 - k * Math.LN2 - logGamma(k))
+    }
+    case 'f': {
+      if (x <= 0) return 0
+      const { df1: a, df2: b } = params
+      return Math.exp(
+        0.5 * (a * Math.log(a * x) + b * Math.log(b) - (a + b) * Math.log(a * x + b)) - Math.log(x) - logBeta(a / 2, b / 2),
+      )
+    }
   }
 }
 
@@ -143,6 +288,14 @@ export function cdf(params: DistributionParams, x: number): number {
       return x <= params.a ? 0 : x >= params.b ? 1 : (x - params.a) / (params.b - params.a)
     case 'exponential':
       return x <= 0 ? 0 : 1 - Math.exp(-params.lambda * x)
+    case 't': {
+      const tail = 0.5 * betaI(params.df / 2, 0.5, params.df / (params.df + x * x))
+      return x >= 0 ? 1 - tail : tail
+    }
+    case 'chisquare':
+      return gammaP(params.df / 2, Math.max(0, x) / 2)
+    case 'f':
+      return x <= 0 ? 0 : betaI(params.df1 / 2, params.df2 / 2, (params.df1 * x) / (params.df1 * x + params.df2))
     case 'binomial':
     case 'poisson': {
       if (x < 0) return 0
@@ -176,6 +329,28 @@ function clamp01(value: number): number {
   return Math.min(1, Math.max(0, value))
 }
 
+/**
+ * The x with P(X ≤ x) = p for a continuous distribution (bisection on the
+ * CDF); used for critical values.
+ */
+export function quantile(params: DistributionParams, p: number): number {
+  const range = plotRange(params)
+  let lo = params.family === 'chisquare' || params.family === 'f' || params.family === 'exponential' ? 0 : range.min
+  let hi = range.max
+  while (cdf(params, lo) > p && lo > -1e6) lo = lo * 2 - 1
+  while (cdf(params, hi) < p && hi < 1e6) hi = hi * 2 + 1
+  for (let i = 0; i < 200; i++) {
+    const mid = (lo + hi) / 2
+    if (cdf(params, mid) < p) lo = mid
+    else hi = mid
+  }
+  return (lo + hi) / 2
+}
+
+/**
+ * Mean and variance; NaN where a moment does not exist (t with ν ≤ 1, F with
+ * d₂ ≤ 2) and Infinity where it diverges.
+ */
 export function moments(params: DistributionParams): { mean: number; variance: number } {
   switch (params.family) {
     case 'normal':
@@ -188,6 +363,19 @@ export function moments(params: DistributionParams): { mean: number; variance: n
       return { mean: (params.a + params.b) / 2, variance: (params.b - params.a) ** 2 / 12 }
     case 'exponential':
       return { mean: 1 / params.lambda, variance: 1 / params.lambda ** 2 }
+    case 't': {
+      const v = params.df
+      return { mean: v > 1 ? 0 : NaN, variance: v > 2 ? v / (v - 2) : v > 1 ? Infinity : NaN }
+    }
+    case 'chisquare':
+      return { mean: params.df, variance: 2 * params.df }
+    case 'f': {
+      const { df1: a, df2: b } = params
+      return {
+        mean: b > 2 ? b / (b - 2) : NaN,
+        variance: b > 4 ? (2 * b * b * (a + b - 2)) / (a * (b - 2) ** 2 * (b - 4)) : b > 2 ? Infinity : NaN,
+      }
+    }
   }
 }
 
@@ -209,6 +397,17 @@ export function plotRange(params: DistributionParams): { min: number; max: numbe
     }
     case 'exponential':
       return { min: 0, max: 5 / params.lambda }
+    case 't': {
+      const half = params.df <= 2 ? 8 : params.df <= 5 ? 6 : 4.5
+      return { min: -half, max: half }
+    }
+    case 'chisquare':
+      return { min: 0, max: Math.max(8, params.df + 5 * Math.sqrt(2 * params.df)) }
+    case 'f': {
+      const { mean, variance } = moments(params)
+      const spread = Number.isFinite(variance) ? mean + 4 * Math.sqrt(variance) : 8
+      return { min: 0, max: Math.min(20, Math.max(4, spread)) }
+    }
   }
 }
 
@@ -226,7 +425,18 @@ export function describeParams(params: DistributionParams): string {
       return `U(${f(params.a)}, ${f(params.b)})`
     case 'exponential':
       return `Exp(λ = ${f(params.lambda)})`
+    case 't':
+      return `t(ν = ${f(params.df)})`
+    case 'chisquare':
+      return `χ²(k = ${f(params.df)})`
+    case 'f':
+      return `F(d₁ = ${f(params.df1)}, d₂ = ${f(params.df2)})`
   }
+}
+
+/** Densities that are unbounded at 0 (χ² with k < 2, F with d₁ < 2). */
+export function unboundedAtZero(params: DistributionParams): boolean {
+  return (params.family === 'chisquare' && params.df < 2) || (params.family === 'f' && params.df1 < 2)
 }
 
 export function formatNumber(value: number, digits = 4): string {

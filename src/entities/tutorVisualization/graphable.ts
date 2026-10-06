@@ -69,7 +69,7 @@ function looksLikeHasseText(text: string): boolean {
 
 /** A named probability distribution (the parameters are checked later). */
 function looksLikeDistributionText(text: string): boolean {
-  return /(?:normal distribution|gaussian|binomial distribution|poisson distribution|uniform distribution|exponential distribution|\\sim\s*(?:N|B|\\mathcal\{N\}|\\operatorname\{(?:Bin|Poisson|Exp)\})\s*\(|正态分布|二项分布|泊松分布|均匀分布|指数分布)/i.test(
+  return /(?:normal distribution|gaussian|binomial distribution|poisson distribution|uniform distribution|exponential distribution|t[- ]distribution|student'?s t|chi-square|χ²|\bF[- ]distribution|goodness of fit|t\s*分布|卡方|F\s*分布|拟合优度|\\sim\s*(?:N|B|\\mathcal\{N\}|\\operatorname\{(?:Bin|Poisson|Exp)\})\s*\(|正态分布|二项分布|泊松分布|均匀分布|指数分布)/i.test(
     text,
   )
 }
@@ -87,7 +87,7 @@ function looksLikeVennText(text: string): boolean {
 
 /** Structures, energy profiles or titrations (chemistry courses only). */
 export function looksLikeChemistryFigureText(text: string): boolean {
-  return /(?:\bSMILES\b|structural formula|skeletal formula|functional group|energy (?:profile|diagram)|activation energy|enthalpy change|transition state|titration|equivalence point|结构式|结构简式|分子结构|官能团|能量图|能量变化图|活化能|反应热|焓变|过渡态|滴定|计量点|等当点)/i.test(
+  return /(?:\bSMILES\b|polyprotic|weak base|多元酸|弱碱|structural formula|skeletal formula|functional group|energy (?:profile|diagram)|activation energy|enthalpy change|transition state|titration|equivalence point|结构式|结构简式|分子结构|官能团|能量图|能量变化图|活化能|反应热|焓变|过渡态|滴定|计量点|等当点)/i.test(
     text,
   )
 }
@@ -95,9 +95,58 @@ export function looksLikeChemistryFigureText(text: string): boolean {
 /** Crosses, pedigrees or the central dogma (biology courses only). */
 export function looksLikeBiologyFigureText(text: string): boolean {
   if (/(?<![A-Z])[ACGT]{9,}(?![A-Z])/.test(text)) return true
-  return /(?:Punnett|genotypes?|phenotypes?|monohybrid|dihybrid|pedigree|\bcodons?\b|\bmRNA\b|transcription|棋盘法|基因型|表现型|杂交|系谱|家系|遗传病|转录|翻译|密码子)/i.test(
+  return /(?:Punnett|genotypes?|phenotypes?|monohybrid|dihybrid|pedigree|\bcodons?\b|\bmRNA\b|transcription|X-linked|sex-linked|multiple alleles|codominan|chi-square|goodness of fit|棋盘法|基因型|表现型|杂交|系谱|家系|遗传病|转录|翻译|密码子|伴性|X\s*连锁|复等位|血型|共显性|卡方|拟合优度)/i.test(
     text,
   )
+}
+
+/** Forces, motion, optics or circuits (physics courses). */
+export function looksLikePhysicsFigureText(text: string): boolean {
+  return /(?:free-body|net force|\bforces?\b|incline|friction|velocity|acceleration|displacement|kinematics|\blens\b|\bmirror\b|focal length|resistors?|\bcircuit|Ohm|series|parallel|受力|合力|斜面|摩擦力|支持力|拉力|速度|加速度|位移|匀变速|运动学|透镜|面镜|焦距|物距|像距|电阻|电路|串联|并联|欧姆)/i.test(text)
+}
+
+/** Derivatives, integrals or series (calculus courses). */
+export function looksLikeCalculusFigureText(text: string): boolean {
+  return /(?:derivative|tangent line|differentiat|integral|Riemann|Taylor|Maclaurin|导数|切线|微分|积分|黎曼|泰勒|麦克劳林)/i.test(text)
+}
+
+/** Regression or interval estimation. */
+export function looksLikeRegressionText(text: string): boolean {
+  return /(?:regression|least squares|correlation coefficient|confidence interval|scatter plot|calibration curve|回归|最小二乘|相关系数|置信区间|散点图|标准曲线)/i.test(text)
+}
+
+/** Rate laws and the Arrhenius equation. */
+export function looksLikeKineticsText(text: string): boolean {
+  return /(?:rate law|rate constant|half-life|reaction order|first-order|second-order|zero-order|Arrhenius|速率方程|速率常数|半衰期|反应级数|一级反应|二级反应|零级反应|阿伦尼乌斯)/i.test(text)
+}
+
+/** Enzyme kinetics. */
+export function looksLikeEnzymeText(text: string): boolean {
+  return /(?:Michaelis|Lineweaver|enzyme kinetics|\bK_?m\b|V_?max|inhibit|米氏|酶动力学|酶促反应|双倒数|抑制剂|竞争性抑制)/i.test(text)
+}
+
+/** Population growth models. */
+export function looksLikePopulationText(text: string): boolean {
+  return /(?:population growth|logistic growth|carrying capacity|exponential growth|种群增长|逻辑斯谛|环境容纳量|指数增长|J\s*型|S\s*型曲线)/i.test(text)
+}
+
+/** Sorting algorithms and binary search trees. */
+export function looksLikeAlgorithmText(text: string): boolean {
+  return /(?:\bsort(?:ing)?\b|quicksort|merge sort|binary search tree|\bBST\b|traversal|in-?order|排序|冒泡|快速排序|归并|二叉搜索树|二叉排序树|遍历)/i.test(text)
+}
+
+/**
+ * A formula worth exploring: some maths segment states a relation between
+ * named quantities (`F = ma`, `x(t) = A\cos(\omega t)`). Used only for the
+ * science subjects, where such formulas are the substance of a lesson.
+ */
+export function looksLikeFormulaText(markdown: string): boolean {
+  for (const segment of splitMathSegments(markdown)) {
+    if (segment.kind !== 'math' || !segment.value.includes('=')) continue
+    const symbols = new Set(segment.value.replace(/\\[a-zA-Z]+/g, ' ').match(/[A-Za-z]/g) ?? [])
+    if (symbols.size >= 2) return true
+  }
+  return false
 }
 
 export function hasGraphableMath(markdown: string): boolean {

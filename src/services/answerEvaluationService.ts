@@ -261,6 +261,16 @@ function evaluateChemEquation(question: Question, userAnswer: string): QuestionE
       }
     case 'coefficients':
       return { ...base, isCorrect: false, confidence: 1, note: t('chemEquation.coefficients') }
+    case 'isomers':
+      // Balanced and right by formula, but a structure is written differently:
+      // it may be an isomer, so it is not graded either way.
+      return {
+        ...base,
+        isCorrect: null,
+        method: 'unverified',
+        confidence: 0,
+        note: t('chemEquation.isomers', { species: result.species.join(', ') }),
+      }
   }
 }
 

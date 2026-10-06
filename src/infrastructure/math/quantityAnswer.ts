@@ -1,4 +1,4 @@
-import { unit as mathUnit, type Unit } from 'mathjs'
+import { all, create, type Unit } from 'mathjs'
 
 /**
  * Deterministic grading of a physical quantity: a number *with a unit*.
@@ -34,6 +34,21 @@ export interface QuantityComparison {
 
 const REL_TOL = 1e-2
 
+/**
+ * A private mathjs instance with the units university chemistry and biology
+ * use but mathjs lacks: molarity (M, mM, µM, nM), daltons (Da, kDa),
+ * calories (cal, kcal) and ppm / ppb. Kept separate so these names never
+ * change how the expression grader reads a variable called `M`.
+ */
+const math = create(all)
+math.createUnit('M', { definition: '1 mol/L', prefixes: 'short' })
+math.createUnit('Da', { definition: '1.66053906660e-27 kg', prefixes: 'short' })
+math.createUnit('cal', { definition: '4.184 J', prefixes: 'short' })
+math.createUnit('ppm', { definition: '0.000001' })
+math.createUnit('ppb', { definition: '0.000000001' })
+const mathUnit = (value: number | string, unitText?: string): Unit =>
+  unitText === undefined ? math.unit(value as string) : math.unit(value as number, unitText)
+
 /** Typed / pasted unit notation → mathjs syntax. */
 export function normalizeUnitText(text: string): string {
   return text
@@ -45,6 +60,7 @@ export function normalizeUnitText(text: string): string {
     .replace(/[·⋅•×]/g, ' ')
     .replace(/[μµ]/g, 'u')
     .replace(/Ω/g, 'ohm')
+    .replace(/Å/g, 'angstrom')
     .replace(/℃|°\s*C\b/g, 'degC')
     .replace(/℉|°\s*F\b/g, 'degF')
     .replace(/°/g, 'deg')

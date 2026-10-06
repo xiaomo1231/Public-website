@@ -108,7 +108,7 @@ Dexie
 - `prompts/index.ts` 是唯一注册表。升级 = 加 `v2/` 并切换 import，**调用点不变**。
 - **科目画像 `subject-profile/v1`**：按项目科目（`calculus / linear_algebra / discrete_math / physics / chemistry / biology / cs / stats / other`）给出记号、推理方式、答案格式与常见错误；由 `withSubject()` 追加到教学/判分/分析类 system prompt（课程分析、增量主题分析、导师课时、交互导师、划词提问、测验、错题分析、作业提示/解法/复习讲解/检查答案/逐题问答、幻灯片学习）。`other` 不追加。科目一律由服务端从项目读取（`services/projectSubject.ts`），**不由 UI 传入**。化学记号用 mhchem `$\ce{...}$`（`Math.tsx` 已加载 `katex/contrib/mhchem`）。
 - 画像可带**仅课时用**的 `lesson` 指引，只有 `withSubject(..., { forLesson: true })`（导师课时）才追加：化学/生物要求把可画成图的事实写明（分子名+分子式、各状态能量、滴定浓度/体积/Kₐ、亲本基因型、家系、DNA 序列），并在课程资料有图时引导学生看原图。
-- 带缓存/可比对的产物把科目画像折进版本：`subjectPromptVersion(base, subject)` = `<base>+subject-profile/v1:<subject>`，某科画像修改时在 `PROFILE_REVISIONS` 里给**该科**加修订号（追加 `.rN`，如化学 `.r2`），只让该科的缓存失效（CourseAnalysis、增量 Topic、TutorLesson、SlideLesson、作业复习讲解与检查答案），不会让其它科目全部重生成。
+- 带缓存/可比对的产物把科目画像折进版本：`subjectPromptVersion(base, subject)` = `<base>+subject-profile/v1:<subject>`，某科画像修改时在 `PROFILE_REVISIONS` 里给**该科**加修订号（追加 `.rN`；当前化学 `.r3`、生物 `.r2`、概率统计 `.r2`、物理 `.r2`、微积分 `.r2`、计算机 `.r2`——均已按大学深度改写或补充课时指引），只让该科的缓存失效（CourseAnalysis、增量 Topic、TutorLesson、SlideLesson、作业复习讲解与检查答案），不会让其它科目全部重生成。
 
 ### 安全模型
 
@@ -267,7 +267,8 @@ Topic
 
 - 题型：单选、判断、数值（容差）、数学表达式、**代码输出**（`code_output`，仅计算机科目提供：题干含带语言标记的代码块，答案为程序的确切输出，按行尾空白/换行规范化后**精确匹配**）。
 - 数值题可带 `unit`（mathjs 单位语法，如 `m/s^2`）：学生须带单位作答，任意同量纲单位先换算再按 1% **相对**容差比较；缺单位 / 量纲不对给出明确提示，单位无法识别则不判分（`infrastructure/math/quantityAnswer.ts`）。出题 prompt 为 `quiz-generator/v4`。
-- **化学方程式题（`chem_equation`，仅化学科目）**：`infrastructure/chemistry/equation.ts` 本地解析（`->`/`<=>`/`→`/`⇌`/`=`、`[条件]`、电荷 `Fe^3+`、按 mhchem 约定 `NH4+` 为 +1、水合物 `·`、状态符号忽略）。判分：物种一致（顺序无关）+ 原子与电荷守恒 + 系数成比例（整倍数也算对）；缺/多物种、不守恒、系数错误分别给出提示；读不懂则不判分。出题时参考答案本身必须能解析且配平，否则丢弃该题。
+- **化学方程式题（`chem_equation`，仅化学科目）**：`infrastructure/chemistry/equation.ts` 本地解析（`->`/`<=>`/`→`/`⇌`/`=`、`[条件]`、电荷 `Fe^3+`、按 mhchem 约定 `NH4+` 为 +1、水合物 `·`、状态符号忽略）。判分：物种一致（顺序无关）+ 原子与电荷守恒 + 系数成比例（整倍数也算对）；缺/多物种、不守恒、系数错误分别给出提示；读不懂则不判分。出题时参考答案本身必须能解析且配平，否则丢弃该题。**有机结构式**：物种内可写键（`CH2=CH2`、`HC#CH`/`HC≡CH`、`CH3-CH3`）；没有其它箭头时裸 `=` 才可能是反应箭头，取能配平的那个 `=`。物种按分子式匹配；参考答案写了 ≥2 个碳的结构式而作答结构写法不同（如乙醇 vs 二甲醚）时，判定为 `isomers`：不计分并提示可能是同分异构体（简单基团 `(CH2)3` 展开、键符号忽略后再比较）。
+- 单位（`quantityAnswer.ts` 使用独立 mathjs 实例，不影响表达式判分）额外支持 `M/mM/µM/nM`（mol/L）、`Da/kDa`、`cal/kcal`、`ppm/ppb`、`Å`。
 - **排序题（`ordering`，全科可选，默认不勾选）**：`orderItems` 3–8 个互不相同的单行项，参考答案由其重建（换行连接）。作答 `widgets/quiz/OrderingInput`（拖拽 + 上/下按钮，从按题目 id 固定的打乱顺序开始，且绝不是正确顺序）。得分 = 最长保序子序列长度 / 总项数（`infrastructure/math/orderingAnswer.ts`），部分得分走与简答题相同的 `score` 通道。
 - **教授练习题与交互导师的简答题**（第二期）复用同一判分器：练习题从教授参考答案经 `rubric-extractor/v1` 拆出得分点（按 答案+prompt 版本 哈希缓存在题目上），作答写入错题本 / 掌握度并支持异议（`PracticeService.disputeAttempt`）；导师出题 `tutor/v2-question` 可出带得分点的简答题，覆盖率 60–99% 或无法核对时难度不调整。
 - **简答题（`short_answer`）按得分点计分**：出题时生成参考答案 + 2–6 条得分点（`Question.rubric`）。判分 `services/shortAnswerGrader.ts` + `short-answer-check/v1`：AI 逐条判断是否答到（同义、等价表述都算），答到必须**逐字摘出学生原话**作为证据，本地校验证据确实出现在答案里，否则该点不算；得分 = 答到点数 / 总点数（3/5 → 60%），由本地计算，从不采用 AI 的整体结论。空答案不调用 AI；未配置 AI 或核对失败 ⇒ 不计分（展示得分点与参考答案）。
@@ -404,6 +405,22 @@ docs/             architecture.md
 9. **化学 / 生物图（三层，随 v0.3.9 发布）**：
    - **第 1 层 课程原图优先**：课时页先显示课程资料里的原图，再显示 AI 生成的图；化学/生物课时的 prompt 附上本主题原图清单（页码 + 说明），讲解按页码引用原图。
    - **第 2 层 本地计算的图**（schema **v7**，`visualization-generator/v7`；化学/生物规则只对相应科目及 `other`/未设科目追加，数学课不多花 token）。模型只给课时里的事实，其余全部本地计算：`molecule_2d`（SMILES + 课时写明的分子式；smiles-drawer 本地算分子式，不一致就丢弃，按主题色单色绘制）、`energy_2d`（各状态能量 → ΔH、Eₐ；过渡态必须是峰）、`titration_2d`（一元酸被强碱滴定，按电荷守恒二分法逐点解 pH；标出计量点与半计量点 pH = pKₐ）、`punnett_2d`（≤2 对基因，配子 / 基因型 / 表现型比例）、`pedigree_2d`（≤16 人；校验父母存在、性别与环，自动分代，外来配偶排在同胞组外侧）、`translation_2d`（编码链 / 模板链 → mRNA → 标准密码子表翻译，遇终止密码子停止）。计算在 `entities/tutorVisualization/chemistry.ts` / `biology.ts`，校验在 `normalizeScience.ts`，渲染在 `widgets/tutor/TutorChemistryFigure.tsx` / `TutorBiologyFigure.tsx`。是否发第二次请求由 `hasGraphableMath` 加上化学/生物关键词门控决定。细胞周期时间轴价值较低，未做。
+   - **大学深度（schema v8，`visualization-generator/v8`，未发布）**：
+     - **分布**：`distribution_2d` 增加 t / χ² / F（`logGamma`、正则化不完全 Γ / B 函数，`quantile` 二分求临界值；不存在的矩显示“不存在”，在 0 处无界的密度用 clipPath 裁切）。
+     - **χ² 拟合优度检验** `chisquare_test_2d`（`chiSquare.ts`，统计 / 生物 / other 科目提供）：类别 + 观测数 + 期望比例或期望数；本地算 χ²、df、p、临界值与结论，期望数 < 5 时提示。
+     - **滴定**：多元酸（Kₐ 数组 ≤3，须递减）或弱碱（K_b，用强酸滴定），按电荷平衡解 pH，每个质子一个计量点；只有 pH 与 pKₐ 相差 ≤0.15 时才标“pH ≈ pKₐ”，否则标“半计量点”。v7 存量行 `LegacyTitrationSetup` 由 `asTitrationSetup` 兼容。
+     - **遗传**：`genetics.ts` 支持 X 连锁（`X^AX^a × X^AY`，子代按性别分列比例）、复等位（`I^AI^B`、`c^{ch}`，两个不同显性等位基因共显性）、`codominant`、常染色体 + X 连锁双基因；仅当基因型中有 `X^` 时 `Y` 才是 Y 染色体（`YyRr` 仍是孟德尔字母）；`traits[].alleles` 给等位基因命名（ABO → A/B/AB/O）。
+     - **系谱遗传方式分析** `inheritanceAnalysis`：对 AD / AR / XD / XR / Y 连锁做穷举基因型回溯（完全外显、无新突变），给出“可能 / 排除”及经典判据和涉及成员（I-1 等）。
+     - **转录翻译**：`direction`（书写方向，默认 5′→3′；序列自带 5′/3′ 标注时以标注为准）+ `start`（默认从第一个 AUG），模板链 5′→3′ 书写时先反向对齐；显示 5′ 非翻译区与 N–…–C 多肽。v7 存量行沿用旧读法。
+   - **其它理科（schema v9，`visualization-generator/v9`，未发布）**：按科目只发送对应规则（`scienceFiguresFor` 返回各图族开关）。
+     - **公式探索器** `formula_2d`（全科）：1–4 条曲线 + ≤6 个滑块参数；`entities/tutorVisualization/formula.ts` 用 mathjs 解析 + 白名单校验（只允许声明的变量 / 参数、常量与函数）后编译为闭包，无 eval；KaTeX 显示由 mathjs `toTex` 生成；改动参数时虚线保留原曲线，可一键还原。
+     - **微积分**：`tangent_2d`（mathjs 符号求导，失败回退中心差分；可拖动切点，割线 h 滑块）、`riemann_2d`（左/右/中点/梯形，n 滑块，复合辛普森数值积分对比误差）、`taylor_2d`（逐阶符号求导得系数，阶数滑块 0–10；不可微的函数拒绝）。
+     - **物理**：`forces_2d`（合力 / 平衡 / a = F/m，可画斜面并给出沿斜面与垂直分量）、`motion_2d`（分段匀变速 → x-t / v-t / a-t 三图，v-t 面积为位移，时间游标；路程按速度变号分段计算）、`optics_2d`（薄透镜 / 球面镜，实正虚负约定，三条特征光线经过或反向延长到像点，物距滑块）、`circuit_2d`（≤8 个电阻的串并联树，递归布局，等效电阻与各电阻 U / I / P）。
+     - **统计**：`regression_2d`（最小二乘、r、R²、残差标准误、斜率 t 检验，置信带 / 预测带）、`confidence_interval_2d`（σ 已知用 z，否则 t(n−1)，置信水平滑块）。
+     - **化学**：`kinetics_2d`（0 / 1 / 2 级积分速率方程 + 线性化图，标出逐个半衰期）、`arrhenius_2d`（由 (T, k) 数据拟合 Eₐ 与 A，或直接给 Eₐ、A）。
+     - **生物**：`enzyme_2d`（米氏曲线 + 双倒数图，竞争 / 非竞争 / 反竞争 / 混合抑制的表观常数）、`population_2d`（指数 / 逻辑斯谛，拐点 t*、最大速率 rK/4、dN/dt–N 图）。
+     - **计算机**：`sorting_2d`（冒泡 / 插入 / 选择 / 归并 / 快排逐步回放，比较与写入计数）、`bst_2d`（按插入顺序建树，插入数滑块，中 / 前 / 后 / 层序遍历与高度）。
+     - 计算在 `formula.ts` / `physics.ts` / `models.ts` / `algorithms.ts`，校验在 `normalizeSubjects.ts`，渲染在 `TutorFormulaFigure` / `TutorPhysicsFigure` / `TutorModelFigure` / `TutorAlgorithmFigure`（共用 `PlotFrame` + `plotUtils`）。门控：各图族关键词 + 理科科目讲解中出现带 `=` 的公式（`looksLikeFormulaText`）。科目画像：物理 / 微积分 / 计算机升至 r2，并为各理科补充“讲解中写明可画图数据”的课时指引。
    - **第 3 层 联网参考图片（默认关闭，设置页开启）**：只在化学/生物课时、且本主题没有课程原图时，提供“查找参考图片”按钮（学生点击才联网）。`reference-image-query/v1` 只让模型给搜索词（PubChem 需附分子式，与 PubChem 返回值核对）；`infrastructure/referenceImages/sources.ts` 检索并下载；可选 `reference-image-check/v1` 视觉核对（`ChatMessage.images` 以 OpenAI content 数组发送；模型不支持图片时自动降级为“未核对”）。图片与来源 / 许可 / 作者存入 Dexie **v14** `referenceImages` / `referenceImageBlobs`（每主题缓存，可逐张移除，随项目删除；不纳入导出，可重新获取）。
 
 8. **Markdown 表格渲染（Phase 3.1.1 已实现并验证，随 v0.2.6 发布）**：共享 `RichText` 新增 GFM pipe table block（`shared/lib/markdownTable.ts` 纯解析 + `markdownText.ts` block + `RichText` 语义化渲染）；cell 复用现有 inline 文本/code/LaTeX；宽表仅在容器内横向滚动；普通 `|x|` 不误判；code fence / block math 内不解析表格。Tutor Lesson Prompt 升 **v3**（保留 v1/v2）规范表格输出。旧缓存中的多行 Markdown 表格**无需重新调用 AI 即可正确显示**；Prompt v3 经 `contentHash` 使旧课时自然重生成一次。未改 `TUTOR_LESSON_VERSION` / Visualization schema / Dexie。
@@ -418,5 +435,5 @@ docs/             architecture.md
 - OCR 质量取决于图片清晰度；手写内容提取效果有限。
 - 课程分析为项目级（覆盖该项目全部已处理文档），非逐文档结果，也非章节级。
 - 数学可视化范围受控：`eigen_2d` 只支持 2×2 实矩阵的**实**特征值/特征向量；复特征值、3×3、Jordan 形、动画、拖拽均不支持，会安全回退为普通 LaTeX，不绘制误导性的实特征方向。
-- 化学 / 生物图范围受控：滴定只支持一元酸 + 强碱；棋盘格最多两对基因、每个基因一个字母；不画 3D 结构、反应机理、细胞 / 器官示意图（这类交给课程原图或联网参考图片）。
+- 化学 / 生物图范围受控：滴定只支持 ≤三元酸 + 强碱、一元弱碱 + 强酸（不含活度校正）；棋盘格最多两对基因、至多一个 X 连锁基因，不含连锁交换 / 上位效应；遗传方式分析假设完全外显；同分异构体无法自动区分（不计分并提示）；不画 3D 结构、反应机理、细胞 / 器官示意图（这类交给课程原图或联网参考图片）。
 - 冷启动时外观偏好（明暗 / 配色）要等 `UserProfile` 读出后才应用，可能有一帧默认配色。

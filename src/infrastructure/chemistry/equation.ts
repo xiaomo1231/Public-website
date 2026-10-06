@@ -11,6 +11,14 @@
  *
  * Unicode subscripts/superscripts (H₂O, SO₄²⁻), `→`/`⇌`, and a trailing
  * charge without a caret (`Fe3+`, as in mhchem) are accepted too.
+ *
+ * Organic chemistry: condensed structural formulas may carry bonds
+ * (`CH2=CH2`, `HC#CH` / `HC≡CH`, `CH3-CH3`). A bare `=` is read as the arrow
+ * only when no other arrow is present, choosing the `=` that leaves a
+ * balanced equation, so `CH2=CH2 + H2 = CH3CH3` reads as intended. Species are
+ * matched by molecular formula; when the reference gives a structure with two
+ * or more carbons and the answer writes it differently, the two may be
+ * isomers, so the comparison says so instead of guessing.
  */
 
 export interface Species {
@@ -21,6 +29,13 @@ export interface Species {
   charge: number
   /** Canonical identity: atoms in Hill order plus charge. */
   key: string
+  /**
+   * The written structure, bonds removed and simple groups expanded
+   * (`CH3(CH2)2CH3` → `CH3CH2CH2CH3`), when the species is written as a
+   * structure (an element repeats, or a bond is drawn). Absent for a plain
+   * molecular formula such as `C2H6O`.
+   */
+  structure?: string
 }
 
 export interface Term {
@@ -32,6 +47,8 @@ export interface Term {
 export interface ParsedEquation {
   reactants: Term[]
   products: Term[]
+  /** The two sides and the arrow as written, for rendering. */
+  written: { left: string; arrow: string; right: string }
 }
 
 export type ParseResult =
@@ -55,8 +72,12 @@ const ELEMENTS = new Set(
   ).split(' '),
 )
 
-const ARROW = /\s*(?:<=>|<->|<-->|⇌|⇄|↔|-->|->|→|⟶|=)(?:\[[^\]]*\])?(?:\[[^\]]*\])?\s*/
+/** Every arrow except a bare `=`, which may also be a double bond. */
+const ARROW = /\s*(?:<=>|<->|<-->|⇌|⇄|↔|-->|->|→|⟶)(?:\[[^\]]*\])?(?:\[[^\]]*\])?\s*/g
+const EQUALS_ARROW = /\s*=(?:\[[^\]]*\])?(?:\[[^\]]*\])?\s*/g
 const STATE = /\((?:s|l|g|aq|cr|sln)\)/gi
+/** Bonds drawn inside a condensed structural formula. */
+const BONDS = /[=#]|(?<=[A-Za-z0-9)\]])-(?=[A-Z([])/g
 
 function normalize(text: string): string {
   let out = ''
@@ -75,6 +96,7 @@ function normalize(text: string): string {
     }
   }
   return out
+    .replace(/≡/g, '#')
     .replace(/[·•∙⋅]/g, '·')
     .replace(/\^\{([^}]*)\}/g, '^$1')
     .replace(/[↑↓]/g, '')
@@ -191,6 +213,9 @@ export function parseSpecies(raw: string): Species | null {
   if (text === 'e') {
     return charge === -1 ? { text: raw.trim(), atoms: {}, charge: -1, key: 'e-' } : null
   }
+  const unbonded = text.replace(BONDS, '')
+  const drawnBond = unbonded !== text
+  text = unbonded
   const atoms: Record<string, number> = {}
   for (const part of text.split('·')) {
     const { coefficient, rest } = parseCoefficient(part)
@@ -201,15 +226,32 @@ export function parseSpecies(raw: string): Species | null {
     }
   }
   const key = `${hillFormula(atoms)}${charge === 0 ? '' : `${Math.abs(charge)}${charge > 0 ? '+' : '-'}`}`
-  return { text: raw.replace(STATE, '').trim(), atoms, charge, key }
+  const structure = text.includes('·') ? undefined : writtenStructure(text, drawnBond)
+  return { text: raw.replace(STATE, '').trim(), atoms, charge, key, ...(structure ? { structure } : {}) }
 }
 
-export function parseEquation(input: string): ParseResult {
-  const text = normalize(input)
-  const parts = text.split(ARROW)
-  if (parts.length !== 2) return { ok: false, reason: 'no-arrow' }
+/**
+ * A condensed structural formula in a comparable form: simple groups
+ * expanded (`(CH2)3` → `CH2CH2CH2`). Undefined for a plain molecular formula
+ * (no element written twice and no bond drawn).
+ */
+function writtenStructure(text: string, drawnBond: boolean): string | undefined {
+  let expanded = text
+  for (let i = 0; i < 10; i++) {
+    const next = expanded.replace(/[([]([^()[\]]+)[)\]](\d+)/g, (_, group: string, times: string) =>
+      group.repeat(Math.min(Number(times), 20)),
+    ).replace(/[([]([^()[\]]+)[)\]]/g, '$1')
+    if (next === expanded) break
+    expanded = next
+  }
+  const elements = expanded.match(/[A-Z][a-z]?/g) ?? []
+  const repeated = new Set(elements).size < elements.length
+  return drawnBond || repeated ? expanded : undefined
+}
+
+function parseSides(left: string, right: string, arrow: string): ParseResult {
   const sides: Term[][] = []
-  for (const side of parts) {
+  for (const side of [left, right]) {
     if (!side.trim()) return { ok: false, reason: 'empty-side' }
     const terms: Term[] = []
     for (const rawTerm of splitTerms(side)) {
@@ -221,7 +263,49 @@ export function parseEquation(input: string): ParseResult {
     }
     sides.push(terms)
   }
-  return { ok: true, equation: { reactants: sides[0]!, products: sides[1]! } }
+  return {
+    ok: true,
+    equation: { reactants: sides[0]!, products: sides[1]!, written: { left: left.trim(), arrow: arrow.trim(), right: right.trim() } },
+  }
+}
+
+/**
+ * Where the arrow may be. Any real arrow wins (then every `=` is a double
+ * bond); otherwise each `=` is a candidate, spaced ones (` = `) first.
+ */
+function arrowSplits(text: string): Array<{ left: string; arrow: string; right: string }> {
+  const arrows = [...text.matchAll(ARROW)]
+  if (arrows.length > 1) return []
+  if (arrows.length === 1) {
+    const match = arrows[0]!
+    return [{ left: text.slice(0, match.index), arrow: match[0], right: text.slice(match.index! + match[0].length) }]
+  }
+  const candidates = [...text.matchAll(EQUALS_ARROW)].map((match) => ({
+    left: text.slice(0, match.index),
+    arrow: match[0],
+    right: text.slice(match.index! + match[0].length),
+    spaced: /^\s/.test(match[0]) && /\s$/.test(match[0]),
+  }))
+  return [...candidates.filter((c) => c.spaced), ...candidates.filter((c) => !c.spaced)]
+}
+
+export function parseEquation(input: string): ParseResult {
+  const text = normalize(input)
+  const splits = arrowSplits(text)
+  if (splits.length === 0) return { ok: false, reason: 'no-arrow' }
+  let firstFailure: ParseResult | null = null
+  let firstParsed: ParseResult | null = null
+  for (const split of splits) {
+    const result = parseSides(split.left, split.right, split.arrow)
+    if (!result.ok) {
+      firstFailure ??= result
+      continue
+    }
+    // Prefer the reading that balances; a double bond read as the arrow will not.
+    if (imbalances(result.equation).length === 0) return result
+    firstParsed ??= result
+  }
+  return firstParsed ?? firstFailure!
 }
 
 export interface Imbalance {
@@ -268,6 +352,8 @@ export type EquationComparison =
   | { verdict: 'species'; missing: string[]; extra: string[] }
   | { verdict: 'unbalanced'; imbalances: Imbalance[] }
   | { verdict: 'coefficients' }
+  /** Balanced and matching by formula, but some organic structures are written differently. */
+  | { verdict: 'isomers'; species: string[] }
 
 /** Coefficients per species key on one side, as exact fractions. */
 function coefficientsByKey(terms: Term[]): Map<string, { n: number; d: number; text: string }> {
@@ -325,6 +411,20 @@ export function compareEquations(answer: string, reference: ParsedEquation): Equ
       else if (Math.abs(r - ratio) > 1e-9) return { verdict: 'coefficients' }
     }
   }
+
+  // Same formula is not the same compound for organic structures (ethanol
+  // and dimethyl ether are both C2H6O). When the reference draws a structure,
+  // an answer written differently cannot be confirmed automatically.
+  const isomers: string[] = []
+  for (const [mine, theirs] of sides) {
+    const reference = new Map(theirs.map(({ species }) => [species.key, species]))
+    for (const { species } of mine) {
+      const expected = reference.get(species.key)
+      if (!expected?.structure || (expected.atoms.C ?? 0) < 2) continue
+      if (species.structure !== expected.structure) isomers.push(species.text)
+    }
+  }
+  if (isomers.length > 0) return { verdict: 'isomers', species: isomers }
   return { verdict: 'correct' }
 }
 
@@ -350,7 +450,13 @@ export type EquationPreview =
 export function previewEquation(input: string): EquationPreview {
   if (!input.trim()) return { status: 'empty' }
   const parsed = parseEquation(input)
-  if (parsed.ok) return { status: 'ok', latex: `\\ce{${toMhchem(input)}}` }
+  if (parsed.ok) {
+    // Render the arrow that was actually read; a `=` arrow becomes `->` so
+    // mhchem does not draw it as a double bond.
+    const { left, arrow, right } = parsed.equation.written
+    const shownArrow = arrow.startsWith('=') ? `->${arrow.slice(1)}` : arrow
+    return { status: 'ok', latex: `\\ce{${toMhchem(`${left} ${shownArrow} ${right}`)}}` }
+  }
   if (parsed.reason === 'bad-species') return { status: 'bad-term', term: parsed.detail ?? input }
   return { status: 'no-arrow' }
 }

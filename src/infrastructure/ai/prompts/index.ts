@@ -15,7 +15,7 @@ import * as ContextualTutorV2 from './contextual-tutor/v2'
 import * as ProfessorProfileV1 from './professor-profile/v1'
 import * as MistakeAnalyzerV2 from './mistake-analyzer/v2'
 import * as QuizGeneratorV4 from './quiz-generator/v4'
-import * as VisualizationGeneratorV7 from './visualization-generator/v7'
+import * as VisualizationGeneratorV9 from './visualization-generator/v9'
 import * as HomeworkAnalyzerV2 from './homework-analyzer/v2'
 import * as HomeworkQuestionV3 from './homework-question/v3'
 import * as HomeworkQaV1 from './homework-qa/v1'
@@ -40,7 +40,7 @@ export const PROMPT_VERSIONS = {
   professorProfile: 'v1',
   mistakeAnalyzer: 'v2',
   quizGenerator: 'v4',
-  visualizationGenerator: 'v7',
+  visualizationGenerator: 'v9',
   homeworkAnalyzer: 'v2',
   homeworkQuestion: 'v3',
   homeworkQa: 'v1',
@@ -66,7 +66,7 @@ export const prompts = {
   professorProfile: ProfessorProfileV1,
   mistakeAnalyzer: MistakeAnalyzerV2,
   quizGenerator: QuizGeneratorV4,
-  visualizationGenerator: VisualizationGeneratorV7,
+  visualizationGenerator: VisualizationGeneratorV9,
   homeworkAnalyzer: HomeworkAnalyzerV2,
   homeworkQuestion: HomeworkQuestionV3,
   homeworkQa: HomeworkQaV1,
@@ -102,7 +102,7 @@ export type {
   GeneratedQuizQuestion,
   QuizQuestionType,
 } from './quiz-generator/v4'
-export type { VisualizationInput, VisualizationOutput } from './visualization-generator/v7'
+export type { VisualizationInput, VisualizationOutput } from './visualization-generator/v9'
 export type {
   HomeworkAnalyzerInput,
   HomeworkAnalyzerOutput,

@@ -1,3 +1,4 @@
+import { useId } from 'react'
 import { niceTickStep } from '@/entities/tutorVisualization/linear'
 import {
   density,
@@ -8,6 +9,7 @@ import {
   isDiscrete,
   moments,
   plotRange,
+  unboundedAtZero,
 } from '@/entities/tutorVisualization/distribution'
 import type { DistributionVisualization } from '@/entities/tutorVisualization/types'
 import type { UseTranslationResult } from '@/i18n'
@@ -69,14 +71,18 @@ export function TutorDistributionSvg({
         const x = xMin + ((xMax - xMin) * i) / SAMPLES
         return { x, y: density(params, x) }
       })
-  const yPeak = Math.max(...(discrete ? bars.map((b) => b.p) : curve.map((c) => c.y)), 1e-9)
+  // A density that is unbounded at 0 (χ² with k < 2) is clipped at the top.
+  const yPeak = unboundedAtZero(params)
+    ? density(params, xMax * 0.04)
+    : Math.max(...(discrete ? bars.map((b) => b.p) : curve.map((c) => c.y)).filter(Number.isFinite), 1e-9)
   const yMax = yPeak * 1.12
 
   const { pad, width, height } = layout
   const plotW = width - pad.left - pad.right
   const plotH = height - pad.top - pad.bottom
   const sx = (x: number) => pad.left + ((x - xMin) / (xMax - xMin)) * plotW
-  const sy = (y: number) => pad.top + (1 - y / yMax) * plotH
+  // Values above the window are clipped by the plot area, not flattened.
+  const sy = (y: number) => pad.top + (1 - Math.min(y, yMax * 4) / yMax) * plotH
   const baseline = sy(0)
 
   const xStep = discrete
@@ -106,6 +112,7 @@ export function TutorDistributionSvg({
   const barWidth = Math.max(2, Math.min(28, (plotW / (bars.length || 1)) * 0.7))
   const name = describeParams(params)
   const label = t('viz.distributionAria', { distribution: name })
+  const clipId = `dist-clip-${useId().replace(/[^a-zA-Z0-9_-]/g, '')}`
 
   return (
     <svg
@@ -115,6 +122,11 @@ export function TutorDistributionSvg({
       className="block h-auto w-full max-w-full"
     >
       <title>{label}</title>
+      <defs>
+        <clipPath id={clipId}>
+          <rect x={pad.left} y={pad.top} width={plotW} height={plotH + 1} />
+        </clipPath>
+      </defs>
       <g aria-hidden="true">
         {yTicks.map((v) => (
           <g key={`y-${v}`}>
@@ -147,8 +159,10 @@ export function TutorDistributionSvg({
             />
           ))}
 
-        {!discrete && shaded && <path d={shaded} fill={FILL} stroke="none" />}
-        {!discrete && <path d={curvePath} fill="none" stroke={SERIES} strokeWidth="2.2" strokeLinejoin="round" />}
+        <g clipPath={`url(#${clipId})`}>
+          {!discrete && shaded && <path d={shaded} fill={FILL} stroke="none" />}
+          {!discrete && <path d={curvePath} fill="none" stroke={SERIES} strokeWidth="2.2" strokeLinejoin="round" />}
+        </g>
       </g>
     </svg>
   )
@@ -164,13 +178,15 @@ export function DistributionFacts({
 }): JSX.Element {
   const { params, interval } = visualization
   const { mean, variance } = moments(params)
+  const moment = (value: number) =>
+    Number.isNaN(value) ? t('viz.distributionUndefined') : value === Infinity ? '∞' : formatNumber(value)
   const probabilityText = intervalLabel(interval)
   const probability = interval ? intervalProbability(params, interval) : null
   return (
     <p className="data-num flex flex-wrap justify-center gap-x-4 gap-y-1 text-[13px] text-muted-foreground">
       <span className="font-medium text-foreground">X ~ {describeParams(params)}</span>
-      <span>{t('viz.distributionMean', { value: formatNumber(mean) })}</span>
-      <span>{t('viz.distributionVariance', { value: formatNumber(variance) })}</span>
+      <span>{t('viz.distributionMean', { value: moment(mean) })}</span>
+      <span>{t('viz.distributionVariance', { value: moment(variance) })}</span>
       {probabilityText && probability !== null && (
         <span className="font-medium text-foreground">
           {probabilityText} = {formatNumber(probability)}

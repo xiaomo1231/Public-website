@@ -1,118 +1,14 @@
 /**
- * Biology figures: Punnett squares, pedigrees and transcription/translation.
+ * Biology figures: Punnett squares, pedigrees (with inheritance-mode
+ * analysis) and transcription/translation.
  *
  * The model supplies only what the lesson states (parental genotypes, family
- * members and who is affected, a DNA sequence); gametes, offspring ratios,
- * generations, mRNA and the amino-acid chain are all computed here.
+ * members and who is affected, a DNA sequence and its orientation); gametes,
+ * offspring ratios, generations, possible modes of inheritance, mRNA and the
+ * amino-acid chain are all computed here.
  */
 
-// --- Punnett squares ---------------------------------------------------------
-
-/** Genes per genotype the square supports (2 → a 4 × 4 square). */
-export const MAX_PUNNETT_GENES = 2
-
-/**
- * Split a genotype into allele pairs per gene: "AaBb" → [["A","a"],["B","b"]].
- * Each gene is one letter, written as a pair in either case order.
- */
-export function genotypePairs(genotype: string): Array<[string, string]> | null {
-  const text = genotype.replace(/\s+/g, '')
-  if (!/^[A-Za-z]+$/.test(text) || text.length % 2 !== 0) return null
-  const pairs: Array<[string, string]> = []
-  for (let i = 0; i < text.length; i += 2) {
-    const a = text[i]!
-    const b = text[i + 1]!
-    if (a.toLowerCase() !== b.toLowerCase()) return null
-    // Dominant allele first, as genotypes are conventionally written.
-    pairs.push(a <= b ? [a, b] : [b, a])
-  }
-  const genes = pairs.map(([a]) => a.toLowerCase())
-  if (new Set(genes).size !== genes.length || pairs.length > MAX_PUNNETT_GENES) return null
-  return pairs
-}
-
-/** Gametes by independent assortment, e.g. AaBb → AB, Ab, aB, ab. */
-export function gametes(pairs: Array<[string, string]>): string[] {
-  return pairs.reduce<string[]>(
-    (acc, [a, b]) => acc.flatMap((prefix) => [`${prefix}${a}`, `${prefix}${b}`]),
-    [''],
-  )
-}
-
-/** Combine two gametes into a genotype in gene order, dominant first. */
-export function combine(left: string, right: string): string {
-  let out = ''
-  for (let i = 0; i < left.length; i++) {
-    const a = left[i]!
-    const b = right[i]!
-    out += a <= b ? `${a}${b}` : `${b}${a}`
-  }
-  return out
-}
-
-export type Dominance = 'complete' | 'incomplete'
-
-/**
- * Phenotype class of a genotype: per gene "dominant", "recessive", or — with
- * incomplete dominance — "intermediate" for a heterozygote.
- */
-export function phenotypeKey(genotype: string, dominance: Dominance): string {
-  const parts: string[] = []
-  for (let i = 0; i < genotype.length; i += 2) {
-    const a = genotype[i]!
-    const b = genotype[i + 1]!
-    const gene = a.toLowerCase()
-    const hasDominant = a !== a.toLowerCase() || b !== b.toLowerCase()
-    const heterozygous = a !== b
-    if (dominance === 'incomplete' && heterozygous) parts.push(`${gene}:intermediate`)
-    else parts.push(`${gene}:${hasDominant ? 'dominant' : 'recessive'}`)
-  }
-  return parts.join(' ')
-}
-
-export interface PunnettResult {
-  rows: string[]
-  columns: string[]
-  cells: string[][]
-  /** Offspring genotypes with their counts, most frequent first. */
-  genotypes: Array<{ genotype: string; count: number }>
-  phenotypes: Array<{ key: string; count: number }>
-  total: number
-}
-
-export function punnettSquare(
-  mother: Array<[string, string]>,
-  father: Array<[string, string]>,
-  dominance: Dominance,
-): PunnettResult {
-  const rows = gametes(mother)
-  const columns = gametes(father)
-  const cells = rows.map((row) => columns.map((column) => combine(row, column)))
-  const tally = (keys: string[]) => {
-    const map = new Map<string, number>()
-    for (const key of keys) map.set(key, (map.get(key) ?? 0) + 1)
-    return [...map.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
-  }
-  const flat = cells.flat()
-  return {
-    rows,
-    columns,
-    cells,
-    genotypes: tally(flat).map(([genotype, count]) => ({ genotype, count })),
-    phenotypes: tally(flat.map((g) => phenotypeKey(g, dominance))).map(([key, count]) => ({ key, count })),
-    total: flat.length,
-  }
-}
-
-function gcd(a: number, b: number): number {
-  return b === 0 ? a : gcd(b, a % b)
-}
-
-/** "3 : 1", "9 : 3 : 3 : 1" — counts in lowest terms. */
-export function ratioText(counts: number[]): string {
-  const divisor = counts.reduce((acc, n) => gcd(acc, n), 0) || 1
-  return counts.map((n) => n / divisor).join(' : ')
-}
+export * from './genetics'
 
 // --- pedigrees --------------------------------------------------------------
 
@@ -286,9 +182,181 @@ export function romanNumeral(n: number): string {
   return out
 }
 
+// --- inheritance-mode analysis ------------------------------------------------
+
+/**
+ * Modes of inheritance a pedigree can be checked against, assuming full
+ * penetrance and no new mutations (the textbook assumptions).
+ */
+export type InheritanceMode = 'AD' | 'AR' | 'XD' | 'XR' | 'YL'
+export const INHERITANCE_MODES: readonly InheritanceMode[] = ['AD', 'AR', 'XD', 'XR', 'YL']
+
+export type InheritanceWitness =
+  | 'unaffected-parents-affected-child'
+  | 'affected-parents-unaffected-child'
+  | 'affected-mother-unaffected-son'
+  | 'affected-daughter-unaffected-father'
+  | 'affected-father-unaffected-daughter'
+  | 'affected-son-unaffected-mother'
+  | 'affected-female'
+  | 'father-son-differ'
+  | 'carrier-in-dominant'
+  | 'male-carrier'
+  | 'no-assignment'
+
+export interface InheritanceVerdict {
+  mode: InheritanceMode
+  possible: boolean
+  /** Why the mode is excluded: the classic pattern and the members showing it. */
+  reason?: { kind: InheritanceWitness; ids: string[] }
+}
+
+/** Genotype = number of disease alleles; for males on X/Y it is 0 or 1. */
+interface Assignment {
+  sex: 'female' | 'male'
+  count: number
+}
+
+function options(member: PedigreeMember, mode: InheritanceMode): Assignment[] {
+  const sexes: Array<'female' | 'male'> = member.sex === 'unknown' ? ['female', 'male'] : [member.sex]
+  const out: Assignment[] = []
+  for (const sex of sexes) {
+    const autosomal = mode === 'AD' || mode === 'AR'
+    const counts = autosomal ? [0, 1, 2] : mode === 'YL' ? (sex === 'male' ? [0, 1] : [0]) : sex === 'male' ? [0, 1] : [0, 1, 2]
+    for (const count of counts) {
+      const affected =
+        mode === 'AR' ? count === 2
+        : mode === 'AD' ? count >= 1
+        : mode === 'XR' ? (sex === 'male' ? count === 1 : count === 2)
+        : mode === 'XD' ? count >= 1
+        : count === 1
+      if (affected !== member.affected) continue
+      // A marked carrier is a heterozygote for a recessive trait.
+      if (member.carrier && !((mode === 'AR' || (mode === 'XR' && sex === 'female')) && count === 1)) continue
+      out.push({ sex, count })
+    }
+  }
+  return out
+}
+
+/** Disease alleles a parent can pass on, for the child's sex. */
+function transmitted(parent: Assignment, mode: InheritanceMode, childSex: 'female' | 'male', role: 'father' | 'mother'): number[] {
+  if (mode === 'AD' || mode === 'AR') return parent.count === 0 ? [0] : parent.count === 2 ? [1] : [0, 1]
+  if (mode === 'YL') return role === 'father' && childSex === 'male' ? [parent.count] : [0]
+  // X-linked: a father gives his X to daughters only; a mother gives an X to everyone.
+  if (role === 'father') return childSex === 'female' ? [parent.count] : [0]
+  return parent.count === 0 ? [0] : parent.count === 2 ? [1] : [0, 1]
+}
+
+function consistentWithParents(
+  child: Assignment,
+  father: Assignment | undefined,
+  mother: Assignment | undefined,
+  mode: InheritanceMode,
+): boolean {
+  const fromFather = father ? transmitted(father, mode, child.sex, 'father') : null
+  const fromMother = mother ? transmitted(mother, mode, child.sex, 'mother') : null
+  const maleOnX = (mode === 'XD' || mode === 'XR') && child.sex === 'male'
+  const fatherOptions = fromFather ?? (maleOnX ? [0] : mode === 'YL' && child.sex === 'male' ? [0, 1] : [0, 1])
+  const motherOptions = fromMother ?? (mode === 'YL' ? [0] : [0, 1])
+  for (const f of fatherOptions) for (const m of motherOptions) if (f + m === child.count) return true
+  return false
+}
+
+function witnessFor(members: PedigreeMember[], mode: InheritanceMode): InheritanceVerdict['reason'] | undefined {
+  const byId = new Map(members.map((member) => [member.id, member]))
+  if (mode !== 'AR' && mode !== 'XR') {
+    const carrier = members.find((member) => member.carrier)
+    if (carrier) return { kind: 'carrier-in-dominant', ids: [carrier.id] }
+  }
+  if (mode === 'XR') {
+    const maleCarrier = members.find((member) => member.carrier && member.sex === 'male')
+    if (maleCarrier) return { kind: 'male-carrier', ids: [maleCarrier.id] }
+  }
+  for (const child of members) {
+    const father = child.father ? byId.get(child.father) : undefined
+    const mother = child.mother ? byId.get(child.mother) : undefined
+    const ids = (...list: Array<PedigreeMember | undefined>) => list.filter(Boolean).map((m) => m!.id)
+    if ((mode === 'AD' || mode === 'XD') && father && mother && !father.affected && !mother.affected && child.affected) {
+      return { kind: 'unaffected-parents-affected-child', ids: ids(father, mother, child) }
+    }
+    if (mode === 'AR' && father && mother && father.affected && mother.affected && !child.affected) {
+      return { kind: 'affected-parents-unaffected-child', ids: ids(father, mother, child) }
+    }
+    if (mode === 'XR') {
+      if (mother?.affected && child.sex === 'male' && !child.affected) {
+        return { kind: 'affected-mother-unaffected-son', ids: ids(mother, child) }
+      }
+      if (father && !father.affected && child.sex === 'female' && child.affected) {
+        return { kind: 'affected-daughter-unaffected-father', ids: ids(father, child) }
+      }
+    }
+    if (mode === 'XD') {
+      if (father?.affected && child.sex === 'female' && !child.affected) {
+        return { kind: 'affected-father-unaffected-daughter', ids: ids(father, child) }
+      }
+      if (mother && !mother.affected && child.sex === 'male' && child.affected) {
+        return { kind: 'affected-son-unaffected-mother', ids: ids(mother, child) }
+      }
+    }
+    if (mode === 'YL') {
+      if (child.sex === 'female' && child.affected) return { kind: 'affected-female', ids: [child.id] }
+      if (father && child.sex === 'male' && father.affected !== child.affected) {
+        return { kind: 'father-son-differ', ids: ids(father, child) }
+      }
+    }
+  }
+  if (mode === 'YL') {
+    const female = members.find((member) => member.sex === 'female' && member.affected)
+    if (female) return { kind: 'affected-female', ids: [female.id] }
+  }
+  return undefined
+}
+
+/**
+ * Which modes of inheritance the pedigree allows. A mode is possible when
+ * some genotype for every member explains every phenotype and every
+ * parent–child transmission (searched exhaustively; at most 16 members).
+ */
+export function inheritanceAnalysis(members: PedigreeMember[]): InheritanceVerdict[] | null {
+  const generations = pedigreeGenerations(members)
+  if (!generations || !members.some((member) => member.affected)) return null
+  const ordered = [...members].sort((a, b) => generations.get(a.id)! - generations.get(b.id)!)
+  const index = new Map(ordered.map((member, i) => [member.id, i]))
+
+  return INHERITANCE_MODES.map((mode) => {
+    const choices = ordered.map((member) => options(member, mode))
+    const assigned: Array<Assignment | undefined> = new Array(ordered.length)
+    const search = (i: number): boolean => {
+      if (i === ordered.length) return true
+      const member = ordered[i]!
+      for (const choice of choices[i]!) {
+        const father = member.father ? assigned[index.get(member.father)!] : undefined
+        const mother = member.mother ? assigned[index.get(member.mother)!] : undefined
+        if (father && father.sex !== 'male') continue
+        if (mother && mother.sex !== 'female') continue
+        if ((member.father || member.mother) && !consistentWithParents(choice, father, mother, mode)) continue
+        assigned[i] = choice
+        if (search(i + 1)) return true
+      }
+      assigned[i] = undefined
+      return false
+    }
+    // Parents must be the right sex in every assignment.
+    for (let i = 0; i < ordered.length; i++) {
+      const member = ordered[i]!
+      if (members.some((child) => child.father === member.id)) choices[i] = choices[i]!.filter((c) => c.sex === 'male')
+      if (members.some((child) => child.mother === member.id)) choices[i] = choices[i]!.filter((c) => c.sex === 'female')
+    }
+    const possible = choices.every((list) => list.length > 0) && search(0)
+    if (possible) return { mode, possible }
+    return { mode, possible, reason: witnessFor(members, mode) ?? { kind: 'no-assignment', ids: [] } }
+  })
+}
+
 // --- transcription and translation ------------------------------------------
 
-export const MAX_DNA_LENGTH = 60
+export const MAX_DNA_LENGTH = 90
 
 const CODONS: Record<string, string> = {}
 const TABLE: Array<[string, string]> = [
@@ -302,34 +370,72 @@ const TABLE: Array<[string, string]> = [
 for (const [aminoAcid, codons] of TABLE) for (const codon of codons.split(' ')) CODONS[codon] = aminoAcid
 
 const COMPLEMENT: Record<string, string> = { A: 'U', T: 'A', C: 'G', G: 'C' }
+const DNA_COMPLEMENT: Record<string, string> = { A: 'T', T: 'A', C: 'G', G: 'C' }
+
+/** The direction a strand is written in, left to right. */
+export type WrittenDirection = '5to3' | '3to5'
+
+export interface TranslationOptions {
+  /**
+   * How the given strand is written. University texts write every strand
+   * 5′→3′ unless stated; omitted, the legacy reading applies (coding 5′→3′,
+   * template 3′→5′ aligned under the mRNA).
+   */
+  direction?: WrittenDirection
+  /** Start at the first AUG (default `first` — from the first base). */
+  start?: 'aug' | 'first'
+}
 
 export interface TranslationResult {
   /** mRNA 5′→3′. */
   mrna: string
+  /** The given strand re-oriented to line up base by base with `mrna`. */
+  alignedDna: string
+  /** True when the strand had to be reversed to line up 5′→3′ with the mRNA. */
+  reversed: boolean
+  /** Index in `mrna` where translation starts; -1 when no AUG was found. */
+  startIndex: number
   codons: Array<{ codon: string; aminoAcid: string }>
   /** True when translation ended at a stop codon. */
   stopped: boolean
 }
 
 /**
- * mRNA and amino acids from a DNA strand, read 5′→3′ from its first base.
- * A coding strand gives the mRNA directly (T → U); a template strand, written
- * 3′→5′ as textbooks align it, is complemented base by base.
+ * mRNA and amino acids from a DNA strand. A coding strand matches the mRNA
+ * (T → U); a template strand is its complement, read antiparallel. The
+ * strand is first put into the orientation that lines up with the mRNA
+ * written 5′→3′.
  */
-export function translateDna(dna: string, strand: 'coding' | 'template'): TranslationResult | null {
-  const bases = dna.toUpperCase().replace(/[\s-]/g, '')
+export function translateDna(
+  dna: string,
+  strand: 'coding' | 'template',
+  options: TranslationOptions = {},
+): TranslationResult | null {
+  const bases = dna.toUpperCase().replace(/[\s-]/g, '').replace(/^5'|3'$|^3'|5'$/g, '')
   if (!/^[ACGT]+$/.test(bases) || bases.length < 3 || bases.length > MAX_DNA_LENGTH) return null
-  const mrna = strand === 'coding' ? bases.replace(/T/g, 'U') : [...bases].map((b) => COMPLEMENT[b]).join('')
+  const direction = options.direction ?? (strand === 'coding' ? '5to3' : '3to5')
+  // Coding strand lines up 5′→3′; template strand lines up 3′→5′.
+  const reversed = strand === 'coding' ? direction === '3to5' : direction === '5to3'
+  const alignedDna = reversed ? [...bases].reverse().join('') : bases
+  const mrna = strand === 'coding' ? alignedDna.replace(/T/g, 'U') : [...alignedDna].map((b) => COMPLEMENT[b]).join('')
+  const startIndex = options.start === 'aug' ? mrna.indexOf('AUG') : 0
   const codons: TranslationResult['codons'] = []
   let stopped = false
-  for (let i = 0; i + 3 <= mrna.length; i += 3) {
-    const codon = mrna.slice(i, i + 3)
-    const aminoAcid = CODONS[codon]!
-    codons.push({ codon, aminoAcid })
-    if (aminoAcid === 'Stop') {
-      stopped = true
-      break
+  if (startIndex >= 0) {
+    for (let i = startIndex; i + 3 <= mrna.length; i += 3) {
+      const codon = mrna.slice(i, i + 3)
+      const aminoAcid = CODONS[codon]!
+      codons.push({ codon, aminoAcid })
+      if (aminoAcid === 'Stop') {
+        stopped = true
+        break
+      }
     }
   }
-  return { mrna, codons, stopped }
+  return { mrna, alignedDna, reversed, startIndex, codons, stopped }
+}
+
+/** The complementary DNA strand, base by base (no reversal). */
+export function complementDna(dna: string): string {
+  return [...dna].map((b) => DNA_COMPLEMENT[b] ?? b).join('')
 }

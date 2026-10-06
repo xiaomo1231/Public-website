@@ -7,6 +7,7 @@
  * energies, concentrations, genotypes, family members, a DNA strand).
  */
 import type {
+  ChiSquareTestVisualization,
   EnergyVisualization,
   MoleculeEntry,
   MoleculeVisualization,
@@ -24,11 +25,15 @@ import { asRecord, readNumber, sanitizeText } from './sanitize'
 import { MAX_SMILES_LENGTH, sameFormula, smilesFormula, type EnergyState } from './chemistry'
 import {
   MAX_DNA_LENGTH,
+  alleleTokens,
+  crossProblem,
+  geneOf,
   genotypePairs,
   pedigreeGenerations,
   translateDna,
   type PedigreeMember,
 } from './biology'
+import { MAX_CHI_SQUARE_CATEGORIES, expectedFromRatio } from './chiSquare'
 
 type Normalized = { ok: true; value: TutorVisualization } | { ok: false; reason: string }
 
@@ -101,32 +106,51 @@ function normalizeEnergy(draft: VisualizationDraft, base: CommonBase): Normalize
 }
 
 function normalizeTitration(draft: VisualizationDraft, base: CommonBase): Normalized {
-  const acidConcentration = readNumber(draft.acidConcentration)
-  const acidVolume = readNumber(draft.acidVolume)
-  const baseConcentration = readNumber(draft.baseConcentration)
+  // v8 fields, with the v7 monoprotic names still accepted.
+  const analyte = draft.analyte === 'base' ? 'base' : 'acid'
+  const concentration = readNumber(draft.concentration ?? draft.acidConcentration)
+  const volume = readNumber(draft.volume ?? draft.acidVolume)
+  const titrantConcentration = readNumber(draft.titrantConcentration ?? draft.baseConcentration)
   const inRange = (v: number | null, min: number, max: number): v is number => v !== null && v >= min && v <= max
-  if (
-    !inRange(acidConcentration, 1e-4, 10) ||
-    !inRange(acidVolume, 1, 500) ||
-    !inRange(baseConcentration, 1e-4, 10)
-  ) {
+  if (!inRange(concentration, 1e-4, 10) || !inRange(volume, 1, 500) || !inRange(titrantConcentration, 1e-4, 10)) {
     return { ok: false, reason: 'invalid-titration-setup' }
   }
-  // Ka is optional (strong acid); a weak acid's Ka must be a real constant.
-  let ka: number | undefined
-  if (draft.ka !== undefined && draft.ka !== null) {
-    const raw = typeof draft.ka === 'number' ? draft.ka : Number(draft.ka)
-    if (!Number.isFinite(raw) || raw < 1e-14 || raw > 10) return { ok: false, reason: 'invalid-titration-ka' }
-    ka = raw
+  const constant = (value: unknown): number | null => {
+    const n = typeof value === 'number' ? value : typeof value === 'string' ? Number(value) : NaN
+    return Number.isFinite(n) && n >= 1e-14 && n <= 10 ? n : null
   }
-  const acidLabel = sanitizeText(draft.acidLabel, MAX_LABEL_LENGTH)
-  const baseLabel = sanitizeText(draft.baseLabel, MAX_LABEL_LENGTH)
+  let ka: number[] | undefined
+  let kb: number | undefined
+  if (analyte === 'acid' && draft.ka !== undefined && draft.ka !== null) {
+    const list = Array.isArray(draft.ka) ? draft.ka : [draft.ka]
+    const values = list.map(constant)
+    // Up to three successive constants, each smaller than the one before.
+    if (values.length === 0 || values.length > 3 || values.some((v) => v === null)) {
+      return { ok: false, reason: 'invalid-titration-ka' }
+    }
+    if (values.some((v, i) => i > 0 && v! >= values[i - 1]!)) return { ok: false, reason: 'invalid-titration-ka' }
+    ka = values as number[]
+  }
+  if (analyte === 'base' && draft.kb !== undefined && draft.kb !== null) {
+    const value = constant(draft.kb)
+    if (value === null) return { ok: false, reason: 'invalid-titration-kb' }
+    kb = value
+  }
+  const analyteLabel = sanitizeText(draft.analyteLabel ?? draft.acidLabel, MAX_LABEL_LENGTH)
+  const titrantLabel = sanitizeText(draft.titrantLabel ?? draft.baseLabel, MAX_LABEL_LENGTH)
   const value: TitrationVisualization = {
     ...base,
     type: 'titration_2d',
-    setup: { acidConcentration, acidVolume, baseConcentration, ...(ka !== undefined ? { ka } : {}) },
-    ...(acidLabel ? { acidLabel } : {}),
-    ...(baseLabel ? { baseLabel } : {}),
+    setup: {
+      analyte,
+      concentration,
+      volume,
+      titrantConcentration,
+      ...(ka ? { ka } : {}),
+      ...(kb !== undefined ? { kb } : {}),
+    },
+    ...(analyteLabel ? { analyteLabel } : {}),
+    ...(titrantLabel ? { titrantLabel } : {}),
   }
   return { ok: true, value }
 }
@@ -137,21 +161,37 @@ function normalizePunnett(draft: VisualizationDraft, base: CommonBase): Normaliz
   const mother = genotypePairs(motherText)
   const father = genotypePairs(fatherText)
   if (!mother || !father) return { ok: false, reason: 'invalid-genotype' }
-  // Both parents must carry the same genes in the same order.
-  const genes = (pairs: Array<[string, string]>) => pairs.map(([a]) => a.toLowerCase()).join('')
-  if (genes(mother) !== genes(father)) return { ok: false, reason: 'genotype-genes-differ' }
-  const dominance = draft.dominance === 'incomplete' ? 'incomplete' : 'complete'
-  const geneSet = new Set(genes(mother))
+  const problem = crossProblem(mother, father)
+  if (problem === 'genes-differ') return { ok: false, reason: 'genotype-genes-differ' }
+  if (problem === 'sex-mismatch') return { ok: false, reason: 'genotype-sex-mismatch' }
+  const dominance = draft.dominance === 'incomplete' || draft.dominance === 'codominant' ? draft.dominance : 'complete'
+  // Trait names attach to a gene by its letter (A/a → a, I^A/i → i, X^B/X^b → b).
+  const letters = new Set(mother.map((pair) => geneOf(pair).replace(/^X:/, '')))
+  const alleleSet = new Set([...mother, ...father].flat())
   const traits: PunnettTrait[] = []
   for (const raw of Array.isArray(draft.traits) ? draft.traits : []) {
     const item = asRecord(raw)
-    const gene = typeof item?.gene === 'string' ? item.gene.trim().toLowerCase() : ''
+    const gene = typeof item?.gene === 'string' ? item.gene.trim().toLowerCase().replace(/^x[:^](?=.)/, '')[0] ?? '' : ''
+    if (!letters.has(gene) || traits.some((trait) => trait.gene === gene)) continue
     const dominant = sanitizeText(item?.dominant, MAX_LABEL_LENGTH)
     const recessive = sanitizeText(item?.recessive, MAX_LABEL_LENGTH)
     const intermediate = sanitizeText(item?.intermediate, MAX_LABEL_LENGTH)
-    // Trait names are optional decoration; a bad one is dropped, not the figure.
-    if (!geneSet.has(gene) || !dominant || !recessive || traits.some((trait) => trait.gene === gene)) continue
-    traits.push({ gene, dominant, recessive, ...(intermediate ? { intermediate } : {}) })
+    const alleles: NonNullable<PunnettTrait['alleles']> = []
+    for (const entry of Array.isArray(item?.alleles) ? item.alleles.slice(0, 6) : []) {
+      const record = asRecord(entry)
+      const tokens = typeof record?.allele === 'string' ? alleleTokens(record.allele) : null
+      const name = sanitizeText(record?.name, MAX_LABEL_LENGTH)
+      // Names only for alleles that are actually in the cross.
+      if (tokens?.length === 1 && name && alleleSet.has(tokens[0]!)) alleles.push({ allele: tokens[0]!, name })
+    }
+    // Trait names are optional decoration; an unusable entry is dropped, not the figure.
+    if (!(dominant && recessive) && alleles.length === 0) continue
+    traits.push({
+      gene,
+      ...(dominant && recessive ? { dominant, recessive } : {}),
+      ...(intermediate ? { intermediate } : {}),
+      ...(alleles.length ? { alleles } : {}),
+    })
   }
   const canonical = (pairs: Array<[string, string]>) => pairs.map(([a, b]) => `${a}${b}`).join('')
   const value: PunnettVisualization = {
@@ -197,11 +237,60 @@ function normalizePedigree(draft: VisualizationDraft, base: CommonBase): Normali
 }
 
 function normalizeTranslation(draft: VisualizationDraft, base: CommonBase): Normalized {
-  const dna = typeof draft.dna === 'string' ? draft.dna.toUpperCase().replace(/[\s-]/g, '') : ''
+  const written = typeof draft.dna === 'string' ? draft.dna.replace(/[′’]/g, "'").replace(/\s+/g, '') : ''
+  // End labels written with the sequence ("3'-TAC…-5'") are the most
+  // reliable statement of its direction; otherwise the stated direction, and
+  // otherwise the university convention of writing every strand 5′→3′.
+  const marked = /^3'/.test(written) ? '3to5' : /^5'/.test(written) ? '5to3' : null
+  const stated = draft.direction === '3to5' || draft.direction === '5to3' ? draft.direction : null
+  const direction = marked ?? stated ?? '5to3'
+  const dna = written.toUpperCase().replace(/^[35]'-?|-?[35]'$/g, '').replace(/-/g, '')
   const strand = draft.strand === 'template' ? 'template' : 'coding'
+  const start = draft.start === 'first' ? 'first' : 'aug'
   if (!dna || dna.length > MAX_DNA_LENGTH) return { ok: false, reason: 'invalid-dna' }
-  if (!translateDna(dna, strand)) return { ok: false, reason: 'invalid-dna' }
-  const value: TranslationVisualization = { ...base, type: 'translation_2d', dna, strand }
+  if (!translateDna(dna, strand, { direction, start })) return { ok: false, reason: 'invalid-dna' }
+  const value: TranslationVisualization = { ...base, type: 'translation_2d', dna, strand, direction, start }
+  return { ok: true, value }
+}
+
+function normalizeChiSquare(draft: VisualizationDraft, base: CommonBase): Normalized {
+  const list = Array.isArray(draft.categories) ? draft.categories : []
+  if (list.length < 2 || list.length > MAX_CHI_SQUARE_CATEGORIES) return { ok: false, reason: 'invalid-chisquare-categories' }
+  const labels: string[] = []
+  const observed: number[] = []
+  const expected: Array<number | null> = []
+  const ratio: Array<number | null> = []
+  for (const raw of list) {
+    const item = asRecord(raw)
+    const label = sanitizeText(item?.label, MAX_LABEL_LENGTH)
+    const count = readNumber(item?.observed)
+    if (!label || count === null || count < 0) return { ok: false, reason: 'invalid-chisquare-category' }
+    labels.push(label)
+    observed.push(count)
+    const e = readNumber(item?.expected)
+    const r = readNumber(item?.ratio)
+    expected.push(e !== null && e > 0 ? e : null)
+    ratio.push(r !== null && r > 0 ? r : null)
+  }
+  const total = observed.reduce((a, b) => a + b, 0)
+  if (total <= 0) return { ok: false, reason: 'invalid-chisquare-category' }
+  let expectedCounts: number[]
+  if (expected.every((e) => e !== null)) {
+    expectedCounts = expected as number[]
+    // Expected counts must describe the same sample as the observed ones.
+    const sum = expectedCounts.reduce((a, b) => a + b, 0)
+    if (Math.abs(sum - total) > Math.max(0.5, total * 0.01)) return { ok: false, reason: 'chisquare-expected-total' }
+  } else if (ratio.every((r) => r !== null)) {
+    expectedCounts = expectedFromRatio(observed, ratio as number[])
+  } else {
+    return { ok: false, reason: 'chisquare-missing-expected' }
+  }
+  const categories = labels.map((label, i) => ({ label, observed: observed[i]!, expected: expectedCounts[i]! }))
+  const rawDf = readNumber(draft.df)
+  const df = rawDf !== null && Number.isInteger(rawDf) && rawDf >= 1 && rawDf <= categories.length - 1 ? rawDf : categories.length - 1
+  const rawAlpha = readNumber(draft.alpha)
+  const alpha = rawAlpha !== null && rawAlpha > 0 && rawAlpha < 0.5 ? rawAlpha : 0.05
+  const value: ChiSquareTestVisualization = { ...base, type: 'chisquare_test_2d', categories, df, alpha }
   return { ok: true, value }
 }
 
@@ -215,4 +304,5 @@ export const SCIENCE_NORMALIZERS: Record<
   punnett_2d: normalizePunnett,
   pedigree_2d: normalizePedigree,
   translation_2d: normalizeTranslation,
+  chisquare_test_2d: normalizeChiSquare,
 }

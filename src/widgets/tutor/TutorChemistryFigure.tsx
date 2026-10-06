@@ -3,10 +3,13 @@ import SmilesDrawer from 'smiles-drawer'
 import { niceTickStep } from '@/entities/tutorVisualization/linear'
 import { formatNumber } from '@/entities/tutorVisualization/distribution'
 import {
+  asTitrationSetup,
+  bufferPoints,
   energyProfileFacts,
-  equivalenceVolume,
+  equivalenceVolumes,
   titrationCurve,
   titrationPH,
+  type TitrationSetup,
 } from '@/entities/tutorVisualization/chemistry'
 import type {
   EnergyVisualization,
@@ -314,6 +317,23 @@ export function EnergyFacts({ visualization, t }: { visualization: EnergyVisuali
 
 // --- titration ---------------------------------------------------------------
 
+/** The setup and labels of a titration, for v8 and legacy (v7) rows alike. */
+function resolveTitration(visualization: TitrationVisualization): {
+  setup: TitrationSetup
+  analyte: string
+  titrant: string
+} {
+  const setup = asTitrationSetup(visualization.setup)
+  const weak = setup.analyte === 'acid' ? Boolean(setup.ka?.length) : setup.kb !== undefined
+  const fallbackAnalyte =
+    setup.analyte === 'acid' ? (weak ? ((setup.ka?.length ?? 1) > 1 ? `H${setup.ka!.length}A` : 'HA') : 'HCl') : weak ? 'B' : 'NaOH'
+  return {
+    setup,
+    analyte: visualization.analyteLabel ?? visualization.acidLabel ?? fallbackAnalyte,
+    titrant: visualization.titrantLabel ?? visualization.baseLabel ?? (setup.analyte === 'acid' ? 'NaOH' : 'HCl'),
+  }
+}
+
 export function TutorTitrationSvg({
   visualization,
   layout,
@@ -323,25 +343,29 @@ export function TutorTitrationSvg({
   layout: PlotLayout
   t: T
 }): JSX.Element {
-  const { setup } = visualization
-  const veq = equivalenceVolume(setup)
+  const { setup, titrant } = resolveTitration(visualization)
+  const volumes = equivalenceVolumes(setup)
   const curve = titrationCurve(setup)
-  const xMax = veq * 2
+  const xMax = volumes[volumes.length - 1]! + volumes[0]!
   const { width, height } = layout
   const pad = { ...layout.pad, bottom: layout.pad.bottom + 6 }
   const plotW = width - pad.left - pad.right
   const plotH = height - pad.top - pad.bottom
   const sx = (x: number) => pad.left + (x / xMax) * plotW
-  const sy = (pH: number) => pad.top + (1 - pH / 14) * plotH
+  const sy = (pH: number) => pad.top + (1 - Math.min(14, Math.max(0, pH)) / 14) * plotH
 
   const path = curve
     .map((point, i) => `${i === 0 ? 'M' : 'L'} ${sx(point.volume).toFixed(2)} ${sy(point.pH).toFixed(2)}`)
     .join(' ')
-  const eqPH = titrationPH(setup, veq)
-  const half = setup.ka !== undefined ? { volume: veq / 2, pH: titrationPH(setup, veq / 2) } : null
+  const equivalences = volumes.map((volume) => ({ volume, pH: titrationPH(setup, volume) }))
+  const buffers = bufferPoints(setup).map((point) => ({ ...point, pH: titrationPH(setup, point.volume) }))
   const xTicks = ticks(0, xMax, niceTickStep(xMax, layout.compact ? 4 : 8))
   const yTicks = [0, 2, 4, 6, 8, 10, 12, 14]
-  const label = t('viz.titrationAria', { volume: formatNumber(veq, 3), pH: formatNumber(eqPH, 3) })
+  const label = t('viz.titrationAria', {
+    volume: equivalences.map((point) => formatNumber(point.volume, 3)).join(', '),
+    pH: equivalences.map((point) => formatNumber(point.pH, 3)).join(', '),
+  })
+  const many = equivalences.length > 1
 
   return (
     <svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label={label} className="block h-auto w-full max-w-full">
@@ -365,53 +389,76 @@ export function TutorTitrationSvg({
           </g>
         ))}
         <text x={width - pad.right} y={height - 4} fontSize="11" fill={LABEL} textAnchor="end">
-          {t('viz.titrationAxis', { base: visualization.baseLabel ?? 'NaOH' })}
+          {t('viz.titrationAxis', { base: titrant })}
         </text>
         <text x={pad.left + 4} y={pad.top + 12} fontSize="11" fill={LABEL}>
           pH
         </text>
 
-        {/* Equivalence point. */}
-        <line x1={sx(veq)} x2={sx(veq)} y1={sy(0)} y2={sy(14)} stroke={ACCENT} strokeWidth="1" strokeDasharray="4 4" />
+        {equivalences.map((point) => (
+          <line key={`eq-${point.volume}`} x1={sx(point.volume)} x2={sx(point.volume)} y1={sy(0)} y2={sy(14)} stroke={ACCENT} strokeWidth="1" strokeDasharray="4 4" />
+        ))}
         <path d={path} fill="none" stroke={SERIES} strokeWidth="2.4" strokeLinejoin="round" />
-        <circle cx={sx(veq)} cy={sy(eqPH)} r="4.5" fill={ACCENT} />
-        <text x={sx(veq) + 8} y={sy(eqPH) + 4} fontSize="12" fill={ACCENT}>
-          {t('viz.titrationEquivalence')}
-        </text>
-        {half && (
-          <g>
-            <circle cx={sx(half.volume)} cy={sy(half.pH)} r="4" fill={FOREGROUND} />
-            <text x={sx(half.volume) + 8} y={sy(half.pH) + 18} fontSize="12" fill={FOREGROUND}>
-              pH = pKₐ
+        {equivalences.map((point, i) => (
+          <g key={`eqp-${point.volume}`}>
+            <circle cx={sx(point.volume)} cy={sy(point.pH)} r="4.5" fill={ACCENT} />
+            <text x={sx(point.volume) + 8} y={sy(point.pH) + 4} fontSize="12" fill={ACCENT}>
+              {many ? t('viz.titrationEquivalenceN', { n: i + 1 }) : t('viz.titrationEquivalence')}
             </text>
           </g>
-        )}
+        ))}
+        {buffers.map((point, i) => (
+          <g key={`buf-${point.volume}`}>
+            <circle cx={sx(point.volume)} cy={sy(point.pH)} r="4" fill={FOREGROUND} />
+            <text x={sx(point.volume) + 8} y={sy(point.pH) + 18} fontSize="12" fill={FOREGROUND}>
+              {/* pH ≈ pKₐ only holds where the buffer approximation does (not
+                  for a very strong first or a very weak last proton). */}
+              {Math.abs(point.pH - point.pKa) <= 0.15
+                ? `pH ≈ pKₐ${many ? ('₁₂₃'[i] ?? '') : ''}`
+                : t('viz.titrationHalfEquivalence')}
+            </text>
+          </g>
+        ))}
       </g>
     </svg>
   )
 }
 
 export function TitrationFacts({ visualization, t }: { visualization: TitrationVisualization; t: T }): JSX.Element {
-  const { setup } = visualization
-  const veq = equivalenceVolume(setup)
-  const acid = visualization.acidLabel ?? (setup.ka !== undefined ? 'HA' : 'HCl')
+  const { setup, analyte, titrant } = resolveTitration(visualization)
+  const volumes = equivalenceVolumes(setup)
+  const buffers = bufferPoints(setup)
   return (
     <p className="data-num flex flex-wrap justify-center gap-x-4 gap-y-1 text-[13px] text-muted-foreground">
       <span className="font-medium text-foreground">
         {t('viz.titrationSetup', {
-          acid,
-          acidConcentration: formatNumber(setup.acidConcentration, 4),
-          acidVolume: formatNumber(setup.acidVolume, 4),
-          base: visualization.baseLabel ?? 'NaOH',
-          baseConcentration: formatNumber(setup.baseConcentration, 4),
+          acid: analyte,
+          acidConcentration: formatNumber(setup.concentration, 4),
+          acidVolume: formatNumber(setup.volume, 4),
+          base: titrant,
+          baseConcentration: formatNumber(setup.titrantConcentration, 4),
         })}
       </span>
       <span>{t('viz.titrationInitialPH', { value: formatNumber(titrationPH(setup, 0), 3) })}</span>
-      <span>{t('viz.titrationVeq', { value: formatNumber(veq, 4) })}</span>
-      <span className="font-medium text-foreground">
-        {t('viz.titrationEquivalencePH', { value: formatNumber(titrationPH(setup, veq), 3) })}
-      </span>
-      {setup.ka !== undefined && <span>pKₐ = {formatNumber(-Math.log10(setup.ka), 3)}</span>}
+      {volumes.map((volume, i) => (
+        <span key={volume} className={i === volumes.length - 1 ? 'font-medium text-foreground' : undefined}>
+          {volumes.length > 1
+            ? t('viz.titrationEquivalenceAt', {
+                n: i + 1,
+                volume: formatNumber(volume, 4),
+                pH: formatNumber(titrationPH(setup, volume), 3),
+              })
+            : t('viz.titrationEquivalenceOne', {
+                volume: formatNumber(volume, 4),
+                pH: formatNumber(titrationPH(setup, volume), 3),
+              })}
+        </span>
+      ))}
+      {buffers.map((point, i) => (
+        <span key={point.volume}>
+          {setup.analyte === 'acid' ? `pKₐ${buffers.length > 1 ? '₁₂₃'[i] : ''}` : 'pKₐ(BH⁺)'} = {formatNumber(point.pKa, 3)}
+        </span>
+      ))}
     </p>
   )
 }

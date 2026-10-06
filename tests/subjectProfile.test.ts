@@ -51,7 +51,8 @@ describe('subject profile prompt', () => {
   })
 
   it('folds the profile and subject into the stored prompt version', () => {
-    expect(subjectPromptVersion('v4', 'stats')).toBe('v4+subject-profile/v1:stats')
+    expect(subjectPromptVersion('v4', 'linear_algebra')).toBe('v4+subject-profile/v1:linear_algebra')
+    expect(subjectPromptVersion('v4', 'stats')).toBe('v4+subject-profile/v1:stats.r2')
     expect(subjectPromptVersion('v4', undefined)).toBe('v4+subject-profile/v1:other')
     expect(subjectPromptVersion('v4', 'stats')).not.toBe(subjectPromptVersion('v4', 'physics'))
   })

@@ -1,6 +1,11 @@
 import type { DistributionParams, ProbabilityInterval } from './distribution'
-import type { EnergyState, TitrationSetup } from './chemistry'
-import type { Dominance, PedigreeMember } from './biology'
+import type { EnergyState, LegacyTitrationSetup, TitrationSetup } from './chemistry'
+import type { Dominance, PedigreeMember, WrittenDirection } from './biology'
+import type { ChiSquareCategory } from './chiSquare'
+import type { RiemannMethod } from './formula'
+import type { CircuitNode, Force, MotionSegment, OpticalElement } from './physics'
+import type { GrowthModel, Inhibitor, ReactionOrder } from './models'
+import type { SortAlgorithm } from './algorithms'
 
 /**
  * Structured 2D mathematical visualizations attached to a `TutorLesson`.
@@ -23,10 +28,17 @@ import type { Dominance, PedigreeMember } from './biology'
  * and `venn_2d`; v4 added `eigen_2d`; v5 added `hasse_2d`; v6 added
  * `distribution_2d`; v7 added the chemistry figures (`molecule_2d`,
  * `energy_2d`, `titration_2d`) and the biology figures (`punnett_2d`,
- * `pedigree_2d`, `translation_2d`). Older rows are still read and rendered
+ * `pedigree_2d`, `translation_2d`); v8 added `chisquare_test_2d`, t / χ² / F
+ * distributions, polyprotic-acid and weak-base titrations, X-linked and
+ * multiple-allele crosses, and an explicit strand direction and start codon
+ * for translation; v9 added the interactive formula explorer and figures for
+ * calculus (tangent, Riemann sums, Taylor), physics (forces, motion, optics,
+ * circuits), statistics (regression, confidence intervals), chemistry
+ * (kinetics, Arrhenius), biology (enzyme kinetics, population growth) and
+ * computer science (sorting, BSTs). Older rows are still read and rendered
  * unchanged.
  */
-export const TUTOR_VISUALIZATION_SCHEMA_VERSION = 7
+export const TUTOR_VISUALIZATION_SCHEMA_VERSION = 9
 
 export type TutorVisualizationType =
   | 'function_2d'
@@ -47,6 +59,23 @@ export type TutorVisualizationType =
   | 'punnett_2d'
   | 'pedigree_2d'
   | 'translation_2d'
+  | 'chisquare_test_2d'
+  | 'formula_2d'
+  | 'tangent_2d'
+  | 'riemann_2d'
+  | 'taylor_2d'
+  | 'forces_2d'
+  | 'motion_2d'
+  | 'optics_2d'
+  | 'circuit_2d'
+  | 'regression_2d'
+  | 'confidence_interval_2d'
+  | 'kinetics_2d'
+  | 'arrhenius_2d'
+  | 'enzyme_2d'
+  | 'population_2d'
+  | 'sorting_2d'
+  | 'bst_2d'
 
 export type VisualizationRelation = '=' | '<' | '<=' | '>' | '>='
 
@@ -344,20 +373,31 @@ export interface EnergyVisualization extends TutorVisualizationBase {
   unit: string
 }
 
-/** A monoprotic acid titrated with a strong base; every pH is computed. */
+/**
+ * An acid (strong, or weak with up to three Kₐ) titrated with a strong base,
+ * or a base (strong, or weak with K_b) titrated with a strong acid; every pH
+ * is computed. Rows stored at schema v7 use the legacy monoprotic shape and
+ * `acidLabel` / `baseLabel`.
+ */
 export interface TitrationVisualization extends TutorVisualizationBase {
   type: 'titration_2d'
-  setup: TitrationSetup
+  setup: TitrationSetup | LegacyTitrationSetup
+  analyteLabel?: string
+  titrantLabel?: string
   acidLabel?: string
   baseLabel?: string
 }
 
 /** Optional phenotype names for one gene of a Punnett square. */
 export interface PunnettTrait {
+  /** The gene's letter, e.g. `a` for A/a, `i` for I^A/I^B/i, `b` for X^B/X^b. */
   gene: string
-  dominant: string
-  recessive: string
+  dominant?: string
+  recessive?: string
+  /** The heterozygote's phenotype under incomplete dominance or codominance. */
   intermediate?: string
+  /** Names per allele for multiple alleles, e.g. I^A → "A", i → "O". */
+  alleles?: Array<{ allele: string; name: string }>
 }
 
 /** A Punnett square; gametes, offspring and ratios are computed. */
@@ -375,11 +415,188 @@ export interface PedigreeVisualization extends TutorVisualizationBase {
   members: PedigreeMember[]
 }
 
-/** DNA → mRNA → amino acids, transcribed and translated locally. */
+/**
+ * DNA → mRNA → amino acids, transcribed and translated locally. `direction`
+ * and `start` are absent on v7 rows (legacy reading: coding 5′→3′, template
+ * 3′→5′, from the first base).
+ */
 export interface TranslationVisualization extends TutorVisualizationBase {
   type: 'translation_2d'
   dna: string
   strand: 'coding' | 'template'
+  direction?: WrittenDirection
+  start?: 'aug' | 'first'
+}
+
+/** A χ² goodness-of-fit test; expected counts, χ², p and the verdict are computed. */
+export interface ChiSquareTestVisualization extends TutorVisualizationBase {
+  type: 'chisquare_test_2d'
+  categories: ChiSquareCategory[]
+  df: number
+  alpha: number
+}
+
+/** A slider-controlled parameter of a formula. */
+export interface FormulaParameter {
+  name: string
+  value: number
+  min: number
+  max: number
+  step: number
+  label?: string
+  unit?: string
+}
+
+/**
+ * Interactive formula explorer: 1–4 curves y(variable) sharing parameters the
+ * student can change with sliders; every point is computed locally.
+ */
+export interface FormulaVisualization extends TutorVisualizationBase {
+  type: 'formula_2d'
+  variable: string
+  curves: Array<{ expression: string; label?: string }>
+  params: FormulaParameter[]
+  domain: { min: number; max: number }
+  xLabel?: string
+  yLabel?: string
+}
+
+/** Tangent line (and secant) to f at a movable point; f′ is computed symbolically. */
+export interface TangentVisualization extends TutorVisualizationBase {
+  type: 'tangent_2d'
+  expression: string
+  variable: string
+  point: number
+  domain: { min: number; max: number }
+  showSecant: boolean
+}
+
+/** Riemann sums converging to ∫ₐᵇ f; the integral is computed numerically. */
+export interface RiemannVisualization extends TutorVisualizationBase {
+  type: 'riemann_2d'
+  expression: string
+  variable: string
+  a: number
+  b: number
+  n: number
+  method: RiemannMethod
+}
+
+/** Taylor polynomials of increasing order around a centre. */
+export interface TaylorVisualization extends TutorVisualizationBase {
+  type: 'taylor_2d'
+  expression: string
+  variable: string
+  center: number
+  order: number
+  domain: { min: number; max: number }
+}
+
+/** Free-body diagram; the net force and acceleration are computed. */
+export interface ForcesVisualization extends TutorVisualizationBase {
+  type: 'forces_2d'
+  body?: string
+  forces: Force[]
+  unit: string
+  mass?: number
+  /** Incline angle in degrees (surface rising to the right). */
+  incline?: number
+}
+
+/** x–t, v–t and a–t graphs from piecewise-constant acceleration. */
+export interface MotionVisualization extends TutorVisualizationBase {
+  type: 'motion_2d'
+  x0: number
+  v0: number
+  segments: MotionSegment[]
+}
+
+/** Ray diagram for a thin lens or spherical mirror. */
+export interface OpticsVisualization extends TutorVisualizationBase {
+  type: 'optics_2d'
+  element: OpticalElement
+  focalLength: number
+  objectDistance: number
+  objectHeight: number
+}
+
+/** A series–parallel resistor network across an ideal source. */
+export interface CircuitVisualization extends TutorVisualizationBase {
+  type: 'circuit_2d'
+  voltage: number
+  network: CircuitNode
+}
+
+/** Scatter plot with the least-squares line and confidence / prediction bands. */
+export interface RegressionVisualization extends TutorVisualizationBase {
+  type: 'regression_2d'
+  points: Array<{ x: number; y: number }>
+  xLabel?: string
+  yLabel?: string
+  level: number
+}
+
+/** A z or t confidence interval for a mean. */
+export interface ConfidenceIntervalVisualization extends TutorVisualizationBase {
+  type: 'confidence_interval_2d'
+  mean: number
+  sd: number
+  n: number
+  level: number
+  sigmaKnown: boolean
+  label?: string
+}
+
+/** Concentration–time curve with the linearised plot for a reaction order. */
+export interface KineticsVisualization extends TutorVisualizationBase {
+  type: 'kinetics_2d'
+  order: ReactionOrder
+  k: number
+  a0: number
+  species?: string
+  timeUnit: string
+}
+
+/** ln k against 1/T; Ea and A are fitted from data or taken from the lesson. */
+export interface ArrheniusVisualization extends TutorVisualizationBase {
+  type: 'arrhenius_2d'
+  points?: Array<{ t: number; k: number }>
+  /** J/mol. */
+  ea?: number
+  a?: number
+}
+
+/** Michaelis–Menten curve and Lineweaver–Burk plot, optionally with an inhibitor. */
+export interface EnzymeVisualization extends TutorVisualizationBase {
+  type: 'enzyme_2d'
+  vmax: number
+  km: number
+  inhibitor?: Inhibitor
+  substrateUnit?: string
+  rateUnit?: string
+}
+
+/** Exponential or logistic population growth. */
+export interface PopulationVisualization extends TutorVisualizationBase {
+  type: 'population_2d'
+  model: GrowthModel
+  n0: number
+  r: number
+  k?: number
+  timeUnit?: string
+}
+
+/** A sorting algorithm, step by step. */
+export interface SortingVisualization extends TutorVisualizationBase {
+  type: 'sorting_2d'
+  algorithm: SortAlgorithm
+  values: number[]
+}
+
+/** A binary search tree built by inserting keys in order. */
+export interface BstVisualization extends TutorVisualizationBase {
+  type: 'bst_2d'
+  keys: number[]
 }
 
 export type TutorVisualization =
@@ -399,8 +616,29 @@ export type TutorVisualization =
   | PunnettVisualization
   | PedigreeVisualization
   | TranslationVisualization
+  | ChiSquareTestVisualization
+  | SubjectVisualization
 
-/** Chemistry and biology figures, drawn by their own renderer. */
+/** Figures for the other science subjects (schema v9). */
+export type SubjectVisualization =
+  | FormulaVisualization
+  | TangentVisualization
+  | RiemannVisualization
+  | TaylorVisualization
+  | ForcesVisualization
+  | MotionVisualization
+  | OpticsVisualization
+  | CircuitVisualization
+  | RegressionVisualization
+  | ConfidenceIntervalVisualization
+  | KineticsVisualization
+  | ArrheniusVisualization
+  | EnzymeVisualization
+  | PopulationVisualization
+  | SortingVisualization
+  | BstVisualization
+
+/** Science and subject figures, drawn by their own renderers. */
 export const SCIENCE_VISUALIZATION_TYPES = [
   'molecule_2d',
   'energy_2d',
@@ -408,6 +646,23 @@ export const SCIENCE_VISUALIZATION_TYPES = [
   'punnett_2d',
   'pedigree_2d',
   'translation_2d',
+  'chisquare_test_2d',
+  'formula_2d',
+  'tangent_2d',
+  'riemann_2d',
+  'taylor_2d',
+  'forces_2d',
+  'motion_2d',
+  'optics_2d',
+  'circuit_2d',
+  'regression_2d',
+  'confidence_interval_2d',
+  'kinetics_2d',
+  'arrhenius_2d',
+  'enzyme_2d',
+  'population_2d',
+  'sorting_2d',
+  'bst_2d',
 ] as const
 
 export type ScienceVisualization =
@@ -417,6 +672,8 @@ export type ScienceVisualization =
   | PunnettVisualization
   | PedigreeVisualization
   | TranslationVisualization
+  | ChiSquareTestVisualization
+  | SubjectVisualization
 
 export function isScienceVisualization(
   visualization: TutorVisualization,
@@ -487,6 +744,13 @@ export interface VisualizationDraft {
   states?: unknown
   unit?: unknown
   // titration_2d
+  analyte?: unknown
+  concentration?: unknown
+  volume?: unknown
+  titrantConcentration?: unknown
+  kb?: unknown
+  analyteLabel?: unknown
+  titrantLabel?: unknown
   acidConcentration?: unknown
   acidVolume?: unknown
   baseConcentration?: unknown
@@ -503,6 +767,61 @@ export interface VisualizationDraft {
   // translation_2d
   dna?: unknown
   strand?: unknown
+  direction?: unknown
+  start?: unknown
+  // chisquare_test_2d
+  categories?: unknown
+  df?: unknown
+  alpha?: unknown
+  // v9 subject figures
+  variable?: unknown
+  curves?: unknown
+  domain?: unknown
+  xLabel?: unknown
+  yLabel?: unknown
+  expression?: unknown
+  point?: unknown
+  showSecant?: unknown
+  a?: unknown
+  b?: unknown
+  n?: unknown
+  method?: unknown
+  center?: unknown
+  order?: unknown
+  body?: unknown
+  forces?: unknown
+  mass?: unknown
+  incline?: unknown
+  x0?: unknown
+  v0?: unknown
+  segments?: unknown
+  element?: unknown
+  focalLength?: unknown
+  objectDistance?: unknown
+  objectHeight?: unknown
+  voltage?: unknown
+  network?: unknown
+  level?: unknown
+  mean?: unknown
+  sd?: unknown
+  sigmaKnown?: unknown
+  label?: unknown
+  k?: unknown
+  a0?: unknown
+  species?: unknown
+  timeUnit?: unknown
+  ea?: unknown
+  vmax?: unknown
+  km?: unknown
+  inhibitor?: unknown
+  substrateUnit?: unknown
+  rateUnit?: unknown
+  model?: unknown
+  n0?: unknown
+  r?: unknown
+  algorithm?: unknown
+  values?: unknown
+  keys?: unknown
   // placement (all types)
   placement?: unknown
 }

@@ -10,9 +10,20 @@ import type { TutorLesson, TutorLessonKey, TutorVisual } from '@/entities/tutorL
 import { TUTOR_LESSON_VERSION } from '@/entities/tutorLesson/types'
 import {
   hasGraphableMath,
+  looksLikeAlgorithmText,
   looksLikeBiologyFigureText,
+  looksLikeCalculusFigureText,
   looksLikeChemistryFigureText,
+  looksLikeEnzymeText,
+  looksLikeFormulaText,
+  looksLikeKineticsText,
+  looksLikePhysicsFigureText,
+  looksLikePopulationText,
+  looksLikeRegressionText,
 } from '@/entities/tutorVisualization/graphable'
+
+/** Subjects whose lessons may offer any stated formula to the formula explorer. */
+const FORMULA_SUBJECTS = new Set<Subject>(['physics', 'chemistry', 'biology', 'stats', 'calculus', 'cs'])
 import type { TutorVisualization } from '@/entities/tutorVisualization/types'
 import { VisualSourceRepository } from '@/entities/visualSource/repository'
 import { TutorVisualizationService } from './tutorVisualizationService'
@@ -388,7 +399,17 @@ export class TutorLessonService {
     const worthAsking =
       hasGraphableMath(content) ||
       (science.chemistry && looksLikeChemistryFigureText(content)) ||
-      (science.biology && looksLikeBiologyFigureText(content))
+      (science.biology && looksLikeBiologyFigureText(content)) ||
+      (science.physics && looksLikePhysicsFigureText(content)) ||
+      (science.calculus && looksLikeCalculusFigureText(content)) ||
+      (science.regression && looksLikeRegressionText(content)) ||
+      (science.kinetics && looksLikeKineticsText(content)) ||
+      (science.enzyme && looksLikeEnzymeText(content)) ||
+      (science.population && looksLikePopulationText(content)) ||
+      (science.algorithms && looksLikeAlgorithmText(content)) ||
+      // Science lessons are built on formulas: any stated relation is worth
+      // offering to the interactive formula explorer.
+      (subject !== undefined && FORMULA_SUBJECTS.has(subject) && looksLikeFormulaText(content))
     if (!worthAsking) return []
     return this.visualizationService.generate({
       topicName: input.topicName,
