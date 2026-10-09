@@ -48,9 +48,7 @@ export function DataManagementPanel(): JSX.Element {
   async function handleExport() {
     setExporting(true)
     try {
-      const { json, blobs } = await new DataManagementService().exportAll()
-      const bundle = { json, blobs }
-      const blob = new Blob([JSON.stringify(bundle)], { type: 'application/json' })
+      const blob = await new DataManagementService().exportFile()
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url

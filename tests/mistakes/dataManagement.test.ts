@@ -140,6 +140,31 @@ describe('DataManagementService', () => {
     expect(decoded).toEqual(bytes)
   })
 
+  it('exportFile writes the same bundle as exportAll, one stored file at a time', async () => {
+    const project = await new ProjectService(db).create({ name: 'P', subject: 'cs' })
+    // Larger than one ~11 MB base64 piece, so the pieces must concatenate cleanly.
+    const big = new Uint8Array(8190 * 1024 + 7)
+    for (let i = 0; i < big.length; i++) big[i] = (i * 31) % 256
+    await db.documentBlobs.put({ id: 'big', projectId: project.id, mimeType: 'application/pdf', bytes: big.buffer })
+    await db.visualSourceImages.put({ id: 'figure', projectId: project.id, mimeType: 'image/png', bytes: new Uint8Array([1, 2, 3]).buffer })
+    const service = new DataManagementService(db)
+    const file = await service.exportFile()
+    expect(file.type).toBe('application/json')
+    const parsed = JSON.parse(await file.text()) as Awaited<ReturnType<DataManagementService['exportAll']>>
+    const expected = await service.exportAll()
+    expect({ ...parsed.json, exportedAt: 0 }).toEqual({ ...expected.json, exportedAt: 0 })
+    // exportAll's encoding is checked byte for byte above; the pieces must match it exactly.
+    expect(parsed.blobs.map((b) => b.id)).toEqual(['big', 'figure'])
+    expect(parsed.blobs[0]!.bytesBase64 === expected.blobs[0]!.bytesBase64).toBe(true)
+    expect(parsed.blobs[1]).toEqual(expected.blobs[1])
+  })
+
+  it('exportFile is valid JSON when nothing binary is stored', async () => {
+    await new ProjectService(db).create({ name: 'P', subject: 'cs' })
+    const parsed = JSON.parse(await (await new DataManagementService(db).exportFile()).text())
+    expect(parsed.blobs).toEqual([])
+  })
+
   it('deleteProject removes every table row for that project', async () => {
     const projects = new ProjectService(db)
     const p = await projects.create({ name: 'P', subject: 'cs' })

@@ -33,6 +33,7 @@ import {
   toSourceDocumentFingerprint,
   type SourceDocumentFingerprint,
 } from './sourceHash'
+import { legacyInputWasTruncated, type AnalysisInputDocument } from './analysisInput'
 
 export interface CourseContentRepositoryDeps {  db?: AppDatabase
   analyses?: CourseAnalysisRepository
@@ -231,14 +232,26 @@ export class CourseContentRepository {
    * re-processing identical material does not count as a change.
    */
   async computeSourceHash(projectId: string): Promise<string> {
+    return (await this.inspectAnalysisInput(projectId)).sourceHash
+  }
+
+  /** The input fingerprint, plus whether the old single request would have cut it short. */
+  private async inspectAnalysisInput(
+    projectId: string,
+  ): Promise<{ sourceHash: string; legacyInputTruncated: boolean }> {
     const documents = await this.documents.listByProject(projectId)
     const selected = selectAnalysisDocuments(documents)
     const fingerprints: SourceDocumentFingerprint[] = []
+    const inputs: AnalysisInputDocument[] = []
     for (const doc of selected) {
       const chunks = await this.chunks.listByDocument(doc.id)
       fingerprints.push(toSourceDocumentFingerprint(doc, chunks))
+      inputs.push({ id: doc.id, name: doc.name, chunks })
     }
-    return computeAnalysisSourceHash(fingerprints)
+    return {
+      sourceHash: computeAnalysisSourceHash(fingerprints),
+      legacyInputTruncated: legacyInputWasTruncated(inputs),
+    }
   }
 
   /**
@@ -260,18 +273,19 @@ export class CourseContentRepository {
     projectId: string,
     overrides: Partial<CourseContentVersions> = {},
   ): Promise<CourseContentVersions> {
-    const [sourceHash, structureVersion, structureHash, promptVersion] = await Promise.all([
-      this.computeSourceHash(projectId),
+    const [input, structureVersion, structureHash, promptVersion] = await Promise.all([
+      this.inspectAnalysisInput(projectId),
       this.getContentVersion(projectId),
       this.getStructureHash(projectId),
       this.expectedPromptVersion(projectId),
     ])
     return {
-      sourceHash: overrides.sourceHash ?? sourceHash,
+      sourceHash: overrides.sourceHash ?? input.sourceHash,
       promptVersion: overrides.promptVersion ?? promptVersion,
       schemaVersion: overrides.schemaVersion ?? this.expectedSchemaVersion,
       structureVersion: overrides.structureVersion ?? structureVersion,
       structureHash: overrides.structureHash ?? structureHash,
+      legacyInputTruncated: overrides.legacyInputTruncated ?? input.legacyInputTruncated,
     }
   }
 

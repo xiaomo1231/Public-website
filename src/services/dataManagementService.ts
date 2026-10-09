@@ -52,16 +52,35 @@ export interface ExportBlob {
   bytesBase64: string
 }
 
-function encodeBytes(bytes: ArrayBuffer): string {
+/**
+ * Base64 of `bytes` as consecutive pieces of at most ~11 MB each. Every
+ * non-final segment is divisible by three, so only the final segment needs
+ * padding and the pieces concatenate into the full encoding.
+ */
+function encodeBytesParts(bytes: ArrayBuffer): string[] {
   const view = new Uint8Array(bytes)
-  const parts: string[] = []
-  // Every non-final segment is divisible by three, so only the final
-  // segment needs base64 padding and the segments can be joined directly.
+  const pieces: string[] = []
+  let segments: string[] = []
   for (let i = 0; i < view.length; i += 8190) {
-    parts.push(btoa(String.fromCharCode(...view.subarray(i, i + 8190))))
+    segments.push(btoa(String.fromCharCode(...view.subarray(i, i + 8190))))
+    if (segments.length === 1024) {
+      pieces.push(segments.join(''))
+      segments = []
+    }
   }
-  return parts.join('')
+  if (segments.length) pieces.push(segments.join(''))
+  return pieces
 }
+
+function encodeBytes(bytes: ArrayBuffer): string {
+  return encodeBytesParts(bytes).join('')
+}
+
+/** Stored binary tables in export order, with the `kind` each row is exported as. */
+const BINARY_TABLES = [
+  { table: 'documentBlobs', kind: 'document' },
+  { table: 'visualSourceImages', kind: 'visualSource' },
+] as const
 
 export class DataManagementService {
   private db: AppDatabase
@@ -105,8 +124,11 @@ export class DataManagementService {
       db.table('processingJobs').count(),
       db.table('settings').get('singleton'),
     ])
-    const blobs = await db.table('documentBlobs').toArray()
-    const blobBytes = blobs.reduce((acc, b) => acc + (b.bytes?.byteLength ?? 0), 0)
+    // Sum the recorded sizes instead of loading every stored file into memory.
+    let blobBytes = 0
+    await db.table('documents').each((doc: { hasBlob?: boolean; sizeBytes?: number }) => {
+      if (doc.hasBlob) blobBytes += doc.sizeBytes ?? 0
+    })
     return {
       projects,
       documents,
@@ -132,6 +154,39 @@ export class DataManagementService {
 
   /** Export restorable content without device secrets. Binary data is base64 encoded for JSON. */
   async exportAll(): Promise<{ json: Record<string, unknown>; blobs: ExportBlob[] }> {
+    const json = await this.exportTables()
+    const blobs: ExportBlob[] = []
+    for (const { table, kind } of BINARY_TABLES) {
+      const rows = await this.db.table(table).toArray()
+      for (const row of rows) blobs.push({ id: row.id, kind, bytesBase64: encodeBytes(row.bytes), mimeType: row.mimeType })
+    }
+    return { json, blobs }
+  }
+
+  /**
+   * The export as a downloadable file: the same JSON as
+   * `JSON.stringify(await exportAll())`, but built one stored file at a time
+   * from Blob parts, so large course files never become one giant string
+   * (browsers cap a string near 512 MB) or sit in memory all at once.
+   */
+  async exportFile(): Promise<Blob> {
+    const json = await this.exportTables()
+    let file = new Blob([`{"json":${JSON.stringify(json)},"blobs":[`])
+    let first = true
+    for (const { table, kind } of BINARY_TABLES) {
+      const keys = await this.db.table(table).toCollection().primaryKeys()
+      for (const key of keys) {
+        const row = await this.db.table(table).get(key)
+        if (!row) continue
+        const head = JSON.stringify({ id: row.id, kind, mimeType: row.mimeType }).slice(0, -1)
+        file = new Blob([file, first ? '' : ',', head, ',"bytesBase64":"', ...encodeBytesParts(row.bytes), '"}'])
+        first = false
+      }
+    }
+    return new Blob([file, ']}'], { type: 'application/json' })
+  }
+
+  private async exportTables(): Promise<Record<string, unknown>> {
     const db = this.db
     const tables = [
       'projects', 'documents', 'documentBlobs', 'chunks', 'processingJobs',
@@ -163,20 +218,7 @@ export class DataManagementService {
         json[name] = rows
       }
     }
-    const blobs = await db.table('documentBlobs').toArray()
-    const visualImages = await db.table('visualSourceImages').toArray()
-    return {
-      json,
-      blobs: [
-        ...blobs.map((b) => ({ id: b.id, kind: 'document' as const, bytesBase64: encodeBytes(b.bytes), mimeType: b.mimeType })),
-        ...visualImages.map((b) => ({
-          id: b.id,
-          kind: 'visualSource' as const,
-          bytesBase64: encodeBytes(b.bytes),
-          mimeType: b.mimeType,
-        })),
-      ],
-    }
+    return json
   }
 
   /** Delete one project and everything that belongs to it. */

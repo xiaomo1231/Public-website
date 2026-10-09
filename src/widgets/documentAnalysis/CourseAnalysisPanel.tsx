@@ -173,7 +173,11 @@ export function CourseAnalysisPanel({
         !freshness.fresh &&
         freshness.reasons.some((reason) => reason !== 'missing') && (
           <div className="space-y-1 rounded-lg border border-amber-500/40 bg-amber-500/5 px-3 py-2 text-sm">
-            <p className="font-medium">{t('analysis.stale')}</p>
+            <p className="font-medium">
+              {freshness.reasons.every((reason) => reason === 'input-truncated')
+                ? t('analysis.staleTruncated')
+                : t('analysis.stale')}
+            </p>
             <p className="text-muted-foreground">{t('analysis.staleHint')}</p>
           </div>
         )}

@@ -13,6 +13,11 @@
  *
  * v1 is kept alongside so old call sites and prompt-version comparisons still
  * work; the registry in `../index.ts` points at v2.
+ *
+ * Long courses are analysed in parts (`entities/courseContent/analysisInput`).
+ * A part's user prompt adds one paragraph naming the part; a course that fits
+ * in one request gets exactly the prompt it always did, so this needs no
+ * version bump (which would re-analyse every course).
  */
 
 import type { DocumentAnalysisOutput } from '../types'
@@ -27,6 +32,8 @@ export interface DocumentAnalyzerInput {
   language: 'zh' | 'en' | 'mixed'
   /** Optional context about the course subject (e.g. "calculus"). */
   subject?: string
+  /** Set when the course is analysed in several parts (1-based index). */
+  part?: { index: number; total: number; label: string }
 }
 
 const JSON_SHAPE_HINT = `
@@ -102,6 +109,11 @@ export function buildUserPrompt(input: DocumentAnalyzerInput): string {
     subject,
     `Document name: ${input.documentName}.`,
     `Document language preference: ${input.language}. ${langHint}`,
+    input.part
+      ? `This is part ${input.part.index} of ${input.part.total} of the course material (${input.part.label}). ` +
+        'Analyze only this part: record the topics, concepts, formulas, symbols, examples, exercises and prerequisites it contains. ' +
+        'The other parts are analyzed separately and merged afterwards, so do not summarize the whole course and do not add topics that are not in this part.'
+      : '',
     '',
     'Document content (each passage is prefixed with its chunk id):',
     untrustedContentWrapper('DOCUMENT', input.documentText),

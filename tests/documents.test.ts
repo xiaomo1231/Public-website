@@ -8,7 +8,7 @@ import { ProcessingJobRepository } from '@/entities/processingJob/repository'
 import { ProcessingService } from '@/services/processingService'
 import { ProjectService } from '@/services/projectService'
 import { DocumentService } from '@/services/documentService'
-import { validateFile, detectDocumentType } from '@/infrastructure/files/validation'
+import { MAX_FILE_BYTES, validateFile, detectDocumentType } from '@/infrastructure/files/validation'
 import { setDbForTesting } from '@/infrastructure/db/database'
 
 function fresh() {
@@ -126,7 +126,7 @@ describe('validateFile', () => {
 
   it('rejects oversized files', () => {
     const big = new File([new Uint8Array(10)], 'huge.pdf', { type: 'application/pdf' })
-    Object.defineProperty(big, 'size', { value: 200 * 1024 * 1024 })
+    Object.defineProperty(big, 'size', { value: MAX_FILE_BYTES + 1 })
     expect(() => validateFile(big)).toThrow(/too large/i)
   })
 })

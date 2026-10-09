@@ -6,6 +6,8 @@ import { ProcessingJobRepository } from '@/entities/processingJob/repository'
 import { ProjectService } from '@/services/projectService'
 import { getDb } from '@/infrastructure/db/database'
 import { validateFile, validateTextInput } from '@/infrastructure/files/validation'
+import { ensureStorageFor, isQuotaError } from '@/infrastructure/files/storageSpace'
+import { ValidationError } from '@/infrastructure/errors/AppError'
 import { logger } from '@/infrastructure/logger/logger'
 import { t } from '@/i18n'
 import type { Document, DocumentType, LearningMaterialType } from '@/entities/document/types'
@@ -118,19 +120,28 @@ export async function uploadDocument(
     sourceModifiedAt = input.file.lastModified
   }
 
+  await ensureStorageFor(sizeBytes)
+
   if (isCancelled(options)) throw new UploadCancelledError()
 
   onStage?.({ phase: 'saving' })
-  const document = await documentService.create({
-    projectId: input.projectId,
-    type,
-    materialType: input.materialType ?? 'textbook',
-    name,
-    sizeBytes,
-    ...(mimeType !== undefined ? { mimeType } : {}),
-    ...(sourceModifiedAt !== undefined ? { sourceModifiedAt } : {}),
-    ...(blob ? { blob } : {}),
-  })
+  let document: Document
+  try {
+    document = await documentService.create({
+      projectId: input.projectId,
+      type,
+      materialType: input.materialType ?? 'textbook',
+      name,
+      sizeBytes,
+      ...(mimeType !== undefined ? { mimeType } : {}),
+      ...(sourceModifiedAt !== undefined ? { sourceModifiedAt } : {}),
+      ...(blob ? { blob } : {}),
+    })
+  } catch (err) {
+    // The save is one transaction, so a full quota leaves nothing behind.
+    if (isQuotaError(err)) throw new ValidationError(t('errors.storageFull'))
+    throw err
+  }
   options.onDocumentCreated?.(document.id)
 
   // Cancelled between saving and processing: remove the half-created document

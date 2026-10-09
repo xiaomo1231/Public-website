@@ -207,6 +207,14 @@ export interface CourseAnalysis {
    */
   derivedFromStructureHash?: string
   /**
+   * `'complete'` when every chunk of the material was sent to the analyzer
+   * (in one request or in parts). Rows written before parts existed lack it
+   * and may cover only the opening of a long textbook; see `input-truncated`.
+   */
+  inputCoverage?: 'complete'
+  /** How many requests the material was analysed in. */
+  inputParts?: number
+  /**
    * Set when the app *knows* something invalidated the analysis (e.g. a source
    * document was removed). Staleness is normally derived from the fields above;
    * this records an explicit, out-of-band reason.

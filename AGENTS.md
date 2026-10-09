@@ -179,6 +179,7 @@ Upload → validation → (blob 落 IndexedDB `documentBlobs`) → processingJob
 - `contentType ∈ {heading, paragraph, table, list, formula, caption, note, ocr, other}`。
 - 图片走**本地 OCR**（tesseract.js），不联网。
 - 批处理并发 2，单文件错误隔离。
+- **文件大小**：无固定产品上限。`MAX_FILE_BYTES` = 2 GB 只是浏览器单次读入 ArrayBuffer 的技术上限；保存前 `ensureStorageFor`（`infrastructure/files/storageSpace.ts`）用 `navigator.storage.estimate()` 检查剩余配额（文件 × 1.2 余量，浏览器无法估算时放行），保存事务遇 `QuotaExceededError` 转为“存储空间已满”提示（事务回滚，不留半成品）。数据管理的存储统计按 `documents.sizeBytes` 累加，不再把所有原文件读进内存；导出用 `exportFile()` 逐个文件拼接 Blob（内容与 `JSON.stringify(exportAll())` 相同），避免超大字符串。
 - 结构识别只在 `materialType === 'textbook'` 时执行；无信号时退化为单个 `General Course Material`（`confidence: 'low'`），**不发明章节**。
 
 ### 课程内容持久化与 freshness（`CourseContent`）
@@ -200,7 +201,7 @@ Upload → validation → (blob 落 IndexedDB `documentBlobs`) → processingJob
 - freshness 判定（`evaluateFreshness`，纯函数）只看：`sourceHash` / `promptVersion` / `schemaVersion` / 结构（优先 `structureHash`，旧行回退 `structureVersion`）/ `status`。期望的 `promptVersion` 按项目科目计算（见 Prompts「科目画像」），所以**改科目 ⇒ `prompt-changed`**。**明暗模式、配色主题、UI 语言、Class Progress、练习记录都不参与。**
 - `staleReason` / `staleAt` **只是注释**，不是 freshness 输入；`markStale()` 不会单独把结果变成 stale。
 - `reseedProject` 是**单事务原子替换**：AI 失败时旧分析原样保留。
-- **`DocumentAnalysisService.analyzeProject()` 仍是项目级**（全量路径不变）。
+- **`DocumentAnalysisService.analyzeProject()` 仍是项目级**（全量路径不变），但**读完全部分块**：`entities/courseContent/analysisInput.ts` 把输入按章节切成每份 ≤ `ANALYSIS_SEGMENT_CHARS = 40_000` 字符的部分（章节放不下按小节，再按分块），一份放得下时只发一次请求、提示与以前逐字相同；多份时每份在 `document-analyzer/v2` 的用户提示里加一段“第 i/n 部分，只分析这一部分”（单份提示不变，故未升版本），并发 2 请求，`entities/courseAnalysis/mergeAnalyses.ts` 合并：概念 / 公式 / 符号 / 例题 / 习题 / 先修按名称或内容去重并合并出处；同名主题若两部分同属一章（长章被切开）则合并来源，否则后者改名为「名称 · 部分标签」并同步该部分的 `topicNames`。任一部分失败 ⇒ 整次失败、恢复旧分析。主题的章节位置优先取其最早的已校验来源分块，无有效来源才回退到文字重叠（每个分块只分词一次）。分析行写入 `inputCoverage: 'complete'` 与 `inputParts`；旧行没有该标记且旧限制（每份前 200 块、合计 5 万字）确实会截断当前材料时，freshness 报 `input-truncated`（分析面板提示“只读到了教材开头”），短课程不受影响、不会重跑。
 - **章节级增量更新已实现**（见 §5.1）：`analyzeScope({type:'chapter'|'section'})` 走**局部**路径，不调用 `analyzeProject`，不调用 `deleteByProject`。
 - 只有 **upload / processing 流程**会调用 `CourseContentService.ensureAnalyzed()`（带 module 级 in-flight 去重）；**打开任何页面都不会触发课程分析**。未配置 API Key 时是 `no-provider`，**不**标记为 failed。
 
@@ -461,6 +462,7 @@ docs/             architecture.md
 - 数学等价判断有边界，极复杂表达式返回「无法自动判定」，不计入成绩。
 - OCR 质量取决于图片清晰度；手写内容提取效果有限。
 - 课程分析为项目级（覆盖该项目全部已处理文档），非逐文档结果，也非章节级。
+- 长教材的课程分析按部分请求，AI 调用次数随教材长度增加（约每 4 万字一次，并发 2）；任一部分失败则整次分析失败、保留旧结果，没有“只重试失败部分”。
 - 数学可视化范围受控：`eigen_2d` 只支持 2×2 实矩阵的**实**特征值/特征向量；复特征值、3×3、Jordan 形、动画、拖拽均不支持，会安全回退为普通 LaTeX，不绘制误导性的实特征方向。
 - 化学 / 生物图范围受控：滴定只支持 ≤三元酸 + 强碱、一元弱碱 + 强酸（不含活度校正）；棋盘格最多两对基因、至多一个 X 连锁基因，不含连锁交换 / 上位效应；遗传方式分析假设完全外显；同分异构体无法自动区分（不计分并提示）；不画 3D 结构、反应机理、细胞 / 器官示意图（这类交给课程原图或联网参考图片）。
 - 医学图为教学模型：动作电位为示意形状；氧解离曲线用 Hill 方程近似；压力–容积环为分段示意；药动学只做一室模型（无非线性消除）；酸碱判读只覆盖单纯性紊乱与一层合并紊乱提示（不含阴离子间隙 / 三重紊乱）；神经通路最多 4 级神经元、一次交叉。不画器官 / 切片 / 影像，这类交给课程原图或联网参考图片。

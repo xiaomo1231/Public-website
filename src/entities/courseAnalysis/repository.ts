@@ -35,6 +35,9 @@ export interface ReseedMeta {
   derivedFromStructureVersion?: number
   /** Content fingerprint of the structure this result was derived from. */
   derivedFromStructureHash?: string
+  /** Whether all of the material was analysed, and in how many requests. */
+  inputCoverage?: CourseAnalysis['inputCoverage']
+  inputParts?: number
   /**
    * Rows from other tables that must land in the **same** transaction, so a
    * failure can never leave a half-applied update behind.
@@ -352,6 +355,8 @@ export class CourseAnalysisRepository {
         ...(meta.derivedFromStructureHash !== undefined
           ? { derivedFromStructureHash: meta.derivedFromStructureHash }
           : {}),
+        ...(meta.inputCoverage ? { inputCoverage: meta.inputCoverage } : {}),
+        ...(meta.inputParts !== undefined ? { inputParts: meta.inputParts } : {}),
       },
       ...(meta.sideWrites ? { sideWrites: meta.sideWrites } : {}),
       },

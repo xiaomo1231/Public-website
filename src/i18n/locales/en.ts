@@ -829,6 +829,7 @@ export const en = {
   'analysis.prompt': 'prompt {version}',
   'analysis.saved': 'Using saved course content',
   'analysis.stale': 'The source material changed — this analysis may be out of date.',
+  'analysis.staleTruncated': 'This analysis only read the opening of the textbook (earlier versions read about 50,000 characters at most). Re-analysing reads the whole book, chapter by chapter.',
   'analysis.staleHint':
     'Re-analyze to update it. The saved content stays available until then.',
   'analysis.working': 'Working… {stage}',
@@ -1531,6 +1532,7 @@ export const en = {
 
   'stage.collecting': 'Collecting documents',
   'stage.askingAi': 'Asking AI to extract knowledge',
+  'stage.askingAiPart': 'Asking AI to extract knowledge (part {current} of {total})',
   'stage.saving': 'Saving structured knowledge',
   'stage.collectingShort': 'collecting',
   'stage.generating': 'generating',
@@ -1619,7 +1621,9 @@ export const en = {
   'errors.hintUnavailable': 'No hint available.',
   'errors.noActiveQuestion': 'No active question',
 
-  'errors.fileTooLarge': 'File is too large (max {max} MB)',
+  'errors.fileTooLarge': 'File is too large: a browser can read at most {max} in one file. Split it (for example by chapter) and upload the parts.',
+  'errors.storageInsufficient': 'Not enough browser storage: the file is {size} but only about {free} is free. Delete courses or files you no longer need and try again.',
+  'errors.storageFull': 'Browser storage is full, so the file was not saved. Delete courses or files you no longer need and try again.',
   'errors.unsupportedFileType': 'Unsupported file type: {name}',
   'errors.textTooLong': 'Text is too long (max {max} KB)',
   'errors.docxFailed': 'DOCX conversion failed: {reason}',

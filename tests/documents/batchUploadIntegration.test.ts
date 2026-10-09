@@ -1,5 +1,5 @@
 import 'fake-indexeddb/auto'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 /**
  * pdfjs cannot spawn its worker under jsdom (the existing PDF test mocks it for
@@ -32,6 +32,7 @@ const {
   summarizeBatch,
 } = await import('@/features/documents/batchUpload')
 const { reprocessDocument, uploadDocument } = await import('@/features/documents/uploadPipeline')
+const { MAX_FILE_BYTES } = await import('@/infrastructure/files/validation')
 
 import type { AppDatabase as AppDatabaseType } from '@/infrastructure/db/database'
 import type { UploadQueueItem, WorkerContext } from '@/features/documents/batchUpload'
@@ -318,7 +319,7 @@ describe('batch upload against the real pipeline', () => {
   it('rejects an oversized file without uploading it', async () => {
     const projectId = await makeProject('Physics 101')
     const huge = pdfFile('Huge.pdf')
-    Object.defineProperty(huge, 'size', { value: 100 * 1024 * 1024 + 1, configurable: true })
+    Object.defineProperty(huge, 'size', { value: MAX_FILE_BYTES + 1, configurable: true })
 
     const items = createFileQueueItems([huge, pdfFile('Fine.pdf')])
     expect(items[0]?.issue).toBe('too-large')
@@ -329,5 +330,51 @@ describe('batch upload against the real pipeline', () => {
 
     const docs = await new DocumentRepository(db).listByProject(projectId)
     expect(docs.map((d) => d.name)).toEqual(['Fine.pdf'])
+  })
+
+  it('accepts files well above the old 100 MB cap', () => {
+    const textbook = pdfFile('Atlas.pdf')
+    Object.defineProperty(textbook, 'size', { value: 600 * 1024 * 1024, configurable: true })
+    expect(createFileQueueItems([textbook])[0]?.issue).toBeUndefined()
+  })
+
+  describe('browser storage', () => {
+    function stubStorage(estimate: () => Promise<StorageEstimate>) {
+      Object.defineProperty(navigator, 'storage', { value: { estimate }, configurable: true })
+    }
+    afterEach(() => {
+      Reflect.deleteProperty(navigator, 'storage')
+    })
+
+    it('refuses a file the free space cannot hold and saves nothing', async () => {
+      const projectId = await makeProject('Anatomy')
+      stubStorage(async () => ({ quota: 1000, usage: 990 }))
+      await expect(uploadDocument({ projectId, type: 'pdf', file: pdfFile('Atlas.pdf') })).rejects.toThrow(
+        /Not enough browser storage/,
+      )
+      expect(await new DocumentRepository(db).listByProject(projectId)).toHaveLength(0)
+    })
+
+    it('uploads when there is room or the browser cannot tell', async () => {
+      const projectId = await makeProject('Anatomy')
+      stubStorage(async () => ({ quota: 10 * 1024 * 1024, usage: 0 }))
+      await uploadDocument({ projectId, type: 'pdf', file: pdfFile('A.pdf') })
+      stubStorage(async () => {
+        throw new Error('unsupported')
+      })
+      await uploadDocument({ projectId, type: 'pdf', file: pdfFile('B.pdf') })
+      expect(await new DocumentRepository(db).listByProject(projectId)).toHaveLength(2)
+    })
+
+    it('explains a full quota instead of a raw database error', async () => {
+      const projectId = await makeProject('Anatomy')
+      const quota = Object.assign(new Error('QuotaExceededError'), { name: 'QuotaExceededError' })
+      const add = vi.spyOn(db.documentBlobs, 'add').mockRejectedValueOnce(quota)
+      await expect(uploadDocument({ projectId, type: 'pdf', file: pdfFile('Atlas.pdf') })).rejects.toThrow(
+        /storage is full/,
+      )
+      add.mockRestore()
+      expect(await new DocumentRepository(db).listByProject(projectId)).toHaveLength(0)
+    })
   })
 })

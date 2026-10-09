@@ -31,6 +31,8 @@ export type CourseContentStaleReason =
   | 'schema-changed'
   | 'structure-changed'
   | 'analysis-failed'
+  /** Written when one request saw only the opening of this (long) material. */
+  | 'input-truncated'
 
 export interface CourseContentFreshness {
   fresh: boolean
@@ -58,6 +60,12 @@ export interface CourseContentVersions {
   structureVersion: number
   /** Content fingerprint of the detected structure; `''` when there is none. */
   structureHash: string
+  /**
+   * Whether the old single-request analysis (first 200 chunks per document,
+   * then 50 000 characters) would have left part of the current material out.
+   * Absent counts as false.
+   */
+  legacyInputTruncated?: boolean
 }
 
 /**
@@ -141,6 +149,7 @@ type FreshnessInput = Pick<
   | 'derivedFromStructureHash'
   | 'status'
   | 'staleReason'
+  | 'inputCoverage'
 >
 
 /**
@@ -186,6 +195,9 @@ export function evaluateFreshness(
   if (saved.promptVersion !== current.promptVersion) reasons.push('prompt-changed')
   if ((saved.schemaVersion ?? '') !== current.schemaVersion) reasons.push('schema-changed')
   if (structureDiffers(saved, current)) reasons.push('structure-changed')
+  // Only courses the old limits actually cut are re-analysed; short ones were
+  // always read in full.
+  if (current.legacyInputTruncated && saved.inputCoverage !== 'complete') reasons.push('input-truncated')
   if (saved.status === 'failed') reasons.push('analysis-failed')
   else if (saved.status !== 'ready') reasons.push('incomplete')
 

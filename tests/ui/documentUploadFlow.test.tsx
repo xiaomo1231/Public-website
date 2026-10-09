@@ -184,7 +184,7 @@ describe('batch file selection', () => {
     const dialog = await openDialog(user)
 
     const huge = pdfFile('Huge.pdf')
-    Object.defineProperty(huge, 'size', { value: 100 * 1024 * 1024 + 1, configurable: true })
+    Object.defineProperty(huge, 'size', { value: 2 * 1024 ** 3 + 1, configurable: true })
 
     await user.upload(fileInput(), [pdfFile('Lecture 01.pdf'), new File(['x'], 'notes.exe'), huge])
 

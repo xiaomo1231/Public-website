@@ -2,7 +2,12 @@ import type { DocumentType } from '@/entities/document/types'
 import { ValidationError } from '@/infrastructure/errors/AppError'
 import { t } from '@/i18n'
 
-export const MAX_FILE_BYTES = 100 * 1024 * 1024 // 100 MB
+/**
+ * Not a product limit: the most a browser can reliably read into memory as one
+ * ArrayBuffer. Whether a file actually fits is decided by the free storage
+ * space at upload time (`ensureStorageFor`).
+ */
+export const MAX_FILE_BYTES = 2 * 1024 * 1024 * 1024 // 2 GB
 export const MAX_TEXT_BYTES = 1 * 1024 * 1024 // 1 MB pasted text
 
 export const ACCEPTED_TYPES: ReadonlyArray<{ type: DocumentType; mime: string[]; ext: string[] }> = [
@@ -47,7 +52,7 @@ export function validateFile(file: File): DocumentType {
   const result = classifyFile(file)
   if (!result.ok) {
     if (result.reason === 'too-large') {
-      throw new ValidationError(t('errors.fileTooLarge', { max: MAX_FILE_BYTES / 1024 / 1024 }))
+      throw new ValidationError(t('errors.fileTooLarge', { max: `${MAX_FILE_BYTES / 1024 ** 3} GB` }))
     }
     throw new ValidationError(t('errors.unsupportedFileType', { name: file.name }))
   }

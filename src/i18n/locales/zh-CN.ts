@@ -788,6 +788,7 @@ export const zhCN: Record<TranslationKey, string> = {
   'analysis.prompt': '提示词 {version}',
   'analysis.saved': '正在使用已保存的课程内容',
   'analysis.stale': '教材来源已变化，此分析结果可能已过期。',
+  'analysis.staleTruncated': '这份分析只读到了教材开头的一部分（旧版每次最多读约 5 万字）。重新分析会分章节读完整本教材。',
   'analysis.staleHint': '重新分析即可更新；在更新完成前，已保存的内容仍然可用。',
   'analysis.working': '处理中… {stage}',
   'analysis.topics': '主题',
@@ -1462,6 +1463,7 @@ export const zhCN: Record<TranslationKey, string> = {
 
   'stage.collecting': '正在收集文档',
   'stage.askingAi': '正在请求 AI 提取知识',
+  'stage.askingAiPart': '正在请求 AI 提取知识（第 {current}/{total} 部分）',
   'stage.saving': '正在保存结构化知识',
   'stage.collectingShort': '收集文档',
   'stage.generating': '生成题目',
@@ -1547,7 +1549,9 @@ export const zhCN: Record<TranslationKey, string> = {
   'errors.hintUnavailable': '暂无提示。',
   'errors.noActiveQuestion': '当前没有进行中的题目',
 
-  'errors.fileTooLarge': '文件过大（最大 {max} MB）',
+  'errors.fileTooLarge': '文件过大：浏览器一次最多只能读取 {max} 的单个文件。可以把文件拆成几部分（如按章节）再上传。',
+  'errors.storageInsufficient': '本机浏览器剩余存储空间不足：文件 {size}，可用约 {free}。可以删除不再需要的课程或文件后重试。',
+  'errors.storageFull': '本机浏览器存储空间已满，文件未保存。可以删除不再需要的课程或文件后重试。',
   'errors.unsupportedFileType': '不支持的文件类型：{name}',
   'errors.textTooLong': '文本过长（最大 {max} KB）',
   'errors.docxFailed': 'DOCX 转换失败：{reason}',
