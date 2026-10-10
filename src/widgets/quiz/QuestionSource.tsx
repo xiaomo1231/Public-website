@@ -1,7 +1,9 @@
+import { useEffect, useState } from 'react'
 import { BookOpen } from 'lucide-react'
 import type { SourceReference } from '@/entities/courseAnalysis/types'
 import { useTranslation } from '@/i18n'
 import { SourceQuote } from '@/widgets/source/SourceQuote'
+import { fillMissingExcerpts, type DisplayedCitation } from '@/services/citationExcerpts'
 
 export interface QuestionSourceProps {
   /**
@@ -38,7 +40,23 @@ function locationOf(
  */
 export function QuestionSource({ sourceRefs, projectId }: QuestionSourceProps): JSX.Element {
   const { t } = useTranslation()
-  const refs = (sourceRefs ?? []).filter((ref) => ref && (ref.documentName || ref.documentId))
+  const stored = (sourceRefs ?? []).filter((ref) => ref && (ref.documentName || ref.documentId))
+  // A citation stored without an excerpt shows the course text it points at.
+  // Keyed by content, not identity: callers may pass a fresh array each render.
+  const key = JSON.stringify(stored)
+  const [filled, setFilled] = useState<{ key: string; refs: DisplayedCitation[] } | null>(null)
+  useEffect(() => {
+    let cancelled = false
+    fillMissingExcerpts(JSON.parse(key) as typeof stored)
+      .then((result) => {
+        if (!cancelled) setFilled({ key, refs: result })
+      })
+      .catch(() => undefined)
+    return () => {
+      cancelled = true
+    }
+  }, [key])
+  const refs: DisplayedCitation[] = filled && filled.key === key ? filled.refs : stored
 
   return (
     <section
@@ -65,6 +83,7 @@ export function QuestionSource({ sourceRefs, projectId }: QuestionSourceProps): 
               {...(locationOf(ref, t) ? { location: locationOf(ref, t) } : {})}
               quote={ref.quote ?? ''}
               {...(ref.quotePending ? { quotePending: true } : {})}
+              {...(ref.pageExcerpt ? { pageExcerpt: true } : {})}
               index={index + 1}
               total={refs.length}
               {...(projectId && ref.documentId

@@ -281,6 +281,8 @@ Topic
 - **教授练习题与交互导师的简答题**（第二期）复用同一判分器：练习题从教授参考答案经 `rubric-extractor/v1` 拆出得分点（按 答案+prompt 版本 哈希缓存在题目上），作答写入错题本 / 掌握度并支持异议（`PracticeService.disputeAttempt`）；导师出题 `tutor/v2-question` 可出带得分点的简答题，覆盖率 60–99% 或无法核对时难度不调整。
 - **简答题（`short_answer`）按得分点计分**：出题时生成参考答案 + 2–6 条得分点（`Question.rubric`）。判分 `services/shortAnswerGrader.ts` + `short-answer-check/v1`：AI 逐条判断是否答到（同义、等价表述都算），答到必须**逐字摘出学生原话**作为证据，本地校验证据确实出现在答案里，否则该点不算；得分 = 答到点数 / 总点数（3/5 → 60%），由本地计算，从不采用 AI 的整体结论。空答案不调用 AI；未配置 AI 或核对失败 ⇒ 不计分（展示得分点与参考答案）。
 - 简答题计分：测验百分比 = Σ得分 / 已判题数（简答题按 `earned/total` 计入，`QuizScore.points`）；只有全部答到才算“正确”，其余进入错题本；掌握度按得分比例、**半权重**计入（`observationFromAttempt`）。学生可点“我不同意这个判定”（`QuizService.disputeAttempt`）：该次作答保留展示但不再计分，同时移出错题本、重建该知识点掌握度、已完成测验重新算分。
+- **出题分批与补题**（`QuizService.generateInBatches`）：每批最多 5 道，输出上限 = max(用户设置, 1024 + 900 × 题数)，封顶 8192；后续批次附“避免重复”。题目按**自身题型**对应计划位（不再按位置套用计划题型，丢题不会让后面的题型错位）；未选的题型丢弃；成功请求中缺少的题最多再补 2 轮（整批失败只在 `generateWithRetry` 内重试 2 次）；测验标题按实际题数。取材用 `collectQuizSnippets`：主题的已校验来源分块优先，再每个知识点一段，其余在全书均匀抽取，片段数 = clamp(题数 + 3, 8, 24)，题多时各批分到不同片段；混合复习的知识点从全部概念中均匀抽 8 个、起点随机。
+- 题目出处没有摘录时（`fillMissingExcerpts`，仅显示时补，不写回）：有 `chunkId` 显示该分块原文，否则显示该页原文并注明“未记录具体原句”。
 - 表达式判分 `infrastructure/math/expressionEvaluator.ts`：Unicode 归一 → mathjs 解析 → 符号化简 `simplify(lhs-rhs)===0` → 16 点数值采样 → 去 `+C` → 返回 `true|false|null`。`null` 显示「无法自动判定」且**不计入成绩**。判分不依赖 AI，可复现。
 - 自适应：`composite = 0.45·近期正确率 + 0.25·难度加权正确率 + 0.20·知识点掌握度 + 0.10·连对连错`；≥2 题才调整；5 档（beginner→challenge）单步移动。
 - 掌握度：`Σ(recencyWeight × difficultyWeight × correct) / Σ(recencyWeight × difficultyWeight)`，`recencyWeight = 0.9^距最新`，难度权重 0.6→1.4，未验证作答不计入。

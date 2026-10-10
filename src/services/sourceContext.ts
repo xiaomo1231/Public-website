@@ -101,6 +101,73 @@ export async function collectSourceSnippetsDetailed(
   return [...preferred, ...deferred].slice(0, limit)
 }
 
+export interface QuizSnippetOptions {
+  documentIds: string[]
+  chunks: ChunkRepository
+  documents?: DocumentRepository
+  /** Chunks the questions should come from first (a topic's validated sources). */
+  preferChunkIds?: string[]
+  /** Each one draws a passage that mentions it, so the questions cover them all. */
+  keywords?: string[]
+  /** Only passages from this chapter / section. */
+  chapterId?: string
+  sectionId?: string
+  limit: number
+  maxChunkChars?: number
+}
+
+/**
+ * Source passages for a quiz, drawn from the whole course rather than its
+ * opening pages: a topic's own source chunks first, then one passage per
+ * knowledge point, then passages spaced evenly through the material.
+ */
+export async function collectQuizSnippets(options: QuizSnippetOptions): Promise<SourceSnippet[]> {
+  const { documentIds, chunks, documents, limit, maxChunkChars = 1000 } = options
+  const candidates: SourceSnippet[] = []
+  for (const documentId of documentIds) {
+    let name = ''
+    if (documents) {
+      try {
+        name = (await documents.get(documentId)).name
+      } catch {
+        // Deleted document: keep its chunks, without a name.
+      }
+    }
+    for (const chunk of await chunks.listByDocument(documentId)) {
+      if (chunk.text.length > maxChunkChars || chunk.text.trim().length < 20) continue
+      if (options.chapterId && chunk.chapterId !== options.chapterId) continue
+      if (options.sectionId && chunk.sectionId !== options.sectionId) continue
+      candidates.push({
+        chunkId: chunk.id,
+        documentId,
+        documentName: name,
+        ...(chunk.pageNumber !== undefined ? { pageNumber: chunk.pageNumber } : {}),
+        ...(chunk.section ? { section: chunk.section } : {}),
+        ...(chunk.chapterId ? { chapterId: chunk.chapterId } : {}),
+        ...(chunk.sectionId ? { sectionId: chunk.sectionId } : {}),
+        text: chunk.text,
+      })
+    }
+  }
+
+  const picked = new Set<number>()
+  const take = (index: number) => {
+    if (picked.size < limit && index >= 0) picked.add(index)
+  }
+  const byId = new Map(candidates.map((snippet, index) => [snippet.chunkId, index]))
+  for (const id of options.preferChunkIds ?? []) take(byId.get(id) ?? -1)
+  for (const keyword of options.keywords ?? []) {
+    const needle = keyword.trim().toLowerCase()
+    if (!needle) continue
+    take(candidates.findIndex((snippet, index) => !picked.has(index) && snippet.text.toLowerCase().includes(needle)))
+  }
+  // Fill the rest evenly across the material, not from its first pages.
+  const free = candidates.map((_, index) => index).filter((index) => !picked.has(index))
+  const room = limit - picked.size
+  for (let i = 0; i < room && i < free.length; i++) take(free[Math.floor((i * free.length) / room)]!)
+  return [...picked].sort((a, b) => a - b).map((index) => candidates[index]!)
+}
+
 /**
  * Plain-text snippets for prompts that only need prose (tutor, mistake
  * analysis). The output format is unchanged from earlier versions.

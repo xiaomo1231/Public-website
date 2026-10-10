@@ -13,8 +13,15 @@ export interface ButtonProps
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
   ({ className, variant, size, asChild = false, ...props }, ref) => {
     const Comp = asChild ? Slot : 'button'
+    // Button labels are already localised. Page-translation extensions would
+    // otherwise inject a "translation" into the button and break its layout.
     return (
-      <Comp ref={ref} className={cn(buttonVariants({ variant, size }), className)} {...props} />
+      <Comp
+        ref={ref}
+        translate="no"
+        className={cn('notranslate', buttonVariants({ variant, size }), className)}
+        {...props}
+      />
     )
   },
 )

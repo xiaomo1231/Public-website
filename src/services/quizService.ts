@@ -25,7 +25,7 @@ import { MasteryService } from './masteryService'
 import type { MistakeService } from './mistakeService'
 import type { ProjectService } from './projectService'
 import {
-  collectSourceSnippetsDetailed,
+  collectQuizSnippets,
   formatSnippetForPrompt,
   scopeSnippetsByStructure,
   type SourceSnippet,
@@ -83,6 +83,21 @@ export interface SubmitAnswerResult {
 export type MoreQuestionsMode = 'same_topic' | 'similar' | 'harder' | 'easier' | 'weakness'
 
 const MAX_GENERATION_ATTEMPTS = 2
+
+/** Questions asked for in one request; larger quizzes are generated in batches. */
+const QUIZ_BATCH_SIZE = 5
+/** Extra requests for questions a batch did not deliver (dropped or missing). */
+const MAX_TOP_UP_ROUNDS = 2
+/** Output room per question (prompt, options, solution, hints, quote) plus the envelope. */
+const QUIZ_TOKENS_PER_QUESTION = 900
+const QUIZ_BASE_OUTPUT_TOKENS = 1024
+/** Most providers refuse a larger `max_tokens`. */
+const QUIZ_MAX_OUTPUT_TOKENS = 8192
+/** Source passages offered: enough to spread a large quiz across the course. */
+const MIN_QUIZ_SNIPPETS = 8
+const MAX_QUIZ_SNIPPETS = 24
+
+type PlanEntry = { type: QuestionType; difficulty: DifficultyLevel }
 
 /** Used when the model omits `type` entirely. */
 const DEFAULT_QUESTION_TYPE: QuestionType = 'multiple_choice'
@@ -313,13 +328,17 @@ export class QuizService {
 
     try {
       options.onProgress?.('collecting', 10)
-      const snippets = await collectSourceSnippetsDetailed({
+      // Passages from the whole course: a topic's own source chunks first, then
+      // one per knowledge point, then evenly spaced — never just the opening.
+      const snippets = await collectQuizSnippets({
         documentIds: analysis.documentIds,
         chunks: this.chunks,
         documents: new DocumentRepository(this.db),
-        ...(topic ? { topicName: topic.name } : {}),
-        limit: 8,
-        ...(knowledgePoints[0] ? { preferKeyword: knowledgePoints[0] } : {}),
+        ...(topic?.sourceChunkIds?.length ? { preferChunkIds: topic.sourceChunkIds } : {}),
+        keywords: knowledgePoints,
+        ...(config.chapterId ? { chapterId: config.chapterId } : {}),
+        ...(config.sectionId ? { sectionId: config.sectionId } : {}),
+        limit: Math.min(MAX_QUIZ_SNIPPETS, Math.max(MIN_QUIZ_SNIPPETS, config.count + 3)),
       })
       // Restrict to the requested chapter/section, so a chapter quiz can never
       // pull questions from another chapter.
@@ -337,24 +356,30 @@ export class QuizService {
       const professorStyleContext = courseContext?.questionStyleProfile
         ? formatQuestionStyleContext(courseContext.questionStyleProfile)
         : undefined
-      const generated = await this.generateWithRetry({
-        topicName,
-        topicDescription,
-        knowledgePoints,
+      const generated = await this.generateInBatches(
         plan,
-        language: analysis.language,
-        sourceSnippets: scopedSnippets.map(formatSnippetForPrompt),
-        ...(professorStyleContext ? { professorStyleContext } : {}),
-      }, await loadProjectSubject(projectId), options.signal)
+        scopedSnippets.map(formatSnippetForPrompt),
+        {
+          topicName,
+          topicDescription,
+          knowledgePoints,
+          language: analysis.language,
+          ...(professorStyleContext ? { professorStyleContext } : {}),
+        },
+        await loadProjectSubject(projectId),
+        options.signal,
+      )
 
       options.onProgress?.('storing', 80)
       const stored = await this.questions.addMany(
-        generated.map((q, i) => ({
+        generated.map(({ question: q, entry }, i) => ({
           projectId,
           ...(topic ? { topicId: topic.id } : {}),
           knowledgePoint: q.knowledgePoint || knowledgePoints[i % Math.max(1, knowledgePoints.length)] || topicName,
-          type: plan[i]?.type ?? DEFAULT_QUESTION_TYPE,
-          difficulty: plan[i]?.difficulty ?? DEFAULT_DIFFICULTY,
+          // The question's own (validated) type: a dropped question must never
+          // shift the types of the ones after it.
+          type: q.type,
+          difficulty: entry.difficulty,
           prompt: q.prompt,
           ...(q.options ? { options: q.options } : {}),
           correctAnswer: q.correctAnswer,
@@ -374,8 +399,13 @@ export class QuizService {
 
       const ready: Quiz = {
         ...quiz,
+        // The title states how many questions there really are.
+        title: t('quiz.topicTitle', { topic: topicName, count: stored.length }),
         questionIds: stored.map((q) => q.id),
         status: 'ready',
+      }
+      if (stored.length < config.count) {
+        logger.warn('Quiz has fewer questions than requested', { quizId: quiz.id, requested: config.count, generated: stored.length })
       }
       await this.quizzes.upsert(ready)
       options.onProgress?.('done', 100)
@@ -386,6 +416,71 @@ export class QuizService {
       await this.quizzes.upsert({ ...quiz, status: 'failed', errorMessage: message })
       throw err
     }
+  }
+
+  /**
+   * Generate the plan in batches of `QUIZ_BATCH_SIZE`, each with room for its
+   * output and its own share of the source passages, then ask again for
+   * whatever a batch did not deliver. Each question is matched to the plan
+   * entry of its own type, so a dropped question leaves a gap to top up
+   * instead of shifting the plan.
+   */
+  private async generateInBatches(
+    plan: PlanEntry[],
+    snippets: string[],
+    context: Omit<Parameters<typeof prompts.quizGenerator.buildUserPrompt>[0], 'plan' | 'sourceSnippets'>,
+    subject: Subject | undefined,
+    signal?: AbortSignal,
+  ): Promise<Array<{ question: GeneratedQuizQuestion; entry: PlanEntry }>> {
+    const delivered: Array<{ question: GeneratedQuizQuestion; entry: PlanEntry }> = []
+    const allowedTypes = new Set(plan.map((entry) => entry.type))
+    let pending = [...plan]
+    let lastError: unknown = null
+    for (let round = 0; round <= MAX_TOP_UP_ROUNDS && pending.length > 0; round++) {
+      const batches: PlanEntry[][] = []
+      for (let i = 0; i < pending.length; i += QUIZ_BATCH_SIZE) batches.push(pending.slice(i, i + QUIZ_BATCH_SIZE))
+      const missing: PlanEntry[] = []
+      for (const [index, batch] of batches.entries()) {
+        signal?.throwIfAborted()
+        // Spread the passages over the batches when there are enough of them.
+        const share =
+          snippets.length >= batches.length * 4 ? snippets.filter((_, i) => i % batches.length === index) : snippets
+        try {
+          const questions = await this.generateWithRetry(
+            {
+              ...context,
+              plan: batch,
+              sourceSnippets: share,
+              ...(delivered.length > 0 ? { avoidRepeating: delivered.map((d) => d.question.prompt) } : {}),
+            },
+            subject,
+            signal,
+          )
+          const open = [...batch]
+          for (const question of questions) {
+            // Its own type's slot first; a question of another type the quiz
+            // asked for still fills a gap (keeping its own type). A type that
+            // was never requested is dropped.
+            let at = open.findIndex((entry) => entry.type === question.type)
+            if (at < 0 && allowedTypes.has(question.type)) at = open.length > 0 ? 0 : -1
+            if (at < 0) continue
+            delivered.push({ question, entry: open.splice(at, 1)[0]! })
+          }
+          missing.push(...open)
+        } catch (err) {
+          // Already retried inside `generateWithRetry`; top-up rounds only ask
+          // for questions a successful request left out.
+          if (signal?.aborted) throw err
+          lastError = err
+        }
+      }
+      pending = missing
+    }
+    if (delivered.length === 0) {
+      throw lastError ?? new AppError(t('errors.noUsableQuestions'), 'MALFORMED_QUIZ')
+    }
+    // Keep the plan's order (difficulty ramps up through an adaptive quiz).
+    return delivered.sort((a, b) => plan.indexOf(a.entry) - plan.indexOf(b.entry))
   }
 
   private async generateWithRetry(
@@ -406,7 +501,14 @@ export class QuizService {
     let lastError: unknown = null
     for (let attempt = 1; attempt <= MAX_GENERATION_ATTEMPTS; attempt++) {
       try {
+        // Room for every question asked for: the chat default (2048) holds
+        // only a few, and a cut-off response is rejected as a whole.
+        const maxTokens = Math.min(
+          QUIZ_MAX_OUTPUT_TOKENS,
+          Math.max(this.ai.maxOutputTokens ?? 0, QUIZ_BASE_OUTPUT_TOKENS + QUIZ_TOKENS_PER_QUESTION * input.plan.length),
+        )
         const { data } = await this.ai.chatJSON<QuizGenerationOutput>(messages, {
+          maxTokens,
           ...(signal ? { signal } : {}),
         })
         const questions = this.validateGenerated(data, input.plan.length)
@@ -586,7 +688,14 @@ export class QuizService {
     const topicIds = config.topicId ? new Set([config.topicId]) : null
     const relevant = concepts.filter((c) => (topicIds ? c.topicIds.some((id) => topicIds.has(id)) : true))
     const names = relevant.map((c) => c.name)
-    if (names.length > 0) return names.slice(0, 8)
+    // Up to 8 points spread over the whole list (it follows the textbook), not
+    // its first few; a mixed review starts at a random place so repeated
+    // reviews cover different parts.
+    if (names.length > 8) {
+      const offset = config.topicId ? 0 : Math.floor(Math.random() * names.length)
+      return Array.from({ length: 8 }, (_, i) => names[(offset + Math.floor((i * names.length) / 8)) % names.length]!)
+    }
+    if (names.length > 0) return names
     return topicName ? [topicName] : []
   }
 

@@ -26,6 +26,8 @@ export interface SourceQuoteProps {
    * empty-excerpt message.
    */
   quotePending?: boolean
+  /** The excerpt is the cited page's text, because the exact sentence was not recorded. */
+  pageExcerpt?: boolean
   documentHref?: string
   meta?: SourceDetail[]
   technical?: SourceDetail[]
@@ -45,6 +47,7 @@ export function SourceQuote({
   quote,
   fullText,
   quotePending,
+  pageExcerpt,
   documentHref,
   meta,
   technical,
@@ -85,6 +88,9 @@ export function SourceQuote({
           ) : null}
         </figcaption>
 
+        {text.trim().length > 0 && pageExcerpt && (
+          <p className="text-[11px] text-muted-foreground">{t('questionSource.pageExcerpt')}</p>
+        )}
         {text.trim().length > 0 ? (
           <blockquote className="min-w-0 border-l-2 border-border pl-3">
             <RichText

@@ -1082,6 +1082,7 @@ export const en = {
   'questionSource.page': 'Page {page}',
   'questionSource.slide': 'Slide {slide}',
   'questionSource.sourceN': 'Source {index}',
+  'questionSource.pageExcerpt': 'The exact sentence was not recorded; this is the course text on that page:',
   'questionSource.unavailable': 'No matching course excerpt was found.',
   'questionSource.pendingExcerpt':
     'The exact passage for this question has not been located yet — open the source to verify it.',

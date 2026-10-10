@@ -1031,6 +1031,7 @@ export const zhCN: Record<TranslationKey, string> = {
   'questionSource.page': '第 {page} 页',
   'questionSource.slide': '第 {slide} 张',
   'questionSource.sourceN': '来源 {index}',
+  'questionSource.pageExcerpt': '未记录具体原句，以下是该页的课程原文：',
   'questionSource.unavailable': '未找到对应的课程原文。',
   'questionSource.pendingExcerpt': '尚未定位到该题的具体片段——请打开原文核对。',
   'questionSource.notRecorded': '暂未记录课程出处。',

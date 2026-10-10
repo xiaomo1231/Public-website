@@ -77,14 +77,17 @@ function scriptedAI(): AIService {
 
     // Quiz generator
     if (system.includes('assessment designer')) {
-      const count = (user.match(/Generate exactly (\d+)/)?.[1] ?? '1')
-      const n = Number(count)
+      // Answer the plan with the types it asks for, as a real model does.
+      const types = [...user.matchAll(/^\s*\d+\. type=(\w+)/gm)].map((m) => m[1]!)
       return {
         data: {
-          questions: Array.from({ length: n }, (_, i) => ({
-            prompt: `Derivative of x^${i + 2}?`,
-            type: 'math_expr',
-            correctAnswer: `${i + 2}x^${i + 1}`,
+          questions: types.map((type, i) => ({
+            prompt: `Derivative of x^${i + 2} at x = 1?`,
+            type,
+            correctAnswer: type === 'math_expr' ? `${i + 2}x^${i + 1}` : `${i + 2}`,
+            ...(type === 'multiple_choice'
+              ? { options: [`${i + 2}`, `${i + 3}`, `${i + 4}`, '0'].map((label, k) => ({ label, isCorrect: k === 0 })) }
+              : {}),
             solution: 'Apply the power rule.',
             knowledgePoint: 'Power Rule',
             difficulty: 'basic',

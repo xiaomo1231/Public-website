@@ -166,7 +166,7 @@ export function EvaluationBox({ evaluation }: { evaluation: QuestionEvaluation }
       <div className="flex items-center gap-2 font-medium">
         {icon}
         {label}
-        <span className="ml-auto text-xs text-muted-foreground">
+        <span translate="no" className="notranslate ml-auto text-xs text-muted-foreground">
           {t(EVAL_METHOD_LABEL_KEYS[evaluation.method])} ·{' '}
           {Math.round(evaluation.confidence * 100)}%
         </span>
