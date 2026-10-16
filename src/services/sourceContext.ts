@@ -101,28 +101,31 @@ export async function collectSourceSnippetsDetailed(
   return [...preferred, ...deferred].slice(0, limit)
 }
 
-export interface QuizSnippetOptions {
+export interface QuizCandidateOptions {
   documentIds: string[]
   chunks: ChunkRepository
   documents?: DocumentRepository
+  /** Only passages from this chapter / section. */
+  chapterId?: string
+  sectionId?: string
+  maxChunkChars?: number
+}
+
+export interface QuizPickOptions {
   /** Chunks the questions should come from first (a topic's validated sources). */
   preferChunkIds?: string[]
   /** Each one draws a passage that mentions it, so the questions cover them all. */
   keywords?: string[]
-  /** Only passages from this chapter / section. */
-  chapterId?: string
-  sectionId?: string
   limit: number
-  maxChunkChars?: number
+  /** Fill the remaining room with passages spaced evenly through the material (default true). */
+  fill?: boolean
 }
 
-/**
- * Source passages for a quiz, drawn from the whole course rather than its
- * opening pages: a topic's own source chunks first, then one passage per
- * knowledge point, then passages spaced evenly through the material.
- */
-export async function collectQuizSnippets(options: QuizSnippetOptions): Promise<SourceSnippet[]> {
-  const { documentIds, chunks, documents, limit, maxChunkChars = 1000 } = options
+export type QuizSnippetOptions = QuizCandidateOptions & QuizPickOptions
+
+/** Every passage a quiz may draw from, in reading order. */
+export async function loadQuizCandidates(options: QuizCandidateOptions): Promise<SourceSnippet[]> {
+  const { documentIds, chunks, documents, maxChunkChars = 1000 } = options
   const candidates: SourceSnippet[] = []
   for (const documentId of documentIds) {
     let name = ''
@@ -149,7 +152,16 @@ export async function collectQuizSnippets(options: QuizSnippetOptions): Promise<
       })
     }
   }
+  return candidates
+}
 
+/**
+ * Choose passages for a quiz from the whole course rather than its opening
+ * pages: preferred chunks first, then one passage per keyword, then (unless
+ * `fill` is off) passages spaced evenly through the material.
+ */
+export function pickQuizSnippets(candidates: SourceSnippet[], options: QuizPickOptions): SourceSnippet[] {
+  const { limit } = options
   const picked = new Set<number>()
   const take = (index: number) => {
     if (picked.size < limit && index >= 0) picked.add(index)
@@ -161,11 +173,18 @@ export async function collectQuizSnippets(options: QuizSnippetOptions): Promise<
     if (!needle) continue
     take(candidates.findIndex((snippet, index) => !picked.has(index) && snippet.text.toLowerCase().includes(needle)))
   }
-  // Fill the rest evenly across the material, not from its first pages.
-  const free = candidates.map((_, index) => index).filter((index) => !picked.has(index))
-  const room = limit - picked.size
-  for (let i = 0; i < room && i < free.length; i++) take(free[Math.floor((i * free.length) / room)]!)
+  if (options.fill !== false) {
+    // Fill the rest evenly across the material, not from its first pages.
+    const free = candidates.map((_, index) => index).filter((index) => !picked.has(index))
+    const room = limit - picked.size
+    for (let i = 0; i < room && i < free.length; i++) take(free[Math.floor((i * free.length) / room)]!)
+  }
   return [...picked].sort((a, b) => a - b).map((index) => candidates[index]!)
+}
+
+/** `loadQuizCandidates` then `pickQuizSnippets`. */
+export async function collectQuizSnippets(options: QuizSnippetOptions): Promise<SourceSnippet[]> {
+  return pickQuizSnippets(await loadQuizCandidates(options), options)
 }
 
 /**

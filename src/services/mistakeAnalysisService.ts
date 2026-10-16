@@ -11,12 +11,20 @@ import { collectSourceSnippets } from './sourceContext'
 import { AppError } from '@/infrastructure/errors/AppError'
 import { t } from '@/i18n'
 import { loadProjectSubject } from './projectSubject'
+import { UserRepository } from '@/entities/user/repository'
+import { resolveContentLanguage } from '@/entities/user/types'
 
 /** Resolved lazily so it follows the current UI language. */
 const fallbackCause = (): string => t('mistakeAnalysis.fallbackCause')
 
 /** Language used when the project has no detected language. */
 const DEFAULT_LANGUAGE: AnalysisLanguage = 'en'
+
+/** The student's question-language preference applied to the material's language. */
+async function contentLanguage(material: AnalysisLanguage): Promise<AnalysisLanguage> {
+  const profile = await new UserRepository().get().catch(() => undefined)
+  return resolveContentLanguage(profile?.questionLanguage, material)
+}
 
 export type AnalysisLanguage = 'zh' | 'en' | 'mixed'
 
@@ -76,12 +84,12 @@ export class MistakeAnalysisService {
     if (override) return override
     if (!this.analyses) return DEFAULT_LANGUAGE
     const analysis = await this.analyses.getByProject(projectId)
-    return analysis?.language ?? DEFAULT_LANGUAGE
+    return contentLanguage(analysis?.language ?? DEFAULT_LANGUAGE)
   }
 
   private async runAnalysis(mistake: Mistake, opts: AnalysisOptions): Promise<MistakeAnalysis> {
     const analysis = this.analyses ? await this.analyses.getByProject(mistake.projectId) : undefined
-    const language: AnalysisLanguage = opts.language ?? analysis?.language ?? DEFAULT_LANGUAGE
+    const language: AnalysisLanguage = opts.language ?? (await contentLanguage(analysis?.language ?? DEFAULT_LANGUAGE))
 
     const sources =
       this.chunks && analysis

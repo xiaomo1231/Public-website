@@ -1,3 +1,5 @@
+import { version } from '../../../package.json'
+
 /**
  * Application-wide configuration constants.
  *
@@ -5,7 +7,8 @@
  */
 
 export const APP_NAME = 'AI Learning Platform'
-export const APP_VERSION = '0.2.0'
+/** From package.json, so it always matches the release. */
+export const APP_VERSION: string = version
 
 export const DB_NAME = 'ai-learning-platform'
 

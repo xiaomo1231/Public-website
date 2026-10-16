@@ -46,6 +46,7 @@ export class UserRepository {
           ...(patch.theme !== undefined ? { theme: patch.theme } : {}),
           ...(patch.colorTheme !== undefined ? { colorTheme: patch.colorTheme } : {}),
           ...(patch.uiLanguage !== undefined ? { uiLanguage: patch.uiLanguage } : {}),
+          ...(patch.questionLanguage !== undefined ? { questionLanguage: patch.questionLanguage } : {}),
         }
         await this.db.user.put(merged)
         return merged

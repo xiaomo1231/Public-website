@@ -34,6 +34,7 @@ import { friendlyTutorError } from '@/shared/lib/aiErrors'
 import { t } from '@/i18n'
 import { loadProjectSubject } from './projectSubject'
 import { ShortAnswerGrader } from './shortAnswerGrader'
+import { shuffled } from '@/shared/lib/shuffle'
 
 const SOURCE_CHUNK_LIMIT = 6
 const MAX_HINTS = 3
@@ -341,7 +342,11 @@ export class TutorService {
       ...(signal ? { signal } : {}),
     })
     // Validate + sanitise before the question reaches the student or storage.
-    const question: TutorQuestion = normalizeTutorQuestion(data)
+    const normalized: TutorQuestion = normalizeTutorQuestion(data)
+    // Models put the right option first; the student sees them in random order.
+    const question: TutorQuestion = normalized.options
+      ? { ...normalized, options: shuffled(normalized.options) }
+      : normalized
 
     // Persist the question so it has a stable identity. This is what lets the
     // mistake book reference it and deduplicate repeat errors, exactly as it

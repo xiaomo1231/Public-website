@@ -171,7 +171,7 @@ export function QuizPage(): JSX.Element {
             question={current}
             index={index}
             total={questions.length}
-            difficulty={quiz.difficultyPlan[index] ?? current.difficulty}
+            difficulty={current.difficulty}
             value={answer}
             onChange={setAnswer}
             onSubmit={submit}

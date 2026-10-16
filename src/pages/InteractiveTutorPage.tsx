@@ -11,6 +11,8 @@ import { TutorPanel } from '@/widgets/tutor/TutorPanel'
 import { ProjectFlowNav } from '@/widgets/project/ProjectFlowNav'
 import { useProjectTopics } from '@/features/tutor/useProjectTopics'
 import { useTranslation } from '@/i18n'
+import { useAuth } from '@/features/auth/useAuth'
+import { resolveContentLanguage } from '@/entities/user/types'
 
 /**
  * The interactive half of the tutor.
@@ -23,10 +25,13 @@ export function InteractiveTutorPage(): JSX.Element {
   const { t } = useTranslation()
   const { loading, analysis, topics } = useProjectTopics(projectId)
   const [language, setLanguage] = useState<'zh' | 'en' | 'mixed'>('en')
+  // Tutor questions follow the student's question-language preference.
+  const { profile, loaded: profileLoaded } = useAuth()
+  const questionLanguage = profile?.questionLanguage
 
   useEffect(() => {
-    if (analysis?.language) setLanguage(analysis.language)
-  }, [analysis?.language])
+    if (analysis?.language && profileLoaded) setLanguage(resolveContentLanguage(questionLanguage, analysis.language))
+  }, [analysis?.language, profileLoaded, questionLanguage])
 
   if (!projectId) return <div />
 

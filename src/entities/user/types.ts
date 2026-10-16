@@ -1,6 +1,26 @@
 import type { UILanguage } from '@/i18n/types'
 
 export type UserLanguage = 'auto' | 'zh' | 'en'
+
+/**
+ * Language of generated questions, explanations of mistakes and tutor
+ * questions: Chinese with key terms in English (the default — Chinese students
+ * often study from English textbooks), the textbook's own language, or English.
+ */
+export type QuestionLanguage = 'zh_terms' | 'source' | 'en'
+
+export const QUESTION_LANGUAGES: QuestionLanguage[] = ['zh_terms', 'source', 'en']
+export const DEFAULT_QUESTION_LANGUAGE: QuestionLanguage = 'zh_terms'
+
+/** The concrete language for content when the preference follows the textbook. */
+export function resolveContentLanguage(
+  preference: QuestionLanguage | undefined,
+  sourceLanguage: 'zh' | 'en' | 'mixed',
+): 'zh' | 'en' | 'mixed' {
+  const choice = preference ?? DEFAULT_QUESTION_LANGUAGE
+  if (choice === 'source') return sourceLanguage
+  return choice === 'en' ? 'en' : 'zh'
+}
 export type UserTheme = 'light' | 'dark' | 'system'
 
 /**
@@ -31,6 +51,8 @@ export interface UserProfile {
    * which case the app falls back to English.
    */
   uiLanguage?: UILanguage
+  /** Language of generated questions; absent means `DEFAULT_QUESTION_LANGUAGE`. */
+  questionLanguage?: QuestionLanguage
   unlockedAt?: number
   inviteCode?: string
 }
@@ -41,4 +63,5 @@ export interface UpdateUserInput {
   theme?: UserTheme
   colorTheme?: UserColorTheme
   uiLanguage?: UILanguage
+  questionLanguage?: QuestionLanguage
 }

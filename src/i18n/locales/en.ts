@@ -987,6 +987,12 @@ export const en = {
   'quizConfig.mixedReview': 'Mixed review (all topics)',
   'quizConfig.questionCount': 'Number of questions',
   'quizConfig.questionCountHint': 'Between 1 and 30.',
+  'quizConfig.questionLanguage': 'Question language',
+  'quizConfig.questionLanguageHint': 'Also used for mistake analysis and AI tutor questions; your choice is remembered.',
+  'questionLanguage.zh_terms': 'Chinese (key terms in English)',
+  'questionLanguage.source': 'Same as the textbook',
+  'questionLanguage.en': 'English',
+  'settings.version': 'Version {version}',
   'quizConfig.difficulty': 'Difficulty',
   'quizConfig.difficultyHint':
     'Starts at Basic and adjusts after each answer based on accuracy, streaks, and knowledge-point mastery.',

@@ -7,6 +7,8 @@ import { MistakeAnalysisService } from '@/services/mistakeAnalysisService'
 import { CourseAnalysisRepository } from '@/entities/courseAnalysis/repository'
 import type { AIService } from '@/services/aiService'
 import type { ChatMessage } from '@/infrastructure/ai/types'
+import { UserRepository } from '@/entities/user/repository'
+import type { QuestionLanguage } from '@/entities/user/types'
 
 function fakeAI(): { ai: AIService; chatJSON: ReturnType<typeof vi.fn> } {
   const chatJSON = vi.fn(async (messages: ChatMessage[]) => {
@@ -50,7 +52,9 @@ describe('MistakeAnalysisService language', () => {
     setDbForTesting(db)
   })
 
-  async function setup(language: 'zh' | 'en' | 'mixed' | null) {
+  // These cases follow the textbook; the default preference is tested below.
+  async function setup(language: 'zh' | 'en' | 'mixed' | null, preference: QuestionLanguage | null = 'source') {
+    if (preference) await new UserRepository(db).update({ questionLanguage: preference })
     const projects = new ProjectService(db)
     const project = await projects.create({ name: 'Calculus', subject: 'calculus' })
     const analyses = new CourseAnalysisRepository(db)
@@ -101,6 +105,19 @@ describe('MistakeAnalysisService language', () => {
 
   it('falls back to English when the project has no analysis', async () => {
     const { project, service } = await setup(null)
+    expect(await service.resolveLanguage(project.id)).toBe('en')
+  })
+
+  it('writes in Chinese by default, even for an English textbook', async () => {
+    const { project, service, mistake, chatJSON } = await setup('en', null)
+    expect(await service.resolveLanguage(project.id)).toBe('zh')
+    await service.explain(mistake)
+    const userPrompt = chatJSON.mock.calls[0]?.[0]?.find((m: ChatMessage) => m.role === 'user')?.content as string
+    expect(userPrompt).toContain('Simplified Chinese')
+  })
+
+  it('writes in English when the student chose English', async () => {
+    const { project, service } = await setup('zh', 'en')
     expect(await service.resolveLanguage(project.id)).toBe('en')
   })
 

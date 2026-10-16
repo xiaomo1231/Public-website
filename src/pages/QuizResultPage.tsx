@@ -291,7 +291,7 @@ export function QuizResultPage(): JSX.Element {
                   return (
                     <div key={difficulty} className="space-y-1">
                       <div className="flex items-center justify-between text-sm capitalize">
-                        <span>{difficulty}</span>
+                        <span>{t(difficultyLabelKey(difficulty))}</span>
                         <span className="tabular-nums text-muted-foreground">
                           {stat.correct}/{stat.total}
                         </span>

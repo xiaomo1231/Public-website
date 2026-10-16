@@ -25,5 +25,6 @@ export function useAuth() {
     setName: store.setName,
     setLanguage: store.setLanguage,
     setUILanguage: store.setUILanguage,
+    setQuestionLanguage: store.setQuestionLanguage,
   }
 }

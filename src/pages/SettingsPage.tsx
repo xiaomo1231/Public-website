@@ -27,6 +27,7 @@ import { toast } from '@/features/toast/toastStore'
 import { isAppError } from '@/infrastructure/errors/AppError'
 import { AIService } from '@/services/aiService'
 import { DataManagementPanel } from '@/widgets/dataManagement/DataManagementPanel'
+import { APP_VERSION } from '@/shared/config/config'
 import { LANGUAGE_LABELS, UI_LANGUAGES, useTranslation, type UILanguage } from '@/i18n'
 
 export function SettingsPage(): JSX.Element {
@@ -385,6 +386,8 @@ export function SettingsPage(): JSX.Element {
         </Card>
 
         <DataManagementPanel />
+        {/* Lets a bug report say which release it came from. */}
+        <p className="text-center text-xs text-muted-foreground">{t('settings.version', { version: APP_VERSION })}</p>
       </PageContent>
     </PageContainer>
   )

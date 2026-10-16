@@ -13,6 +13,7 @@ import { AnswerInput } from './AnswerInput'
 import { QuestionSource } from './QuestionSource'
 import { ShortAnswerFeedback } from './ShortAnswerFeedback'
 import { cn } from '@/shared/lib/utils'
+import { difficultyLabelKey } from '@/infrastructure/ai/prompts/types'
 import { useTranslation } from '@/i18n'
 
 export interface QuestionCardProps {
@@ -57,7 +58,7 @@ export function QuestionCard({
         <CardTitle className="text-base">
           {t('question.label', { number: index + 1, total })}
         </CardTitle>
-        <Badge variant="outline">{difficulty}</Badge>
+        <Badge variant="outline">{t(difficultyLabelKey(difficulty))}</Badge>
         <Badge variant="outline">{t(QUESTION_TYPE_LABEL_KEYS[question.type])}</Badge>
         <span className="ml-auto text-xs text-muted-foreground">{question.knowledgePoint}</span>
       </CardHeader>

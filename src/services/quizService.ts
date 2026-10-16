@@ -16,7 +16,7 @@ import type {
 } from '@/entities/quiz/types'
 import type { DifficultyLevel } from '@/infrastructure/ai/prompts/types'
 import { prompts } from '@/infrastructure/ai/prompts'
-import type { QuizGenerationOutput, GeneratedQuizQuestion } from '@/infrastructure/ai/prompts/quiz-generator/v5'
+import type { QuizGenerationOutput, GeneratedQuizQuestion } from '@/infrastructure/ai/prompts/quiz-generator/v6'
 import type { ChatMessage } from '@/infrastructure/ai/types'
 import type { AIService } from './aiService'
 import { evaluateDeterministic } from './answerEvaluationService'
@@ -25,8 +25,9 @@ import { MasteryService } from './masteryService'
 import type { MistakeService } from './mistakeService'
 import type { ProjectService } from './projectService'
 import {
-  collectQuizSnippets,
   formatSnippetForPrompt,
+  loadQuizCandidates,
+  pickQuizSnippets,
   scopeSnippetsByStructure,
   type SourceSnippet,
 } from './sourceContext'
@@ -44,6 +45,9 @@ import { imbalances, parseEquation } from '@/infrastructure/chemistry/equation'
 import { isValidUnit } from '@/infrastructure/math/quantityAnswer'
 import { normalizeProgramOutput } from './answerEvaluationService'
 import type { Subject } from '@/entities/project/types'
+import { UserRepository } from '@/entities/user/repository'
+import { shuffled } from '@/shared/lib/shuffle'
+import { DEFAULT_QUESTION_LANGUAGE, type QuestionLanguage } from '@/entities/user/types'
 
 
 /** Scoring points per short answer: enough to grade, few enough to stay distinct. */
@@ -97,7 +101,44 @@ const QUIZ_MAX_OUTPUT_TOKENS = 8192
 const MIN_QUIZ_SNIPPETS = 8
 const MAX_QUIZ_SNIPPETS = 24
 
-type PlanEntry = { type: QuestionType; difficulty: DifficultyLevel }
+/** `group` points into the quiz's topic groups (a mixed review spreads its questions over topics). */
+type PlanEntry = { type: QuestionType; difficulty: DifficultyLevel; group?: number }
+
+/** What one part of a quiz is about: a topic's knowledge points and source passages. */
+interface QuizGroup {
+  topicId?: string
+  knowledgePoints: string[]
+  snippets: SourceSnippet[]
+}
+
+/** Source passages offered per topic in a mixed review. */
+const SNIPPETS_PER_TOPIC = 3
+/** Knowledge points named per topic in a mixed review. */
+const POINTS_PER_TOPIC = 3
+
+/**
+ * A correct option this much longer than every distractor gives the answer
+ * away (models tend to make the right answer the most detailed one).
+ */
+const ANSWER_LENGTH_RATIO = 1.6
+const ANSWER_LENGTH_MARGIN = 12
+
+function answerStandsOut(options: Array<{ label: string; isCorrect: boolean }>): boolean {
+  const correct = options.find((o) => o.isCorrect)
+  const others = options.filter((o) => !o.isCorrect).map((o) => o.label.length)
+  if (!correct || others.length === 0) return false
+  const longest = Math.max(...others)
+  return correct.label.length > longest * ANSWER_LENGTH_RATIO && correct.label.length - longest >= ANSWER_LENGTH_MARGIN
+}
+
+/** The language the generator writes in, from the student's preference and the material. */
+export function quizLanguage(
+  preference: QuestionLanguage | undefined,
+  material: 'zh' | 'en' | 'mixed',
+): 'zh' | 'en' | 'mixed' | 'zh_terms' {
+  const choice = preference ?? DEFAULT_QUESTION_LANGUAGE
+  return choice === 'source' ? material : choice
+}
 
 /** Used when the model omits `type` entirely. */
 const DEFAULT_QUESTION_TYPE: QuestionType = 'multiple_choice'
@@ -123,7 +164,7 @@ function normalizeChoiceOptions(
     const label = (raw as { label?: unknown }).label
     if (typeof label !== 'string') return null
     const trimmed = label.trim()
-    if (!trimmed) return null
+    if (!trimmed || options.some((o) => o.label === trimmed)) return null
     options.push({
       label: trimmed,
       isCorrect: (raw as { isCorrect?: unknown }).isCorrect === true,
@@ -328,26 +369,28 @@ export class QuizService {
 
     try {
       options.onProgress?.('collecting', 10)
-      // Passages from the whole course: a topic's own source chunks first, then
-      // one per knowledge point, then evenly spaced — never just the opening.
-      const snippets = await collectQuizSnippets({
+      // Every passage the quiz may use, loaded once and shared by its groups.
+      const candidates = await loadQuizCandidates({
         documentIds: analysis.documentIds,
         chunks: this.chunks,
         documents: new DocumentRepository(this.db),
-        ...(topic?.sourceChunkIds?.length ? { preferChunkIds: topic.sourceChunkIds } : {}),
-        keywords: knowledgePoints,
         ...(config.chapterId ? { chapterId: config.chapterId } : {}),
         ...(config.sectionId ? { sectionId: config.sectionId } : {}),
-        limit: Math.min(MAX_QUIZ_SNIPPETS, Math.max(MIN_QUIZ_SNIPPETS, config.count + 3)),
       })
-      // Restrict to the requested chapter/section, so a chapter quiz can never
-      // pull questions from another chapter.
-      const scopedSnippets = scopeSnippetsByStructure(snippets, {
+      const scope = {
         ...(config.chapterId ? { chapterId: config.chapterId } : {}),
         ...(config.sectionId ? { sectionId: config.sectionId } : {}),
+      }
+      const groups = await this.planGroups(projectId, config, candidates, knowledgePoints, topic)
+      // Spread the questions over the groups (one group unless a mixed review).
+      groups.forEach((group) => {
+        group.snippets = scopeSnippetsByStructure(group.snippets, scope)
+      })
+      plan.forEach((entry, i) => {
+        if (groups.length > 1) (entry as PlanEntry).group = i % groups.length
       })
       // Only ids actually offered to the model can ever be cited.
-      const snippetIndex = new Map(scopedSnippets.map((s) => [s.chunkId, s]))
+      const snippetIndex = new Map(groups.flatMap((group) => group.snippets).map((s) => [s.chunkId, s]))
 
       options.onProgress?.('generating', 30)
       // How the professor writes questions (never what is tested). Absent when
@@ -356,14 +399,15 @@ export class QuizService {
       const professorStyleContext = courseContext?.questionStyleProfile
         ? formatQuestionStyleContext(courseContext.questionStyleProfile)
         : undefined
+      const preference =
+        config.questionLanguage ?? (await new UserRepository(this.db).get().catch(() => undefined))?.questionLanguage
       const generated = await this.generateInBatches(
         plan,
-        scopedSnippets.map(formatSnippetForPrompt),
+        groups,
         {
           topicName,
           topicDescription,
-          knowledgePoints,
-          language: analysis.language,
+          language: quizLanguage(preference, analysis.language),
           ...(professorStyleContext ? { professorStyleContext } : {}),
         },
         await loadProjectSubject(projectId),
@@ -372,16 +416,21 @@ export class QuizService {
 
       options.onProgress?.('storing', 80)
       const stored = await this.questions.addMany(
-        generated.map(({ question: q, entry }, i) => ({
+        generated.map(({ question: q, entry }, i) => {
+          const group = groups[entry.group ?? 0]
+          const topicId = group?.topicId ?? topic?.id
+          const fallbackPoint = group?.knowledgePoints[0] ?? knowledgePoints[i % Math.max(1, knowledgePoints.length)]
+          return {
           projectId,
-          ...(topic ? { topicId: topic.id } : {}),
-          knowledgePoint: q.knowledgePoint || knowledgePoints[i % Math.max(1, knowledgePoints.length)] || topicName,
+          ...(topicId ? { topicId } : {}),
+          knowledgePoint: q.knowledgePoint || fallbackPoint || topicName,
           // The question's own (validated) type: a dropped question must never
           // shift the types of the ones after it.
           type: q.type,
           difficulty: entry.difficulty,
           prompt: q.prompt,
-          ...(q.options ? { options: q.options } : {}),
+          // Models put the answer first; the order the student sees is random.
+          ...(q.options ? { options: shuffled(q.options) } : {}),
           correctAnswer: q.correctAnswer,
           ...(q.unit ? { unit: q.unit } : {}),
           ...(q.rubric?.length
@@ -394,7 +443,8 @@ export class QuizService {
           hints: q.hints ?? [],
           sourceRefs: resolveSourceReferences(q.sourceChunkId, q.quote, snippetIndex),
           promptVersion: prompts.quizGenerator.VERSION,
-        })),
+          }
+        }),
       )
 
       const ready: Quiz = {
@@ -427,8 +477,8 @@ export class QuizService {
    */
   private async generateInBatches(
     plan: PlanEntry[],
-    snippets: string[],
-    context: Omit<Parameters<typeof prompts.quizGenerator.buildUserPrompt>[0], 'plan' | 'sourceSnippets'>,
+    groups: QuizGroup[],
+    context: Omit<Parameters<typeof prompts.quizGenerator.buildUserPrompt>[0], 'plan' | 'sourceSnippets' | 'knowledgePoints'>,
     subject: Subject | undefined,
     signal?: AbortSignal,
   ): Promise<Array<{ question: GeneratedQuizQuestion; entry: PlanEntry }>> {
@@ -442,15 +492,14 @@ export class QuizService {
       const missing: PlanEntry[] = []
       for (const [index, batch] of batches.entries()) {
         signal?.throwIfAborted()
-        // Spread the passages over the batches when there are enough of them.
-        const share =
-          snippets.length >= batches.length * 4 ? snippets.filter((_, i) => i % batches.length === index) : snippets
+        const { knowledgePoints, snippets } = this.batchMaterial(batch, groups, index, batches.length)
         try {
           const questions = await this.generateWithRetry(
             {
               ...context,
+              knowledgePoints,
               plan: batch,
-              sourceSnippets: share,
+              sourceSnippets: snippets,
               ...(delivered.length > 0 ? { avoidRepeating: delivered.map((d) => d.question.prompt) } : {}),
             },
             subject,
@@ -481,6 +530,84 @@ export class QuizService {
     }
     // Keep the plan's order (difficulty ramps up through an adaptive quiz).
     return delivered.sort((a, b) => plan.indexOf(a.entry) - plan.indexOf(b.entry))
+  }
+
+  /**
+   * What one batch is given. A single group (a topic quiz) shares its
+   * passages out over the batches; in a mixed review each batch gets exactly
+   * the topics its questions belong to.
+   */
+  private batchMaterial(
+    batch: PlanEntry[],
+    groups: QuizGroup[],
+    index: number,
+    batchCount: number,
+  ): { knowledgePoints: string[]; snippets: string[] } {
+    if (groups.length <= 1) {
+      const only = groups[0] ?? { knowledgePoints: [], snippets: [] }
+      const all = only.snippets
+      const share = all.length >= batchCount * 4 ? all.filter((_, i) => i % batchCount === index) : all
+      return { knowledgePoints: only.knowledgePoints, snippets: share.map(formatSnippetForPrompt) }
+    }
+    const used = [...new Set(batch.map((entry) => entry.group ?? 0))].map((g) => groups[g]!).filter(Boolean)
+    const seen = new Set<string>()
+    const snippets = used
+      .flatMap((group) => group.snippets)
+      .filter((snippet) => !seen.has(snippet.chunkId) && seen.add(snippet.chunkId))
+    return {
+      knowledgePoints: [...new Set(used.flatMap((group) => group.knowledgePoints))],
+      snippets: snippets.map(formatSnippetForPrompt),
+    }
+  }
+
+  /**
+   * The parts a quiz is generated from. A mixed review over a course with
+   * several topics gets one group per topic — every topic when they fit in the
+   * question count, otherwise a random selection — so it cannot settle on one
+   * topic. Every other quiz is a single group.
+   */
+  private async planGroups(
+    projectId: string,
+    config: QuizConfig,
+    candidates: SourceSnippet[],
+    knowledgePoints: string[],
+    topic: Awaited<ReturnType<CourseAnalysisRepository['getTopic']>>,
+  ): Promise<QuizGroup[]> {
+    const single = (): QuizGroup[] => [
+      {
+        ...(topic ? { topicId: topic.id } : {}),
+        knowledgePoints,
+        snippets: pickQuizSnippets(candidates, {
+          ...(topic?.sourceChunkIds?.length ? { preferChunkIds: topic.sourceChunkIds } : {}),
+          keywords: knowledgePoints,
+          limit: Math.min(MAX_QUIZ_SNIPPETS, Math.max(MIN_QUIZ_SNIPPETS, config.count + 3)),
+        }),
+      },
+    ]
+    if (config.mode !== 'mixed' || config.topicId || config.focusKnowledgePoints?.length) return single()
+    const topics = await this.analyses.listTopics(projectId)
+    if (topics.length < 2) return single()
+    const chosen =
+      topics.length <= config.count ? topics : shuffled(topics).slice(0, config.count).sort((a, b) => a.order - b.order)
+    const concepts = await this.analyses.listConcepts(projectId)
+    return chosen.map((each) => {
+      const points = concepts
+        .filter((concept) => concept.topicIds.includes(each.id))
+        .map((concept) => concept.name)
+        .slice(0, POINTS_PER_TOPIC)
+      const keywords = points.length > 0 ? points : [each.name]
+      return {
+        topicId: each.id,
+        knowledgePoints: keywords,
+        snippets: pickQuizSnippets(candidates, {
+          ...(each.sourceChunkIds?.length ? { preferChunkIds: each.sourceChunkIds } : {}),
+          keywords: [each.name, ...keywords],
+          limit: SNIPPETS_PER_TOPIC,
+          // A topic's passages only; never filler from elsewhere in the book.
+          fill: false,
+        }),
+      }
+    })
   }
 
   private async generateWithRetry(
@@ -548,6 +675,11 @@ export class QuizService {
       if (type === 'multiple_choice') {
         const parsed = normalizeChoiceOptions(q.options)
         if (!parsed) continue
+        // A giveaway answer is dropped; the batch tops the gap up.
+        if (answerStandsOut(parsed)) {
+          logger.debug('Dropped a choice question whose answer stands out by length')
+          continue
+        }
         options = parsed
         // Grading matches `correctAnswer` against an option, so it must name
         // one. If the model only flagged an option, adopt that label.

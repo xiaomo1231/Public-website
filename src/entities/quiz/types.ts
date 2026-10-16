@@ -1,6 +1,7 @@
 import type { DifficultyLevel } from '@/infrastructure/ai/prompts/types'
 import type { QuestionType } from '@/entities/question/types'
 import type { TranslationKey } from '@/i18n/types'
+import type { QuestionLanguage } from '../user/types'
 
 export type QuizDifficulty = 'adaptive' | DifficultyLevel
 
@@ -24,6 +25,8 @@ export interface QuizConfig {
   focusKnowledgePoints?: string[]
   /** When set, the session was launched from a specific mistake. */
   sourceMistakeId?: string
+  /** Language of the questions; absent uses the student's saved preference. */
+  questionLanguage?: QuestionLanguage
 }
 
 export type QuizStatus = 'generating' | 'ready' | 'in_progress' | 'completed' | 'failed'

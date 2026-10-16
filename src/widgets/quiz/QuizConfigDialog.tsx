@@ -5,6 +5,12 @@ import type { QuizConfig, QuizDifficulty } from '@/entities/quiz/types'
 import type { QuestionType } from '@/entities/question/types'
 import { QUESTION_TYPE_LABEL_KEYS, questionTypesForSubject } from '@/entities/question/types'
 import { useProject } from '@/features/project/useProjects'
+import { useAuth } from '@/features/auth/useAuth'
+import {
+  DEFAULT_QUESTION_LANGUAGE,
+  QUESTION_LANGUAGES,
+  type QuestionLanguage,
+} from '@/entities/user/types'
 import { CourseContentRepository } from '@/entities/courseContent/repository'
 import { Button } from '@/shared/ui/Button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/shared/ui/Card'
@@ -37,6 +43,12 @@ const DIFFICULTIES: Array<{ value: QuizDifficulty; labelKey: TranslationKey }> =
   { value: 'challenge', labelKey: 'difficulty.challenge' },
 ]
 
+const QUESTION_LANGUAGE_LABEL_KEYS: Record<QuestionLanguage, TranslationKey> = {
+  zh_terms: 'questionLanguage.zh_terms',
+  source: 'questionLanguage.source',
+  en: 'questionLanguage.en',
+}
+
 const STAGE_LABEL_KEYS: Record<string, TranslationKey> = {
   starting: 'quiz.starting',
   collecting: 'stage.collectingShort',
@@ -56,6 +68,9 @@ export function QuizConfigDialog({ projectId, onStart, busy, progress }: QuizCon
   const [difficulty, setDifficulty] = useState<QuizDifficulty>('adaptive')
   const [types, setTypes] = useState<QuestionType[]>(['multiple_choice'])
   const [loading, setLoading] = useState(true)
+  // The saved preference; changing it here saves it for every later quiz.
+  const { profile, setQuestionLanguage } = useAuth()
+  const questionLanguage = profile?.questionLanguage ?? DEFAULT_QUESTION_LANGUAGE
 
   useEffect(() => {
     let cancelled = false
@@ -95,6 +110,7 @@ export function QuizConfigDialog({ projectId, onStart, busy, progress }: QuizCon
       count,
       difficulty,
       types,
+      questionLanguage,
       ...(topic ? { topicId: topic.id, topicName: topic.name } : {}),
     }
     onStart(config)
@@ -165,6 +181,23 @@ export function QuizConfigDialog({ projectId, onStart, busy, progress }: QuizCon
             />
             <p className="text-xs text-muted-foreground">{t('quizConfig.questionCountHint')}</p>
           </div>
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="quiz-language">{t('quizConfig.questionLanguage')}</Label>
+          <Select value={questionLanguage} onValueChange={(v) => void setQuestionLanguage(v as QuestionLanguage)}>
+            <SelectTrigger id="quiz-language">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {QUESTION_LANGUAGES.map((value) => (
+                <SelectItem key={value} value={value}>
+                  {t(QUESTION_LANGUAGE_LABEL_KEYS[value])}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <p className="text-xs text-muted-foreground">{t('quizConfig.questionLanguageHint')}</p>
         </div>
 
         <div className="space-y-2">

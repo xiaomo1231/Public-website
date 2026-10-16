@@ -269,7 +269,7 @@ Topic
 ### Quiz
 
 - 题型：单选、判断、数值（容差）、数学表达式、**代码输出**（`code_output`，仅计算机科目提供：题干含带语言标记的代码块，答案为程序的确切输出，按行尾空白/换行规范化后**精确匹配**）。
-- 数值题可带 `unit`（mathjs 单位语法，如 `m/s^2`）：学生须带单位作答，任意同量纲单位先换算再按 1% **相对**容差比较；缺单位 / 量纲不对给出明确提示，单位无法识别则不判分（`infrastructure/math/quantityAnswer.ts`）。出题 prompt 为 `quiz-generator/v5`（v4 保留）。
+- 数值题可带 `unit`（mathjs 单位语法，如 `m/s^2`）：学生须带单位作答，任意同量纲单位先换算再按 1% **相对**容差比较；缺单位 / 量纲不对给出明确提示，单位无法识别则不判分（`infrastructure/math/quantityAnswer.ts`）。出题 prompt 为 `quiz-generator/v6`（v5 及更早保留）：v6 新增 `language: 'zh_terms'`（简体中文、关键术语首次出现附英文），干扰项规则（同一材料里真实易混的概念、各选项长短与句式相近、正确项不能是最长 / 最具体的、禁止荒谬或离题选项），以及题干不得以“根据讲义提纲 / 课件 / 教材”开头。
 - **化学方程式题（`chem_equation`，仅化学科目）**：`infrastructure/chemistry/equation.ts` 本地解析（`->`/`<=>`/`→`/`⇌`/`=`、`[条件]`、电荷 `Fe^3+`、按 mhchem 约定 `NH4+` 为 +1、水合物 `·`、状态符号忽略）。判分：物种一致（顺序无关）+ 原子与电荷守恒 + 系数成比例（整倍数也算对）；缺/多物种、不守恒、系数错误分别给出提示；读不懂则不判分。出题时参考答案本身必须能解析且配平，否则丢弃该题。**有机结构式**：物种内可写键（`CH2=CH2`、`HC#CH`/`HC≡CH`、`CH3-CH3`）；没有其它箭头时裸 `=` 才可能是反应箭头，取能配平的那个 `=`。物种按分子式匹配；参考答案写了 ≥2 个碳的结构式而作答结构写法不同（如乙醇 vs 二甲醚）时，判定为 `isomers`：不计分并提示可能是同分异构体（简单基团 `(CH2)3` 展开、键符号忽略后再比较）。
 - 单位（`quantityAnswer.ts` 使用独立 mathjs 实例，不影响表达式判分）额外支持 `M/mM/µM/nM`（mol/L）、`Da/kDa`、`cal/kcal`、`ppm/ppb`、`Å`，以及医学的 `bpm`（1/min）、`Osm/mOsm`（独立量纲，与 mol 不互换）、`Eq/mEq`（独立量纲）；`mmHg` 为 mathjs 自带。
 - **医学考试题型（`quiz-generator/v5`，全科可选，医学默认可用）**：
@@ -281,7 +281,10 @@ Topic
 - **教授练习题与交互导师的简答题**（第二期）复用同一判分器：练习题从教授参考答案经 `rubric-extractor/v1` 拆出得分点（按 答案+prompt 版本 哈希缓存在题目上），作答写入错题本 / 掌握度并支持异议（`PracticeService.disputeAttempt`）；导师出题 `tutor/v2-question` 可出带得分点的简答题，覆盖率 60–99% 或无法核对时难度不调整。
 - **简答题（`short_answer`）按得分点计分**：出题时生成参考答案 + 2–6 条得分点（`Question.rubric`）。判分 `services/shortAnswerGrader.ts` + `short-answer-check/v1`：AI 逐条判断是否答到（同义、等价表述都算），答到必须**逐字摘出学生原话**作为证据，本地校验证据确实出现在答案里，否则该点不算；得分 = 答到点数 / 总点数（3/5 → 60%），由本地计算，从不采用 AI 的整体结论。空答案不调用 AI；未配置 AI 或核对失败 ⇒ 不计分（展示得分点与参考答案）。
 - 简答题计分：测验百分比 = Σ得分 / 已判题数（简答题按 `earned/total` 计入，`QuizScore.points`）；只有全部答到才算“正确”，其余进入错题本；掌握度按得分比例、**半权重**计入（`observationFromAttempt`）。学生可点“我不同意这个判定”（`QuizService.disputeAttempt`）：该次作答保留展示但不再计分，同时移出错题本、重建该知识点掌握度、已完成测验重新算分。
-- **出题分批与补题**（`QuizService.generateInBatches`）：每批最多 5 道，输出上限 = max(用户设置, 1024 + 900 × 题数)，封顶 8192；后续批次附“避免重复”。题目按**自身题型**对应计划位（不再按位置套用计划题型，丢题不会让后面的题型错位）；未选的题型丢弃；成功请求中缺少的题最多再补 2 轮（整批失败只在 `generateWithRetry` 内重试 2 次）；测验标题按实际题数。取材用 `collectQuizSnippets`：主题的已校验来源分块优先，再每个知识点一段，其余在全书均匀抽取，片段数 = clamp(题数 + 3, 8, 24)，题多时各批分到不同片段；混合复习的知识点从全部概念中均匀抽 8 个、起点随机。
+- **出题分批与补题**（`QuizService.generateInBatches`）：每批最多 5 道，输出上限 = max(用户设置, 1024 + 900 × 题数)，封顶 8192；后续批次附“避免重复”。题目按**自身题型**对应计划位（不再按位置套用计划题型，丢题不会让后面的题型错位）；未选的题型丢弃；成功请求中缺少的题最多再补 2 轮（整批失败只在 `generateWithRetry` 内重试 2 次）；测验标题按实际题数。取材：`loadQuizCandidates` 一次读出全部候选段落，`pickQuizSnippets` 选取（主题的已校验来源分块优先，再每个知识点一段，其余在全书均匀抽取）。主题测验为单组，片段数 = clamp(题数 + 3, 8, 24)，题多时各批分到不同片段。**混合复习按主题分组**（`planGroups`）：主题数 ≤ 题数时全部主题，否则随机抽题数个主题；题目轮流分到各组，每批只拿到本批题目所属主题的知识点（每主题 ≤3）与来源段落（每主题 ≤3，不用全书填充），题目记录各自的 `topicId`。
+- **选项随机顺序**：保存前在本地打乱 `multiple_choice` / `multiple_select` / `matching` 的选项（`shared/lib/shuffle.ts`，判分按选项文字，不受影响）；AI 导师单选同样打乱。单选题若正确项长度 > 1.6 × 最长干扰项且多 ≥12 字，或选项重复，丢弃并补题。旧题不变。
+- **题目语言**（`UserProfile.questionLanguage`：`zh_terms` 默认 / `source` 跟随教材 / `en`）：测验配置里选择并保存，`QuizConfig.questionLanguage` 可覆盖；服务端缺省读用户偏好（`quizLanguage()`）。错题分析与交互导师（`InteractiveTutorPage`）用 `resolveContentLanguage()` 换算为 zh / en / 教材语言；课时阅读页仍保留自己的语言切换，不受影响。
+- 题目卡片与结果页的难度显示为本地化名称（`difficultyLabelKey`），取题目自身记录的难度。设置页底部显示版本号（`APP_VERSION` 取自 `package.json`）。
 - 题目出处没有摘录时（`fillMissingExcerpts`，仅显示时补，不写回）：有 `chunkId` 显示该分块原文，否则显示该页原文并注明“未记录具体原句”。
 - 表达式判分 `infrastructure/math/expressionEvaluator.ts`：Unicode 归一 → mathjs 解析 → 符号化简 `simplify(lhs-rhs)===0` → 16 点数值采样 → 去 `+C` → 返回 `true|false|null`。`null` 显示「无法自动判定」且**不计入成绩**。判分不依赖 AI，可复现。
 - 自适应：`composite = 0.45·近期正确率 + 0.25·难度加权正确率 + 0.20·知识点掌握度 + 0.10·连对连错`；≥2 题才调整；5 档（beginner→challenge）单步移动。

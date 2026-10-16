@@ -938,6 +938,12 @@ export const zhCN: Record<TranslationKey, string> = {
   'quizConfig.mixedReview': '混合复习（全部主题）',
   'quizConfig.questionCount': '题目数量',
   'quizConfig.questionCountHint': '介于 1 到 30 之间。',
+  'quizConfig.questionLanguage': '题目语言',
+  'quizConfig.questionLanguageHint': '也用于错题分析和 AI 导师出题；会记住你的选择。',
+  'questionLanguage.zh_terms': '中文（关键术语附英文）',
+  'questionLanguage.source': '跟随教材语言',
+  'questionLanguage.en': '英文',
+  'settings.version': '版本 {version}',
   'quizConfig.difficulty': '难度',
   'quizConfig.difficultyHint':
     '从「基础」开始，并根据正确率、连对/连错和知识点掌握度在每题后调整。',
