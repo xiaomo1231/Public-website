@@ -1,5 +1,6 @@
 import { NavLink, useLocation } from 'react-router-dom'
 import {
+  BookA,
   FolderKanban,
   House,
   PanelLeftClose,
@@ -22,6 +23,7 @@ interface NavItem {
 const NAV_ITEMS: NavItem[] = [
   { to: '/dashboard', labelKey: 'nav.dashboard', icon: House },
   { to: '/projects', labelKey: 'nav.projects', icon: FolderKanban },
+  { to: '/vocab', labelKey: 'nav.vocab', icon: BookA },
   { to: '/settings', labelKey: 'nav.settings', icon: SettingsIcon },
 ]
 

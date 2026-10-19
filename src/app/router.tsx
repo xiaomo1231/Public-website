@@ -21,6 +21,7 @@ import { MasteryPage } from '@/pages/MasteryPage'
 import { MistakeBookPage } from '@/pages/MistakeBookPage'
 import { ReviewCardsPage } from '@/pages/ReviewCardsPage'
 import { SettingsPage } from '@/pages/SettingsPage'
+import { VocabPage } from '@/pages/VocabPage'
 import { RequireAuth } from './RequireAuth'
 
 export const routes: RouteObject[] = [
@@ -56,6 +57,7 @@ export const routes: RouteObject[] = [
       { path: 'projects/:id/mistakes', element: <MistakeBookPage /> },
       { path: 'projects/:id/cards', element: <ReviewCardsPage /> },
       { path: 'projects/:id/documents/:did', element: <DocumentDetailPage /> },
+      { path: 'vocab', element: <VocabPage /> },
       { path: 'settings', element: <SettingsPage /> },
     ],
   },

@@ -47,6 +47,9 @@ export class UserRepository {
           ...(patch.colorTheme !== undefined ? { colorTheme: patch.colorTheme } : {}),
           ...(patch.uiLanguage !== undefined ? { uiLanguage: patch.uiLanguage } : {}),
           ...(patch.questionLanguage !== undefined ? { questionLanguage: patch.questionLanguage } : {}),
+          ...(patch.vocabBookId !== undefined ? { vocabBookId: patch.vocabBookId } : {}),
+          ...(patch.vocabDailyNew !== undefined ? { vocabDailyNew: patch.vocabDailyNew } : {}),
+          ...(patch.vocabReviewMode !== undefined ? { vocabReviewMode: patch.vocabReviewMode } : {}),
         }
         await this.db.user.put(merged)
         return merged

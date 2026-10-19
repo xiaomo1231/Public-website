@@ -50,7 +50,7 @@
 
 ```text
 ┌─ IndexedDB (Dexie) ─────────────┐  结构化元数据 + 学习数据 + 原始文件字节
-│                                 │  33 张表，schema v11
+│                                 │  43 张表，Dexie v16
 ├─ localStorage ──────────────────┤  仅 UI 语言镜像（避免首帧语言闪烁）
 ├─ 浏览器内存 ────────────────────┤  仅当前任务文本 → 用户配置的 AI API
 └─────────────────────────────────┘
@@ -138,6 +138,7 @@ Dexie
 | 教授练习 | `PracticeSet` `PracticeQuestion` `PracticeAttempt` |
 | 练习 | `Question` `QuestionAttempt` `Quiz` `KnowledgeMastery` |
 | 复习 | `ReviewCard`（复习卡片 / 间隔重复，Dexie v15） |
+| 单词 | `VocabCard` `VocabBook` `VocabEntry` `VocabReview`（背单词，Dexie v16；**进度全局、不带 projectId**，课程词书带 `projectId`） |
 | 错误 | `Mistake` |
 
 关键约定：
@@ -313,6 +314,18 @@ Topic
 
 ---
 
+
+### 背单词（`/vocab`）
+
+- **数据**：`scripts/build-vocab.mjs` 从 [ECDICT](https://github.com/skywind3000/ECDICT)（MIT）下载到 `.cache/ecdict/`（已 gitignore），生成 `public/vocab/{dictionary.json, common.json, roots.json, LICENSE-ECDICT.txt}`。`dictionary.json` 只保留带考试标签的 14,912 词，每词 `[word, phonetic, meanings[], mask, rank, exchange]`，按词频排序；`mask` 位序 = `TAG_ORDER`（`zk gk cet4 cet6 ky toefl ielts gre`）；释义去掉 `[网络]` / `[计]` 义项（含 `art. [计] …` 写法）。`common.json` = 词频前 6000 及其变形（课程词汇跳过它们）。重跑脚本即可重建；运行时由 `infrastructure/vocab/wordData.ts` fetch。**不要**改用 qwerty-learner / TypeWords（GPL）、Earthworm（AGPL）或无许可证的词表。
+- **调度**：`ts-fsrs`（FSRS-6，`request_retention 0.9`、fuzz、最长 1825 天），`entities/vocab/schedule.ts`。**现有复习卡片 `ReviewCard` 仍是 SM-2，未迁移。**
+- **表（Dexie v16）**：`vocabCards`（主键 `word`，**全局进度**，跨课程共享——`projectId` 原则的唯一例外）、`vocabBooks`（`custom` 导入词表 / `course` 课程词书，后者带 `projectId`）、`vocabEntries`（词书条目，含释义来源 `glossBy: dictionary | ai | user | none`、原句 `context`、出现次数）、`vocabReviews`（评分日志，供连续天数与统计）。考试词书不入库，由词典按标签生成（`exam:<tag>`，推荐 `exam:cet4`）。删除词书 / 删除项目只删词书与条目，**不删单词进度**。纳入导出。
+- **设置**（`UserProfile`）：`vocabBookId` / `vocabDailyNew`（默认 20，上限 200）/ `vocabReviewMode`（`auto | recognize | spell | dictation | cloze`）。
+- **今日队列**（`VocabService.session`）：到期复习在前（上限 200），再补新词至 `dailyNew − 今日已学新词`。`auto` 复习方式：学习中或 `reps < 2` → 认读；否则按 `reps % 3` 轮换 拼写 / 填空 / 听写，无可挖空原句时填空退回拼写。打字题本地判分：对 → 记得(3)，差一个字母 → 模糊(2)，错 → 忘了(1) 并计入易错词；忘了的词本轮以认读再出现（最多 2 次）。
+- **课程词汇**（`CourseVocabService.extract`）：读项目已处理分块，本地抽词（`extractCourseTerms`：≥4 字母、去停用词、复数并入单数），跳过常用词与中考 / 高考 / 四级词，取前 150 个，保留首次出现的原句 + 页码 + 文档名；词典查不到的由 `vocab-gloss/v1` 每批 40 个补释义（AI 判定不是词则丢弃），未配置 AI 时保留未释义条目、之后可再补；每个项目一本课程词书，重复提取只合并不重复。
+- **导出**（`formatExport`）：Anki（`#separator:tab` / `#html:true` / `#tags column:3`，背面音标 + 释义 + 例句）、CSV（带 BOM，`word,phonetic,meaning,example,source`）、纯单词 TXT；可导出任意词书 / 已学 / 易错词。导入：`parseWordList`（每行单词，或 制表符 / 逗号 / 冒号 / 空格+中文 分隔的释义）。
+- 词根词缀提示（`rootHints`）只作联想，至少留 3 个字母的词干才提示。朗读用浏览器 `speechSynthesis`（`shared/lib/speech.ts`），不可用时听写模式退回拼写。
+
 ## 7. 路由与目录
 
 | 路由 | 页面 |
@@ -326,6 +339,7 @@ Topic
 | `/projects/:id/quiz` `/quiz/:quizId` `/result` | 测验 |
 | `/projects/:id/mastery` `/mistakes` | 掌握度 / 错题本 |
 | `/projects/:id/cards` | 复习卡片（间隔重复） |
+| `/vocab` | 背单词（全局，侧栏「单词」） |
 | `/projects/:id/documents/:did` | 文档详情 |
 | `/settings` | AI 设置 / 数据管理 |
 
@@ -404,6 +418,7 @@ docs/             architecture.md
 | 7y | 大教材：取消 100 MB 上传上限（按剩余存储空间检查，单文件 2 GB）、课程分析按章节分部分读完整本教材并合并、流式导出 | 已交付（v0.5.3） |
 | 7z | 测验修复：分批出题与补题、题型按题目自身对应、全书取材、出处无摘录时显示该页原文、按钮防整页翻译 | 已交付（v0.5.4） |
 | 7z.1 | 测验质量：选项本地随机顺序、干扰项规则与可疑题丢弃（`quiz-generator/v6`）、混合复习按主题分组、题目语言偏好（默认中文附英文术语）、难度本地化、设置页版本号 | 已交付（v0.5.5） |
+| 7z.2 | 背单词板块：考试词书（ECDICT）、FSRS 调度、认读 / 拼写 / 填空 / 听写、课程词汇（AI 补释义）、易错词、统计、导入、导出（Anki / CSV / TXT） | 已实现（未发布） |
 | 8 | Dashboard 强化 | 部分交付（v0.2.8：视觉与交互函数图；v0.3.1：构图与动效打磨；指标类未做） |
 | 9 | PWA · a11y · 导入导出打磨 | 未开始 |
 
@@ -482,3 +497,4 @@ docs/             architecture.md
 - 医学图为教学模型：动作电位为示意形状；氧解离曲线用 Hill 方程近似；压力–容积环为分段示意；药动学只做一室模型（无非线性消除）；酸碱判读只覆盖单纯性紊乱与一层合并紊乱提示（不含阴离子间隙 / 三重紊乱）；神经通路最多 4 级神经元、一次交叉。不画器官 / 切片 / 影像，这类交给课程原图或联网参考图片。
 - 复习卡片计入掌握度，但对错题判定提出异议后的 `MasteryService.rebuild()` 只按测验作答重算，会丢掉该知识点此前的卡片观测（之后的复习会继续计入）。
 - 冷启动时外观偏好（明暗 / 配色）要等 `UserProfile` 读出后才应用，可能有一帧默认配色。
+- 背单词的词典数据（`public/vocab/`，约 1.9 MB）按需 fetch；项目**没有 Service Worker**，不保证离线可用。课程词汇的提取是纯本地启发式（≥4 字母、去停用词与常用词），可能漏掉短术语或收进少量普通词。

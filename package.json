@@ -43,6 +43,7 @@
     "smiles-drawer": "^2.4.1",
     "tailwind-merge": "^2.5.4",
     "tesseract.js": "^7.0.0",
+    "ts-fsrs": "^5.4.2",
     "zustand": "^5.0.1"
   },
   "devDependencies": {

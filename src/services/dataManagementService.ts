@@ -11,6 +11,7 @@ import { TutorSessionRepository } from '@/entities/tutorSession/repository'
 import { VisualSourceRepository } from '@/entities/visualSource/repository'
 import { ReferenceImageRepository } from '@/entities/referenceImage/repository'
 import { ReviewCardRepository } from '@/entities/reviewCard/repository'
+import { VocabRepository } from '@/entities/vocab/repository'
 import { CourseContextRepository } from '@/entities/courseContext/repository'
 import { CourseStructureRepository } from '@/entities/courseStructure/repository'
 import { TranslationRepository } from '@/entities/translation/repository'
@@ -195,6 +196,7 @@ export class DataManagementService {
       'visualSources', 'courseContexts', 'courseStructures', 'courseStructureNodes',
       'practiceSets', 'practiceQuestions', 'practiceAttempts',
       'homeworkSets', 'homeworkQuestions', 'slideLessons', 'translations', 'reviewCards',
+      'vocabCards', 'vocabBooks', 'vocabEntries', 'vocabReviews',
       'questions', 'questionAttempts', 'quizzes', 'knowledgeMastery', 'mistakes',
       'inviteKeys', 'user', 'settings',
     ] as const
@@ -236,6 +238,7 @@ export class DataManagementService {
     const visualRepo = new VisualSourceRepository(this.db)
     const referenceRepo = new ReferenceImageRepository(this.db)
     const cardRepo = new ReviewCardRepository(this.db)
+    const vocabRepo = new VocabRepository(this.db)
     const contextRepo = new CourseContextRepository(this.db)
     const structureRepo = new CourseStructureRepository(this.db)
     const practiceRepo = new PracticeRepository(this.db)
@@ -249,6 +252,8 @@ export class DataManagementService {
       await visualRepo.deleteByProject(projectId)
       await referenceRepo.deleteByProject(projectId)
       await cardRepo.deleteByProject(projectId)
+      // The course's word book goes; word progress is global and stays.
+      await vocabRepo.deleteByProject(projectId)
       await contextRepo.deleteByProject(projectId)
       await structureRepo.deleteByProject(projectId)
       await this.db.table('chunks').where('projectId').equals(projectId).delete()

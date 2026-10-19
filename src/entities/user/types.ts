@@ -53,6 +53,10 @@ export interface UserProfile {
   uiLanguage?: UILanguage
   /** Language of generated questions; absent means `DEFAULT_QUESTION_LANGUAGE`. */
   questionLanguage?: QuestionLanguage
+  /** Vocabulary: current book, new words per day, how reviews are practised. */
+  vocabBookId?: string
+  vocabDailyNew?: number
+  vocabReviewMode?: 'auto' | 'recognize' | 'spell' | 'dictation'
   unlockedAt?: number
   inviteCode?: string
 }
@@ -64,4 +68,7 @@ export interface UpdateUserInput {
   colorTheme?: UserColorTheme
   uiLanguage?: UILanguage
   questionLanguage?: QuestionLanguage
+  vocabBookId?: string
+  vocabDailyNew?: number
+  vocabReviewMode?: 'auto' | 'recognize' | 'spell' | 'dictation'
 }

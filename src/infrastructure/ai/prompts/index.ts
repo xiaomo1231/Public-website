@@ -28,6 +28,7 @@ import * as RubricExtractorV1 from './rubric-extractor/v1'
 import * as ReferenceImageQueryV2 from './reference-image-query/v2'
 import * as ReferenceImageCheckV1 from './reference-image-check/v1'
 import * as FillBlankCheckV1 from './fill-blank-check/v1'
+import * as VocabGlossV1 from './vocab-gloss/v1'
 
 export const PROMPT_VERSIONS = {
   documentAnalyzer: 'v2',
@@ -54,6 +55,7 @@ export const PROMPT_VERSIONS = {
   referenceImageQuery: 'v2',
   referenceImageCheck: 'v1',
   fillBlankCheck: 'v1',
+  vocabGloss: 'v1',
 } as const
 
 export const prompts = {
@@ -82,6 +84,7 @@ export const prompts = {
   referenceImageQuery: ReferenceImageQueryV2,
   referenceImageCheck: ReferenceImageCheckV1,
   fillBlankCheck: FillBlankCheckV1,
+  vocabGloss: VocabGlossV1,
 } as const
 
 export type {
