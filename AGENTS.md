@@ -19,7 +19,7 @@
 
 **这不是"AI PDF 总结工具"。** 教学以题目为主要载体，而不是长篇总结。
 
-当前版本：**V0.5.5（0.5.5）**。
+当前版本：**V0.6.0（0.6.0）**。
 
 ---
 
@@ -418,9 +418,11 @@ docs/             architecture.md
 | 7y | 大教材：取消 100 MB 上传上限（按剩余存储空间检查，单文件 2 GB）、课程分析按章节分部分读完整本教材并合并、流式导出 | 已交付（v0.5.3） |
 | 7z | 测验修复：分批出题与补题、题型按题目自身对应、全书取材、出处无摘录时显示该页原文、按钮防整页翻译 | 已交付（v0.5.4） |
 | 7z.1 | 测验质量：选项本地随机顺序、干扰项规则与可疑题丢弃（`quiz-generator/v6`）、混合复习按主题分组、题目语言偏好（默认中文附英文术语）、难度本地化、设置页版本号 | 已交付（v0.5.5） |
-| 7z.2 | 背单词板块：考试词书（ECDICT）、FSRS 调度、认读 / 拼写 / 填空 / 听写、课程词汇（AI 补释义）、易错词、统计、导入、导出（Anki / CSV / TXT） | 已实现（未发布） |
+| 7z.2 | 背单词板块：考试词书（ECDICT）、FSRS 调度、认读 / 拼写 / 填空 / 听写、课程词汇（AI 补释义）、易错词、统计、导入、导出（Anki / CSV / TXT） | 已交付（v0.6.0） |
 | 8 | Dashboard 强化 | 部分交付（v0.2.8：视觉与交互函数图；v0.3.1：构图与动效打磨；指标类未做） |
 | 9 | PWA · a11y · 导入导出打磨 | 未开始 |
+
+**V0.6.0 已提交并发布**（tag `v0.6.0`，两个远程仓库各一份 Release + 源码压缩包）。本版新增**背单词板块**（`/vocab`，见 §6「背单词」）：ECDICT 考试词书（`scripts/build-vocab.mjs` → `public/vocab/`）、`ts-fsrs` 调度、认读 / 拼写 / 填空 / 听写、课程词汇（`CourseVocabService` + `vocab-gloss/v1`）、易错词、统计、导入、导出（Anki / CSV / TXT）。新增 Dexie **v16** 四张表 `vocabCards` / `vocabBooks` / `vocabEntries` / `vocabReviews`（单词进度全局，不带 projectId）；`UserProfile` 新增 `vocabBookId` / `vocabDailyNew` / `vocabReviewMode`。
 
 **V0.5.5 已提交并发布**（tag `v0.5.5`，两个远程仓库各一份 Release + 源码压缩包）。本版包含：**选项本地随机顺序**（测验三种选择题型 + AI 导师单选，`shared/lib/shuffle.ts`）；**`quiz-generator/v6`**（`zh_terms` 语言、干扰项规则、禁止“根据讲义”式题干）与本地可疑题丢弃（正确项过长 / 选项重复）；**混合复习按主题分组**（`planGroups`，每批只给本批主题的知识点与来源）；**题目语言偏好** `UserProfile.questionLanguage`（默认 `zh_terms`，测验 / 错题分析 / 交互导师共用）；难度本地化；设置页版本号（取自 package.json）。未新增 Dexie 表 / 索引。
 
