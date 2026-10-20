@@ -146,24 +146,22 @@ export class MistakeAnalysisService {
 export function normalizeAnalysis(raw: Partial<MistakeAnalyzerOutput> | null | undefined): MistakeAnalysis {
   const type = (raw?.mistakeType ?? 'unknown') as MistakeType
   const safeType: MistakeType = MISTAKE_TYPES.includes(type) ? type : 'unknown'
-  const cause = typeof raw?.possibleCause === 'string' && raw.possibleCause.trim()
-    ? raw.possibleCause.trim()
-    : fallbackCause()
-  const normalizedCause = /careless|lazy|sloppy|stupid/i.test(cause)
-    ? t('mistakeAnalysis.neutralCause', {
-        cause: cause.replace(/careless|lazy|sloppy|stupid/gi, 'unclear'),
-      })
-    : cause
+  const cause =
+    typeof raw?.possibleCause === 'string' && raw.possibleCause.trim() ? raw.possibleCause.trim() : fallbackCause()
 
   return {
     whereWrong: str(raw?.whereWrong, t('mistakeAnalysis.fallbackWhereWrong')),
     firstError: str(raw?.firstError, t('mistakeAnalysis.fallbackFirstError')),
     whyWrong: str(raw?.whyWrong, t('mistakeAnalysis.fallbackWhyWrong')),
     correctApproach: str(raw?.correctApproach, t('mistakeAnalysis.fallbackCorrectApproach')),
-    possibleCause: normalizedCause,
+    // The cause is the field most prone to blame: any judgemental wording
+    // replaces it outright rather than being patched sentence by sentence.
+    possibleCause: JUDGEMENTAL.test(cause) ? t('mistakeAnalysis.neutralCause') : cause,
     mistakeType: safeType,
     reviewKnowledgePoints: Array.isArray(raw?.reviewKnowledgePoints)
-      ? raw!.reviewKnowledgePoints.filter((k): k is string => typeof k === 'string' && k.trim().length > 0)
+      ? raw!.reviewKnowledgePoints.filter(
+          (k): k is string => typeof k === 'string' && k.trim().length > 0 && !JUDGEMENTAL.test(k),
+        )
       : [],
     shouldPracticeMore: Boolean(raw?.shouldPracticeMore),
     ...(raw?.similarExample && typeof raw.similarExample.prompt === 'string' && raw.similarExample.prompt.trim()
@@ -172,7 +170,7 @@ export function normalizeAnalysis(raw: Partial<MistakeAnalyzerOutput> | null | u
             prompt: raw.similarExample.prompt,
             answer: typeof raw.similarExample.answer === 'string' ? raw.similarExample.answer : '',
             ...(typeof raw.similarExample.explanation === 'string'
-              ? { explanation: raw.similarExample.explanation }
+              ? { explanation: soften(raw.similarExample.explanation) }
               : {}),
           },
         }
@@ -183,6 +181,32 @@ export function normalizeAnalysis(raw: Partial<MistakeAnalyzerOutput> | null | u
   }
 }
 
+/** Wording that blames the student (never "careless"), English and Chinese. */
+const JUDGEMENTAL =
+  /careless\w*|lazy(?!\s*(?:evaluation|loading|initiali[sz]ation|propagation|deletion))|laziness|sloppy|stupid|inattentive|粗心|马虎|不认真|不仔细|懒(?!加载|惰求值|求值|汉式)/i
+
+/**
+ * Replace every sentence that blames the student with one neutral, localized
+ * sentence, so no judgemental word survives in any field.
+ */
+export function soften(text: string): string {
+  if (!JUDGEMENTAL.test(text)) return text
+  // A period ends a sentence only before a space or the end ("3.14" stays whole).
+  const sentences = text.match(/[\s\S]+?(?:[。！？!?]+|\.+(?=\s|$)|$)/g) ?? [text]
+  const out: string[] = []
+  let replaced = false
+  for (const sentence of sentences) {
+    if (!JUDGEMENTAL.test(sentence)) {
+      out.push(sentence)
+    } else if (!replaced) {
+      replaced = true
+      const lead = sentence.match(/^\s*/)?.[0] ?? ''
+      out.push(`${lead}${t('mistakeAnalysis.neutralSentence')}`)
+    }
+  }
+  return out.join('').trim()
+}
+
 function str(value: unknown, fallback: string): string {
-  return typeof value === 'string' && value.trim() ? value.trim() : fallback
+  return typeof value === 'string' && value.trim() ? soften(value.trim()) : fallback
 }

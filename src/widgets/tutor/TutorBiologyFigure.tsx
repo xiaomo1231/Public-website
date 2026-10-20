@@ -5,6 +5,7 @@ import {
   isDominant,
   pedigreeLayout,
   punnettSquare,
+  dominanceOrderOf,
   ratioText,
   romanNumeral,
   translateDna,
@@ -135,7 +136,7 @@ export function TutorPunnettFigure({ visualization, t }: { visualization: Punnet
   const mother = genotypePairs(visualization.mother)
   const father = genotypePairs(visualization.father)
   if (!mother || !father) return null
-  const result = punnettSquare(mother, father, visualization.dominance)
+  const result = punnettSquare(mother, father, visualization.dominance, dominanceOrderOf(visualization.traits))
   const classIndex = new Map(result.phenotypes.map((entry, index) => [entry.key, index]))
 
   return (

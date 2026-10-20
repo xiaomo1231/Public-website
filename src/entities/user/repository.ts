@@ -73,6 +73,21 @@ export class UserRepository {
     return next
   }
 
+  /**
+   * Lock the app: forget only the unlock state (when and with which invite
+   * code). Appearance, name, languages and vocab settings are preferences and
+   * survive a lock.
+   */
+  async clearUnlock(): Promise<void> {
+    await this.db.transaction('rw', this.db.user, async () => {
+      const current = await this.db.user.get('singleton')
+      if (!current) return
+      const { unlockedAt: _unlockedAt, inviteCode: _inviteCode, ...rest } = current
+      await this.db.user.put(rest)
+    })
+    logger.info('App locked')
+  }
+
   async reset(): Promise<void> {
     await this.db.user.delete('singleton')
   }

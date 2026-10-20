@@ -24,7 +24,7 @@ interface ToastActions {
 
 export type ToastStore = ToastState & ToastActions
 
-export const useToastStore = create<ToastStore>((set, get) => ({
+export const useToastStore = create<ToastStore>((set) => ({
   toasts: [],
 
   push(toast) {
@@ -41,9 +41,8 @@ export const useToastStore = create<ToastStore>((set, get) => ({
       if (next.length > TOAST_LIMIT) next.shift()
       return { toasts: next }
     })
-    if (full.duration && full.duration > 0) {
-      setTimeout(() => get().dismiss(id), full.duration)
-    }
+    // No timer here: the Radix toast owns `duration` (pausing while hovered
+    // or focused) and calls dismiss() through onOpenChange(false).
     return id
   },
 

@@ -594,3 +594,54 @@
     transform: none !important;
   }
 }
+
+/* Homework walkthrough: saved passages and the passage a window jumps back to. */
+::highlight(walkthrough-note) {
+  background-color: hsl(var(--primary) / 0.12);
+  text-decoration: underline;
+  text-decoration-color: hsl(var(--primary) / 0.55);
+  text-decoration-thickness: 2px;
+}
+
+::highlight(walkthrough-flash) {
+  background-color: hsl(var(--primary) / 0.3);
+}
+
+/* Printing the walkthrough: only the print copy is shown, in black on white. */
+#walkthrough-print {
+  display: none;
+}
+
+@media print {
+  body.printing-walkthrough {
+    background: #fff !important;
+  }
+
+  body.printing-walkthrough > *:not(#walkthrough-print) {
+    display: none !important;
+  }
+
+  body.printing-walkthrough > #walkthrough-print {
+    display: block !important;
+  }
+
+  #walkthrough-print,
+  #walkthrough-print * {
+    color: #000 !important;
+    background: transparent !important;
+    border-color: #999 !important;
+    box-shadow: none !important;
+  }
+
+  #walkthrough-print section {
+    break-inside: auto;
+  }
+
+  #walkthrough-print h2 {
+    break-after: avoid;
+  }
+
+  #walkthrough-print .katex-display {
+    break-inside: avoid;
+  }
+}

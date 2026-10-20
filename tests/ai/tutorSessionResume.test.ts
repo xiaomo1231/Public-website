@@ -139,6 +139,28 @@ describe('Interactive Tutor session resume', () => {
     expect(chinese.session.id).not.toBe(english.session.id)
   })
 
+  it('refreshes updatedAt on every turn so the latest session sorts first', async () => {
+    const { ai } = stubAI()
+    const tutor = new TutorService({ ai, db, projects })
+    let now = 1_000_000
+    const spy = vi.spyOn(Date, 'now').mockImplementation(() => now)
+    try {
+      const { session } = await tutor.findOrStartSession(input())
+      expect(session.updatedAt).toBe(1_000_000)
+      now = 2_000_000
+      await tutor.beginTopic(session.id)
+      expect((await tutor.getSession(session.id)).updatedAt).toBe(2_000_000)
+      now = 3_000_000
+      await tutor.submitAnswer(session.id, 'the intersection')
+      expect((await tutor.getSession(session.id)).updatedAt).toBe(3_000_000)
+      now = 4_000_000
+      await tutor.askQuestion(session.id)
+      expect((await tutor.getSession(session.id)).updatedAt).toBe(4_000_000)
+    } finally {
+      spy.mockRestore()
+    }
+  })
+
   it('does not resume an abandoned conversation', async () => {
     const { ai } = stubAI()
     const tutor = new TutorService({ ai, db, projects })

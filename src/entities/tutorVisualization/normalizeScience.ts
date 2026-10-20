@@ -27,6 +27,8 @@ import {
   MAX_DNA_LENGTH,
   alleleTokens,
   crossProblem,
+  dominanceOrderOf,
+  unrankedGenes,
   geneOf,
   genotypePairs,
   pedigreeGenerations,
@@ -192,6 +194,11 @@ function normalizePunnett(draft: VisualizationDraft, base: CommonBase): Normaliz
       ...(intermediate ? { intermediate } : {}),
       ...(alleles.length ? { alleles } : {}),
     })
+  }
+  // A lower-case allelic series (c^{ch} / c^h / c) cannot be ranked by letter
+  // case; without the lesson's dominance order the phenotypes would be invented.
+  if (unrankedGenes(mother, father, dominance, dominanceOrderOf(traits)).length > 0) {
+    return { ok: false, reason: 'genotype-dominance-unknown' }
   }
   const canonical = (pairs: Array<[string, string]>) => pairs.map(([a, b]) => `${a}${b}`).join('')
   const value: PunnettVisualization = {

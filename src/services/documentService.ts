@@ -166,6 +166,8 @@ export class DocumentService {
         this.db.courseStructureNodes,
         this.db.homeworkSets,
         this.db.homeworkQuestions,
+        this.db.homeworkWalkthroughs,
+        this.db.walkthroughNotes,
         this.db.slideLessons,
         this.db.practiceSets,
         this.db.practiceQuestions,
@@ -246,6 +248,8 @@ export class DocumentService {
       const questions = await this.homework.listQuestions(set.id)
       homeworkQuestions += questions.length
       homeworkAnswers += questions.filter((question) => hasStudentWork(question)).length
+      // Questions saved about the walkthrough are student work too.
+      homeworkAnswers += await this.db.walkthroughNotes.where('[setId+updatedAt]').between([set.id, -Infinity], [set.id, Infinity]).count()
     }
 
     let practiceQuestions = 0

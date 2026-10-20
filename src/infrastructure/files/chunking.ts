@@ -53,7 +53,9 @@ function pack(lines: ChunkLine[]): ChunkLine[] {
       if ((acc + sentence).length > MAX_CHUNK_CHARS && acc) {
         current.text = acc.trim()
         final.push(current)
-        acc = sentence.slice(-OVERLAP_CHARS) // tiny overlap
+        // A tiny overlap from the chunk just closed, then the WHOLE sentence:
+        // keeping only the sentence's tail would lose the rest of it.
+        acc = `${acc.slice(-OVERLAP_CHARS).trimStart()} ${sentence}`
         current = { ...piece, text: '' }
       } else {
         acc += (acc ? ' ' : '') + sentence

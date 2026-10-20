@@ -67,6 +67,9 @@ export function useTutorLesson(input: UseTutorLessonInput): UseTutorLessonState 
     setStreaming(false)
     setError(undefined)
     setRefreshError(undefined)
+    // A regenerate for the previous topic may still be running; its result is
+    // discarded by the request id, so its spinner must not stick either.
+    setRegenerating(false)
 
     void (async () => {
       try {
@@ -115,10 +118,15 @@ export function useTutorLesson(input: UseTutorLessonInput): UseTutorLessonState 
   }, [projectId, topicId, language, topicName, topicDescription])
 
   const regenerate = useCallback(async () => {
+    // Same guard as the load effect: a regenerate for topic A must never land
+    // on topic B if the student navigated while it was running.
+    const id = ++requestId.current
+    const isCurrent = () => id === requestId.current
     setRegenerating(true)
     setRefreshError(undefined)
     try {
       const services = await buildAIServices()
+      if (!isCurrent()) return
       if (!services) {
         setError(t('tutor.noProvider'))
         setStatus('error')
@@ -131,15 +139,18 @@ export function useTutorLesson(input: UseTutorLessonInput): UseTutorLessonState 
         topicDescription,
         language,
       })
+      if (!isCurrent()) return
       setLesson(result.lesson)
       setFromCache(false)
+      setStreaming(false)
       setError(undefined)
       setStatus('ready')
     } catch (err) {
+      if (!isCurrent()) return
       // Keep whatever is on screen; only report that the refresh failed.
       setRefreshError(friendlyTutorError(err))
     } finally {
-      setRegenerating(false)
+      if (isCurrent()) setRegenerating(false)
     }
   }, [projectId, topicId, topicName, topicDescription, language, t])
 

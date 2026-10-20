@@ -40,6 +40,21 @@ describe('membrane potentials', () => {
     expect(vm).toBeGreaterThan(-80)
     expect(vm).toBeLessThan(-60)
   })
+
+  it('takes K+ as the reference permeability 1 when only the others are given', () => {
+    const implicit = goldman([
+      { ion: 'K+', inside: 140, outside: 4 },
+      { ion: 'Na+', inside: 12, outside: 145, permeability: 0.04 },
+    ])!
+    const explicit = goldman([
+      { ion: 'K+', inside: 140, outside: 4, permeability: 1 },
+      { ion: 'Na+', inside: 12, outside: 145, permeability: 0.04 },
+    ])!
+    near(implicit, explicit, 1e-9)
+    expect(implicit).toBeLessThan(-60)
+    // No permeabilities at all: nothing to weigh, no GHK value.
+    expect(goldman([{ ion: 'K+', inside: 140, outside: 4 }, { ion: 'Na+', inside: 12, outside: 145 }])).toBeNull()
+  })
 })
 
 describe('oxygen and circulation', () => {

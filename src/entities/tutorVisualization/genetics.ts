@@ -14,7 +14,16 @@
  * `c^{ch}`), an X-linked allele (`X^A`), or `Y`. An allele is dominant when
  * its base letter (the superscript, for X alleles) is upper-case; two
  * different dominant alleles of one gene are both expressed (codominance).
+ *
+ * Letter case cannot rank a lower-case allelic series (`c^{ch}`, `c^h`, `c`).
+ * Such heterozygotes need an explicit dominance order (most dominant first,
+ * taken from the lesson's `traits[].alleles` list); without one a
+ * complete-dominance cross containing them is rejected rather than shown as an
+ * invented blend.
  */
+
+/** Per gene letter (`c`, `b` for X^B/X^b), alleles from most to least dominant. */
+export type DominanceOrder = Record<string, string[]>
 
 /** Genes per genotype the square supports (2 → a 4 × 4 square). */
 export const MAX_PUNNETT_GENES = 2
@@ -139,7 +148,11 @@ function combineAlleles(egg: string[], sperm: string[]): Array<[string, string]>
  * Phenotype class of one genotype: per gene the expressed alleles (or
  * `intermediate`), prefixed with the sex when a gene is X-linked.
  */
-export function phenotypeOf(pairs: Array<[string, string]>, dominance: Dominance): string {
+export function phenotypeOf(
+  pairs: Array<[string, string]>,
+  dominance: Dominance,
+  order: DominanceOrder = {},
+): string {
   const sex = sexOf(pairs)
   const parts = pairs.map((pair) => {
     const gene = geneOf(pair)
@@ -147,6 +160,12 @@ export function phenotypeOf(pairs: Array<[string, string]>, dominance: Dominance
     if (b === 'Y' && a.startsWith('X^')) return `${gene}:${a}`
     const dominant = [...new Set(pair.filter(isDominant))]
     let expressed: string[]
+    if (dominant.length === 0 && a !== b && dominance === 'complete') {
+      // Two different lower-case alleles: only an explicit order can rank them.
+      const top = rankedTop(pair, order[geneLetter(pair)])
+      expressed = top ? [top] : [...new Set(pair)].sort()
+      return `${gene}:${expressed.join('+')}`
+    }
     if (dominant.length >= 2) expressed = dominant.sort()
     else if (dominant.length === 1 && a !== b && dominance === 'incomplete') return `${gene}:intermediate`
     else if (dominant.length === 1 && a !== b && dominance === 'codominant') expressed = [a, b]
@@ -155,6 +174,59 @@ export function phenotypeOf(pairs: Array<[string, string]>, dominance: Dominance
     return `${gene}:${expressed.join('+')}`
   })
   return `${sex ? `${sex}|` : ''}${parts.join(' ')}`
+}
+
+/** Dominance order per gene from the lesson's allele lists (listed most dominant first). */
+export function dominanceOrderOf(
+  traits: ReadonlyArray<{ gene: string; alleles?: ReadonlyArray<{ allele: string }> }>,
+): DominanceOrder {
+  const order: DominanceOrder = {}
+  for (const trait of traits) {
+    if (trait.alleles?.length) order[trait.gene] = trait.alleles.map((entry) => entry.allele)
+  }
+  return order
+}
+
+/** The gene letter traits use: `c` for c^{ch}/c, `b` for X^B/X^b. */
+export function geneLetter(pair: [string, string]): string {
+  return geneOf(pair).replace(/^X:/, '')
+}
+
+/** The more dominant allele of a pair by an explicit order, or null when it cannot be ranked. */
+function rankedTop(pair: [string, string], order: string[] | undefined): string | null {
+  if (!order) return null
+  const ia = order.indexOf(pair[0])
+  const ib = order.indexOf(pair[1])
+  if (ia < 0 || ib < 0) return null
+  return ia <= ib ? pair[0] : pair[1]
+}
+
+/**
+ * Genes whose offspring include a heterozygote of two different lower-case
+ * alleles that the order cannot rank, under complete dominance. Empty when
+ * every phenotype is well defined.
+ */
+export function unrankedGenes(
+  mother: Array<[string, string]>,
+  fatherInput: Array<[string, string]>,
+  dominance: Dominance,
+  order: DominanceOrder = {},
+): string[] {
+  if (dominance !== 'complete') return []
+  const father = alignGenes(mother, fatherInput) ?? fatherInput
+  const out = new Set<string>()
+  mother.forEach((pair, i) => {
+    const other = father[i]
+    if (!other) return
+    for (const x of pair) {
+      for (const y of other) {
+        if (x === y || x === 'Y' || y === 'Y' || isDominant(x) || isDominant(y)) continue
+        const letter = geneLetter(pair)
+        if (!rankedTop([x, y], order[letter])) out.add(letter)
+      }
+    }
+  })
+  return [...out]
 }
 
 export interface PunnettCell {
@@ -205,6 +277,7 @@ export function punnettSquare(
   mother: Array<[string, string]>,
   fatherInput: Array<[string, string]>,
   dominance: Dominance,
+  order: DominanceOrder = {},
 ): PunnettResult {
   const father = alignGenes(mother, fatherInput) ?? fatherInput
   const eggs = mother.reduce<string[][]>((acc, [a, b]) => acc.flatMap((p) => [[...p, a], [...p, b]]), [[]])
@@ -215,7 +288,7 @@ export function punnettSquare(
       const sex = sexOf(pairs)
       return {
         genotype: pairs.map(([a, b]) => `${a}${b}`).join(''),
-        phenotype: phenotypeOf(pairs, dominance),
+        phenotype: phenotypeOf(pairs, dominance, order),
         ...(sex ? { sex } : {}),
       }
     }),

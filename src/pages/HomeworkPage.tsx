@@ -20,6 +20,7 @@ import { PageContainer, PageContent, PageHeader } from '@/shared/ui/Page'
 import { RichText } from '@/shared/ui/RichText'
 import { formatHomeworkQuestion } from '@/entities/homework/formatQuestion'
 import { HomeworkQuestionView } from '@/widgets/homework/HomeworkQuestionView'
+import { HomeworkWalkthroughPanel } from '@/widgets/homework/walkthrough/HomeworkWalkthroughPanel'
 import { ProjectFlowNav } from '@/widgets/project/ProjectFlowNav'
 import { useHomeworkService } from '@/features/homework/useHomeworkService'
 import { friendlyAIError } from '@/shared/lib/aiErrors'
@@ -50,6 +51,8 @@ export function HomeworkPage(): JSX.Element {
   const [error, setError] = useState<string | null>(null)
   /** Practice (answer hidden) or review (professor answer shown). */
   const [mode, setMode] = useState<'practice' | 'review'>('practice')
+  /** One question at a time, or the whole assignment's walkthrough. */
+  const [view, setView] = useState<'questions' | 'walkthrough'>('questions')
 
   const load = useCallback(async () => {
     if (!service || !assignmentId) return
@@ -58,13 +61,16 @@ export function HomeworkPage(): JSX.Element {
       service.listQuestions(assignmentId),
       service.listRetiredQuestions(assignmentId),
     ])
-    setSet(nextSet ?? null)
-    setQuestions(nextQuestions)
-    setRetired(nextRetired)
+    // An assignment from another course is "not found" from this one.
+    const owned = nextSet && nextSet.projectId === projectId ? nextSet : null
+    const ownedQuestions = owned ? nextQuestions : []
+    setSet(owned)
+    setQuestions(ownedQuestions)
+    setRetired(owned ? nextRetired : [])
     setActiveId((prev) =>
-      prev && nextQuestions.some((q) => q.id === prev) ? prev : (nextQuestions[0]?.id ?? null),
+      prev && ownedQuestions.some((q) => q.id === prev) ? prev : (ownedQuestions[0]?.id ?? null),
     )
-  }, [service, assignmentId])
+  }, [service, assignmentId, projectId])
 
   useEffect(() => {
     let alive = true
@@ -142,27 +148,43 @@ export function HomeworkPage(): JSX.Element {
         nav={<ProjectFlowNav projectId={projectId} active="homework" />}
         actions={
           <div className="flex flex-wrap items-center gap-2">
-            {set?.answerDocumentId && (
+            {set?.status === 'ready' && questions.length > 0 && (
               <div
                 role="group"
                 aria-label={t('homework.mode.label')}
                 className="inline-flex items-center gap-1 rounded-full border border-border/70 bg-muted/30 p-1"
               >
                 <Button
-                  variant={mode === 'practice' ? 'default' : 'ghost'}
+                  variant={view === 'questions' && mode === 'practice' ? 'default' : 'ghost'}
                   size="sm"
-                  aria-pressed={mode === 'practice'}
-                  onClick={() => setMode('practice')}
+                  aria-pressed={view === 'questions' && mode === 'practice'}
+                  onClick={() => {
+                    setView('questions')
+                    setMode('practice')
+                  }}
                 >
                   {t('homework.mode.practice')}
                 </Button>
+                {set.answerDocumentId && (
+                  <Button
+                    variant={view === 'questions' && mode === 'review' ? 'default' : 'ghost'}
+                    size="sm"
+                    aria-pressed={view === 'questions' && mode === 'review'}
+                    onClick={() => {
+                      setView('questions')
+                      setMode('review')
+                    }}
+                  >
+                    {t('homework.mode.review')}
+                  </Button>
+                )}
                 <Button
-                  variant={mode === 'review' ? 'default' : 'ghost'}
+                  variant={view === 'walkthrough' ? 'default' : 'ghost'}
                   size="sm"
-                  aria-pressed={mode === 'review'}
-                  onClick={() => setMode('review')}
+                  aria-pressed={view === 'walkthrough'}
+                  onClick={() => setView('walkthrough')}
                 >
-                  {t('homework.mode.review')}
+                  {t('homework.mode.walkthrough')}
                 </Button>
               </div>
             )}
@@ -187,10 +209,20 @@ export function HomeworkPage(): JSX.Element {
         ) : error && !set ? (
           <ErrorState title={t('homework.failedTitle')} description={error} />
         ) : !set ? (
+          // The assignment id is unknown (deleted, mistyped, or from another
+          // course) — this is not an empty homework list.
           <EmptyState
             icon={<ClipboardList className="h-10 w-10" />}
-            title={t('homework.empty')}
-            description={t('homework.emptyHint')}
+            title={t('homework.assignmentNotFound')}
+            description={t('homework.assignmentNotFoundHint')}
+            action={
+              <Button asChild>
+                <Link to={`/projects/${projectId}/homework`}>
+                  <ArrowLeft className="h-4 w-4" />
+                  {t('homework.back')}
+                </Link>
+              </Button>
+            }
           />
         ) : set.status === 'failed' ? (
           <ErrorState
@@ -239,7 +271,9 @@ export function HomeworkPage(): JSX.Element {
               </Card>
             )}
 
-            {questions.length === 0 ? (
+            {view === 'walkthrough' && questions.length > 0 ? (
+              <HomeworkWalkthroughPanel set={set} mode={mode} />
+            ) : questions.length === 0 ? (
               <Card>
                 <CardContent className="flex items-center gap-2 p-6 text-sm text-muted-foreground">
                   <Loader2 className="h-4 w-4 animate-spin" aria-hidden />

@@ -8,7 +8,7 @@ import { LoadingState } from '@/shared/ui/LoadingState'
 import { Progress } from '@/shared/ui/Progress'
 import { TruncatedText } from '@/shared/ui/TruncatedText'
 import { toast } from '@/features/toast/toastStore'
-import { buildAIServices } from '@/services/aiServices'
+import { CourseContentService } from '@/services/courseContentService'
 import type { CourseAnalysis, Formula, Topic, CourseSymbol } from '@/entities/courseAnalysis/types'
 import { CourseContentRepository } from '@/entities/courseContent/repository'
 import type { CourseContentFreshness } from '@/entities/courseContent/types'
@@ -79,22 +79,30 @@ export function CourseAnalysisPanel({
     setProgress(0)
     setMessage(t('analysis.preparing'))
     try {
-      const bundle = await buildAIServices()
-      if (!bundle) {
-        toast({
-          variant: 'error',
-          title: t('analysis.noProvider'),
-          description: t('analysis.noProviderHint'),
-        })
-        setRunning(false)
-        return
-      }
-      await bundle.documentAnalysis.analyzeProject(projectId, {
+      // Through the content service: shares any run already in flight for this
+      // project and commits practice-question relinks in the same transaction.
+      const result = await new CourseContentService().ensureAnalyzed(projectId, {
+        force: true,
         onProgress: (p) => {
           setProgress(p.progress)
           setMessage(p.message)
         },
       })
+      if (result.reason === 'no-provider') {
+        toast({
+          variant: 'error',
+          title: t('analysis.noProvider'),
+          description: t('analysis.noProviderHint'),
+        })
+        return
+      }
+      if (result.reason === 'no-documents') {
+        toast({ variant: 'error', title: t('analysis.failed'), description: t('errors.noProcessedDocuments') })
+        return
+      }
+      if (result.reason === 'failed') {
+        throw result.cause ?? new Error(result.error ?? t('errors.analysisFailed'))
+      }
       const [a, ts, fs, ss, fr] = await Promise.all([
         content.getAnalysis(projectId),
         content.getTopics(projectId),

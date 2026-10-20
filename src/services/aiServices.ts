@@ -7,6 +7,7 @@ import { TutorLessonService } from './tutorLessonService'
 import { TutorVisualizationService } from './tutorVisualizationService'
 import { TranslationService } from './translationService'
 import { ContextualTutorService } from './contextualTutorService'
+import { HomeworkWalkthroughService } from './homeworkWalkthroughService'
 import { QuizService } from './quizService'
 import { MasteryService } from './masteryService'
 import { MistakeService } from './mistakeService'
@@ -124,6 +125,16 @@ export async function buildHomeworkService(): Promise<HomeworkService> {
   const settings = await new SettingsService().get()
   const ai = settings.apiKey.trim() ? new AIService({ config: settings }) : null
   return new HomeworkService({ ai, db: getDb() })
+}
+
+/**
+ * The walkthrough reads stored sections without an AI; only writing sections
+ * needs one, and then fails with an actionable message.
+ */
+export async function buildHomeworkWalkthroughService(): Promise<HomeworkWalkthroughService> {
+  const settings = await new SettingsService().get()
+  const ai = settings.apiKey.trim() ? new AIService({ config: settings }) : null
+  return new HomeworkWalkthroughService({ ai, db: getDb() })
 }
 
 /**

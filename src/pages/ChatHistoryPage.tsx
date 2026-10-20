@@ -5,6 +5,7 @@ import { Button } from '@/shared/ui/Button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/shared/ui/Card'
 import { Badge } from '@/shared/ui/Badge'
 import { EmptyState } from '@/shared/ui/EmptyState'
+import { ErrorState } from '@/shared/ui/ErrorState'
 import { LoadingState } from '@/shared/ui/LoadingState'
 import { PageContainer, PageContent, PageHeader } from '@/shared/ui/Page'
 import { TruncatedText } from '@/shared/ui/TruncatedText'
@@ -17,6 +18,8 @@ import {
   type TutorTurn,
 } from '@/entities/tutorSession/types'
 import { formatDateTime } from '@/shared/lib/utils'
+import { difficultyLabelKey } from '@/infrastructure/ai/prompts/types'
+import { logger } from '@/infrastructure/logger/logger'
 import { useTranslation } from '@/i18n'
 
 export function ChatHistoryPage(): JSX.Element {
@@ -25,17 +28,29 @@ export function ChatHistoryPage(): JSX.Element {
   const [sessions, setSessions] = useState<TutorSession[]>([])
   const [activeId, setActiveId] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  /** Bumped by "Try again" to re-run the load. */
+  const [attempt, setAttempt] = useState(0)
 
   useEffect(() => {
     if (!projectId) return
     let cancelled = false
+    // Switching course must not show the previous course's sessions.
+    setSessions([])
+    setActiveId(null)
+    setError(null)
+    setLoading(true)
     void (async () => {
       try {
         const repo = new TutorSessionRepository()
         const rows = await repo.listByProject(projectId)
         if (cancelled) return
         setSessions(rows)
-        if (rows[0]) setActiveId(rows[0].id)
+        setActiveId(rows[0]?.id ?? null)
+      } catch (err) {
+        if (cancelled) return
+        logger.error('ChatHistoryPage load failed', { projectId }, err)
+        setError(err instanceof Error && err.message ? err.message : t('chatHistory.loadFailedHint'))
       } finally {
         if (!cancelled) setLoading(false)
       }
@@ -43,7 +58,9 @@ export function ChatHistoryPage(): JSX.Element {
     return () => {
       cancelled = true
     }
-  }, [projectId])
+    // `t` is stable per language; reloading on language change is not needed.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [projectId, attempt])
 
   if (!projectId) return <div />
 
@@ -52,6 +69,24 @@ export function ChatHistoryPage(): JSX.Element {
       <PageContainer>
         <PageContent>
           <LoadingState label={t('chatHistory.loading')} />
+        </PageContent>
+      </PageContainer>
+    )
+  }
+
+  if (error) {
+    return (
+      <PageContainer>
+        <PageContent>
+          <ErrorState
+            title={t('chatHistory.loadFailed')}
+            description={`${error} ${t('chatHistory.loadFailedHint')}`}
+            action={
+              <Button variant="outline" onClick={() => setAttempt((n) => n + 1)}>
+                {t('common.tryAgain')}
+              </Button>
+            }
+          />
         </PageContent>
       </PageContainer>
     )
@@ -101,7 +136,9 @@ export function ChatHistoryPage(): JSX.Element {
                 >
                   <div className="flex min-w-0 items-center justify-between gap-2">
                     <TruncatedText text={s.topicName} className="min-w-0 flex-1 font-medium" />
-                    <Badge variant="outline" className="shrink-0">{s.currentDifficulty}</Badge>
+                    <Badge variant="outline" className="shrink-0">
+                      {t(difficultyLabelKey(s.currentDifficulty))}
+                    </Badge>
                   </div>
                   <div className="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
                     <span>{formatDateTime(s.updatedAt)}</span>

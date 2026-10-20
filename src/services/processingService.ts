@@ -30,6 +30,7 @@ import {
   type SuspiciousUnicodeReport,
 } from '@/infrastructure/files/textEncoding'
 import { logger } from '@/infrastructure/logger/logger'
+import { isQuotaError } from '@/infrastructure/files/storageSpace'
 import { AppError, ValidationError } from '@/infrastructure/errors/AppError'
 import { t } from '@/i18n'
 
@@ -217,13 +218,21 @@ export class ProcessingService {
       onProgress?.({ stage: 'done', progress: 100 })
       logger.info('Document processed', { id: document.id, chunks: newChunks.length })
     } catch (err) {
-      const message = err instanceof Error ? err.message : t('upload.processingFailed')
+      // The commit is one transaction, so a full quota leaves the previous
+      // chunks in place; tell the user what to do instead of a raw DOM error.
+      const quotaFull = isQuotaError(err)
+      const message = quotaFull
+        ? t('errors.storageFullProcessing')
+        : err instanceof Error
+          ? err.message
+          : t('upload.processingFailed')
       logger.error('Document processing failed', { id: document.id }, err)
       await this.documents.update(document.id, {
         status: document.status === 'ready' ? 'ready' : 'failed',
         errorMessage: message,
       })
       await this.jobs.update(jobId, { stage: 'failed', progress: 100, errorMessage: message, finishedAt: Date.now() })
+      if (quotaFull) throw new ValidationError(message)
       throw err instanceof AppError ? err : new AppError(message, 'PROCESSING_FAILED', err)
     }
   }

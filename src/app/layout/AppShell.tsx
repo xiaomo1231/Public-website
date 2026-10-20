@@ -40,6 +40,48 @@ export function AppShell(): JSX.Element {
     )
   }, [routeId])
 
+  /*
+   * Mobile drawer accessibility. While closed it is `inert` (not focusable,
+   * not in the accessibility tree), not just `aria-hidden`. Opening moves
+   * focus into it; Escape closes it; closing returns focus to whatever opened
+   * it (the header menu button). `inert` is set through the DOM because
+   * React 18 does not know the attribute.
+   */
+  const drawerRef = useRef<HTMLDivElement>(null)
+  const drawerPanelRef = useRef<HTMLDivElement>(null)
+  const drawerOpenerRef = useRef<HTMLElement | null>(null)
+  useLayoutEffect(() => {
+    const drawer = drawerRef.current
+    if (!drawer) return
+    if (mobileNavOpen) drawer.removeAttribute('inert')
+    else drawer.setAttribute('inert', '')
+  }, [mobileNavOpen])
+  useEffect(() => {
+    if (!mobileNavOpen) return
+    const active = document.activeElement
+    drawerOpenerRef.current = active instanceof HTMLElement ? active : null
+    const drawer = drawerRef.current
+    const panel = drawerPanelRef.current
+    const first = panel?.querySelector<HTMLElement>(
+      'a[href], button:not([disabled]), input:not([disabled]), [tabindex]:not([tabindex="-1"])',
+    )
+    ;(first ?? panel)?.focus()
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key === 'Escape') setMobileNavOpen(false)
+    }
+    document.addEventListener('keydown', onKeyDown)
+    return () => {
+      document.removeEventListener('keydown', onKeyDown)
+      const opener = drawerOpenerRef.current
+      drawerOpenerRef.current = null
+      // Only restore focus when it would otherwise be lost (still inside the
+      // now-inert drawer, or dropped to <body>) — not when it moved elsewhere.
+      const now = document.activeElement
+      const lost = !now || now === document.body || Boolean(drawer?.contains(now))
+      if (opener && opener.isConnected && lost) opener.focus()
+    }
+  }, [mobileNavOpen])
+
   // Close mobile nav when resizing back to desktop
   useEffect(() => {
     function onResize() {
@@ -80,11 +122,13 @@ export function AppShell(): JSX.Element {
 
       {/* Mobile drawer */}
       <div
+        ref={drawerRef}
         className={cn(
           'fixed inset-0 z-40 lg:hidden',
           mobileNavOpen ? 'pointer-events-auto' : 'pointer-events-none',
         )}
         aria-hidden={!mobileNavOpen}
+        data-testid="mobile-nav"
       >
         <div
           className={cn(
@@ -94,8 +138,10 @@ export function AppShell(): JSX.Element {
           onClick={() => setMobileNavOpen(false)}
         />
         <div
+          ref={drawerPanelRef}
+          tabIndex={-1}
           className={cn(
-            'absolute inset-y-0 left-0 transition-transform duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]',
+            'absolute inset-y-0 left-0 outline-none transition-transform duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]',
             mobileNavOpen ? 'translate-x-0' : '-translate-x-full',
           )}
         >

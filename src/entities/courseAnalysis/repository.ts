@@ -194,6 +194,11 @@ export class CourseAnalysisRepository {
     projectId: string,
     seed: {
       topics: Array<{
+        /**
+         * Caller-resolved id (stable identity), carried by position. Preferred
+         * over `topicsByName`, which cannot tell two same-name topics apart.
+         */
+        id?: string
         name: string
         description: string
         sourceRefs: SourceReference[]
@@ -238,30 +243,38 @@ export class CourseAnalysisRepository {
           ?.subject,
       )
 
-    const topics: Topic[] = seed.topics.map((t, idx) => ({
-      // Respect the caller-provided id map so downstream references stay valid.
-      id: seed.topicsByName.get(t.name) ?? crypto.randomUUID(),
-      projectId,
-      name: t.name,
-      description: t.description,
-      order: idx,
-      topicIds: [],
-      sourceRefs: t.sourceRefs,
-      ...(t.chapterId ? { chapterId: t.chapterId } : {}),
-      ...(t.sectionId ? { sectionId: t.sectionId } : {}),
-      ...(t.chapterNumber ? { chapterNumber: t.chapterNumber } : {}),
-      ...(t.sectionNumber ? { sectionNumber: t.sectionNumber } : {}),
-      ...(t.chapterTitle ? { chapterTitle: t.chapterTitle } : {}),
-      ...(t.sectionTitle ? { sectionTitle: t.sectionTitle } : {}),
-      ...(t.sourceChunkIds ? { sourceChunkIds: t.sourceChunkIds } : {}),
-      ...(t.sourceChapterIds ? { sourceChapterIds: t.sourceChapterIds } : {}),
-      ...(t.sourceSectionIds ? { sourceSectionIds: t.sourceSectionIds } : {}),
-      ...(t.dependencyHash ? { dependencyHash: t.dependencyHash } : {}),
-      ...(t.sourceChunkFingerprints ? { sourceChunkFingerprints: t.sourceChunkFingerprints } : {}),
-      ...(t.needsFullReanalysis ? { needsFullReanalysis: true } : {}),
-      ...(t.promptVersion ? { promptVersion: t.promptVersion } : {}),
-      createdAt: now,
-    }))
+    const usedIds = new Set<string>()
+    const topics: Topic[] = seed.topics.map((t, idx) => {
+      // Respect the caller-provided id so downstream references stay valid. A
+      // name lookup is only the fallback, and an id is never issued twice —
+      // two rows sharing one id would silently collapse into one.
+      let id = t.id ?? seed.topicsByName.get(t.name) ?? crypto.randomUUID()
+      if (usedIds.has(id)) id = crypto.randomUUID()
+      usedIds.add(id)
+      return {
+        id,
+        projectId,
+        name: t.name,
+        description: t.description,
+        order: idx,
+        topicIds: [],
+        sourceRefs: t.sourceRefs,
+        ...(t.chapterId ? { chapterId: t.chapterId } : {}),
+        ...(t.sectionId ? { sectionId: t.sectionId } : {}),
+        ...(t.chapterNumber ? { chapterNumber: t.chapterNumber } : {}),
+        ...(t.sectionNumber ? { sectionNumber: t.sectionNumber } : {}),
+        ...(t.chapterTitle ? { chapterTitle: t.chapterTitle } : {}),
+        ...(t.sectionTitle ? { sectionTitle: t.sectionTitle } : {}),
+        ...(t.sourceChunkIds ? { sourceChunkIds: t.sourceChunkIds } : {}),
+        ...(t.sourceChapterIds ? { sourceChapterIds: t.sourceChapterIds } : {}),
+        ...(t.sourceSectionIds ? { sourceSectionIds: t.sourceSectionIds } : {}),
+        ...(t.dependencyHash ? { dependencyHash: t.dependencyHash } : {}),
+        ...(t.sourceChunkFingerprints ? { sourceChunkFingerprints: t.sourceChunkFingerprints } : {}),
+        ...(t.needsFullReanalysis ? { needsFullReanalysis: true } : {}),
+        ...(t.promptVersion ? { promptVersion: t.promptVersion } : {}),
+        createdAt: now,
+      }
+    })
 
     const concepts: Concept[] = seed.concepts.map((c) => ({
       id: crypto.randomUUID(),

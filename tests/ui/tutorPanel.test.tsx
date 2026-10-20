@@ -220,4 +220,29 @@ describe('TutorPanel', () => {
     expect(await screen.findByText(INTRO)).toBeInTheDocument()
     expect(screen.queryByText('Tutor unavailable')).not.toBeInTheDocument()
   })
+
+  it('aborts the introduction when unmounted (e.g. the language changed)', async () => {
+    let seen: AbortSignal | undefined
+    let started!: () => void
+    const begun = new Promise<void>((resolve) => (started = resolve))
+    vi.mocked(buildAIServices).mockResolvedValue({
+      tutor: {
+        findOrStartSession: vi.fn().mockResolvedValue({ session: sessionWith(''), resumed: false }),
+        beginTopic: vi.fn().mockImplementation(
+          (_id, opts: { signal?: AbortSignal }) =>
+            new Promise((_resolve, reject) => {
+              seen = opts.signal
+              started()
+              opts.signal?.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')))
+            }),
+        ),
+      },
+    } as never)
+
+    const view = renderPanel()
+    await begun
+    expect(seen?.aborted).toBe(false)
+    view.unmount()
+    expect(seen?.aborted).toBe(true)
+  })
 })

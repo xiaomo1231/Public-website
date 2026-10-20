@@ -35,13 +35,23 @@ export function nernst(ion: IonName, inside: number, outside: number, celsius = 
   return ((R * t) / (ION_VALENCE[ion] * F)) * Math.log(outside / inside) * 1000
 }
 
-/** Goldman–Hodgkin–Katz membrane potential (mV) from the monovalent ions with permeabilities. */
+/**
+ * Goldman–Hodgkin–Katz membrane potential (mV) from the monovalent ions.
+ *
+ * Permeabilities are relative to K⁺. When none is given there is nothing to
+ * weigh and the result is null (only Nernst potentials are shown). When some
+ * are given, K⁺ without one takes the conventional reference value 1; any
+ * other ion without a permeability is treated as impermeant. Ca²⁺ is never
+ * included (the classic GHK form covers monovalent ions only).
+ */
 export function goldman(ions: IonConcentration[], celsius = 37): number | null {
   const t = celsius + 273.15
+  const anyPermeability = ions.some((ion) => ion.permeability !== undefined && ion.permeability > 0)
+  if (!anyPermeability) return null
   let numerator = 0
   let denominator = 0
   for (const ion of ions) {
-    const p = ion.permeability
+    const p = ion.permeability ?? (ion.ion === 'K+' ? 1 : undefined)
     if (p === undefined || p <= 0 || ion.ion === 'Ca2+') continue
     if (ion.ion === 'Cl-') {
       numerator += p * ion.inside

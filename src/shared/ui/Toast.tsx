@@ -9,6 +9,7 @@ import {
 } from 'react'
 import { cn } from '@/shared/lib/utils'
 import { useToastStore } from '@/features/toast/toastStore'
+import { useTranslation } from '@/i18n'
 
 export const ToastProvider = ToastPrimitive.Provider
 
@@ -52,6 +53,7 @@ export interface ToastProps
 
 export const Toast = forwardRef<ElementRef<typeof ToastPrimitive.Root>, ToastProps>(
   ({ className, variant, title, description, children, ...props }, ref) => {
+    const { t } = useTranslation()
     return (
       <ToastPrimitive.Root
         ref={ref}
@@ -67,8 +69,11 @@ export const Toast = forwardRef<ElementRef<typeof ToastPrimitive.Root>, ToastPro
           )}
           {children}
         </div>
-        <ToastPrimitive.Close className="absolute right-2 top-2 rounded-lg p-1 opacity-60 transition-opacity hover:opacity-100 focus-ring">
-          <X className="h-4 w-4" />
+        <ToastPrimitive.Close
+          aria-label={t('common.close')}
+          className="absolute right-2 top-2 rounded-lg p-1 opacity-60 transition-opacity hover:opacity-100 focus-ring"
+        >
+          <X className="h-4 w-4" aria-hidden />
         </ToastPrimitive.Close>
       </ToastPrimitive.Root>
     )
@@ -81,16 +86,18 @@ export function Toaster(): JSX.Element {
   const dismiss = useToastStore((s) => s.dismiss)
   return (
     <ToastProvider swipeDirection="right">
-      {toasts.map((t) => (
+      {toasts.map((item) => (
         <Toast
-          key={t.id}
-          variant={t.variant ?? 'default'}
-          duration={t.duration}
+          key={item.id}
+          variant={item.variant ?? 'default'}
+          // Radix owns the auto-dismiss timer (it pauses while the toast is
+          // hovered or focused) and reports the close through onOpenChange.
+          duration={item.duration && item.duration > 0 ? item.duration : Infinity}
           onOpenChange={(open) => {
-            if (!open) dismiss(t.id)
+            if (!open) dismiss(item.id)
           }}
-          title={t.title}
-          description={t.description}
+          title={item.title}
+          description={item.description}
         />
       ))}
       <ToastViewport />

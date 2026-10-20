@@ -23,7 +23,8 @@ export interface QuestionCardProps {
   difficulty: string
   value: string
   onChange: (value: string) => void
-  onSubmit: () => void
+  /** Called with how many hints were revealed before submitting. */
+  onSubmit: (hintsUsed: number) => void
   onNext: () => void
   busy?: boolean
   evaluation?: QuestionEvaluation | null
@@ -77,7 +78,7 @@ export function QuestionCard({
           disabled={busy || answered}
           revealed={answered}
           onSubmit={() => {
-            if (!busy && !answered && value.trim()) onSubmit()
+            if (!busy && !answered && value.trim()) onSubmit(hintIndex)
           }}
         />
 
@@ -111,7 +112,7 @@ export function QuestionCard({
         <div className="flex flex-wrap items-center gap-2">
           {!answered ? (
             <>
-              <Button onClick={onSubmit} disabled={busy || !value.trim()}>
+              <Button onClick={() => onSubmit(hintIndex)} disabled={busy || !value.trim()}>
                 {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
                 {t('question.submit')}
               </Button>

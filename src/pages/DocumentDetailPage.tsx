@@ -14,13 +14,22 @@ import type { DocumentChunk } from '@/entities/chunk/types'
 import { useDocument } from '@/features/documents/useDocuments'
 import { useProject } from '@/features/project/useProjects'
 import { ChunkRepository } from '@/entities/chunk/repository'
-import { DocumentRepository } from '@/entities/document/repository'
+import { useDocumentsStore } from '@/features/documents/documentsStore'
+import type { DocumentDeleteImpact } from '@/services/documentService'
 import { getDb } from '@/infrastructure/db/database'
 import { toast } from '@/features/toast/toastStore'
 import { Badge } from '@/shared/ui/Badge'
 import { Button } from '@/shared/ui/Button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/shared/ui/Card'
 import { ConfirmDialog } from '@/shared/ui/ConfirmDialog'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/shared/ui/Dialog'
 import { EmptyState } from '@/shared/ui/EmptyState'
 import { ErrorState } from '@/shared/ui/ErrorState'
 import { Input } from '@/shared/ui/Input'
@@ -42,8 +51,13 @@ export function DocumentDetailPage(): JSX.Element {
   const { t } = useTranslation()
   const { document, status, error, refresh } = useDocument(projectId, did)
   const { project } = useProject(projectId)
+  const removeDocument = useDocumentsStore((s) => s.remove)
+  const describeDelete = useDocumentsStore((s) => s.describeDelete)
   const [deleteOpen, setDeleteOpen] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  /** What deleting would remove; `blocked` when the file holds student work. */
+  const [impact, setImpact] = useState<DocumentDeleteImpact | null>(null)
+  const [checkingDelete, setCheckingDelete] = useState(false)
   const [chunks, setChunks] = useState<DocumentChunk[]>([])
   const [chunksLoading, setChunksLoading] = useState(true)
   const [chunksError, setChunksError] = useState<string | null>(null)
@@ -138,20 +152,46 @@ export function DocumentDetailPage(): JSX.Element {
     )
   }
 
+  async function requestDelete() {
+    if (!document || !projectId) return
+    setCheckingDelete(true)
+    try {
+      setImpact(await describeDelete(document.id, projectId))
+      setDeleteOpen(true)
+    } catch (err) {
+      toast({ variant: 'error', title: t('documentDetail.deleteFailed'), description: (err as Error).message })
+    } finally {
+      setCheckingDelete(false)
+    }
+  }
+
   async function handleDelete() {
     if (!document || !projectId) return
     setDeleting(true)
     try {
-      await new DocumentRepository(getDb()).delete(document.id)
+      // Goes through DocumentService.delete: refuses files holding student
+      // work, cleans up derived homework / practice / slide data, unlinks
+      // answer keys, marks the course analysis stale and refreshes the store.
+      await removeDocument(document.id, projectId)
       setDeleteOpen(false)
       toast({ variant: 'success', title: t('documentDetail.deleted'), description: document.name })
       navigate(`/projects/${projectId}`, { replace: true })
     } catch (err) {
+      setDeleteOpen(false)
       toast({ variant: 'error', title: t('documentDetail.deleteFailed'), description: (err as Error).message })
     } finally {
       setDeleting(false)
     }
   }
+
+  const blockedWork = impact
+    ? [
+        impact.studentWork.homeworkAnswers > 0 && t('files.deleteBlockedHomework'),
+        impact.studentWork.practiceAttempts > 0 && t('files.deleteBlockedPractice'),
+      ]
+        .filter(Boolean)
+        .join(' · ')
+    : ''
 
   return (
     <PageContainer>
@@ -173,7 +213,7 @@ export function DocumentDetailPage(): JSX.Element {
         description={t('documentDetail.subtitle')}
         nav={<ProjectFlowNav projectId={projectId} active="home" />}
         actions={
-          <Button variant="destructive" onClick={() => setDeleteOpen(true)}>
+          <Button variant="destructive" onClick={() => void requestDelete()} disabled={checkingDelete}>
             <Trash2 className="h-4 w-4" />
             {t('common.delete')}
           </Button>
@@ -318,8 +358,25 @@ export function DocumentDetailPage(): JSX.Element {
         </Tabs>
       </PageContent>
 
+      <Dialog open={deleteOpen && Boolean(impact?.blocked)} onOpenChange={setDeleteOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{t('files.deleteBlockedTitle')}</DialogTitle>
+            <DialogDescription>{t('files.deleteIntro', { name: document.name })}</DialogDescription>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            {t('files.deleteBlockedBody', { work: blockedWork })}
+          </p>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteOpen(false)}>
+              {t('common.close')}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <ConfirmDialog
-        open={deleteOpen}
+        open={deleteOpen && impact !== null && !impact.blocked}
         onOpenChange={setDeleteOpen}
         title={t('documentDetail.deleteTitle')}
         description={t('documentDetail.deleteBody')}
@@ -335,7 +392,9 @@ export function DocumentDetailPage(): JSX.Element {
             <DetailRow label={t('documentDetail.detail.project')} value={project?.name ?? projectId ?? '—'} />
             <DetailRow
               label={t('documentDetail.detail.chunks')}
-              value={t('documentDetail.detail.chunksWillDelete', { count: chunks.length })}
+              value={t('documentDetail.detail.chunksWillDelete', {
+                count: impact?.removes.chunks ?? chunks.length,
+              })}
             />
           </dl>
         }

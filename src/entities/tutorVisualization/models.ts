@@ -49,7 +49,7 @@ export interface ArrheniusFit {
 export function fitArrhenius(points: Array<{ t: number; k: number }>): ArrheniusFit | null {
   const fit = linearFit(points.map((p) => ({ x: 1 / p.t, y: Math.log(p.k) })))
   if (!fit) return null
-  return { ea: -fit.slope * GAS_CONSTANT, a: Math.exp(fit.intercept), r2: fit.r2 }
+  return { ea: -fit.slope * GAS_CONSTANT, a: Math.exp(fit.intercept), ...(fit.r2 !== null ? { r2: fit.r2 } : {}) }
 }
 
 export function arrheniusK(ea: number, a: number, t: number): number {
@@ -129,8 +129,10 @@ export function populationSpan(model: GrowthModel, n0: number, r: number, k?: nu
 export interface LinearFit {
   slope: number
   intercept: number
-  r: number
-  r2: number
+  /** Pearson r; null when y has no variance (correlation is undefined). */
+  r: number | null
+  /** Coefficient of determination; null when y has no variance. */
+  r2: number | null
   n: number
   /** Residual standard error s = √(SSE / (n − 2)). */
   residualSe: number
@@ -151,9 +153,10 @@ export function linearFit(points: Array<{ x: number; y: number }>): LinearFit | 
   const slope = sxy / sxx
   const intercept = meanY - slope * meanX
   const sse = points.reduce((s, p) => s + (p.y - (intercept + slope * p.x)) ** 2, 0)
-  const r = syy === 0 ? 1 : sxy / Math.sqrt(sxx * syy)
+  // Flat y data: the line fits perfectly but r and R² are 0 / 0, not 1.
+  const r = syy === 0 ? null : sxy / Math.sqrt(sxx * syy)
   const residualSe = n > 2 ? Math.sqrt(sse / (n - 2)) : 0
-  return { slope, intercept, r, r2: r * r, n, residualSe, slopeSe: residualSe / Math.sqrt(sxx), meanX, sxx }
+  return { slope, intercept, r, r2: r === null ? null : r * r, n, residualSe, slopeSe: residualSe / Math.sqrt(sxx), meanX, sxx }
 }
 
 /** Half-widths of the confidence band (mean response) and prediction band at x. */

@@ -45,6 +45,7 @@ import { logger } from '@/infrastructure/logger/logger'
 import { t } from '@/i18n'
 import type { Subject } from '@/entities/project/types'
 import { loadProjectSubject } from './projectSubject'
+import { getDb, type AppDatabase } from '@/infrastructure/db/database'
 
 /** How a re-analysis would have to be run. */
 export type IncrementalMode = 'none' | 'full' | 'incremental'
@@ -81,6 +82,8 @@ export interface EnsureAnalyzedResult {
   analyzed: boolean
   reason: EnsureAnalyzedReason
   error?: string
+  /** The original error for `failed`, so the UI can map it to an actionable hint. */
+  cause?: unknown
 }
 
 export interface EnsureAnalyzedOptions {
@@ -88,6 +91,11 @@ export interface EnsureAnalyzedOptions {
   signal?: AbortSignal
   /** Defaults to the whole project. */
   scope?: AnalysisScope
+  /**
+   * Re-analyse even when the stored analysis is fresh (the user's explicit
+   * "re-analyse"). Still coalesced with any run already in flight.
+   */
+  force?: boolean
 }
 
 export interface IncrementalExecutionResult {
@@ -100,6 +108,11 @@ export interface IncrementalExecutionResult {
   flaggedForFullReanalysis: string[]
   /** Topics the run deliberately left untouched, with the reason. */
   skipped: Array<{ topicId: string; reason: string }>
+  /**
+   * True only when every topic that needed work (in and outside the scope)
+   * got it, so the analysis was stamped fresh. False ⇒ it stays stale.
+   */
+  complete?: boolean
 }
 
 /**
@@ -115,6 +128,32 @@ const inFlight = new Map<string, Promise<EnsureAnalyzedResult>>()
 /** Test helper — drops any pending deduplication entry. */
 export function clearEnsureAnalyzedInFlightForTesting(): void {
   inFlight.clear()
+}
+
+/** A run older than this with no live request in this tab was cut off. */
+const INTERRUPTED_AFTER_MS = 5 * 60_000
+
+/**
+ * An analysis row left `analyzing` / `pending` by a tab that was closed
+ * mid-run would read "processing" forever. Called once at start-up: rows with
+ * no live request here that started a while ago become `failed` with an
+ * actionable message, so the course offers a re-run. (A run still going in
+ * another tab simply overwrites this when it finishes.)
+ */
+export async function recoverInterruptedAnalyses(db: AppDatabase = getDb(), now = Date.now()): Promise<number> {
+  const stuck = await db.courseAnalyses
+    .where('status')
+    .anyOf(['analyzing', 'pending'])
+    .filter((row) => !inFlight.has(row.projectId) && now - row.startedAt > INTERRUPTED_AFTER_MS)
+    .toArray()
+  for (const row of stuck) {
+    await db.courseAnalyses.update(row.id, {
+      status: 'failed',
+      errorMessage: t('analysis.interrupted'),
+      finishedAt: now,
+    })
+  }
+  return stuck.length
 }
 
 /**
@@ -313,13 +352,29 @@ export class CourseContentService {
       )
     }
 
+    // Only topics that touch the requested chapter/section are regenerated —
+    // a scoped call must never spend AI work on (or rewrite) the rest of the
+    // course. Pending topic work elsewhere keeps the analysis non-fresh.
+    const inScope = topicScopeFilter(
+      nodes,
+      targetNodeId,
+      await this.content.getTopics(projectId),
+    )
+    const isTopicWork = (op: IncrementalOp) =>
+      op.entity === 'topic' &&
+      (op.kind === 'regenerateTopic' || (op.kind === 'relinkOnly' && op.inputChunkIds.length > 0))
+    const outOfScopeWork = plan.ops.filter((op) => isTopicWork(op) && !inScope(op.id))
     const regeneratableOps = plan.ops.filter(
       (op): op is IncrementalOp & { entity: 'topic' } =>
-        op.kind === 'regenerateTopic' && op.entity === 'topic',
+        op.kind === 'regenerateTopic' && op.entity === 'topic' && inScope(op.id),
     )
     // Re-pointing a dependency needs no AI at all.
     const relinkOps = plan.ops.filter(
-      (op) => op.kind === 'relinkOnly' && op.entity === 'topic' && op.inputChunkIds.length > 0,
+      (op) =>
+        op.kind === 'relinkOnly' &&
+        op.entity === 'topic' &&
+        op.inputChunkIds.length > 0 &&
+        inScope(op.id),
     )
     if (regeneratableOps.length === 0 && relinkOps.length === 0) {
       return {
@@ -363,12 +418,12 @@ export class CourseContentService {
 
     // Re-pointed dependencies need no AI at all — the content fingerprint proved
     // the passage is the same, only its chunk id changed.
-    for (const op of plan.ops) {
-      if (op.kind !== 'relinkOnly' || op.entity !== 'topic' || op.inputChunkIds.length === 0) {
+    for (const op of relinkOps) {
+      const topic = topicById.get(op.id)
+      if (!topic) {
+        skipped.push({ topicId: op.id, reason: 'topic-missing' })
         continue
       }
-      const topic = topicById.get(op.id)
-      if (!topic) continue
       const dependency = buildTopicDependency(op.inputChunkIds, chunks)
       const next: Topic = {
         ...topic,
@@ -443,8 +498,27 @@ export class CourseContentService {
     const stagedContext = await this.courseContext.stageDerived(projectId)
     if (stagedContext.changed) sideWrites.courseContext = stagedContext.context
 
+    // The analysis may only be stamped with the current source/structure hashes
+    // when *every* topic that needed work got it: a failed, skipped or flagged
+    // topic — or pending work outside this scope — would otherwise sit behind
+    // an analysis that reads fresh. In that case the regenerated topics are
+    // still committed, but the analysis row keeps its old hashes, so it stays
+    // stale and the rest is redone.
+    const complete =
+      flaggedForFullReanalysis.length === 0 &&
+      skipped.length === 0 &&
+      outOfScopeWork.length === 0
+    if (!complete) {
+      logger.info('Incremental update left work pending; the analysis stays stale', {
+        projectId,
+        flagged: flaggedForFullReanalysis.length,
+        skipped: skipped.length,
+        outOfScope: outOfScopeWork.length,
+      })
+    }
+
     await this.analyses.applyTopicUpdates(projectId, updates, {
-      ...(analysis
+      ...(analysis && complete
         ? {
             analysis: {
               ...analysis,
@@ -476,6 +550,7 @@ export class CourseContentService {
       regeneratedTopicIds,
       flaggedForFullReanalysis,
       skipped,
+      complete,
     }
   }
 
@@ -612,6 +687,9 @@ export class CourseContentService {
         })),
       }
     } catch (err) {
+      // A cancelled run is not a per-topic failure: abandon the whole run so
+      // nothing is committed.
+      if (signal?.aborted || isAbortError(err)) throw err
       logger.warn('Incremental topic regeneration failed; keeping the stored topic', {
         topicId: topic.id,
         error: err instanceof Error ? err.message : String(err),
@@ -642,7 +720,7 @@ export class CourseContentService {
     }
 
     const freshness = await this.content.isFresh(projectId)
-    if (freshness.fresh) return { analyzed: false, reason: 'fresh' }
+    if (freshness.fresh && !options.force) return { analyzed: false, reason: 'fresh' }
 
     // No API key is a distinct state from "analysis failed" — it is simply
     // "not configured", and must never mark the stored analysis as failed.
@@ -672,9 +750,52 @@ export class CourseContentService {
         reasons: freshness.reasons,
         error: message,
       })
-      return { analyzed: false, reason: 'failed', error: message }
+      return { analyzed: false, reason: 'failed', error: message, cause: err }
     }
   }
+}
+
+function isAbortError(err: unknown): boolean {
+  const e = err as { name?: unknown; code?: unknown } | null
+  return e?.name === 'AbortError' || e?.code === 'ABORTED'
+}
+
+/**
+ * Which topics touch a chapter/section scope: the target node, or any node
+ * below it, appears among the topic's primary position or its validated
+ * source chapters/sections.
+ */
+export function topicScopeFilter(
+  nodes: ReadonlyArray<{ id: string; parentId?: string | null }>,
+  targetNodeId: string,
+  topics: ReadonlyArray<
+    Pick<Topic, 'id' | 'chapterId' | 'sectionId' | 'sourceChapterIds' | 'sourceSectionIds'>
+  >,
+): (topicId: string) => boolean {
+  const scopeNodes = new Set<string>([targetNodeId])
+  // Walk down the flat tree until no new descendants appear.
+  for (let grew = true; grew; ) {
+    grew = false
+    for (const node of nodes) {
+      if (node.parentId && scopeNodes.has(node.parentId) && !scopeNodes.has(node.id)) {
+        scopeNodes.add(node.id)
+        grew = true
+      }
+    }
+  }
+  const matching = new Set(
+    topics
+      .filter((topic) =>
+        [
+          topic.chapterId,
+          topic.sectionId,
+          ...(topic.sourceChapterIds ?? []),
+          ...(topic.sourceSectionIds ?? []),
+        ].some((id) => id !== undefined && scopeNodes.has(id)),
+      )
+      .map((topic) => topic.id),
+  )
+  return (topicId) => matching.has(topicId)
 }
 
 export { isPlanNoop, buildTopicDependency, isEmptyAffected, detectAffectedStructure }

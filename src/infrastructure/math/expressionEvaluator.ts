@@ -64,6 +64,42 @@ export function stripIntegrationConstant(expr: string): { expr: string; hadConst
   return { expr: match[1]!.trim(), hadConstant: true }
 }
 
+function usesSymbol(expr: string, symbol: string): boolean {
+  return new RegExp(`(^|[^A-Za-z0-9_])${symbol}([^A-Za-z0-9_]|$)`).test(expr)
+}
+
+/** Trailing `± <letter>` whose letter appears nowhere else in the expression. */
+function trailingConstant(expr: string, letters: string): { expr: string; symbol: string } | null {
+  const match = expr.match(new RegExp(`^(.*?)[+-]\\s*([${letters}])\\s*$`))
+  if (!match) return null
+  const rest = match[1]!.trim()
+  const symbol = match[2]!
+  if (!rest || usesSymbol(rest, symbol)) return null
+  return { expr: rest, symbol }
+}
+
+/**
+ * Decide which integration constants to ignore. Only a reference that is an
+ * antiderivative (ends with an uppercase `+ C` not used elsewhere) lets both
+ * sides drop their constant; a lowercase `c`/`k` in the reference is an
+ * ordinary term, so `a+b+c` vs `a+b` and `x+k` vs `x-k` stay different. When
+ * the reference omits the constant, the student's own `+ C` is still accepted
+ * as long as `C` is not a symbol of the reference.
+ */
+function stripConstantsForCompare(
+  user: string,
+  expected: string,
+): { user: string; expected: string; stripped: boolean } {
+  const reference = trailingConstant(expected, 'C')
+  if (reference) {
+    const own = trailingConstant(user, 'cCkK')
+    return { user: own ? own.expr : user, expected: reference.expr, stripped: true }
+  }
+  const own = trailingConstant(user, 'C')
+  if (own && !usesSymbol(expected, 'C')) return { user: own.expr, expected, stripped: true }
+  return { user, expected, stripped: false }
+}
+
 /** Split an equation `lhs = rhs` into its two sides, if present. */
 export function splitEquation(expr: string): [string, string] | null {
   // Ignore ==, <=, >=
@@ -190,15 +226,11 @@ export function compareMath(userAnswer: string, expectedAnswer: string): MathCom
     return { equivalent: true, normalizedUser: userNorm, normalizedExpected: expectedNorm }
   }
 
-  // Integration constants: strip from both sides
-  const userStripped = stripIntegrationConstant(userNorm)
-  const expectedStripped = stripIntegrationConstant(expectedNorm)
-  const userForCompare = userStripped.expr
-  const expectedForCompare = expectedStripped.expr
-  const constantNote =
-    userStripped.hadConstant || expectedStripped.hadConstant
-      ? t('evalNote.integrationConstant')
-      : undefined
+  // Integration constants: only when the reference is an antiderivative
+  const constants = stripConstantsForCompare(userNorm, expectedNorm)
+  const userForCompare = constants.user
+  const expectedForCompare = constants.expected
+  const constantNote = constants.stripped ? t('evalNote.integrationConstant') : undefined
 
   // Equations: compare each side independently
   const userEq = splitEquation(userForCompare)
@@ -282,8 +314,12 @@ export function numericEquivalent(userAnswer: string, expectedAnswer: string, re
   if (u === null || e === null) return null
   if (u === e) return true
   const diff = Math.abs(u - e)
-  return diff <= relTol * Math.max(Math.abs(e), 1)
+  // Purely relative (like `compareQuantity`): a small expected value such as
+  // 1.8e-5 must not accept 0. The tiny absolute floor only absorbs float noise.
+  return diff <= Math.max(relTol * Math.abs(e), NUMERIC_ABS_FLOOR)
 }
+
+const NUMERIC_ABS_FLOOR = 1e-12
 
 /** How a typed expression will be read, for a live preview under the field. */
 export type ExpressionPreview =

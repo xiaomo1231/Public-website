@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import {
   AlertTriangle,
@@ -154,8 +154,17 @@ export function SlideStudyPage(): JSX.Element {
     }
   }, [service, documentId, validSlideNumber, index, navigate, projectId])
 
+  // Which slide (+ language) the page currently shows. A generate / ask
+  // started on another slide must not apply its result to this one.
+  const slideKey = `${documentId ?? ''}::${validSlideNumber ?? ''}::${language}`
+  const activeSlideKey = useRef(slideKey)
+
   // Load the current slide's material + its cached lesson.
   useEffect(() => {
+    activeSlideKey.current = slideKey
+    // A request from the previous slide may still be running; its result is
+    // discarded, so its busy state must not lock this slide.
+    setBusy(false)
     if (!service || !documentId || validSlideNumber === undefined) {
       setContent(null)
       setLesson(null)
@@ -187,7 +196,7 @@ export function SlideStudyPage(): JSX.Element {
     return () => {
       alive = false
     }
-  }, [service, documentId, validSlideNumber, language, projectId])
+  }, [service, documentId, validSlideNumber, language, projectId, slideKey])
 
   const slideNumbers = useMemo(() => (index?.slides ?? []).map((entry) => entry.slideNumber), [index])
   const currentPosition = slideNumbers.indexOf(validSlideNumber ?? -1)
@@ -203,36 +212,42 @@ export function SlideStudyPage(): JSX.Element {
   const generate = useCallback(
     async (force: boolean) => {
       if (!service || !projectId || !documentId || validSlideNumber === undefined) return
+      const key = slideKey
+      const isCurrent = () => activeSlideKey.current === key
       setBusy(true)
       setError(null)
       try {
         const input = { projectId, documentId, slideNumber: validSlideNumber, language }
         const result = force ? await service.regenerate(input) : await service.generate(input)
+        if (!isCurrent()) return
         setLesson(result.lesson)
         if (result.error) setError(result.error)
       } catch (err) {
-        setError(friendlyAIError(err))
+        if (isCurrent()) setError(friendlyAIError(err))
       } finally {
-        setBusy(false)
+        if (isCurrent()) setBusy(false)
       }
     },
-    [service, projectId, documentId, validSlideNumber, language],
+    [service, projectId, documentId, validSlideNumber, language, slideKey],
   )
 
   const ask = useCallback(async () => {
     if (!service || !lesson || !askText.trim()) return
+    const key = slideKey
+    const isCurrent = () => activeSlideKey.current === key
     setBusy(true)
     setError(null)
     try {
       const updated = await service.ask(lesson.id, askText)
+      if (!isCurrent()) return
       setLesson(updated)
       setAskText('')
     } catch (err) {
-      setError(friendlyAIError(err))
+      if (isCurrent()) setError(friendlyAIError(err))
     } finally {
-      setBusy(false)
+      if (isCurrent()) setBusy(false)
     }
-  }, [service, lesson, askText])
+  }, [service, lesson, askText, slideKey])
 
   if (!projectId) return <div />
 

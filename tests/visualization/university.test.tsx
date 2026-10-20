@@ -7,11 +7,13 @@ import { cdf, moments, quantile } from '@/entities/tutorVisualization/distributi
 import { chiSquareTest, expectedFromRatio } from '@/entities/tutorVisualization/chiSquare'
 import {
   crossProblem,
+  dominanceOrderOf,
   genotypePairs,
   inheritanceAnalysis,
   punnettSquare,
   ratioText,
   translateDna,
+  unrankedGenes,
   type PedigreeMember,
 } from '@/entities/tutorVisualization/biology'
 import { bufferPoints, equivalenceVolumes, titrationPH } from '@/entities/tutorVisualization/chemistry'
@@ -134,6 +136,31 @@ describe('university genetics', () => {
     const result = punnettSquare(genotypePairs('I^Ai')!, genotypePairs('I^Bi')!, 'complete')
     expect(result.phenotypes.map((p) => p.key).sort()).toEqual(['i:I^A', 'i:I^A+I^B', 'i:I^B', 'i:i'])
     expect(ratioText(result.phenotypes.map((p) => p.count))).toBe('1 : 1 : 1 : 1')
+  })
+
+  it('ranks a lower-case allelic series only by an explicit order, never by blending', () => {
+    // Rabbit coat: c^{ch} (chinchilla) > c^h (Himalayan) > c (albino).
+    const mother = genotypePairs('c^{ch}c')!
+    const father = genotypePairs('c^hc')!
+    expect(unrankedGenes(mother, father, 'complete')).toEqual(['c'])
+    const order = dominanceOrderOf([{ gene: 'c', alleles: [{ allele: 'c^{ch}' }, { allele: 'c^h' }, { allele: 'c' }] }])
+    expect(unrankedGenes(mother, father, 'complete', order)).toEqual([])
+    const result = punnettSquare(mother, father, 'complete', order)
+    expect(result.phenotypes.map((p) => p.key).sort()).toEqual(['c:c', 'c:c^h', 'c:c^{ch}'])
+    expect(result.phenotypes.find((p) => p.key === 'c:c^{ch}')!.count).toBe(2)
+    expect(result.phenotypes.some((p) => p.key.includes('+'))).toBe(false)
+
+    expect(one({ type: 'punnett_2d', mother: 'c^{ch}c', father: 'c^hc' })).toBe('genotype-dominance-unknown')
+    expect(
+      one({
+        type: 'punnett_2d',
+        mother: 'c^{ch}c',
+        father: 'c^hc',
+        traits: [{ gene: 'c', alleles: [{ allele: 'c^{ch}', name: 'chinchilla' }, { allele: 'c^h', name: 'Himalayan' }, { allele: 'c', name: 'albino' }] }],
+      }),
+    ).toMatchObject({ type: 'punnett_2d' })
+    // ABO still works without any order: I^A and I^B are codominant, i recessive.
+    expect(one({ type: 'punnett_2d', mother: 'I^Ai', father: 'I^Bi' })).toMatchObject({ type: 'punnett_2d' })
   })
 
   it('keeps Mendel letters (Y/y for seed colour) autosomal', () => {

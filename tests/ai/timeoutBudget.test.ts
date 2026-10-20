@@ -24,6 +24,8 @@ const config: ProviderConfig = {
 const CONNECT_MS = 10_000
 const READ_MS = 60_000
 const TOTAL_MS = CONNECT_MS + READ_MS
+/** A non-streaming completion gets a long total budget (connect + 5 min). */
+const CHAT_TOTAL_MS = CONNECT_MS + 300_000
 
 function provider(): OpenAICompatibleProvider {
   return new OpenAICompatibleProvider('custom', 'Custom', config, {
@@ -100,9 +102,21 @@ describe('AI request time budget', () => {
     expect(await settled).toBe('{"ok":true}')
   })
 
+  it('does not cut off a slow-but-working non-streaming request at the streaming idle window', async () => {
+    globalThis.fetch = slowFetch(TOTAL_MS * 3)
+
+    const settled = chat()
+      .then((r) => r.content)
+      .catch(() => 'rejected')
+
+    await vi.advanceTimersByTimeAsync(TOTAL_MS * 3 + 1_000)
+
+    expect(await settled).toBe('{"ok":true}')
+  })
+
   it('enforces the overall budget once it is genuinely exceeded', async () => {
     let aborted = false
-    globalThis.fetch = slowFetch(TOTAL_MS * 10, () => {
+    globalThis.fetch = slowFetch(CHAT_TOTAL_MS * 10, () => {
       aborted = true
     })
 
@@ -110,11 +124,11 @@ describe('AI request time budget', () => {
       .then(() => null)
       .catch((err: unknown) => err)
 
-    await vi.advanceTimersByTimeAsync(TOTAL_MS + 1)
+    await vi.advanceTimersByTimeAsync(CHAT_TOTAL_MS + 1)
     const err = await settled
 
     expect(err).toBeInstanceOf(TimeoutError)
-    expect((err as TimeoutError).message).toContain(String(TOTAL_MS))
+    expect((err as TimeoutError).message).toContain(String(CHAT_TOTAL_MS))
     expect(aborted).toBe(true)
   })
 

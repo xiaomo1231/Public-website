@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Eye, EyeOff, ImageIcon, Languages, Loader2, RotateCcw, Save, Wifi } from 'lucide-react'
 import { useAISettings } from '@/features/settings/useAISettings'
+import { useSettingsStore } from '@/features/settings/settingsStore'
 import { useUILanguage } from '@/features/settings/useUILanguage'
 import {
   PROVIDER_PRESETS,
@@ -86,6 +87,13 @@ export function SettingsPage(): JSX.Element {
   async function resetDefaults() {
     try {
       await reset()
+      // Replace the local draft with the freshly reset settings: otherwise the
+      // old key / base URL / model stay in the form and a later Save (or Test
+      // connection) would quietly use them again.
+      const fresh = useSettingsStore.getState().settings
+      if (fresh) setDraft(fresh)
+      setShowKey(false)
+      setTestResult(null)
       setDirty(false)
       toast({ variant: 'info', title: t('settings.resetDone') })
     } catch (err) {

@@ -8,6 +8,8 @@ import { computeMastery } from './adaptiveDifficulty'
 import { logger } from '@/infrastructure/logger/logger'
 
 const MAX_OBSERVATIONS = 40
+/** `questionType` of a review-card observation (see ReviewCardService.review). */
+export const FLASHCARD_TYPE = 'flashcard'
 
 /**
  * Maintains the per-knowledge-point mastery estimate.
@@ -68,7 +70,12 @@ export class MasteryService {
     return row
   }
 
-  /** Rebuild all mastery rows for a project from its attempt history. */
+  /**
+   * Rebuild the mastery rows of the knowledge points in `attempts`. Pass every
+   * source for a point (quiz and practice attempts): rows are replaced, not
+   * merged. Disputed attempts no longer count; flashcard reviews already on a
+   * row are kept, since they are stored nowhere else.
+   */
   async rebuild(projectId: string, attempts: QuestionAttempt[]): Promise<KnowledgeMastery[]> {
     const byKp = new Map<string, QuestionAttempt[]>()
     for (const a of attempts) {
@@ -79,8 +86,13 @@ export class MasteryService {
     const rows: KnowledgeMastery[] = []
     for (const [kp, list] of byKp) {
       const sorted = list.slice().sort((a, b) => a.createdAt - b.createdAt)
-      const observations: MasteryObservation[] = sorted
-        .map(observationFromAttempt)
+      const existing = await this.repo.get(projectId, kp)
+      const reviews = (existing?.observations ?? []).filter((o) => o.questionType === FLASHCARD_TYPE)
+      const observations: MasteryObservation[] = [
+        ...sorted.filter((a) => a.evaluation.disputed !== true).map(observationFromAttempt),
+        ...reviews,
+      ]
+        .sort((a, b) => a.at - b.at)
         .slice(-MAX_OBSERVATIONS)
       const graded = observations.filter((o) => o.isCorrect !== null)
       rows.push({

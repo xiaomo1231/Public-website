@@ -9,7 +9,7 @@ import {
   encryptString,
   isEncryptedPayload,
 } from '@/infrastructure/crypto/crypto'
-import { OpenAICompatibleProvider } from '@/infrastructure/ai/openaiCompatible'
+import { OpenAICompatibleProvider, redactUrl } from '@/infrastructure/ai/openaiCompatible'
 import { logger } from '@/infrastructure/logger/logger'
 import type { ProviderConfig } from '@/infrastructure/ai/types'
 
@@ -229,6 +229,38 @@ describe('API key is never logged', () => {
   it('redacts an encrypted key payload in log context', () => {
     logger.error('diagnostic', { apiKeyEncrypted: 'aaaa.bbbb' })
     expect(captured()).toContain('[REDACTED]')
+  })
+
+  it('redacts token-like credentials but keeps token usage counters readable', () => {
+    logger.error('diagnostic', {
+      token: SECRET,
+      access_token: SECRET,
+      idToken: SECRET,
+      refreshToken: SECRET,
+      'x-auth-token': SECRET,
+      Authorization: `Bearer ${SECRET}`,
+      password: SECRET,
+      clientSecret: SECRET,
+      'x-api-key': SECRET,
+      promptTokens: 1234,
+      completionTokens: 567,
+      maxOutputTokens: 8192,
+      estimatedInputTokens: 42,
+    })
+    const output = captured()
+    expect(output).not.toContain(SECRET)
+    expect(output).toContain('"promptTokens":1234')
+    expect(output).toContain('"completionTokens":567')
+    expect(output).toContain('"maxOutputTokens":8192')
+    expect(output).toContain('"estimatedInputTokens":42')
+  })
+
+  it('logs only origin and path of the provider URL', () => {
+    expect(redactUrl(`https://proxy.example.com/v1/chat/completions?key=${SECRET}#x`)).toBe(
+      'https://proxy.example.com/v1/chat/completions',
+    )
+    expect(redactUrl(`https://user:${SECRET}@proxy.example.com/v1`)).toBe('https://proxy.example.com/v1')
+    expect(redactUrl(`not a url?key=${SECRET}`)).not.toContain(SECRET)
   })
 
   it('does not log the key when the AI provider is constructed or used', async () => {

@@ -26,6 +26,8 @@ export function QuizPage(): JSX.Element {
   const [quiz, setQuiz] = useState<Quiz | null>(null)
   const [questions, setQuestions] = useState<Question[]>([])
   const [index, setIndex] = useState(0)
+  /** Questions that already have an attempt, so a reopened quiz resumes. */
+  const [answeredIds, setAnsweredIds] = useState<Set<string>>(() => new Set())
   const [answer, setAnswer] = useState('')
   const [evaluation, setEvaluation] = useState<QuestionEvaluation | null>(null)
   /** The attempt behind `evaluation`, so a short-answer judgement can be disputed. */
@@ -43,12 +45,24 @@ export function QuizPage(): JSX.Element {
       try {
         const q = await service.getQuiz(quizId)
         const qs = await service.getQuestions(quizId)
+        const attempts = q.status === 'completed' ? [] : await service.getAttempts(quizId)
         if (cancelled) return
-        setQuiz(q)
-        setQuestions(qs)
         if (q.status === 'completed') {
           navigate(`/projects/${projectId}/quiz/${quizId}/result`, { replace: true })
+          return
         }
+        const done = new Set(attempts.map((a) => a.questionId))
+        const firstOpen = qs.findIndex((question) => !done.has(question.id))
+        if (qs.length > 0 && firstOpen === -1) {
+          // Every question was answered but the quiz was never closed.
+          await service.completeQuiz(quizId)
+          if (!cancelled) navigate(`/projects/${projectId}/quiz/${quizId}/result`, { replace: true })
+          return
+        }
+        setQuiz(q)
+        setQuestions(qs)
+        setAnsweredIds(done)
+        setIndex(Math.max(0, firstOpen))
       } catch (err) {
         if (!cancelled) setError(isAppError(err) ? err.message : (err as Error).message)
       } finally {
@@ -62,7 +76,7 @@ export function QuizPage(): JSX.Element {
 
   const current = questions[index]
 
-  async function submit() {
+  async function submit(hintsUsed: number) {
     if (!quizId || !current) return
     setBusy(true)
     try {
@@ -72,10 +86,12 @@ export function QuizPage(): JSX.Element {
       const graded = needsAi ? ((await buildAIServices())?.quiz ?? null) : null
       const result = await (graded ?? service).submitAnswer(quizId, current.id, answer, {
         durationMs: Date.now() - startedAt,
+        hintsUsed,
         ...(graded ? { gradeShortAnswer: true } : {}),
       })
       setEvaluation(result.evaluation)
       setAttemptId(result.attempt.id)
+      setAnsweredIds((prev) => new Set(prev).add(current.id))
     } catch (err) {
       toast({ variant: 'error', title: t('quiz.gradeFailed'), description: (err as Error).message })
     } finally {
@@ -101,12 +117,15 @@ export function QuizPage(): JSX.Element {
     setAttemptId(null)
     setAnswer('')
     setStartedAt(Date.now())
-    if (index + 1 >= questions.length) {
+    const following = nextOpenIndex(questions, answeredIds, index)
+    if (following === -1) {
       navigate(`/projects/${projectId}/quiz/${quizId}/result`)
       return
     }
-    setIndex((i) => i + 1)
+    setIndex(following)
   }
+
+  const answeredCount = questions.filter((question) => answeredIds.has(question.id)).length
 
   if (!projectId) return <div />
 
@@ -157,10 +176,10 @@ export function QuizPage(): JSX.Element {
       />
       <PageContent className="space-y-4">
         <div className="space-y-1">
-          <Progress value={((index + (evaluation ? 1 : 0)) / questions.length) * 100} />
+          <Progress value={(answeredCount / questions.length) * 100} />
           <p className="text-xs text-muted-foreground">
             {t('quiz.progress', {
-              answered: index + (evaluation ? 1 : 0),
+              answered: answeredCount,
               total: questions.length,
             })}
           </p>
@@ -168,6 +187,7 @@ export function QuizPage(): JSX.Element {
 
         {current && (
           <QuestionCard
+            key={current.id}
             question={current}
             index={index}
             total={questions.length}
@@ -178,7 +198,7 @@ export function QuizPage(): JSX.Element {
             onNext={next}
             busy={busy}
             evaluation={evaluation}
-            isLast={index + 1 >= questions.length}
+            isLast={nextOpenIndex(questions, answeredIds, index) === -1}
             {...(evaluation?.method === 'rubric_ai' && !evaluation.disputed && attemptId
               ? { onDispute: () => void dispute() }
               : {})}
@@ -196,4 +216,12 @@ export function QuizPage(): JSX.Element {
       </PageContent>
     </PageContainer>
   )
+}
+
+/** The next question after `from` that has no attempt yet, or -1. */
+function nextOpenIndex(questions: Question[], answered: Set<string>, from: number): number {
+  for (let i = from + 1; i < questions.length; i++) {
+    if (!answered.has(questions[i]!.id)) return i
+  }
+  return -1
 }

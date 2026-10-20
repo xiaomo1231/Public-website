@@ -12,7 +12,7 @@ import {
   chunkFingerprintMap,
   validateTopicSourceChunks,
 } from '@/entities/courseContent/topicDependency'
-import { matchTopicIdentities } from '@/entities/courseAnalysis/topicIdentity'
+import { matchTopicIdentities, normalizeTopicName } from '@/entities/courseAnalysis/topicIdentity'
 import { mergeDocumentAnalyses } from '@/entities/courseAnalysis/mergeAnalyses'
 import {
   planAnalysisSegments,
@@ -195,7 +195,13 @@ export class DocumentAnalysisService {
       prompts.documentAnalyzer.VERSION,
       subject,
     )
-    await this.analyses.upsert({
+    // A usable analysis is never overwritten by an in-progress marker: if the
+    // tab closes mid-run, the ready row (with its old source hash, so it reads
+    // stale and is redone later) must still be there. Progress is reported via
+    // `onProgress`. Only when nothing usable exists is an 'analyzing' row
+    // written, and the next run simply replaces it.
+    const keepReadyRow = seed?.status === 'ready'
+    if (!keepReadyRow) await this.analyses.upsert({
       id: analysisId,
       projectId,
       status: 'analyzing',
@@ -240,10 +246,9 @@ export class DocumentAnalysisService {
       }
     } catch (err) {
       // A failed refresh must never destroy an analysis that is already usable.
-      // Restore the previous row (the 'analyzing' write above replaced it) and
-      // let the caller surface the error.
-      if (seed && seed.status === 'ready') {
-        await this.analyses.upsert(seed)
+      // The ready row was never touched, so there is nothing to restore; let
+      // the caller surface the error.
+      if (keepReadyRow) {
         logger.warn('Course analysis failed; the previously saved analysis is still in use', {
           projectId,
           error: err instanceof Error ? err.message : String(err),
@@ -281,7 +286,7 @@ export class DocumentAnalysisService {
     const previousTopics = await this.analyses.listTopics(projectId)
     const chunkTokens = analysisChunks.map((chunk) => ({ chunk, tokens: new Set(tokenize(chunk.text)) }))
     const position = new Map(analysisChunks.map((chunk, index) => [chunk.id, { chunk, index }]))
-    const drafts = output.topics.map((topic, idx) => {
+    const rawDrafts = output.topics.map((topic, idx) => {
       // A topic sits where its earliest source passage is; word overlap is
       // only the fallback for a topic without valid sources.
       const firstSource = (topic.sourceChunkIds ?? [])
@@ -300,6 +305,16 @@ export class DocumentAnalysisService {
         ...structure,
       }
     })
+    // Topic rows are keyed by id, and derived rows refer to topics by name: two
+    // topics with the same name in one result would collapse into one row and
+    // their references would be ambiguous. Collapse true duplicates, and rename
+    // same-name topics that sit in different chapters.
+    const { drafts, aliases } = collapseSameNameTopics(rawDrafts)
+    // Validated once, and used both for identity matching (source overlap)
+    // and for the stored dependency.
+    const dependencies = drafts.map((draft) =>
+      validateTopicSourceChunks(draft.rawSourceChunkIds, candidateChunks),
+    )
 
     // Reuse the stored id when this is recognisably the same teaching topic, so
     // TutorLesson / TutorSession / Quiz / Practice references survive a
@@ -312,11 +327,16 @@ export class DocumentAnalysisService {
         ...(topic.sectionId ? { sectionId: topic.sectionId } : {}),
         ...(topic.sourceChunkIds ? { sourceChunkIds: topic.sourceChunkIds } : {}),
       })),
-      drafts.map((draft) => ({
-        name: draft.name,
-        ...(draft.chapterId ? { chapterId: draft.chapterId } : {}),
-        ...(draft.sectionId ? { sectionId: draft.sectionId } : {}),
-      })),
+      drafts.map((draft, idx) => {
+        const dependency = dependencies[idx]
+        return {
+          name: draft.name,
+          ...(draft.chapterId ? { chapterId: draft.chapterId } : {}),
+          ...(draft.sectionId ? { sectionId: draft.sectionId } : {}),
+          // Only locally validated ids: pass 3 (source overlap) trusts them.
+          ...(dependency ? { sourceChunkIds: dependency.sourceChunkIds } : {}),
+        }
+      }),
     )
     logger.debug('Topic identity resolved', {
       projectId,
@@ -329,8 +349,10 @@ export class DocumentAnalysisService {
     const topicsPayload = drafts.map((draft, idx) => {
       const id = identity.ids[idx] ?? crypto.randomUUID()
       topicsByName.set(draft.name, id)
-      const dependency = validateTopicSourceChunks(draft.rawSourceChunkIds, candidateChunks)
+      const dependency = dependencies[idx]
       return {
+        // Carried by position, never looked up by name.
+        id,
         name: draft.name,
         description: draft.description,
         order: draft.order,
@@ -359,6 +381,10 @@ export class DocumentAnalysisService {
           : { needsFullReanalysis: true }),
       }
     })
+    // References may still use a collapsed duplicate's spelling of the name.
+    for (const [name, index] of aliases) {
+      if (!topicsByName.has(name)) topicsByName.set(name, topicsPayload[index]!.id)
+    }
 
     await this.analyses.reseedProject(
       projectId,
@@ -585,6 +611,72 @@ interface StructureRef {
   sectionNumber?: string
   chapterTitle?: string
   sectionTitle?: string
+}
+
+interface TopicDraft extends StructureRef {
+  name: string
+  description: string
+  order: number
+  sourceRefs: CourseSourceRef[]
+  rawSourceChunkIds?: string[] | undefined
+}
+
+/**
+ * Make topic names unique within one analysis result.
+ *
+ * Same normalised name and no conflicting chapter ⇒ the same topic reported
+ * twice: the two are combined (sources unioned). Same name in two different
+ * chapters (e.g. "Summary") ⇒ both kept, the later one renamed with its chapter
+ * label. `aliases` maps every original spelling to the index of the topic that
+ * now answers to it, so name-based references still resolve.
+ *
+ * Pure: no storage, no AI.
+ */
+export function collapseSameNameTopics<T extends TopicDraft>(
+  input: readonly T[],
+): { drafts: T[]; aliases: Map<string, number> } {
+  const drafts: T[] = []
+  const aliases = new Map<string, number>()
+  const byKey = new Map<string, number>()
+  const used = new Set<string>()
+  for (const topic of input) {
+    const key = normalizeTopicName(topic.name) || topic.name
+    const at = byKey.get(key)
+    const kept = at === undefined ? undefined : drafts[at]!
+    if (kept === undefined || at === undefined) {
+      byKey.set(key, drafts.length)
+      used.add(key)
+      if (!aliases.has(topic.name)) aliases.set(topic.name, drafts.length)
+      drafts.push({ ...topic, order: drafts.length })
+      continue
+    }
+    const differentChapter =
+      Boolean(kept.chapterId && topic.chapterId) && kept.chapterId !== topic.chapterId
+    if (!differentChapter) {
+      const refKeys = new Set(kept.sourceRefs.map(courseRefKey))
+      drafts[at] = {
+        ...kept,
+        rawSourceChunkIds: [...new Set([...(kept.rawSourceChunkIds ?? []), ...(topic.rawSourceChunkIds ?? [])])],
+        sourceRefs: [...kept.sourceRefs, ...topic.sourceRefs.filter((ref) => !refKeys.has(courseRefKey(ref)))],
+      }
+      if (!aliases.has(topic.name)) aliases.set(topic.name, at)
+      continue
+    }
+    const label =
+      [topic.chapterNumber, topic.chapterTitle].filter(Boolean).join(' ') || `${drafts.length + 1}`
+    let name = `${topic.name} · ${label}`
+    for (let n = 2; used.has(normalizeTopicName(name) || name); n++) name = `${topic.name} · ${label} (${n})`
+    used.add(normalizeTopicName(name) || name)
+    byKey.set(normalizeTopicName(name) || name, drafts.length)
+    // The original spelling keeps pointing at the first topic of that name.
+    aliases.set(name, drafts.length)
+    drafts.push({ ...topic, name, order: drafts.length })
+  }
+  return { drafts, aliases }
+}
+
+function courseRefKey(ref: CourseSourceRef): string {
+  return [ref.documentId, ref.page ?? '', ref.slideNumber ?? '', ref.section ?? '', ref.quote ?? ''].join('|')
 }
 
 /** The textbook position of one chunk — the model never gets to renumber the book. */

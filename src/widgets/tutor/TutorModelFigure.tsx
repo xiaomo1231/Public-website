@@ -62,7 +62,7 @@ export function TutorRegressionFigure({ visualization, layout, t }: { visualizat
       ...[...bands].reverse().map((b) => `L ${scale.sx(b.x).toFixed(1)} ${scale.sy(b.y - b[key]).toFixed(1)}`),
       'Z',
     ].join(' ')
-  const label = t('viz.regressionAria', { n: fit.n, slope: f(fit.slope, 4), r2: f(fit.r2, 3) })
+  const label = t('viz.regressionAria', { n: fit.n, slope: f(fit.slope, 4), r2: fit.r2 === null ? '—' : f(fit.r2, 3) })
 
   return (
     <div className="space-y-2 px-1 py-2">
@@ -95,8 +95,8 @@ export function TutorRegressionFigure({ visualization, layout, t }: { visualizat
         <span className="font-medium text-foreground">
           ŷ = {f(fit.intercept, 4)} {fit.slope < 0 ? '−' : '+'} {f(Math.abs(fit.slope), 4)}x
         </span>
-        <span>r = {f(fit.r, 4)}</span>
-        <span>R² = {f(fit.r2, 4)}</span>
+        <span>r = {fit.r === null ? '—' : f(fit.r, 4)}</span>
+        <span>R² = {fit.r2 === null ? '—' : f(fit.r2, 4)}</span>
         <span>s = {f(fit.residualSe, 4)}</span>
         {p !== null && <span>{t('viz.regressionSlopeTest', { se: f(fit.slopeSe, 3), p: p < 1e-4 ? '< 0.0001' : f(p, 3), df: fit.n - 2 })}</span>}
       </Facts>

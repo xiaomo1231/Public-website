@@ -1,6 +1,7 @@
 import type { AppDatabase } from '@/infrastructure/db/database'
 import { getDb } from '@/infrastructure/db/database'
 import { PracticeRepository } from '@/entities/practice/repository'
+import { QuestionAttemptRepository } from '@/entities/questionAttempt/repository'
 import type {
   PracticeAttempt,
   PracticeQuestion,
@@ -437,7 +438,11 @@ export class PracticeService {
       await this.mistakes?.removeAttempt(attempt.projectId, question.id, attempt.id)
       if (this.mastery) {
         const knowledgePoint = await this.knowledgePointFor(question)
-        const history = (await this.practiceHistory(question.projectId, knowledgePoint))
+        // Quiz work on the same point counts too; a rebuild replaces the row.
+        const history = [
+          ...(await this.practiceHistory(question.projectId, knowledgePoint)),
+          ...(await new QuestionAttemptRepository(this.db).listByKnowledgePoint(question.projectId, knowledgePoint)),
+        ]
         await this.mastery.rebuild(question.projectId, history)
       }
     }
@@ -566,7 +571,7 @@ export class PracticeService {
   }
 
   /** Practice attempts on one knowledge point, as quiz attempts (for a mastery rebuild). */
-  private async practiceHistory(projectId: string, knowledgePoint: string): Promise<QuestionAttempt[]> {
+  async practiceHistory(projectId: string, knowledgePoint: string): Promise<QuestionAttempt[]> {
     const questions = await this.practice.listQuestionsByProject(projectId)
     const history: QuestionAttempt[] = []
     for (const question of questions) {

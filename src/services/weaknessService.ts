@@ -16,8 +16,6 @@ export interface WeaknessArea {
   mastery: number | null
   /** Higher = weaker. Used for ranking. */
   weaknessScore: number
-  /** Neutral, non-judgemental description for the UI. */
-  reason: string
 }
 
 export interface WeaknessReport {
@@ -95,11 +93,6 @@ export function buildWeaknessAreas(
       0.45 * mistakeWeight + 0.2 * activeWeight + 0.15 * recencyWeight + 0.2 * masteryGap,
     )
 
-    const reasonParts: string[] = []
-    reasonParts.push(`${list.length} recorded mistake${list.length === 1 ? '' : 's'}`)
-    if (recentMistakeCount > 0) reasonParts.push(`${recentMistakeCount} in the last 30 days`)
-    if (mastery !== null) reasonParts.push(`mastery estimate ${Math.round(mastery * 100)}%`)
-
     areas.push({
       knowledgePoint,
       mistakeCount: list.length,
@@ -107,7 +100,6 @@ export function buildWeaknessAreas(
       recentMistakeCount,
       mastery,
       weaknessScore,
-      reason: reasonParts.join(' · '),
     })
   }
 

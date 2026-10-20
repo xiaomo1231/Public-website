@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { KeyRound } from 'lucide-react'
 import { useAuth } from '@/features/auth/useAuth'
+import { safeReturnPath } from '@/features/auth/returnPath'
 import { Button } from '@/shared/ui/Button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/shared/ui/Card'
 import { Input } from '@/shared/ui/Input'
@@ -19,10 +20,13 @@ export function InvitePage(): JSX.Element {
   const [submitting, setSubmitting] = useState(false)
   const [localError, setLocalError] = useState<string | null>(null)
   const navigate = useNavigate()
+  const location = useLocation()
+  // Back to the page the student originally asked for (same-app paths only).
+  const returnTo = safeReturnPath(location.state)
 
   useEffect(() => {
-    if (loaded && isUnlocked) navigate('/dashboard', { replace: true })
-  }, [loaded, isUnlocked, navigate])
+    if (loaded && isUnlocked) navigate(returnTo, { replace: true })
+  }, [loaded, isUnlocked, navigate, returnTo])
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -30,7 +34,7 @@ export function InvitePage(): JSX.Element {
     setSubmitting(true)
     try {
       await unlock(code)
-      navigate('/dashboard', { replace: true })
+      navigate(returnTo, { replace: true })
     } catch (err) {
       if (err instanceof AuthError) {
         setLocalError(err.message)

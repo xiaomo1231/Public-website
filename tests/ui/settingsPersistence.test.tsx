@@ -112,4 +112,40 @@ describe('Settings page persistence', () => {
       expect(stored.model).toBe('model-b')
     })
   })
+
+  it('reset to defaults clears the form so a later Save does not write the old key back', async () => {
+    const user = userEvent.setup()
+    await new SettingsService().update({
+      apiKey: 'sk-old-key',
+      baseURL: 'https://api.old.example/v1',
+      model: 'old-model',
+    })
+
+    reloadCaches()
+    render(
+      <MemoryRouter>
+        <SettingsPage />
+      </MemoryRouter>,
+    )
+
+    expect(await screen.findByLabelText('Key')).toHaveValue('sk-old-key')
+    await user.click(screen.getByRole('button', { name: 'Reset to defaults' }))
+
+    await waitFor(() => expect(screen.getByLabelText('Key')).toHaveValue(''))
+    expect(screen.getByLabelText('API Base URL')).not.toHaveValue('https://api.old.example/v1')
+    expect(screen.getByLabelText('Model')).not.toHaveValue('old-model')
+
+    const model = screen.getByLabelText('Model')
+    await user.clear(model)
+    await user.type(model, 'new-model')
+    await user.click(screen.getByRole('button', { name: 'Save changes' }))
+
+    await waitFor(async () => {
+      const stored = await new SettingsService().get()
+      expect(stored.model).toBe('new-model')
+    })
+    const stored = await new SettingsService().get()
+    expect(stored.apiKey).toBe('')
+    expect(stored.baseURL).not.toBe('https://api.old.example/v1')
+  })
 })

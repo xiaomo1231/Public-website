@@ -20,7 +20,7 @@ export function RequireAuth({ children }: { children: ReactNode }): JSX.Element 
     )
   }
   if (!isUnlocked) {
-    return <Navigate to="/invite" replace state={{ from: location.pathname }} />
+    return <Navigate to="/invite" replace state={{ from: location.pathname + location.search + location.hash }} />
   }
   return <>{children}</>
 }

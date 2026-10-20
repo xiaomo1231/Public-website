@@ -7,11 +7,12 @@ import { buildAIServices } from '@/services/aiServices'
 import { friendlyAIError } from '@/shared/lib/aiErrors'
 import { looksLikeUnreliableVisualText } from '@/infrastructure/files/visualDetection'
 import { useTranslation } from '@/i18n'
+import type { ContextualTutorKind } from '@/infrastructure/ai/prompts/contextual-tutor/v3'
 
 export interface ContextualTutorContext {
   projectId: string
   topicId?: string
-  contextKind?: 'lesson' | 'homework'
+  contextKind?: ContextualTutorKind
   topicTitle?: string
   sectionHeading?: string
   selectedText: string

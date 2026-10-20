@@ -9,7 +9,8 @@
 
 export type ReviewGrade = 'again' | 'hard' | 'good' | 'easy'
 
-export type ReviewCardSource = 'concept' | 'table' | 'manual'
+/** `note` — a question saved from a homework walkthrough. */
+export type ReviewCardSource = 'concept' | 'table' | 'manual' | 'note'
 
 export interface ReviewCard {
   id: string
@@ -45,9 +46,15 @@ export function scheduleReview(card: ReviewCard, grade: ReviewGrade, now: number
   let { interval, ease, reps, lapses } = card
   let dueIn: number
   if (grade === 'again') {
+    // Only forgetting a graduated card (one in review, interval > 0) is a
+    // lapse that lowers its ease. Failing a new or still-learning card again
+    // just restarts its learning step — otherwise a few repeats in one session
+    // would sink the ease to its floor before the card was ever learned.
+    if (card.interval > 0) {
+      lapses += 1
+      ease = Math.max(MIN_EASE, ease - 0.2)
+    }
     reps = 0
-    lapses += card.reps > 0 ? 1 : 0
-    ease = Math.max(MIN_EASE, ease - 0.2)
     interval = 0
     dueIn = 10 * MINUTE_MS
   } else if (grade === 'hard' && reps === 0) {
@@ -68,6 +75,30 @@ export function scheduleReview(card: ReviewCard, grade: ReviewGrade, now: number
     dueIn = interval * DAY_MS
   }
   return { ...card, interval, ease, reps, lapses, due: now + dueIn, lastReviewedAt: now, updatedAt: now }
+}
+
+/** How often one card may come back within a single review session after "again". */
+export const MAX_SESSION_REPEATS = 2
+
+/**
+ * The session queue after grading its first card: "again" puts the card back
+ * at the end, at most `MAX_SESSION_REPEATS` times per session (it is still
+ * scheduled 10 minutes out, so it returns in a later session).
+ */
+export function advanceSessionQueue(
+  queue: ReviewCard[],
+  graded: ReviewCard,
+  grade: ReviewGrade,
+  repeats: ReadonlyMap<string, number>,
+): { queue: ReviewCard[]; repeats: Map<string, number> } {
+  const rest = queue.slice(1)
+  const nextRepeats = new Map(repeats)
+  const used = repeats.get(graded.id) ?? 0
+  if (grade === 'again' && used < MAX_SESSION_REPEATS) {
+    nextRepeats.set(graded.id, used + 1)
+    return { queue: [...rest, graded], repeats: nextRepeats }
+  }
+  return { queue: rest, repeats: nextRepeats }
 }
 
 /** How long each grade would postpone the card, for the rating buttons. */

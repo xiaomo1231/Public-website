@@ -169,19 +169,65 @@ export async function searchCommons(
 
 // --- download ------------------------------------------------------------------
 
-/** Image bytes from an allowed host, or null when the response is not a safe image. */
+/**
+ * Image bytes from an allowed host, or null when the response is not a safe image.
+ *
+ * Redirects are only accepted when they end on an allowed host (browsers do
+ * not expose the Location of a manual redirect, so the final `response.url`
+ * is checked instead). The body is read as a stream with a running byte cap,
+ * so a response without `content-length` cannot make us buffer more than
+ * `MAX_IMAGE_BYTES`.
+ */
 export async function downloadImage(
   url: string,
   options: { fetch: FetchLike; signal?: AbortSignal },
 ): Promise<{ bytes: ArrayBuffer; mimeType: string } | null> {
   if (!isAllowedUrl(url)) return null
   const response = await options.fetch(url, options.signal ? { signal: options.signal } : undefined)
+  if (response.type === 'opaqueredirect') return null
+  if (response.url && !isAllowedUrl(response.url)) {
+    await response.body?.cancel().catch(() => undefined)
+    return null
+  }
   if (!response.ok) return null
   const mimeType = (response.headers.get('content-type') ?? '').split(';')[0]!.trim().toLowerCase()
   if (!ALLOWED_MIME.includes(mimeType)) return null
   const declared = Number(response.headers.get('content-length') ?? '0')
-  if (declared > MAX_IMAGE_BYTES) return null
-  const bytes = await response.arrayBuffer()
-  if (bytes.byteLength === 0 || bytes.byteLength > MAX_IMAGE_BYTES) return null
+  if (declared > MAX_IMAGE_BYTES) {
+    await response.body?.cancel().catch(() => undefined)
+    return null
+  }
+  const bytes = await readCapped(response, MAX_IMAGE_BYTES)
+  if (!bytes || bytes.byteLength === 0) return null
   return { bytes, mimeType }
+}
+
+/** The response body, or null as soon as it grows past `max` bytes. */
+async function readCapped(response: Response, max: number): Promise<ArrayBuffer | null> {
+  const body = response.body
+  if (!body) {
+    const bytes = await response.arrayBuffer()
+    return bytes.byteLength > max ? null : bytes
+  }
+  const reader = body.getReader()
+  const parts: Uint8Array[] = []
+  let total = 0
+  for (;;) {
+    const { done, value } = await reader.read()
+    if (done) break
+    if (!value) continue
+    total += value.byteLength
+    if (total > max) {
+      await reader.cancel().catch(() => undefined)
+      return null
+    }
+    parts.push(value)
+  }
+  const out = new Uint8Array(total)
+  let offset = 0
+  for (const part of parts) {
+    out.set(part, offset)
+    offset += part.byteLength
+  }
+  return out.buffer
 }

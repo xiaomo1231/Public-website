@@ -195,7 +195,7 @@ export class DataManagementService {
       'courseExercises', 'prerequisites', 'tutorSessions', 'tutorLessons',
       'visualSources', 'courseContexts', 'courseStructures', 'courseStructureNodes',
       'practiceSets', 'practiceQuestions', 'practiceAttempts',
-      'homeworkSets', 'homeworkQuestions', 'slideLessons', 'translations', 'reviewCards',
+      'homeworkSets', 'homeworkQuestions', 'homeworkWalkthroughs', 'walkthroughNotes', 'slideLessons', 'translations', 'reviewCards',
       'vocabCards', 'vocabBooks', 'vocabEntries', 'vocabReviews',
       'questions', 'questionAttempts', 'quizzes', 'knowledgeMastery', 'mistakes',
       'inviteKeys', 'user', 'settings',

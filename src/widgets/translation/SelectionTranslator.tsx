@@ -8,6 +8,9 @@ import { useCurrentProject } from '@/features/project/useCurrentProject'
 import { toast } from '@/features/toast/toastStore'
 import { friendlyAIError } from '@/shared/lib/aiErrors'
 import { useTranslation } from '@/i18n'
+import type { ContextualTutorKind } from '@/infrastructure/ai/prompts/contextual-tutor/v3'
+import { describeAnchor, type TextAnchor } from '@/shared/lib/textAnchor'
+import { openPassage } from '@/features/homework/floatingQA'
 import {
   computeSelectionPopupPosition,
   isPopupAnchorVisible,
@@ -27,13 +30,24 @@ interface SelectionState {
   topicTitle?: string
   projectId?: string
   topicId?: string
-  contextKind?: 'lesson' | 'homework'
+  contextKind?: ContextualTutorKind
   language: string
   fromVisual: boolean
   tooLong: boolean
   /** The selection's viewport rectangle; the anchor for every re-position. */
   anchor: PopupAnchor
   mobile: boolean
+  /** Inside a homework walkthrough: Explain / Ask open a floating window. */
+  walkthrough?: WalkthroughSelection
+}
+
+interface WalkthroughSelection {
+  projectId: string
+  setId: string
+  setTitle: string
+  sectionId: string
+  sectionTitle: string
+  textAnchor: TextAnchor
 }
 
 interface TranslationResult {
@@ -132,6 +146,7 @@ export function SelectionTranslator(): JSX.Element | null {
       const surrounding = getSurroundingParagraph(range)
       const sectionHeading = getSectionHeading(range)
       const topicTitle = homeworkScope?.getAttribute('data-selection-title') || getTopicTitle(range)
+      const walkthrough = readWalkthroughSelection(range)
 
       setAction(null)
       setTranslation(null)
@@ -141,13 +156,23 @@ export function SelectionTranslator(): JSX.Element | null {
         ...(canonicalLatex ? { canonicalLatex } : {}),
         ...(sectionHeading ? { sectionHeading } : {}),
         ...(topicTitle ? { topicTitle } : {}),
-        ...(route ?? (homeworkProject ? { projectId: homeworkProject } : {})),
-        ...(homeworkProject ? { contextKind: 'homework' as const } : {}),
+        ...(route ??
+          (homeworkProject
+            ? { projectId: homeworkProject }
+            : walkthrough
+              ? { projectId: walkthrough.projectId }
+              : {})),
+        ...(walkthrough
+          ? { contextKind: 'walkthrough' as const }
+          : homeworkProject
+            ? { contextKind: 'homework' as const }
+            : {}),
         language: detectLanguage(`${text} ${surrounding}`),
         fromVisual: isInsideVisual(range),
         tooLong: text.length > MAX_SELECTION,
         anchor,
         mobile,
+        ...(walkthrough ? { walkthrough } : {}),
       })
       // Provisional placement with an unknown size; the layout effect below
       // measures the real popup and refines it before the first paint.
@@ -306,6 +331,31 @@ export function SelectionTranslator(): JSX.Element | null {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [action])
 
+  // In a walkthrough the answer becomes a floating window the learner can move
+  // and keep, instead of a popup tied to the selection.
+  useEffect(() => {
+    if ((action !== 'explain' && action !== 'ask') || !selection?.walkthrough) return
+    const { walkthrough: scope } = selection
+    openPassage(
+      {
+        projectId: scope.projectId,
+        setId: scope.setId,
+        setTitle: scope.setTitle,
+        sectionId: scope.sectionId,
+        sectionTitle: scope.sectionTitle,
+        quote: selection.text,
+        ...(selection.canonicalLatex ? { latex: selection.canonicalLatex } : {}),
+        anchor: scope.textAnchor,
+        surrounding: selection.surrounding,
+        language: selection.language === 'zh' ? 'zh' : 'en',
+      },
+      action,
+      selection.anchor,
+    )
+    window.getSelection()?.removeAllRanges()
+    closeAll()
+  }, [action, selection, closeAll])
+
   if (!selection) return null
 
   const contextualContext: ContextualTutorContext | null =
@@ -398,7 +448,7 @@ export function SelectionTranslator(): JSX.Element | null {
             </div>
           )}
         </div>
-      ) : contextualContext ? (
+      ) : selection.walkthrough ? null : contextualContext ? (
         <ContextualTutorPopup mode={action} context={contextualContext} onClose={closeAll} />
       ) : null}
     </div>
@@ -437,6 +487,26 @@ function parseTopicRoute(pathname: string): { projectId: string; topicId: string
 
 function parseProjectRoute(pathname: string): string | null {
   return /^\/projects\/([^/]+)\/homework\/[^/]+/.exec(pathname)?.[1] ?? null
+}
+
+function readWalkthroughSelection(range: Range): WalkthroughSelection | undefined {
+  const start = elementFor(range.startContainer)
+  const scope = start?.closest('[data-selection-context="walkthrough"]')
+  const section = start?.closest('[data-walkthrough-section]')
+  if (!scope || !section || !section.contains(range.endContainer)) return undefined
+  const projectId = scope.getAttribute('data-walkthrough-project')
+  const setId = scope.getAttribute('data-walkthrough-set')
+  const sectionId = section.getAttribute('data-walkthrough-section')
+  const textAnchor = describeAnchor(section, range)
+  if (!projectId || !setId || !sectionId || !textAnchor) return undefined
+  return {
+    projectId,
+    setId,
+    setTitle: scope.getAttribute('data-selection-title') ?? '',
+    sectionId,
+    sectionTitle: section.getAttribute('data-section-title') ?? '',
+    textAnchor,
+  }
 }
 
 function elementFor(node: Node | null): Element | null {

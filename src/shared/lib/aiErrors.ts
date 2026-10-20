@@ -65,7 +65,9 @@ export function friendlyAIError(err: unknown): string {
   }
   if (err instanceof Error) {
     if (err.name === 'AbortError') return t('friendlyError.cancelled')
-    if (/failed to fetch|networkerror|network request failed/i.test(err.message)) {
+    // Firefox: "NetworkError when…", Chrome mid-stream: "network error",
+    // Safari / RN: "Network request failed", Chrome fetch: "Failed to fetch".
+    if (/failed to fetch|network ?error|network request failed/i.test(err.message)) {
       return t('friendlyError.providerUnavailable')
     }
     return ensureUseful(err.message, t('friendlyError.generic'))

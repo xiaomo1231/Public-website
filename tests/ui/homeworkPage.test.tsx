@@ -160,3 +160,19 @@ describe('HomeworkPage archive and re-analysis summary', () => {
     expect(screen.getByRole('button', { name: 'Previous' })).toBeEnabled()
   })
 })
+
+describe('HomeworkPage unknown assignment', () => {
+  it('says the assignment was not found instead of "No homework yet"', async () => {
+    holder.service.getSet = vi.fn(async () => undefined)
+    renderPage()
+    expect(await screen.findByText('Assignment not found')).toBeInTheDocument()
+    expect(screen.queryByText('No homework yet')).not.toBeInTheDocument()
+  })
+
+  it('treats an assignment from another course as not found', async () => {
+    holder.service.getSet = vi.fn(async () => ({ ...SET, projectId: 'other' }))
+    renderPage()
+    expect(await screen.findByText('Assignment not found')).toBeInTheDocument()
+    expect(screen.queryByTestId('question-view')).not.toBeInTheDocument()
+  })
+})

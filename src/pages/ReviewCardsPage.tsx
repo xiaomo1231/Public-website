@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { ArrowLeft, Layers, Loader2, Pencil, Plus, Search, Sparkles, Trash2 } from 'lucide-react'
 import { Button } from '@/shared/ui/Button'
@@ -16,7 +16,7 @@ import { Textarea } from '@/shared/ui/Textarea'
 import { PageContainer, PageContent, PageHeader } from '@/shared/ui/Page'
 import { ProjectFlowNav } from '@/widgets/project/ProjectFlowNav'
 import { ReviewCardService, type ReviewStats } from '@/services/reviewCardService'
-import { DAY_MS, previewIntervals, type ReviewCard, type ReviewGrade } from '@/entities/reviewCard/types'
+import { DAY_MS, advanceSessionQueue, previewIntervals, type ReviewCard, type ReviewGrade } from '@/entities/reviewCard/types'
 import { toast } from '@/features/toast/toastStore'
 import { useTranslation, type TranslationKey } from '@/i18n'
 
@@ -57,6 +57,8 @@ export function ReviewCardsPage(): JSX.Element {
   const [generating, setGenerating] = useState(false)
   // Review session: the queue is fixed when it starts; "again" re-queues a card.
   const [queue, setQueue] = useState<ReviewCard[] | null>(null)
+  /** Times each card was re-queued by "again" in the current session. */
+  const repeatsRef = useRef<Map<string, number>>(new Map())
   const [reviewed, setReviewed] = useState(0)
   const [revealed, setRevealed] = useState(false)
   const [grading, setGrading] = useState(false)
@@ -91,6 +93,7 @@ export function ReviewCardsPage(): JSX.Element {
   const startReview = async () => {
     if (!projectId) return
     const due = await service.due(projectId)
+    repeatsRef.current = new Map()
     setQueue(due.sort((a, b) => a.due - b.due))
     setReviewed(0)
     setRevealed(false)
@@ -102,10 +105,10 @@ export function ReviewCardsPage(): JSX.Element {
       setGrading(true)
       try {
         const next = await service.review(current.id, value)
-        setQueue((q) => {
-          const rest = (q ?? []).slice(1)
-          return value === 'again' ? [...rest, next] : rest
-        })
+        // "again" re-queues the card, but only a couple of times per session.
+        const advanced = advanceSessionQueue(queue ?? [], next, value, repeatsRef.current)
+        repeatsRef.current = advanced.repeats
+        setQueue(advanced.queue)
         setReviewed((n) => n + 1)
         setRevealed(false)
         await refresh()
@@ -115,7 +118,7 @@ export function ReviewCardsPage(): JSX.Element {
         setGrading(false)
       }
     },
-    [current, grading, refresh, service, t],
+    [current, grading, queue, refresh, service, t],
   )
 
   // Space reveals the answer; 1–4 rate it.

@@ -49,7 +49,13 @@ function serializeError(err: unknown): LogPayload['error'] {
   }
 }
 
-const SENSITIVE_KEY = /apikey|api_key|password|secret|token|authorization|bearer/i
+/**
+ * Keys whose values are credentials. `token` only counts as a whole word or a
+ * suffix in the singular (`token`, `access_token`, `idToken`, `refreshToken`,
+ * `x-auth-token`), so usage counters such as `promptTokens` or
+ * `maxOutputTokens` stay readable.
+ */
+const SENSITIVE_KEY = /api[_-]?key|password|passwd|secret|authorization|bearer|credential|token$/i
 
 function redact(value: unknown, seen: WeakSet<object> = new WeakSet()): unknown {
   if (value === null || value === undefined) return value

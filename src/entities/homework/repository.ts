@@ -4,6 +4,7 @@ import { AppError } from '@/infrastructure/errors/AppError'
 import type { HomeworkQuestion, HomeworkSet } from './types'
 import { homeworkReviewInputHash, type HomeworkReviewGuide } from './reviewGuide'
 import { answerCheckInputHash, type HomeworkAnswerCheck } from './answerCheck'
+import { WalkthroughRepository } from './walkthroughRepository'
 
 /**
  * Persistence for homework assignments and their questions.
@@ -275,9 +276,11 @@ export class HomeworkRepository {
 
   async deleteByDocument(documentId: string): Promise<void> {
     const sets = await this.sets().where('documentId').equals(documentId).toArray()
-    await this.db.transaction('rw', this.sets(), this.questions(), async () => {
+    const walkthroughs = new WalkthroughRepository(this.db)
+    await this.db.transaction('rw', [this.sets(), this.questions(), this.db.homeworkWalkthroughs, this.db.walkthroughNotes], async () => {
       for (const set of sets) {
         await this.questions().where('setId').equals(set.id).delete()
+        await walkthroughs.deleteBySet(set.id)
         await this.sets().delete(set.id)
       }
     })
@@ -285,7 +288,8 @@ export class HomeworkRepository {
 
   async deleteByProject(projectId: string): Promise<number> {
     const sets = await this.sets().where('projectId').equals(projectId).toArray()
-    await this.db.transaction('rw', this.sets(), this.questions(), async () => {
+    await this.db.transaction('rw', [this.sets(), this.questions(), this.db.homeworkWalkthroughs, this.db.walkthroughNotes], async () => {
+      await new WalkthroughRepository(this.db).deleteByProject(projectId)
       await this.questions().where('projectId').equals(projectId).delete()
       await this.sets().where('projectId').equals(projectId).delete()
     })

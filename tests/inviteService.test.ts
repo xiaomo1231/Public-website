@@ -4,6 +4,7 @@ import { describe, expect, it, beforeEach } from 'vitest'
 import { AppDatabase } from '@/infrastructure/db/database'
 import { InviteService } from '@/services/inviteService'
 import { AuthError } from '@/infrastructure/errors/AppError'
+import { UserRepository } from '@/entities/user/repository'
 
 describe('InviteService', () => {
   let svc: InviteService
@@ -68,6 +69,36 @@ describe('InviteService', () => {
     expect(await s.isUnlocked()).toBe(true)
     await s.lock()
     expect(await s.isUnlocked()).toBe(false)
+  })
+
+  it('locking keeps the user preferences and only clears the unlock state', async () => {
+    const s = fresh()
+    const users = new UserRepository()
+    await s.ensureSeeded()
+    await s.unlock('welcome-learn')
+    await users.update({
+      name: 'Ada',
+      theme: 'dark',
+      colorTheme: 'academic',
+      uiLanguage: 'zh-CN',
+      questionLanguage: 'en',
+      vocabDailyNew: 35,
+    })
+    await s.lock()
+    const profile = await users.get()
+    expect(profile.unlockedAt).toBeUndefined()
+    expect(profile.inviteCode).toBeUndefined()
+    expect(profile).toMatchObject({
+      name: 'Ada',
+      theme: 'dark',
+      colorTheme: 'academic',
+      uiLanguage: 'zh-CN',
+      questionLanguage: 'en',
+      vocabDailyNew: 35,
+    })
+    // Unlocking again still works after a lock.
+    await s.unlock('welcome-learn')
+    expect(await s.isUnlocked()).toBe(true)
   })
 
   it('AppDatabase constructed standalone works', () => {

@@ -300,7 +300,7 @@ describe('End-to-end user flow', () => {
     const report = await weakness.analyze(project.id)
     expect(report.totalMistakes).toBeGreaterThan(0)
     expect(report.areas[0]!.knowledgePoint).toBe('Power Rule')
-    expect(report.areas[0]!.reason).toMatch(/mistake/)
+    expect(report.areas[0]!.mistakeCount).toBeGreaterThan(0)
 
     // 10. Review session from mistakes
     const review = new ReviewSessionService({ quiz, mistakes, weakness, db })

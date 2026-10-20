@@ -110,6 +110,36 @@ describe('import and export', () => {
   it('writes one word per line', () => {
     expect(formatExport(rows, 'txt')).toBe('bursa\ntendon\n')
   })
+
+  it('re-imports its own CSV export: meaning column only, quoted fields honoured', () => {
+    const { words, skipped } = parseWordList(formatExport(rows, 'csv'))
+    expect(words).toEqual([
+      { word: 'bursa', meaning: 'n. 滑膜囊；囊' },
+      { word: 'tendon', meaning: 'n. 肌腱' },
+    ])
+    expect(skipped).toBe(0)
+  })
+
+  it('reads CSV with quoted commas, line breaks and a reordered header', () => {
+    const csv = 'source,Meaning,Word\r\n"a.pdf, p1","v. 放弃, 抛弃\n离弃",abandon\r\nx,"n. ""肌腱""",tendon\r\n'
+    expect(parseWordList(csv).words).toEqual([
+      { word: 'abandon', meaning: 'v. 放弃, 抛弃\n离弃' },
+      { word: 'tendon', meaning: 'n. "肌腱"' },
+    ])
+  })
+
+  it('re-imports its own Anki export: back field without phonetic, example, HTML or tags', () => {
+    const { words, skipped } = parseWordList(formatExport([
+      ...rows,
+      { word: 'ligand', phonetic: 'ˈlɪɡənd', meanings: ['n. 配体 <A&B>'], tags: [] },
+    ], 'anki'))
+    expect(words).toEqual([
+      { word: 'bursa', meaning: 'n. 滑膜囊；囊' },
+      { word: 'tendon', meaning: 'n. 肌腱' },
+      { word: 'ligand', meaning: 'n. 配体 <A&B>' },
+    ])
+    expect(skipped).toBe(0)
+  })
 })
 
 describe('root hints', () => {

@@ -50,7 +50,7 @@
 
 ```text
 ┌─ IndexedDB (Dexie) ─────────────┐  结构化元数据 + 学习数据 + 原始文件字节
-│                                 │  43 张表，Dexie v16
+│                                 │  45 张表，Dexie v17
 ├─ localStorage ──────────────────┤  仅 UI 语言镜像（避免首帧语言闪烁）
 ├─ 浏览器内存 ────────────────────┤  仅当前任务文本 → 用户配置的 AI API
 └─────────────────────────────────┘
@@ -99,13 +99,14 @@ Dexie
 
 - **不为每家厂商写独立业务逻辑**。6 个预设（OpenAI / Qwen / DeepSeek / MiniMax / MiMo / 自定义）全部复用 `OpenAICompatibleProvider`，差异只在 `presets.ts`（baseURL、`supportsJsonMode`、默认模型）。
 - 能力声明：`ProviderCapabilities { jsonMode, streaming, tools }`。
-- 流式走 SSE；超时语义是**静默超时**而非总时长（长课程分析不被误杀）。
+- 流式走 SSE；超时语义是**静默超时**而非总时长（长课程分析不被误杀）。非流式 `chat()` 无法观测进度，给连接超时 + 300 s 总时长（`nonStreamingTimeoutMs`）。流结束时冲洗解码器并解析残留缓冲，多行 `data:` 以换行拼接；流中断网包装为 `PROVIDER_UNAVAILABLE`。日志中的端点只记 origin + path（`redactUrl`）。
 - 类型化错误：`MISSING_API_KEY / MISSING_BASE_URL / MISSING_MODEL / AUTH_FAILED / RATE_LIMITED / TIMEOUT / PROVIDER_UNAVAILABLE / INVALID_RESPONSE / INVALID_JSON / ABORTED`，再由 `shared/lib/aiErrors.ts` 映射为可操作提示。
 
 ### Prompts
 
 - 每个 prompt 在 `src/infrastructure/ai/prompts/<family>/v1.ts`，导出 `VERSION` / `buildSystemPrompt()` / `buildUserPrompt()`。
 - `prompts/index.ts` 是唯一注册表。升级 = 加 `v2/` 并切换 import，**调用点不变**。
+- **划词问答 `contextual-tutor/v3`**：在 v2 上新增 `walkthrough` 语境与可选的 `history`（最近 6 轮）；lesson / homework 语境且无历史时与 v2 逐字相同。不缓存，故直接切换。
 - **科目画像 `subject-profile/v1`**：按项目科目（`calculus / linear_algebra / discrete_math / physics / chemistry / biology / medicine / cs / stats / other`）给出记号、推理方式、答案格式与常见错误；由 `withSubject()` 追加到教学/判分/分析类 system prompt（课程分析、增量主题分析、导师课时、交互导师、划词提问、测验、错题分析、作业提示/解法/复习讲解/检查答案/逐题问答、幻灯片学习）。`other` 不追加。科目一律由服务端从项目读取（`services/projectSubject.ts`），**不由 UI 传入**。化学记号用 mhchem `$\ce{...}$`（`Math.tsx` 已加载 `katex/contrib/mhchem`）。
 - 画像可带 `boundaries`（渲染为 `Boundaries (always apply):`，每次都追加）：目前只有**医学**使用——这是教育不是医疗，不对真实个人做诊断、不给治疗或剂量建议，遇到个人健康问题建议就医；例题中的参考值与剂量仅为示意。医学画像中英（拉丁）术语并列、解剖学姿势、FDI 牙位、名词解释 / 简答 / 论述的答题格式。科目推断：解剖 / 组织胚胎 / 生理学 / 病理 / 药理 / 口腔 / 牙等归为医学（在生物之前判断；“医用化学 / 医用物理 / 医用高数”仍归化学 / 物理 / 微积分，“植物生理学”仍归生物）。
 - 画像可带**仅课时用**的 `lesson` 指引，只有 `withSubject(..., { forLesson: true })`（导师课时）才追加：化学/生物要求把可画成图的事实写明（分子名+分子式、各状态能量、滴定浓度/体积/Kₐ、亲本基因型、家系、DNA 序列），并在课程资料有图时引导学生看原图。
@@ -139,6 +140,7 @@ Dexie
 | 练习 | `Question` `QuestionAttempt` `Quiz` `KnowledgeMastery` |
 | 复习 | `ReviewCard`（复习卡片 / 间隔重复，Dexie v15） |
 | 单词 | `VocabCard` `VocabBook` `VocabEntry` `VocabReview`（背单词，Dexie v16；**进度全局、不带 projectId**，课程词书带 `projectId`） |
+| 作业完整讲解 | `HomeworkWalkthrough`（每份作业 × 语言一行，分部分缓存）`WalkthroughNote`（保存的划词问答，Dexie v17） |
 | 错误 | `Mistake` |
 
 关键约定：
@@ -204,7 +206,7 @@ Upload → validation → (blob 落 IndexedDB `documentBlobs`) → processingJob
 - `reseedProject` 是**单事务原子替换**：AI 失败时旧分析原样保留。
 - **`DocumentAnalysisService.analyzeProject()` 仍是项目级**（全量路径不变），但**读完全部分块**：`entities/courseContent/analysisInput.ts` 把输入按章节切成每份 ≤ `ANALYSIS_SEGMENT_CHARS = 40_000` 字符的部分（章节放不下按小节，再按分块），一份放得下时只发一次请求、提示与以前逐字相同；多份时每份在 `document-analyzer/v2` 的用户提示里加一段“第 i/n 部分，只分析这一部分”（单份提示不变，故未升版本），并发 2 请求，`entities/courseAnalysis/mergeAnalyses.ts` 合并：概念 / 公式 / 符号 / 例题 / 习题 / 先修按名称或内容去重并合并出处；同名主题若两部分同属一章（长章被切开）则合并来源，否则后者改名为「名称 · 部分标签」并同步该部分的 `topicNames`。任一部分失败 ⇒ 整次失败、恢复旧分析。主题的章节位置优先取其最早的已校验来源分块，无有效来源才回退到文字重叠（每个分块只分词一次）。分析行写入 `inputCoverage: 'complete'` 与 `inputParts`；旧行没有该标记且旧限制（每份前 200 块、合计 5 万字）确实会截断当前材料时，freshness 报 `input-truncated`（分析面板提示“只读到了教材开头”），短课程不受影响、不会重跑。
 - **章节级增量更新已实现**（见 §5.1）：`analyzeScope({type:'chapter'|'section'})` 走**局部**路径，不调用 `analyzeProject`，不调用 `deleteByProject`。
-- 只有 **upload / processing 流程**会调用 `CourseContentService.ensureAnalyzed()`（带 module 级 in-flight 去重）；**打开任何页面都不会触发课程分析**。未配置 API Key 时是 `no-provider`，**不**标记为 failed。
+- 只有 **upload / processing 流程**与分析面板的手动「重新分析」（`ensureAnalyzed(projectId, { force: true })`）会调用 `CourseContentService.ensureAnalyzed()`（带 module 级 in-flight 去重，手动重析同样提交练习题重连）；**打开任何页面都不会触发课程分析**。已有 ready 分析时重析过程中不改动该行（进度只走回调）；启动时 `recoverInterruptedAnalyses()` 把超过 5 分钟、本页无进行中请求的 `analyzing/pending` 行标为 failed（「上次分析被中断」）。增量提交只有在所有计划内主题都成功且范围外无待办时才推进 `sourceHash`；同名主题在全量分析中按章节合并或改名，主题 id 按位置传递。未配置 API Key 时是 `no-provider`，**不**标记为 failed。
 
 ### 5.1 章节级增量更新
 
@@ -326,6 +328,19 @@ Topic
 - **导出**（`formatExport`）：Anki（`#separator:tab` / `#html:true` / `#tags column:3`，背面音标 + 释义 + 例句）、CSV（带 BOM，`word,phonetic,meaning,example,source`）、纯单词 TXT；可导出任意词书 / 已学 / 易错词。导入：`parseWordList`（每行单词，或 制表符 / 逗号 / 冒号 / 空格+中文 分隔的释义）。
 - 词根词缀提示（`rootHints`）只作联想，至少留 3 个字母的词干才提示。朗读用浏览器 `speechSynthesis`（`shared/lib/speech.ts`），不可用时听写模式退回拼写。
 
+### 作业完整讲解（作业页「完整讲解」标签）
+
+- **结构**：`HomeworkWalkthrough`（id = `<setId>:<language>`，Dexie v17 `homeworkWalkthroughs`）按部分存 `sections`：`overview`（必须掌握的工具）、每题 `q:<questionId>`（`conclusion` + Markdown `body` + 可选 `checks`）、`summary`（小结 + `suggestions`）。标题在渲染时按 UI 语言生成，不存。
+- **生成**（`services/homeworkWalkthroughService.ts`，提示词 `homework-walkthrough/v1`，带科目画像；缓存版本 `subjectPromptVersion('homework-walkthrough/v1', subject)`）：每题一次请求（并发 2，单部分 240 s 时限；截断时输出预算翻倍至 ≤16k，`output-limit` 减半，限流 / 超时 / 不可用重试 2 次），再一次请求写开头与小结（只看各题题目、结论与正文开头）。每部分完成即 `putSection`（事务内读改写）；**已就绪的部分绝不被失败覆盖**；账号类错误（额度 / 鉴权）停止后续请求。不会自动生成：首次与更新都由学生点击。语言 = `walkthroughLanguage(questionLanguage, set.language)`（默认 `zh_terms`）。教授答案规则同复习讲解（已对上题号才用，「留给学生」不用）。
+- **freshness**（`planWalkthrough`，纯函数）：题目部分哈希 = 提示词版本 + 语言 + 题号 / 题面 / 指纹 / 来源 chunk / 已对上的教授答案；开头与小结的哈希 = 全部题目哈希。只有变化的题目 + 开头小结显示“可更新”；`insufficient` / `failed` / 缺失也算需要更新；退役题目的部分在下次生成后移除。
+- **RREF 本地核对**（`infrastructure/math/rref.ts` BigInt 精确分数；`entities/homework/walkthroughChecks.ts`）：线性代数科目或题面含增广 / 行阶梯 / RREF / 线性方程组等关键词时，模型额外返回 `linearSystems`（增广矩阵、最终 RREF、解的类型）；本地重算 RREF 并比较（忽略零行）与解的类型，不一致在该题下标出并显示正确 RREF。读不出的矩阵跳过，不报错误。
+- **划词提问**：讲解 `<article data-selection-context="walkthrough" data-walkthrough-project data-walkthrough-set>`，每部分 `<section data-walkthrough-section data-section-title>`。`SelectionTranslator` 在此范围内选「解释 / 提问」时不弹原来的贴边弹窗，而是 `openPassage()` 打开**浮动窗口**（`features/homework/floatingQAStore.ts` zustand：位置 / 大小 / 层级 / 最小化，最多同时 3 个，第 4 个把最靠后的收进右下角停靠栏；整窗始终在视口内；层级按排名 41–43，低于对话框 z-50）。问答走 `contextual-tutor/v3`（新增 `walkthrough` 语境：解法已在眼前，可完整解释并指出计算错误；`history` 带最近 6 轮）。
+- **保存问答**（`WalkthroughNote`，Dexie v17 `walkthroughNotes`，索引 `[setId+updatedAt]`）：原文以 `TextAnchor`（文本 + 前后各 32 字，`shared/lib/textAnchor.ts`，与 `Range.toString()` 同口径）保存，不存位置；重新定位时按文本搜索，多处出现按前后文选最匹配。保存后追问自动追加；窗口拖动 / 调大小后记住位置。原文用 CSS Custom Highlight API（`walkthrough-note` / `walkthrough-flash`）标记，点击标记处（`caretPositionFromPoint`）重新打开；每部分下有本节问答芯片；「我的问答」对话框可搜索 / 打开 / 重命名 / 删除，找不到原文的标“原文已更新”。以“解释”开始的问答以原文命名。
+- **加入复习卡片**：每轮问答一张卡（`ReviewCardSource` 新增 `note`），问题很短时正面附原文，背面过长在段落处截断；按正面去重。
+- **打印 / 导出 PDF**：`WalkthroughPrint` 只在打印时把纯净副本挂到 `body` 下，`body.printing-walkthrough` 的打印样式隐藏其它内容并强制白底黑字；`afterprint` 后卸载。
+- **删除与导出**：两表随作业删除（`deleteAssignment` / 删除作业文件 / 删除项目，均在同一事务）、纳入导出；**保存过的问答计入学生作业**（`studentWorkFor`），有问答的作业文件不能被直接删除。
+- 做题模式下首次进入显示“包含全部解法”提示（仅本次访问记住，不写存储）。只做桌面端布局。
+
 ## 7. 路由与目录
 
 | 路由 | 页面 |
@@ -419,6 +434,7 @@ docs/             architecture.md
 | 7z | 测验修复：分批出题与补题、题型按题目自身对应、全书取材、出处无摘录时显示该页原文、按钮防整页翻译 | 已交付（v0.5.4） |
 | 7z.1 | 测验质量：选项本地随机顺序、干扰项规则与可疑题丢弃（`quiz-generator/v6`）、混合复习按主题分组、题目语言偏好（默认中文附英文术语）、难度本地化、设置页版本号 | 已交付（v0.5.5） |
 | 7z.2 | 背单词板块：考试词书（ECDICT）、FSRS 调度、认读 / 拼写 / 填空 / 听写、课程词汇（AI 补释义）、易错词、统计、导入、导出（Anki / CSV / TXT） | 已交付（v0.6.0） |
+| 7z.3 | 作业完整讲解：整份作业的讲义式讲解（工具 / 逐题 / 小结）、线性代数 RREF 本地核对、划词提问浮动窗口（拖动 / 调大小 / 最小化 / 追问带上下文）、保存问答并按原文重新定位、加入复习卡片、打印 / 导出 PDF（Dexie v17） | 已实现（未发布） |
 | 8 | Dashboard 强化 | 部分交付（v0.2.8：视觉与交互函数图；v0.3.1：构图与动效打磨；指标类未做） |
 | 9 | PWA · a11y · 导入导出打磨 | 未开始 |
 
@@ -497,6 +513,7 @@ docs/             architecture.md
 - 数学可视化范围受控：`eigen_2d` 只支持 2×2 实矩阵的**实**特征值/特征向量；复特征值、3×3、Jordan 形、动画、拖拽均不支持，会安全回退为普通 LaTeX，不绘制误导性的实特征方向。
 - 化学 / 生物图范围受控：滴定只支持 ≤三元酸 + 强碱、一元弱碱 + 强酸（不含活度校正）；棋盘格最多两对基因、至多一个 X 连锁基因，不含连锁交换 / 上位效应；遗传方式分析假设完全外显；同分异构体无法自动区分（不计分并提示）；不画 3D 结构、反应机理、细胞 / 器官示意图（这类交给课程原图或联网参考图片）。
 - 医学图为教学模型：动作电位为示意形状；氧解离曲线用 Hill 方程近似；压力–容积环为分段示意；药动学只做一室模型（无非线性消除）；酸碱判读只覆盖单纯性紊乱与一层合并紊乱提示（不含阴离子间隙 / 三重紊乱）；神经通路最多 4 级神经元、一次交叉。不画器官 / 切片 / 影像，这类交给课程原图或联网参考图片。
-- 复习卡片计入掌握度，但对错题判定提出异议后的 `MasteryService.rebuild()` 只按测验作答重算，会丢掉该知识点此前的卡片观测（之后的复习会继续计入）。
+- 对判定提出异议后的掌握度重算（`MasteryService.rebuild`）合并测验与教授练习的作答，并保留已有的复习卡片观测（`FLASHCARD_TYPE`）；被异议的作答不计入。
 - 冷启动时外观偏好（明暗 / 配色）要等 `UserProfile` 读出后才应用，可能有一帧默认配色。
+- 作业完整讲解的浮动问答窗口只做了桌面端（未做手机端适配）；保存问答的原文标记用 CSS Custom Highlight API，不支持的浏览器不显示标记（本节问答芯片与「我的问答」仍可用）。RREF 核对只验证“讲解写出的增广矩阵 → RREF”的计算，不验证增广矩阵是否按题目列对；矩阵读不出时跳过不报。打印依赖浏览器打印对话框（另存为 PDF）。
 - 背单词的词典数据（`public/vocab/`，约 1.9 MB）按需 fetch；项目**没有 Service Worker**，不保证离线可用。课程词汇的提取是纯本地启发式（≥4 字母、去停用词与常用词），可能漏掉短术语或收进少量普通词。

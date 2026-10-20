@@ -165,6 +165,17 @@ describe('chemistry, biology and statistics models', () => {
     expect(bands.prediction).toBeGreaterThan(bands.confidence)
   })
 
+  it('reports r and R² as undefined (not 1) for flat y data', () => {
+    const fit = linearFit([
+      { x: 1, y: 5 },
+      { x: 2, y: 5 },
+      { x: 3, y: 5 },
+    ])!
+    expect(fit.slope).toBe(0)
+    expect(fit.r).toBeNull()
+    expect(fit.r2).toBeNull()
+  })
+
   it('builds t and z confidence intervals', () => {
     const t = confidenceInterval(50, 10, 25, 0.95, false)
     near(t.critical, 2.064, 2e-3)

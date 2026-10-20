@@ -80,6 +80,16 @@ describe('chunking', () => {
     for (const c of chunks) expect(c.text.length).toBeLessThanOrEqual(1200)
   })
 
+  it('keeps every sentence of a long paragraph when splitting it', () => {
+    const sentences = Array.from({ length: 12 }, (_, i) =>
+      `Sentence ${i} explains the pivot column ${'and its reduced row echelon form '.repeat(4)}in detail.`,
+    )
+    const chunks = chunksFromText(baseCtx, sentences.join(' '))
+    expect(chunks.length).toBeGreaterThan(1)
+    const joined = chunks.map((chunk) => chunk.text).join(' ')
+    for (const sentence of sentences) expect(joined).toContain(sentence)
+  })
+
   it('toStoredChunks assigns ids and timestamps', () => {
     const inputs: NewChunkInput[] = [
       {

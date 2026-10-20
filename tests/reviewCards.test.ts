@@ -3,7 +3,16 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import { AppDatabase, setDbForTesting } from '@/infrastructure/db/database'
 import { ReviewCardService } from '@/services/reviewCardService'
 import { MasteryService } from '@/services/masteryService'
-import { DAY_MS, INITIAL_EASE, newCard, previewIntervals, scheduleReview, type ReviewCard } from '@/entities/reviewCard/types'
+import {
+  DAY_MS,
+  INITIAL_EASE,
+  MAX_SESSION_REPEATS,
+  advanceSessionQueue,
+  newCard,
+  previewIntervals,
+  scheduleReview,
+  type ReviewCard,
+} from '@/entities/reviewCard/types'
 import type { Concept } from '@/entities/courseAnalysis/types'
 
 const NOW = Date.UTC(2026, 9, 1)
@@ -30,6 +39,34 @@ describe('spaced-repetition schedule', () => {
     expect(lapsed.ease).toBeCloseTo(INITIAL_EASE - 0.2)
     // A card that was never learned does not count as a lapse.
     expect(scheduleReview(card(), 'again', NOW).lapses).toBe(0)
+  })
+
+  it('does not lower the ease of a new or relearning card on repeated "again"', () => {
+    let fresh = card()
+    for (let i = 0; i < 5; i++) fresh = scheduleReview(fresh, 'again', NOW)
+    expect(fresh.ease).toBe(INITIAL_EASE)
+    expect(fresh.lapses).toBe(0)
+
+    // A graduated card lapses once; failing it again while relearning does not stack.
+    let learned = scheduleReview(card({ interval: 10, reps: 3 }), 'again', NOW)
+    learned = scheduleReview(learned, 'again', NOW)
+    learned = scheduleReview(learned, 'again', NOW)
+    expect(learned.lapses).toBe(1)
+    expect(learned.ease).toBeCloseTo(INITIAL_EASE - 0.2)
+  })
+
+  it('re-queues a card after "again" at most twice per session', () => {
+    const a = card({ id: 'a' })
+    const b = card({ id: 'b' })
+    let state = { queue: [a, b], repeats: new Map<string, number>() }
+    const ids: string[] = []
+    while (state.queue.length) {
+      const head = state.queue[0]!
+      ids.push(head.id)
+      state = advanceSessionQueue(state.queue, head, head.id === 'a' ? 'again' : 'good', state.repeats)
+    }
+    expect(ids).toEqual(['a', 'b', 'a', 'a'])
+    expect(MAX_SESSION_REPEATS).toBe(2)
   })
 
   it('never lets the ease fall below 1.3', () => {

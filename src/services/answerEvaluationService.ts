@@ -57,19 +57,26 @@ export function evaluateDeterministic(question: Question, userAnswer: string): Q
   }
 }
 
+const TRUE_WORDS = new Set(['true', 't', 'yes', 'y', '1', '正确', '对', '是', '√', '✓', '✔'])
+const FALSE_WORDS = new Set(['false', 'f', 'no', 'n', '0', '错误', '错', '否', '×', '✗', '✘', 'x'])
+
+/** Read a true/false answer, including Chinese words, ticks/crosses and JSON booleans. */
+export function parseTrueFalse(value: unknown): boolean | null {
+  if (typeof value === 'boolean') return value
+  if (typeof value !== 'string') return null
+  const v = value.normalize('NFKC').trim().toLowerCase().replace(/[。.!！]$/, '')
+  if (TRUE_WORDS.has(v)) return true
+  if (FALSE_WORDS.has(v)) return false
+  return null
+}
+
 function evaluateOption(question: Question, userAnswer: string, isBoolean: boolean): QuestionEvaluation {
   const expected = question.correctAnswer.trim()
   const given = userAnswer.trim()
 
   if (isBoolean) {
-    const parseBool = (s: string): boolean | null => {
-      const v = s.toLowerCase().trim()
-      if (['true', 't', 'yes', 'y', '1'].includes(v)) return true
-      if (['false', 'f', 'no', 'n', '0'].includes(v)) return false
-      return null
-    }
-    const expectedBool = parseBool(expected)
-    const givenBool = parseBool(given)
+    const expectedBool = parseTrueFalse(expected)
+    const givenBool = parseTrueFalse(given)
     if (expectedBool !== null && givenBool !== null) {
       return {
         isCorrect: expectedBool === givenBool,

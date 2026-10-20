@@ -27,6 +27,8 @@ interface RequestBudget {
    */
   touch: () => void
   dispose: () => void
+  /** The window (ms) this budget enforces; reported in timeout errors and logs. */
+  timeoutMs: number
 }
 
 export interface OpenAICompatibleOptions {
@@ -36,8 +38,14 @@ export interface OpenAICompatibleOptions {
   supportsJsonMode: boolean
   /** Connect timeout in ms (default 10 s). */
   connectTimeoutMs?: number
-  /** Read timeout in ms (default 60 s). */
+  /** Read timeout in ms (default 60 s): the inactivity window of a stream. */
   readTimeoutMs?: number
+  /**
+   * Total wait for a non-streaming completion after connecting (default
+   * 5 min). Such a response only arrives once generation has finished, so a
+   * slow-but-working request must not be cut off at the streaming idle window.
+   */
+  nonStreamingTimeoutMs?: number
 }
 
 /**
@@ -67,10 +75,13 @@ export class OpenAICompatibleProvider implements AIProvider {
   async chat(req: ChatRequest): Promise<ChatResponse> {
     const url = this.endpoint()
     const body = this.buildChatBody(req, false)
-    const budget = this.budgetSignal(req.signal)
-    const startedAt = this.logRequestStart('chat', req)
+    // A non-streaming completion only answers once the whole generation is
+    // done, so there is no data to restart an inactivity window with: give it
+    // a long total budget instead of the streaming idle window.
+    const budget = this.budgetSignal(req.signal, this.chatBudgetMs())
+    const startedAt = this.logRequestStart('chat', req, budget.timeoutMs)
     try {
-      const res = await this.fetchWithBudget(url, budget.signal, {
+      const res = await this.fetchWithBudget(url, budget, {
         method: 'POST',
         body: JSON.stringify(body),
       })
@@ -98,7 +109,7 @@ export class OpenAICompatibleProvider implements AIProvider {
       this.logRequestEnd('chat', startedAt, response)
       return response
     } catch (err) {
-      this.logRequestError('chat', startedAt, err, budget.signal)
+      this.logRequestError('chat', startedAt, err, budget)
       throw err
     } finally {
       budget.dispose()
@@ -109,9 +120,9 @@ export class OpenAICompatibleProvider implements AIProvider {
     const url = this.endpoint()
     const body = this.buildChatBody(req, true)
     const budget = this.budgetSignal(req.signal)
-    const startedAt = this.logRequestStart('stream', req)
+    const startedAt = this.logRequestStart('stream', req, budget.timeoutMs)
     try {
-      const res = await this.fetchWithBudget(url, budget.signal, {
+      const res = await this.fetchWithBudget(url, budget, {
         method: 'POST',
         body: JSON.stringify(body),
       })
@@ -126,9 +137,64 @@ export class OpenAICompatibleProvider implements AIProvider {
       let usage: ChatResponse['usage'] | undefined
       let finalModel = ''
       let finalFinishReason: string | undefined
+      const finish = (): ChatResponse => {
+        onChunk({ delta: '', done: true, usage })
+        const response: ChatResponse = {
+          content,
+          usage,
+          model: finalModel || req.model || this.config.model,
+          ...(finalFinishReason ? { finishReason: finalFinishReason } : {}),
+        }
+        this.logRequestEnd('stream', startedAt, response)
+        return response
+      }
+      /** Handle one SSE event block; true once the stream says `[DONE]`. */
+      const handleBlock = (block: string): boolean => {
+        const ev = parseBlock(block)
+        if (!ev) return false
+        if (ev.data === '[DONE]') return true
+        const parsed = safeJSON(ev.data)
+        if (!parsed) return false
+        const choice = parsed.choices?.[0]
+        const delta = choice?.delta?.content ?? choice?.message?.content ?? ''
+        if (delta) {
+          content += delta
+          onChunk({ delta, done: false })
+        }
+        const u = parsed.usage
+        if (u) {
+          usage = {
+            promptTokens: u.prompt_tokens ?? 0,
+            completionTokens: u.completion_tokens ?? 0,
+            totalTokens: u.total_tokens ?? 0,
+          }
+        }
+        if (parsed.model) finalModel = parsed.model
+        if (typeof choice?.finish_reason === 'string') {
+          finalFinishReason = choice.finish_reason
+        }
+        return false
+      }
+      const read = async (): Promise<ReadableStreamReadResult<Uint8Array>> => {
+        try {
+          return await reader.read()
+        } catch (err) {
+          if ((err as { name?: string } | undefined)?.name === 'AbortError') {
+            // Preserve why we aborted: our own inactivity timeout, or the caller.
+            const reason: unknown = budget.signal.reason
+            if (reason instanceof AIProviderError) throw reason
+            throw new AbortedError()
+          }
+          if (err instanceof AIProviderError) throw err
+          // The connection dropped mid-stream ("network error", "terminated", …).
+          throw new ProviderUnavailableError(
+            err instanceof Error && err.message ? err.message : t('errors.aiNetwork'),
+          )
+        }
+      }
       try {
         while (true) {
-          const { value, done } = await reader.read()
+          const { value, done } = await read()
           if (done) break
           // Receiving data resets the inactivity window, so a long generation
           // is bounded by silence rather than by total elapsed time.
@@ -137,49 +203,16 @@ export class OpenAICompatibleProvider implements AIProvider {
           const events = buffer.split(/\r?\n\r?\n/)
           buffer = events.pop() ?? ''
           for (const block of events) {
-            const ev = parseBlock(block)
-            if (!ev) continue
-            if (ev.data === '[DONE]') {
-              onChunk({ delta: '', done: true, usage })
-              const response: ChatResponse = {
-                content,
-                usage,
-                model: finalModel || req.model || this.config.model,
-                ...(finalFinishReason ? { finishReason: finalFinishReason } : {}),
-              }
-              this.logRequestEnd('stream', startedAt, response)
-              return response
-            }
-            const parsed = safeJSON(ev.data)
-            if (!parsed) continue
-            const choice = parsed.choices?.[0]
-            const delta = choice?.delta?.content ?? choice?.message?.content ?? ''
-            if (delta) {
-              content += delta
-              onChunk({ delta, done: false })
-            }
-            const u = parsed.usage
-            if (u) {
-              usage = {
-                promptTokens: u.prompt_tokens ?? 0,
-                completionTokens: u.completion_tokens ?? 0,
-                totalTokens: u.total_tokens ?? 0,
-              }
-            }
-            if (parsed.model) finalModel = parsed.model
-            if (typeof choice?.finish_reason === 'string') {
-              finalFinishReason = choice.finish_reason
-            }
+            if (handleBlock(block)) return finish()
           }
         }
-      } catch (err) {
-        if ((err as { name?: string } | undefined)?.name === 'AbortError') {
-          // Preserve why we aborted: our own inactivity timeout, or the caller.
-          const reason: unknown = budget.signal.reason
-          if (reason instanceof AIProviderError) throw reason
-          throw new AbortedError()
+        // The stream ended: flush the decoder (a multi-byte character may be
+        // split across the last chunk) and parse an event that was not
+        // followed by a blank line.
+        buffer += decoder.decode()
+        for (const block of buffer.split(/\r?\n\r?\n/)) {
+          if (handleBlock(block)) return finish()
         }
-        throw err
       } finally {
         try {
           reader.releaseLock()
@@ -187,17 +220,9 @@ export class OpenAICompatibleProvider implements AIProvider {
           /* ignore */
         }
       }
-      onChunk({ delta: '', done: true, usage })
-      const response: ChatResponse = {
-        content,
-        usage,
-        model: finalModel || req.model || this.config.model,
-        ...(finalFinishReason ? { finishReason: finalFinishReason } : {}),
-      }
-      this.logRequestEnd('stream', startedAt, response)
-      return response
+      return finish()
     } catch (err) {
-      this.logRequestError('stream', startedAt, err, budget.signal)
+      this.logRequestError('stream', startedAt, err, budget)
       throw err
     } finally {
       budget.dispose()
@@ -209,7 +234,7 @@ export class OpenAICompatibleProvider implements AIProvider {
     const budget = this.budgetSignal()
     try {
       const url = this.endpoint()
-      const res = await this.fetchWithBudget(url, budget.signal, {
+      const res = await this.fetchWithBudget(url, budget, {
         method: 'POST',
         body: JSON.stringify({
           model: this.config.model,
@@ -243,17 +268,18 @@ export class OpenAICompatibleProvider implements AIProvider {
    * Structured lifecycle logging. Never logs the API key, the Authorization
    * header, or any message content — only sizes and timing.
    */
-  private logRequestStart(mode: 'chat' | 'stream', req: ChatRequest): number {
+  private logRequestStart(mode: 'chat' | 'stream', req: ChatRequest, timeoutMs: number): number {
     const inputChars = req.messages.reduce((total, m) => total + m.content.length, 0)
     logger.debug('AI request start', {
       provider: this.id,
       model: req.model ?? this.config.model,
-      url: this.endpoint(),
+      // Origin + path only: a custom base URL may carry a key in its query.
+      url: redactUrl(this.endpoint()),
       streaming: mode === 'stream',
       inputChars,
       estimatedInputTokens: Math.round(inputChars / 3),
       maxOutputTokens: req.maxTokens ?? this.config.maxTokens,
-      timeoutMs: this.totalBudgetMs(),
+      timeoutMs,
     })
     return Date.now()
   }
@@ -276,7 +302,7 @@ export class OpenAICompatibleProvider implements AIProvider {
     mode: 'chat' | 'stream',
     startedAt: number,
     err: unknown,
-    signal: AbortSignal,
+    budget: RequestBudget,
   ): void {
     logger.warn('AI request error', {
       provider: this.id,
@@ -287,8 +313,8 @@ export class OpenAICompatibleProvider implements AIProvider {
       errorMessage: err instanceof Error ? err.message : String(err),
       code: err instanceof AIProviderError ? err.code : undefined,
       httpStatus: err instanceof AIProviderError ? err.status : undefined,
-      aborted: signal.aborted,
-      timeoutMs: this.totalBudgetMs(),
+      aborted: budget.signal.aborted,
+      timeoutMs: budget.timeoutMs,
     })
   }
 
@@ -341,8 +367,17 @@ export class OpenAICompatibleProvider implements AIProvider {
     return connectMs + readMs
   }
 
-  private budgetSignal(extra?: AbortSignal): RequestBudget {
-    const totalMs = this.totalBudgetMs()
+  /**
+   * Total budget of a non-streaming completion: the connect timeout plus
+   * `nonStreamingTimeoutMs` (default 5 min). It cannot be an inactivity window
+   * because nothing arrives until the model has finished generating.
+   */
+  private chatBudgetMs(): number {
+    const connectMs = this.options.connectTimeoutMs ?? 10_000
+    return connectMs + (this.options.nonStreamingTimeoutMs ?? 300_000)
+  }
+
+  private budgetSignal(extra?: AbortSignal, totalMs = this.totalBudgetMs()): RequestBudget {
     const ctrl = new AbortController()
     let timer: ReturnType<typeof setTimeout> | null = null
 
@@ -363,6 +398,7 @@ export class OpenAICompatibleProvider implements AIProvider {
 
     return {
       signal: ctrl.signal,
+      timeoutMs: totalMs,
       touch: () => {
         if (!ctrl.signal.aborted) arm()
       },
@@ -375,9 +411,10 @@ export class OpenAICompatibleProvider implements AIProvider {
 
   private async fetchWithBudget(
     url: string,
-    signal: AbortSignal,
+    budget: RequestBudget,
     init?: RequestInit,
   ): Promise<Response> {
+    const signal = budget.signal
     try {
       return await fetch(url, {
         ...init,
@@ -399,7 +436,7 @@ export class OpenAICompatibleProvider implements AIProvider {
         if (signal.aborted) throw new AbortedError()
         // An AbortError we did not raise means the request budget expired
         // somewhere below us (transport-level abort).
-        throw new TimeoutError(this.totalBudgetMs())
+        throw new TimeoutError(budget.timeoutMs)
       }
       if (err instanceof AIProviderError) throw err
       throw new ProviderUnavailableError((err as Error)?.message ?? t('errors.aiNetwork'))
@@ -407,15 +444,29 @@ export class OpenAICompatibleProvider implements AIProvider {
   }
 }
 
+/** Origin + path of a URL, never its query or fragment (may hold credentials). */
+export function redactUrl(url: string): string {
+  try {
+    const parsed = new URL(url)
+    return `${parsed.origin}${parsed.pathname}`
+  } catch {
+    return url.replace(/[?#].*$/, '').replace(/\/\/[^/@]*@/, '//')
+  }
+}
+
 function parseBlock(block: string): { data: string } | null {
   const trimmed = block.trim()
   if (!trimmed) return null
-  let data: string | undefined
+  // Per the SSE spec, several `data:` lines of one event are joined with "\n".
+  const lines: string[] = []
   for (const line of trimmed.split(/\r?\n/)) {
     if (line.startsWith('data:')) {
-      data = line.slice(5).trim()
+      let value = line.slice(5)
+      if (value.startsWith(' ')) value = value.slice(1)
+      lines.push(value)
     }
   }
+  const data = lines.join('\n').trim()
   return data ? { data } : null
 }
 

@@ -203,6 +203,11 @@ export class TutorService {
     if (existing && existing.language === input.language && existing.turns.length > 0) {
       return { session: existing, resumed: true }
     }
+    // A session that never received its introduction (e.g. the page was left
+    // or the request was cancelled) is reused instead of leaving an orphan.
+    if (existing && existing.language === input.language && existing.turns.length === 0) {
+      return { session: existing, resumed: false }
+    }
     return { session: await this.startSession(input), resumed: false }
   }
 
@@ -276,6 +281,7 @@ export class TutorService {
       { role: 'user', content: introMessages[1]!.content },
       { role: 'assistant', content: introContent },
     )
+    session.updatedAt = Date.now()
     await this.sessions.upsert(session)
 
     // Best-effort: a question is a follow-up, never a precondition.
@@ -405,6 +411,7 @@ export class TutorService {
       { role: 'user', content: prompts.tutorQuestion.buildUserPrompt({ topicName: session.topicName, topicDescription: session.topicDescription ?? '', difficulty: session.currentDifficulty, language: session.language, sourceSnippets: sources }) },
       { role: 'assistant', content: JSON.stringify(question) },
     )
+    session.updatedAt = Date.now()
     await this.sessions.upsert(session)
     return { session, turn, finished: false }
   }
@@ -426,7 +433,8 @@ export class TutorService {
       createdAt: Date.now(),
     }
     session.turns.push(turn)
-    await this.sessions.upsert({ ...session, updatedAt: Date.now() })
+    session.updatedAt = Date.now()
+    await this.sessions.upsert(session)
     return { session, hint }
   }
 
@@ -521,6 +529,7 @@ export class TutorService {
     session.pendingQuestion = undefined
     session.hintsRevealed = 0
     session.messages.push({ role: 'user', content: studentAnswer }, { role: 'assistant', content: JSON.stringify(evaluationTyped) })
+    session.updatedAt = Date.now()
     await this.sessions.upsert(session)
 
     // Wrong tutor answers go to the mistake book through the same service the

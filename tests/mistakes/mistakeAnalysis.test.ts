@@ -60,6 +60,31 @@ describe('normalizeAnalysis', () => {
     expect(a.possibleCause).toMatch(/possible cause|explore/i)
   })
 
+  it('removes Chinese judgemental wording from every text field', () => {
+    const a = normalizeAnalysis({
+      ...validOutput,
+      possibleCause: '学生太粗心了。',
+      whyWrong: '链式法则需要乘以内层导数。这里是马虎导致的。',
+      firstError: 'The student was just lazy here. The factor 2 is missing.',
+      correctApproach: '不认真审题，应先求内层导数。',
+      continuePrompt: '下次别再不仔细了！',
+      similarExample: { prompt: 'Differentiate cos(3x)', answer: '-3sin(3x)', explanation: '懒得写中间步骤会出错。' },
+      reviewKnowledgePoints: ['Chain Rule', '粗心'],
+    })
+    const text = [a.possibleCause, a.whyWrong, a.firstError, a.correctApproach, a.continuePrompt, a.similarExample?.explanation ?? '', ...a.reviewKnowledgePoints].join(' ')
+    expect(text).not.toMatch(/粗心|马虎|不认真|不仔细|懒|lazy|careless/i)
+    // Unrelated sentences survive; nothing English-only like "unclear" is spliced in.
+    expect(a.whyWrong).toContain('链式法则需要乘以内层导数。')
+    expect(a.firstError).toContain('The factor 2 is missing.')
+    expect(text).not.toContain('unclear')
+    expect(a.reviewKnowledgePoints).toEqual(['Chain Rule'])
+  })
+
+  it('keeps technical terms such as lazy evaluation', () => {
+    const a = normalizeAnalysis({ ...validOutput, whyWrong: 'Lazy evaluation delays the call. x = 3.14 here.' })
+    expect(a.whyWrong).toBe('Lazy evaluation delays the call. x = 3.14 here.')
+  })
+
   it('handles a null response', () => {
     const a = normalizeAnalysis(null)
     expect(a.mistakeType).toBe('unknown')

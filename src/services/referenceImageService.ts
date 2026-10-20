@@ -18,6 +18,20 @@ import { logger } from '@/infrastructure/logger/logger'
 import { t } from '@/i18n'
 
 /**
+ * Cancellation shows up as a DOM `AbortError` from fetch, as the AI layer's
+ * own `AbortedError` (code `ABORTED`), or simply as an aborted signal.
+ */
+function isAbortError(err: unknown, signal?: AbortSignal): boolean {
+  if (signal?.aborted) return true
+  const e = err as { name?: unknown; code?: unknown } | null
+  return e?.name === 'AbortError' || e?.code === 'ABORTED'
+}
+
+function abortReason(signal: AbortSignal): unknown {
+  return signal.reason ?? new DOMException('Aborted', 'AbortError')
+}
+
+/**
  * Opt-in web reference images for chemistry and biology topics.
  *
  * The model proposes search terms only. Pictures come from PubChem (compound
@@ -152,6 +166,8 @@ export class ReferenceImageService {
             else visionAvailable = false
           }
 
+          // Never cache anything once the student cancelled the search.
+          if (input.signal?.aborted) throw abortReason(input.signal)
           const record: ReferenceImage = {
             id: crypto.randomUUID(),
             projectId: input.projectId,
@@ -173,7 +189,7 @@ export class ReferenceImageService {
           break // one picture per query
         }
       } catch (err) {
-        if ((err as Error)?.name === 'AbortError') throw err
+        if (isAbortError(err, input.signal)) throw err
         // One failed source must not cost the others.
         logger.warn('Reference image query failed', { source: query.source, error: (err as Error)?.message })
       }
@@ -219,7 +235,7 @@ export class ReferenceImageService {
       )
       return prompts.referenceImageCheck.readRelevance(data)
     } catch (err) {
-      if ((err as Error)?.name === 'AbortError') throw err
+      if (isAbortError(err, signal)) throw err
       logger.warn('Reference image vision check unavailable', { error: (err as Error)?.message })
       return null
     }

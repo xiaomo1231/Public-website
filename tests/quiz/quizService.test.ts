@@ -244,6 +244,84 @@ describe('QuizService.submitAnswer', () => {
     expect(completed.score?.percentage).toBe(50)
   })
 
+  it('counts distinct answered questions, so re-answering one does not finish the quiz early', async () => {
+    const { quiz, stored, svc } = await setupQuiz([
+      { type: 'numeric', correctAnswer: '1' },
+      { type: 'numeric', correctAnswer: '2' },
+      { type: 'numeric', correctAnswer: '3' },
+    ])
+    await svc.submitAnswer(quiz.id, stored[0]!.id, '1')
+    // A reopened quiz used to restart at question 1 and answer it again.
+    const again = await svc.submitAnswer(quiz.id, stored[0]!.id, '1')
+    expect(again.isLastQuestion).toBe(false)
+    const second = await svc.submitAnswer(quiz.id, stored[1]!.id, '2')
+    expect(second.isLastQuestion).toBe(false)
+    expect((await svc.getQuiz(quiz.id)).status).toBe('in_progress')
+    const third = await svc.submitAnswer(quiz.id, stored[2]!.id, '3')
+    expect(third.isLastQuestion).toBe(true)
+  })
+
+  it('stores the number of hints revealed with the attempt', async () => {
+    const { quiz, stored, svc } = await setupQuiz([{ type: 'numeric', correctAnswer: '2' }])
+    const result = await svc.submitAnswer(quiz.id, stored[0]!.id, '2', { hintsUsed: 2 })
+    expect(result.attempt.hintsUsed).toBe(2)
+  })
+
+  it('rebuilds mastery after a dispute from quiz AND practice work, keeping flashcard reviews', async () => {
+    const { project, quiz, stored, svc } = await setupQuiz([
+      { type: 'numeric', correctAnswer: '2', knowledgePoint: 'calc.txt' },
+    ])
+    const mastery = new MasteryService(db)
+    // A flashcard review on the same point, stored only on the mastery row.
+    await mastery.recordObservation(project.id, 'calc.txt', undefined, {
+      at: Date.now() - 5000,
+      isCorrect: true,
+      difficulty: 'basic',
+      questionType: 'flashcard',
+      credit: 1,
+      weight: 0.5,
+    })
+    // A graded practice attempt whose knowledge point (document name) matches.
+    const { PracticeRepository } = await import('@/entities/practice/repository')
+    const practice = new PracticeRepository(db)
+    await practice.addQuestions([
+      {
+        id: 'pq1',
+        projectId: project.id,
+        setId: 'set-1',
+        documentId: 'doc-p',
+        documentName: 'calc.txt',
+        order: 0,
+        type: 'numeric',
+        prompt: 'P1',
+        options: [],
+        expectedAnswer: '4',
+        answerSource: 'professor',
+        confidence: 1,
+        status: 'verified',
+        createdAt: Date.now(),
+      } as never,
+    ])
+    await practice.addAttempt({
+      id: 'pa1',
+      projectId: project.id,
+      setId: 'set-1',
+      questionId: 'pq1',
+      userAnswer: '4',
+      isCorrect: true,
+      method: 'numeric',
+      attemptNumber: 1,
+      submittedAt: Date.now() - 4000,
+    })
+    const wrong = await svc.submitAnswer(quiz.id, stored[0]!.id, '5')
+    await svc.disputeAttempt(wrong.attempt.id)
+    const row = await mastery.get(project.id, 'calc.txt')
+    // The disputed quiz attempt is gone; the practice answer and flashcard remain.
+    expect(row!.observations).toHaveLength(2)
+    expect(row!.observations.some((o) => o.questionType === 'flashcard')).toBe(true)
+    expect(row!.observations.every((o) => o.isCorrect === true)).toBe(true)
+  })
+
   it('excludes unverified answers from the percentage', async () => {
     const { quiz, stored, svc } = await setupQuiz([
       { type: 'numeric', correctAnswer: '9.81' },
@@ -381,5 +459,6 @@ describe('QuizService.generateMore', () => {
     const more = await svc.generateMore(quiz.id, 'weakness')
     expect(more.config.mode).toBe('weakness')
     expect(more.config.topicName).toMatch(/Chain Rule|Weakness/i)
+    expect(more.config.focusKnowledgePoints).toEqual(['Chain Rule'])
   })
 })

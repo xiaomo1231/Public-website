@@ -78,6 +78,6 @@ export class InviteService {
   }
 
   async lock(): Promise<void> {
-    await this.users.reset()
+    await this.users.clearUnlock()
   }
 }

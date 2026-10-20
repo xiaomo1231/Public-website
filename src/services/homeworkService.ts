@@ -518,6 +518,8 @@ export class HomeworkService {
       [
         this.db.homeworkSets,
         this.db.homeworkQuestions,
+        this.db.homeworkWalkthroughs,
+        this.db.walkthroughNotes,
         this.db.documents,
         this.db.documentBlobs,
         this.db.chunks,
@@ -1707,6 +1709,11 @@ export class HomeworkService {
   private requireAI(): AIService {
     if (!this.ai) throw new AppError(t('homework.noProvider'), 'NO_PROVIDER')
     return this.ai
+  }
+
+  /** The passages a question was read from (or its prompt), for the walkthrough. */
+  questionSourceText(question: HomeworkQuestion): Promise<string> {
+    return this.sourceText(question)
   }
 
   private async sourceText(question: HomeworkQuestion): Promise<string> {

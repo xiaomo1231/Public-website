@@ -68,9 +68,13 @@ export function VocabPage(): JSX.Element {
   }, [service])
 
   const chooseBook = async (bookId: string) => {
-    setSettings(await service.updateSettings({ bookId }))
-    toast({ variant: 'success', title: t('vocab.bookChosen') })
-    await refresh()
+    try {
+      setSettings(await service.updateSettings({ bookId }))
+      toast({ variant: 'success', title: t('vocab.bookChosen') })
+      await refresh()
+    } catch (err) {
+      toast({ variant: 'error', title: t('vocab.chooseBookFailed'), description: (err as Error).message })
+    }
   }
 
   const start = async (kind: 'today' | 'mistakes') => {
@@ -82,6 +86,9 @@ export function VocabPage(): JSX.Element {
         return
       }
       setSession(items)
+    } catch (err) {
+      // e.g. the dictionary (public/vocab/dictionary.json) failed to load.
+      toast({ variant: 'error', title: t('vocab.startFailed'), description: (err as Error).message })
     } finally {
       setStarting(false)
     }

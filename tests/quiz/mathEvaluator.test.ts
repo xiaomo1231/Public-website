@@ -139,9 +139,36 @@ describe('numeric parsing and comparison', () => {
     expect(numericEquivalent('100', '105')).toBe(false)
   })
 
+  it('uses a relative tolerance for small expected values', () => {
+    expect(numericEquivalent('0', '1.8e-5')).toBe(false)
+    expect(numericEquivalent('0.000019', '1.8e-5')).toBe(false)
+    expect(numericEquivalent('0.0000180', '1.8e-5')).toBe(true)
+    expect(numericEquivalent('0.5', '0.501')).toBe(true)
+    expect(numericEquivalent('0.4', '0.5')).toBe(false)
+    expect(numericEquivalent('0', '0')).toBe(true)
+  })
+
   it('returns null when either side cannot be parsed', () => {
     expect(numericEquivalent('abc', '1')).toBeNull()
     expect(numericEquivalent('1', 'abc')).toBeNull()
+  })
+})
+
+describe('compareMath — integration constants', () => {
+  it('does not drop a trailing c or k term when the reference is not an antiderivative', () => {
+    expect(compareMath('a+b', 'a+b+c').equivalent).toBe(false)
+    expect(compareMath('x-k', 'x+k').equivalent).toBe(false)
+    expect(compareMath('x+k', 'x+k').equivalent).toBe(true)
+  })
+
+  it('ignores the constant on both sides when the reference ends with + C', () => {
+    expect(compareMath('x^3/3', 'x^3/3 + C').equivalent).toBe(true)
+    expect(compareMath('x^3/3 + c', 'x^3/3 + C').equivalent).toBe(true)
+    expect(compareMath('x^2/2 + C', 'x^3/3 + C').equivalent).toBe(false)
+  })
+
+  it('does not treat C as a constant when the reference uses it as a symbol', () => {
+    expect(compareMath('x + C', 'x + 2C').equivalent).toBe(false)
   })
 })
 

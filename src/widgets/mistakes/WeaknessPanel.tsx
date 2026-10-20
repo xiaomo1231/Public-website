@@ -108,7 +108,11 @@ export function WeaknessPanel({ projectId, onReview, compact }: WeaknessPanelPro
               </span>
             </div>
             <Progress value={area.weaknessScore * 100} className="h-1.5" />
-            <p className="text-xs text-muted-foreground">{area.reason}</p>
+            {area.recentMistakeCount > 0 && (
+              <p className="text-xs text-muted-foreground">
+                {t('weakness.recent', { count: area.recentMistakeCount })}
+              </p>
+            )}
           </div>
         ))}
       </CardContent>

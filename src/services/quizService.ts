@@ -19,7 +19,7 @@ import { prompts } from '@/infrastructure/ai/prompts'
 import type { QuizGenerationOutput, GeneratedQuizQuestion } from '@/infrastructure/ai/prompts/quiz-generator/v6'
 import type { ChatMessage } from '@/infrastructure/ai/types'
 import type { AIService } from './aiService'
-import { evaluateDeterministic } from './answerEvaluationService'
+import { evaluateDeterministic, parseTrueFalse } from './answerEvaluationService'
 import { decideNextDifficulty, nextStreaks, DEFAULT_DIFFICULTY, DIFFICULTY_ORDER, stepDifficulty } from './adaptiveDifficulty'
 import { MasteryService } from './masteryService'
 import type { MistakeService } from './mistakeService'
@@ -33,7 +33,7 @@ import {
 } from './sourceContext'
 import { DocumentRepository } from '@/entities/document/repository'
 import { CourseContextRepository } from '@/entities/courseContext/repository'
-import { formatQuestionStyleContext } from './practiceService'
+import { PracticeService, formatQuestionStyleContext } from './practiceService'
 import type { SourceReference } from '@/entities/courseAnalysis/types'
 import { logger } from '@/infrastructure/logger/logger'
 import { AppError } from '@/infrastructure/errors/AppError'
@@ -667,7 +667,14 @@ export class QuizService {
       // X / B / fill-blank answers are rebuilt from their structure below, so
       // a missing `correctAnswer` does not disqualify them.
       const rebuilt = type === 'multiple_select' || type === 'matching' || type === 'fill_blank'
-      const rawAnswer = typeof q.correctAnswer === 'string' ? q.correctAnswer.trim() : ''
+      let rawAnswer = typeof q.correctAnswer === 'string' ? q.correctAnswer.trim() : ''
+      // True/false answers arrive as "正确", "×", JSON booleans…; the grader
+      // compares "true"/"false", so anything unreadable is dropped.
+      if (type === 'true_false') {
+        const truth = parseTrueFalse(q.correctAnswer as unknown)
+        if (truth === null) continue
+        rawAnswer = truth ? 'true' : 'false'
+      }
       if (!rawAnswer && !rebuilt) continue
 
       let correctAnswer = rawAnswer
@@ -924,7 +931,9 @@ export class QuizService {
       knowledgePointMastery: masteryRow?.mastery ?? 0,
     })
 
-    const isLastQuestion = history.length >= quiz.questionIds.length
+    // Distinct questions, not attempts: a resumed quiz may re-answer one.
+    const answered = new Set(history.map((a) => a.questionId))
+    const isLastQuestion = quiz.questionIds.every((id) => answered.has(id))
     if (isLastQuestion) {
       await this.completeQuiz(quizId)
     }
@@ -988,7 +997,11 @@ export class QuizService {
     if (this.mistakes) {
       await this.mistakes.removeAttempt(attempt.projectId, attempt.questionId, attempt.id)
     }
-    const history = await this.attempts.listByKnowledgePoint(attempt.projectId, attempt.knowledgePoint)
+    // Practice work on the same point counts too; a rebuild replaces the row.
+    const history = [
+      ...(await this.attempts.listByKnowledgePoint(attempt.projectId, attempt.knowledgePoint)),
+      ...(await new PracticeService({ db: this.db }).practiceHistory(attempt.projectId, attempt.knowledgePoint)),
+    ]
     await this.mastery.rebuild(attempt.projectId, history)
 
     if (attempt.quizId) {
@@ -1043,6 +1056,7 @@ export class QuizService {
         ...baseConfig,
         mode: 'weakness',
         ...(weak[0]?.topicId ? { topicId: weak[0].topicId } : {}),
+        ...(weak.length > 0 ? { focusKnowledgePoints: weak.map((w) => w.knowledgePoint) } : {}),
         topicName:
           weak.length > 0
             ? t('quizResult.followUp.weaknessLabel', {

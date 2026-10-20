@@ -7,17 +7,21 @@ import { AppError } from '@/infrastructure/errors/AppError'
 import { logger } from '@/infrastructure/logger/logger'
 import { t } from '@/i18n'
 import { loadProjectSubject } from './projectSubject'
+import { fnv1a } from '@/shared/lib/hash'
+import type { ContextualTutorKind, ContextualTutorTurn } from '@/infrastructure/ai/prompts/contextual-tutor/v3'
 
 export interface ContextualTutorInput {
   projectId: string
   topicId?: string
-  contextKind?: 'lesson' | 'homework'
+  contextKind?: ContextualTutorKind
   topicTitle?: string
   sectionHeading?: string
   selectedText: string
   surroundingContext: string
   question: string
   language: string
+  /** Earlier turns of the same conversation, oldest first. */
+  history?: ContextualTutorTurn[]
   signal?: AbortSignal
 }
 
@@ -36,7 +40,7 @@ export interface ContextualTutorAnswer {
 const inFlight = new Map<string, Promise<ContextualTutorAnswer>>()
 
 function keyOf(input: ContextualTutorInput): string {
-  return [input.projectId, input.topicId ?? '', input.contextKind ?? 'lesson', input.selectedText, input.question].join('\u0000')
+  return [input.projectId, input.topicId ?? '', input.contextKind ?? 'lesson', input.selectedText, input.surroundingContext, fnv1a(JSON.stringify(input.history ?? [])), input.question].join('\u0000')
 }
 
 /**
@@ -82,6 +86,7 @@ export class ContextualTutorService {
           question: input.question,
           language: input.language,
           ...(input.contextKind ? { contextKind: input.contextKind } : {}),
+          ...(input.history?.length ? { history: input.history } : {}),
         }),
       },
     ]

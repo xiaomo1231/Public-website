@@ -63,6 +63,9 @@ export function TutorPanel(props: TutorPanelProps): JSX.Element {
 
   useEffect(() => {
     let cancelled = false
+    // Unmounting (topic or language change) cancels the in-flight
+    // introduction / first question instead of paying for a hidden run.
+    const controller = new AbortController()
     void (async () => {
       try {
         setBusy(true)
@@ -95,7 +98,10 @@ export function TutorPanel(props: TutorPanelProps): JSX.Element {
         // first question is generated on a best-effort basis — a failure here
         // must not hide the explanation the student just received.
         const next = await bundle.tutor.beginTopic(s.id, {
-          onDelta: (text) => setIntro((prev) => prev + text),
+          onDelta: (text) => {
+            if (!cancelled) setIntro((prev) => prev + text)
+          },
+          signal: controller.signal,
         })
         if (cancelled) return
         setSession(next.session)
@@ -111,6 +117,7 @@ export function TutorPanel(props: TutorPanelProps): JSX.Element {
     })()
     return () => {
       cancelled = true
+      controller.abort()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])

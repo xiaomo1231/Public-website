@@ -38,11 +38,16 @@ export function useReferenceImages(
   const topicId = lesson?.topicId
 
   useEffect(() => {
-    if (!projectId || !topicId) return
-    let cancelled = false
+    // A new topic starts from a clean slate: the previous topic's search is
+    // aborted on cleanup (its `finally` then skips `setSearching(false)`), and
+    // availability is re-evaluated for the new project/topic.
+    setSearching(false)
+    setAvailable(false)
     setImages([])
     setSearchedEmpty(false)
     setError(undefined)
+    if (!projectId || !topicId) return
+    let cancelled = false
     void (async () => {
       try {
         const svc = await buildReferenceImageService()

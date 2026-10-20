@@ -18,6 +18,7 @@ import { buildSystemPrompt as buildReferenceQueryPrompt, normalizeReferenceQueri
 import { OpenAICompatibleProvider } from '@/infrastructure/ai/openaiCompatible'
 import type { AIService } from '@/services/aiService'
 import type { ChatMessage } from '@/infrastructure/ai/types'
+import { AbortedError } from '@/infrastructure/ai/errors'
 
 const PNG = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10, 0, 0])
 
@@ -133,6 +134,36 @@ describe('open image sources', () => {
     expect(await downloadImage('http://upload.wikimedia.org/a.png', { fetch: network })).toBeNull()
     const svg = vi.fn<FetchLike>(async () => new Response('<svg/>', { headers: { 'content-type': 'image/svg+xml' } }))
     expect(await downloadImage('https://upload.wikimedia.org/a.svg', { fetch: svg })).toBeNull()
+  })
+
+  it('rejects redirects that end on a host outside the whitelist', async () => {
+    const redirected = vi.fn<FetchLike>(async () => {
+      const response = png()
+      Object.defineProperty(response, 'url', { value: 'https://evil.example.com/a.png' })
+      Object.defineProperty(response, 'redirected', { value: true })
+      return response
+    })
+    expect(await downloadImage('https://upload.wikimedia.org/a.png', { fetch: redirected })).toBeNull()
+    const sameHost = vi.fn<FetchLike>(async () => {
+      const response = png()
+      Object.defineProperty(response, 'url', { value: 'https://upload.wikimedia.org/b.png' })
+      return response
+    })
+    expect(await downloadImage('https://upload.wikimedia.org/a.png', { fetch: sameHost })).not.toBeNull()
+  })
+
+  it('stops reading a body without content-length once it passes 3 MB', async () => {
+    let pulled = 0
+    const chunk = new Uint8Array(1024 * 1024)
+    const endless = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        pulled += 1
+        controller.enqueue(chunk)
+      },
+    })
+    const big = vi.fn<FetchLike>(async () => new Response(endless, { headers: { 'content-type': 'image/png' } }))
+    expect(await downloadImage('https://upload.wikimedia.org/big.png', { fetch: big })).toBeNull()
+    expect(pulled).toBeLessThan(10)
   })
 })
 
@@ -260,6 +291,30 @@ describe('reference image service', () => {
     const verified = new ReferenceImageService({ db, ai: fakeAI(true).ai, fetch: fakeNetwork(), options: { enabled: true, visionCheck: true } })
     const images = await verified.search(input(projectId))
     expect(images.every((image) => image.relevance === 'verified')).toBe(true)
+  })
+
+  it('does not save an unverified picture when the vision check is cancelled', async () => {
+    const projectId = await project('chemistry')
+    const controller = new AbortController()
+    const chatJSON = vi.fn(async (messages: ChatMessage[]) => {
+      if (messages[0]!.content.includes('suggest search terms')) {
+        return {
+          data: { queries: [{ source: 'wikimedia', term: 'ethanol molecule model', purpose: 'model' }] },
+          raw: { content: '{}', model: 'fake' },
+        }
+      }
+      // The AI layer reports cancellation as its own AbortedError (code ABORTED).
+      controller.abort()
+      throw new AbortedError()
+    })
+    const service = new ReferenceImageService({
+      db,
+      ai: { chatJSON } as unknown as AIService,
+      fetch: fakeNetwork(),
+      options: { enabled: true, visionCheck: true },
+    })
+    await expect(service.search({ ...input(projectId), signal: controller.signal })).rejects.toMatchObject({ code: 'ABORTED' })
+    expect(await service.list(projectId, 'topic-1')).toEqual([])
   })
 
   it('falls back to unverified when the model cannot look at images', async () => {

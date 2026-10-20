@@ -85,12 +85,11 @@ describe('buildWeaknessAreas', () => {
     expect(low.weaknessScore).toBeGreaterThan(high.weaknessScore)
   })
 
-  it('describes each area neutrally', () => {
+  it('returns structured counts (the panel words them in the UI language)', () => {
     const areas = buildWeaknessAreas([mistake('Chain Rule'), mistake('Chain Rule')], [{ knowledgePoint: 'Chain Rule', mastery: 0.4, attempts: 3 }])
-    expect(areas[0]!.reason).toContain('2 recorded mistakes')
-    expect(areas[0]!.reason).toContain('mastery estimate 40%')
-    expect(areas[0]!.reason.toLowerCase()).not.toContain('bad')
-    expect(areas[0]!.reason.toLowerCase()).not.toContain('weak at')
+    expect(areas[0]).toMatchObject({ mistakeCount: 2, mastery: 0.4 })
+    expect(areas[0]!.recentMistakeCount).toBeGreaterThanOrEqual(0)
+    expect(areas[0]).not.toHaveProperty('reason')
   })
 
   it('respects the limit', () => {

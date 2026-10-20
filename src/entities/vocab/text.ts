@@ -187,22 +187,157 @@ export function parseWordList(text: string): { words: Array<{ word: string; mean
   const words: Array<{ word: string; meaning?: string }> = []
   const seen = new Set<string>()
   let skipped = 0
-  for (const rawLine of text.replace(BOM_AT_START, '').split(/\r?\n/)) {
+  const body = text.replace(BOM_AT_START, '')
+
+  /** Add one entry; false when the word part is not a word. */
+  const accept = (rawWord: string, rawMeaning?: string): boolean => {
+    const trimmed = rawWord.trim()
+    if (!/^([A-Za-z][A-Za-z' -]*[A-Za-z]|[A-Za-z])$/.test(trimmed)) return false
+    const word = normalizeWord(trimmed)
+    if (word === 'word' || seen.has(word)) return true
+    seen.add(word)
+    const meaning = rawMeaning?.trim()
+    words.push({ word, ...(meaning ? { meaning } : {}) })
+    return true
+  }
+
+  /** One free-form line: word, then optionally tab / comma / colon / space + meaning. */
+  const acceptLine = (rawLine: string) => {
     const line = rawLine.trim()
-    if (!line) continue
+    if (!line) return
     const match = /^([A-Za-z][A-Za-z' -]*?[A-Za-z]|[A-Za-z])\s*(?:[\t,:：]\s*|\s+(?=[^\x20-\x7e]))(.*)$/.exec(line) ??
       /^([A-Za-z][A-Za-z' -]*[A-Za-z]|[A-Za-z])$/.exec(line)
     if (!match) {
       skipped++
+      return
+    }
+    accept(match[1]!, match[2]?.replace(/^["']|["']$/g, ''))
+  }
+
+  const lines = body.split(/\r?\n/)
+  const firstLine = lines.find((line) => line.trim())?.trim() ?? ''
+
+  // Anki text export (ours writes `#separator:tab`, `#html:true`, `#tags column:3`).
+  if (/^#(separator|html|tags column|notetype|deck|columns|guid)\b/i.test(firstLine)) {
+    const headers = lines.filter((line) => line.startsWith('#'))
+    const separator = ankiSeparator(headers)
+    const html = !headers.some((line) => /^#html:\s*false/i.test(line))
+    for (const line of lines) {
+      if (!line.trim() || line.startsWith('#')) continue
+      const fields = line.split(separator)
+      const front = html ? htmlToText(fields[0] ?? '') : (fields[0] ?? '')
+      const back = fields[1] !== undefined ? ankiBackMeaning(fields[1], html) : undefined
+      if (!accept(front, back)) skipped++
+    }
+    return { words, skipped }
+  }
+
+  // CSV with a header row (e.g. our own `word,phonetic,meaning,example,source`)
+  // or with quoted fields: parse it as CSV so quotes and extra columns are
+  // honoured. Records with a single field fall back to the free-form reader.
+  const header = parseCsv(firstLine)[0]?.map((cell) => cell.trim().toLowerCase()) ?? []
+  const wordColumn = header.findIndex((cell) => WORD_HEADERS.has(cell))
+  const hasHeader = header.length >= 2 && wordColumn >= 0
+  const quotedCsv = firstLine.includes(',') && /"/.test(body)
+  if (hasHeader || quotedCsv) {
+    const meaningColumn = hasHeader ? header.findIndex((cell) => MEANING_HEADERS.has(cell)) : 1
+    const records = parseCsv(body)
+    for (const [index, record] of records.entries()) {
+      if (index === 0 && hasHeader) continue
+      if (record.every((cell) => !cell.trim())) continue
+      if (record.length < 2) {
+        acceptLine(record[0] ?? '')
+        continue
+      }
+      const rawWord = record[hasHeader ? wordColumn : 0] ?? ''
+      const meaning = meaningColumn >= 0 ? record[meaningColumn] : undefined
+      if (!accept(rawWord, meaning)) skipped++
+    }
+    return { words, skipped }
+  }
+
+  for (const rawLine of lines) acceptLine(rawLine)
+  return { words, skipped }
+}
+
+const WORD_HEADERS = new Set(['word', 'words', 'term', 'headword', '单词', '词'])
+const MEANING_HEADERS = new Set(['meaning', 'meanings', 'definition', 'translation', 'gloss', '释义', '意思', '词义'])
+
+/** RFC 4180 CSV: quoted fields may hold commas, doubled quotes and line breaks. */
+export function parseCsv(text: string): string[][] {
+  const records: string[][] = []
+  let record: string[] = []
+  let field = ''
+  let quoted = false
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i]!
+    if (quoted) {
+      if (ch === '"') {
+        if (text[i + 1] === '"') {
+          field += '"'
+          i++
+        } else {
+          quoted = false
+        }
+      } else {
+        field += ch
+      }
       continue
     }
-    const word = normalizeWord(match[1]!)
-    if (word === 'word' || seen.has(word)) continue
-    seen.add(word)
-    const meaning = match[2]?.replace(/^["']|["']$/g, '').trim()
-    words.push({ word, ...(meaning ? { meaning } : {}) })
+    if (ch === '"' && !field.trim()) {
+      quoted = true
+      field = ''
+    } else if (ch === ',') {
+      record.push(field)
+      field = ''
+    } else if (ch === '\r' || ch === '\n') {
+      if (ch === '\r' && text[i + 1] === '\n') i++
+      record.push(field)
+      records.push(record)
+      record = []
+      field = ''
+    } else {
+      field += ch
+    }
   }
-  return { words, skipped }
+  if (field || record.length) {
+    record.push(field)
+    records.push(record)
+  }
+  return records
+}
+
+function ankiSeparator(headers: string[]): string | RegExp {
+  const line = headers.find((header) => /^#separator:/i.test(header))
+  const value = line?.replace(/^#separator:/i, '').trim().toLowerCase() ?? 'tab'
+  const named: Record<string, string> = { tab: '\t', comma: ',', semicolon: ';', pipe: '|', colon: ':' }
+  if (value === 'space') return / +/
+  return named[value] ?? (value.length === 1 ? value : '\t')
+}
+
+function decodeEntities(text: string): string {
+  return text
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&amp;/g, '&')
+}
+
+function htmlToText(html: string): string {
+  return decodeEntities(html.replace(/<br\s*\/?>/gi, ' ').replace(/<[^>]*>/g, '')).trim()
+}
+
+/** The meaning from an Anki back field: no example (`<i>…</i>`), no `/phonetic/`, no HTML. */
+function ankiBackMeaning(back: string, html: boolean): string {
+  if (!html) return back.trim()
+  return back
+    .replace(/<i>[\s\S]*?<\/i>/gi, '')
+    .split(/<br\s*\/?>/i)
+    .map(htmlToText)
+    .filter((part) => part && !/^\/[^/]+\/$/.test(part))
+    .join('；')
 }
 
 export interface ExportRow {

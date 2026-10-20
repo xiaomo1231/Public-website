@@ -1,4 +1,3 @@
-import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { ArrowLeft, ArrowRight, Brain, MessagesSquare } from 'lucide-react'
 import { Button } from '@/shared/ui/Button'
@@ -24,14 +23,14 @@ export function InteractiveTutorPage(): JSX.Element {
   const { id: projectId, topicId } = useParams<{ id: string; topicId: string }>()
   const { t } = useTranslation()
   const { loading, analysis, topics } = useProjectTopics(projectId)
-  const [language, setLanguage] = useState<'zh' | 'en' | 'mixed'>('en')
-  // Tutor questions follow the student's question-language preference.
+  // Tutor questions follow the student's question-language preference. The
+  // language is derived (not seeded with a default) so the TutorPanel is only
+  // mounted once it is final: mounting it early would start a session and an
+  // AI introduction in the wrong language, then remount and orphan both.
   const { profile, loaded: profileLoaded } = useAuth()
   const questionLanguage = profile?.questionLanguage
-
-  useEffect(() => {
-    if (analysis?.language && profileLoaded) setLanguage(resolveContentLanguage(questionLanguage, analysis.language))
-  }, [analysis?.language, profileLoaded, questionLanguage])
+  const language =
+    analysis && profileLoaded ? resolveContentLanguage(questionLanguage, analysis.language) : null
 
   if (!projectId) return <div />
 
@@ -103,14 +102,18 @@ export function InteractiveTutorPage(): JSX.Element {
             </CardHeader>
           </Card>
 
-          <TutorPanel
-            key={`${activeTopic.id}-${language}`}
-            projectId={projectId}
-            topicId={activeTopic.id}
-            topicName={activeTopic.name}
-            topicDescription={activeTopic.description}
-            language={language}
-          />
+          {language ? (
+            <TutorPanel
+              key={`${activeTopic.id}-${language}`}
+              projectId={projectId}
+              topicId={activeTopic.id}
+              topicName={activeTopic.name}
+              topicDescription={activeTopic.description}
+              language={language}
+            />
+          ) : (
+            <LoadingState label={t('tutor.loading')} />
+          )}
 
           <div className="mt-4 flex flex-col gap-3 rounded-xl border border-border/70 bg-muted/20 p-4 sm:flex-row sm:items-center sm:justify-between">
             <div className="min-w-0">
