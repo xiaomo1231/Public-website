@@ -2,6 +2,7 @@ import type { AIService } from './aiService'
 import type { AppDatabase } from '@/infrastructure/db/database'
 import { getDb } from '@/infrastructure/db/database'
 import type { ChatMessage } from '@/infrastructure/ai/types'
+import type { FrameRevision } from '@/infrastructure/ai/prompts/homework-walkthrough/v2'
 import { prompts } from '@/infrastructure/ai/prompts'
 import { AbortedError, TimeoutError as AITimeoutError } from '@/infrastructure/ai/errors'
 import { AppError, NotFoundError } from '@/infrastructure/errors/AppError'
@@ -15,15 +16,27 @@ import {
   isRetryableHomeworkError,
 } from '@/entities/homework/errorKind'
 import { MIN_OUTPUT_TOKENS, planOutputBudget } from '@/entities/homework/tokenBudget'
-import { checkLinearSystems, involvesRowReduction } from '@/entities/homework/walkthroughChecks'
+import {
+  checkLinearSystems,
+  involvesRowReduction,
+  type ClaimedLinearSystem,
+} from '@/entities/homework/walkthroughChecks'
+import {
+  shouldSplitWalkthrough,
+  walkthroughSubparts,
+  type WalkthroughSubpart,
+} from '@/entities/homework/splitQuestion'
 import {
   planWalkthrough,
   walkthroughId,
   walkthroughLanguage,
   type HomeworkWalkthrough,
+  type WalkthroughDraft,
   type WalkthroughLanguage,
+  type WalkthroughPart,
   type WalkthroughPlanEntry,
   type WalkthroughSection,
+  type WalkthroughSectionVersion,
 } from '@/entities/homework/walkthrough'
 import { WalkthroughRepository } from '@/entities/homework/walkthroughRepository'
 import type { HomeworkQuestion, HomeworkSet } from '@/entities/homework/types'
@@ -31,6 +44,7 @@ import type { SubjectContext } from '@/entities/project/types'
 import { friendlyAIError } from '@/shared/lib/aiErrors'
 import {
   createGenerationRun,
+  GenerationPausedError,
   isAbortError,
   type GenerationControl,
   type GenerationRun,
@@ -52,6 +66,11 @@ const RETRY_BASE_DELAY_MS = 700
 /** How much of each question the opening / summary request sees. */
 const FRAME_QUESTION_CHARS = 1_500
 const FRAME_EXCERPT_CHARS = 1_500
+/** How much of the sub-parts already written each later sub-part request sees. */
+const PART_EARLIER_CHARS = 6_000
+const PART_EARLIER_MIN_CHARS = 600
+/** Longest revision request kept from the student. */
+export const MAX_REVISION_SUGGESTION = 1_000
 
 export interface WalkthroughState {
   set: HomeworkSet
@@ -68,6 +87,10 @@ export interface WalkthroughProgress {
   failed: number
   /** Section ids being written right now. */
   running: string[]
+  /** Split questions: the sub-part being written, by section id (`b`). */
+  parts?: Record<string, string>
+  /** Set while one section is being regenerated on its own. */
+  section?: { id: string; split: boolean }
 }
 
 export interface WalkthroughRunResult {
@@ -131,7 +154,14 @@ export function walkthroughPausedRun(setId: string): WalkthroughPausedRun | unde
 
 export function walkthroughRunProgress(setId: string): WalkthroughProgress | undefined {
   const run = runs.get(setId)
-  return run ? { ...run.progress, running: [...run.progress.running] } : undefined
+  return run
+    ? {
+        ...run.progress,
+        running: [...run.progress.running],
+        ...(run.progress.parts ? { parts: { ...run.progress.parts } } : {}),
+        ...(run.progress.section ? { section: { ...run.progress.section } } : {}),
+      }
+    : undefined
 }
 
 /** `1`, `2(a)` or `Problem 3` — how the walkthrough refers to a question. */
@@ -173,7 +203,8 @@ export class HomeworkWalkthroughService {
     const language = walkthroughLanguage(profile?.questionLanguage, set.language)
     const subject = await loadProjectSubjectContext(set.projectId, this.db)
     const promptVersion = prompts.subjectProfile.subjectPromptVersion(
-      `homework-walkthrough/${prompts.homeworkWalkthrough.VERSION}`,
+      // v2 without a revision block is byte-identical to v1, so caches keep their hashes.
+      `homework-walkthrough/${prompts.homeworkWalkthrough.CACHE_VERSION}`,
       subject,
     )
     const walkthrough = await this.repo.get(walkthroughId(setId, language))
@@ -189,6 +220,11 @@ export class HomeworkWalkthroughService {
 
   isRunning(setId: string): boolean {
     return runs.has(setId)
+  }
+
+  /** An AI provider is configured (writing or rewriting is possible). */
+  hasAI(): boolean {
+    return this.ai !== null
   }
 
   /**
@@ -266,7 +302,10 @@ export class HomeworkWalkthroughService {
     const redo = (entry: WalkthroughPlanEntry): boolean =>
       entry.needsWork ||
       (forceSince !== undefined &&
-        !(entry.section?.status !== 'failed' && (entry.section?.generatedAt ?? 0) >= forceSince))
+        !(
+          (entry.section?.status === 'ready' || entry.section?.status === 'insufficient') &&
+          (entry.section?.generatedAt ?? 0) >= forceSince
+        ))
     const questionEntries = state.plan.filter((entry) => entry.kind === 'question')
     const todo = questionEntries.filter(redo)
     const frameEntries = state.plan.filter((entry) => entry.kind !== 'question')
@@ -302,14 +341,23 @@ export class HomeworkWalkthroughService {
         const label = labels.get(entry.question!.id) ?? '?'
         let aborted = false
         try {
-          const section = await this.writeQuestionSection(
-            ai,
+          const section = await this.writeQuestion(ai, {
             entry,
             label,
-            state.language,
+            language: state.language,
             subject,
-            control.signal,
-          )
+            control,
+            mode: 'generate',
+            // A resumed "rewrite everything" continues only its own drafts.
+            ...(forceSince !== undefined ? { draftSince: forceSince } : {}),
+            saveSection: save,
+            onPart: (part) => {
+              progress.parts = { ...progress.parts }
+              if (part) progress.parts[entry.id] = part
+              else delete progress.parts[entry.id]
+              emit()
+            },
+          })
           // "Not enough information" is a finished answer, not a failure.
           await save(section)
           result.generated += 1
@@ -324,12 +372,21 @@ export class HomeworkWalkthroughService {
           if (isAccountFatalError(kind)) fatal = friendlyAIError(err)
           result.failed += 1
           progress.failed += 1
-          // A finished section is never replaced by a failure.
-          if (entry.section?.status !== 'ready') {
-            await save(failedSection(entry, label, friendlyAIError(err)))
+          // A finished section is never replaced by a failure; finished
+          // sub-parts of a split question are kept for the next run.
+          const latest = await this.storedSection(base.id, entry.id)
+          if (latest?.status !== 'ready') {
+            await save({
+              ...failedSection(entry, label, friendlyAIError(err)),
+              ...(latest?.draft ? { draft: latest.draft } : {}),
+            })
           }
         } finally {
           progress.running = progress.running.filter((id) => id !== entry.id)
+          if (progress.parts?.[entry.id]) {
+            progress.parts = { ...progress.parts }
+            delete progress.parts[entry.id]
+          }
           if (!aborted) progress.done += 1
           emit()
         }
@@ -395,29 +452,202 @@ export class HomeworkWalkthroughService {
     }
   }
 
-  private async writeQuestionSection(
-    ai: AIService,
-    entry: WalkthroughPlanEntry,
-    label: string,
-    language: WalkthroughLanguage,
+  /** The stored version of one section (fresh, not the run's starting snapshot). */
+  private async storedSection(
+    id: string,
+    sectionId: string,
+  ): Promise<WalkthroughSection | undefined> {
+    return (await this.repo.get(id))?.sections.find((section) => section.id === sectionId)
+  }
+
+  /**
+   * Rewrite one section on its own, optionally following the student's
+   * suggestion (the model sees the current version). The previous ready
+   * version is kept for 恢复上一版; a stopped or failed rewrite leaves the
+   * section exactly as it was (finished sub-parts of a split question are
+   * kept as a draft, so 继续 writes only the rest).
+   */
+  regenerateSection(
+    setId: string,
+    sectionId: string,
+    options: { suggestion?: string; control?: GenerationControl } = {},
+  ): Promise<WalkthroughRunResult> {
+    if (runs.has(setId))
+      return Promise.reject(new AppError(t('homework.walkthrough.busy'), 'VALIDATION_ERROR'))
+    const control = options.control ?? createGenerationRun()
+    const progress: WalkthroughProgress = {
+      total: 1,
+      done: 0,
+      failed: 0,
+      running: [sectionId],
+      section: { id: sectionId, split: false },
+    }
+    const suggestion = options.suggestion?.trim().slice(0, MAX_REVISION_SUGGESTION) || undefined
+    const promise = this.regenerate(setId, sectionId, suggestion, progress, control).finally(() => {
+      runs.delete(setId)
+      emit()
+    })
+    runs.set(setId, { promise, progress, control })
+    emit()
+    return promise
+  }
+
+  private async regenerate(
+    setId: string,
+    sectionId: string,
+    suggestion: string | undefined,
+    progress: WalkthroughProgress,
+    control: GenerationControl,
+  ): Promise<WalkthroughRunResult> {
+    const ai = this.requireAI()
+    const state = await this.state(setId)
+    const entry = state.plan.find((item) => item.id === sectionId)
+    if (!entry) throw new NotFoundError('WalkthroughSection', sectionId)
+    const subject = await loadProjectSubjectContext(state.set.projectId, this.db)
+    const base = {
+      id: walkthroughId(setId, state.language),
+      projectId: state.set.projectId,
+      setId,
+      language: state.language,
+    }
+    const save = async (section: WalkthroughSection): Promise<void> => {
+      await this.repo.putSection(base, section)
+    }
+    const current = entry.section?.status === 'ready' ? entry.section : undefined
+    const labels = new Map(
+      state.questions.map((question, index) => [question.id, questionLabel(question, index)]),
+    )
+    try {
+      if (entry.kind === 'question') {
+        const section = await this.writeQuestion(ai, {
+          entry,
+          label: labels.get(entry.question!.id) ?? '?',
+          language: state.language,
+          subject,
+          control,
+          mode: 'regenerate',
+          ...(suggestion ? { suggestion } : {}),
+          ...(current ? { current } : {}),
+          saveSection: save,
+          onPart: (part, done, total) => {
+            progress.section = { id: sectionId, split: true }
+            progress.total = total
+            progress.done = done
+            progress.parts = part ? { [sectionId]: part } : {}
+            emit()
+          },
+        })
+        // "Not enough information" never replaces a ready section.
+        if (section.status === 'insufficient' && current)
+          throw new AppError(
+            t('homework.walkthrough.insufficient', { reason: section.error ?? '' }),
+            'INVALID_RESPONSE',
+          )
+        await save(withPrevious(section, current))
+      } else {
+        const frame = await this.writeFrame(ai, setId, state, labels, subject, control.signal, {
+          target: entry.kind,
+          ...(current ? { current: { body: frameText(current) } } : {}),
+          ...(suggestion ? { suggestion } : {}),
+        })
+        if (!frame)
+          throw new AppError(t('homework.walkthrough.frameNeedsQuestions'), 'VALIDATION_ERROR')
+        // The frame request returns both parts; only the requested one is saved.
+        const next = frame.find((section) => section.id === sectionId)!
+        await save(withPrevious(next, current))
+      }
+      progress.done = progress.total
+      emit()
+      return { generated: 1, failed: 0 }
+    } catch (err) {
+      if (isAbortError(err, control.signal))
+        return {
+          generated: 0,
+          failed: 0,
+          paused: true,
+          ...(control.signal.aborted ? { stopped: true } : {}),
+        }
+      throw err
+    }
+  }
+
+  /** Swap a section with the version its last regeneration replaced (toggles). */
+  async restorePrevious(setId: string, sectionId: string): Promise<void> {
+    if (runs.has(setId)) throw new AppError(t('homework.walkthrough.busy'), 'VALIDATION_ERROR')
+    const state = await this.state(setId)
+    const section = state.walkthrough?.sections.find((item) => item.id === sectionId)
+    if (!section?.previous) throw new NotFoundError('WalkthroughSection', sectionId)
+    await this.repo.putSection(
+      {
+        id: walkthroughId(setId, state.language),
+        projectId: state.set.projectId,
+        setId,
+        language: state.language,
+      },
+      { ...applyVersion(section, section.previous), previous: versionOf(section) },
+    )
+  }
+
+  /** What a question's prompt needs besides the question text. */
+  private async questionInputs(
+    question: HomeworkQuestion,
     subject: SubjectContext | undefined,
-    signal?: AbortSignal,
-  ): Promise<WalkthroughSection> {
-    const question = entry.question!
+  ): Promise<QuestionInputs> {
     const deferred =
       question.answerStatus === 'matched' && isDeferredProfessorAnswer(question.answerText ?? '')
     const professorAnswer =
       question.answerStatus === 'matched' && !deferred && (question.answerText ?? '').trim()
         ? question.answerText
         : undefined
-    const linearSystems =
-      subject?.subject === 'linear_algebra' || involvesRowReduction(question.prompt)
+    return {
+      sourceText: await this.homework.questionSourceText(question),
+      ...(professorAnswer ? { professorAnswer } : {}),
+      ...(!deferred && question.solution ? { previousSolution: question.solution } : {}),
+      linearSystems: subject?.subject === 'linear_algebra' || involvesRowReduction(question.prompt),
+    }
+  }
+
+  /**
+   * One question's section: in one request, or — for a long multipart
+   * question, or when the one request still ends truncated — one request per
+   * sub-part, saved as it goes so an interruption continues where it stopped.
+   */
+  private async writeQuestion(ai: AIService, job: QuestionJob): Promise<WalkthroughSection> {
+    const question = job.entry.question!
+    const inputs = await this.questionInputs(question, job.subject)
+    const subparts = walkthroughSubparts(question.prompt)
+    const draft = usableDraft(job, subparts)
+    if (subparts.length >= 2 && (draft || shouldSplitWalkthrough(question.prompt, subparts)))
+      return this.writeSplit(ai, job, inputs, subparts, draft, false)
+    try {
+      return await this.writeWhole(ai, job, inputs)
+    } catch (err) {
+      if (
+        subparts.length >= 2 &&
+        !isAbortError(err, job.control.signal) &&
+        classifyHomeworkError(err) === 'truncated'
+      )
+        // Too long for one reply even with the larger budget: split it.
+        return this.writeSplit(ai, job, inputs, subparts, undefined, true)
+      throw err
+    }
+  }
+
+  private async writeWhole(
+    ai: AIService,
+    job: QuestionJob,
+    inputs: QuestionInputs,
+  ): Promise<WalkthroughSection> {
+    const { entry, label } = job
+    const question = entry.question!
     const messages: ChatMessage[] = [
       {
         role: 'system',
         content: prompts.subjectProfile.withSubject(
-          prompts.homeworkWalkthrough.buildQuestionSystemPrompt({ linearSystems }),
-          subject,
+          prompts.homeworkWalkthrough.buildQuestionSystemPrompt({
+            linearSystems: inputs.linearSystems,
+          }),
+          job.subject,
         ),
       },
       {
@@ -425,31 +655,20 @@ export class HomeworkWalkthroughService {
         content: prompts.homeworkWalkthrough.buildQuestionUserPrompt({
           label,
           question: question.prompt,
-          sourceText: await this.homework.questionSourceText(question),
-          language,
-          ...(professorAnswer ? { professorAnswer } : {}),
-          ...(!deferred && question.solution ? { previousSolution: question.solution } : {}),
+          sourceText: inputs.sourceText,
+          language: job.language,
+          ...(inputs.professorAnswer ? { professorAnswer: inputs.professorAnswer } : {}),
+          ...(inputs.previousSolution ? { previousSolution: inputs.previousSolution } : {}),
+          ...(job.mode === 'regenerate' ? { revision: revisionOf(job, job.current) } : {}),
         }),
       },
     ]
-    const data = await requestSectionJSON(ai, messages, signal)
+    const data = await requestSectionJSON(ai, messages, job.control.signal)
     const normalized = prompts.homeworkWalkthrough.normalizeQuestionSection(data)
     if (!normalized) throw new AppError(t('homework.walkthrough.invalid'), 'INVALID_RESPONSE')
-    const now = Date.now()
-    if (normalized.status === 'insufficient') {
-      return {
-        id: entry.id,
-        kind: 'question',
-        questionId: question.id,
-        title: label,
-        body: '',
-        status: 'insufficient',
-        error: normalized.reason,
-        inputHash: entry.inputHash,
-        generatedAt: now,
-      }
-    }
-    const checks = linearSystems ? checkLinearSystems(normalized.linearSystems) : []
+    if (normalized.status === 'insufficient')
+      return insufficientSection(entry, label, normalized.reason)
+    const checks = inputs.linearSystems ? checkLinearSystems(normalized.linearSystems) : []
     return {
       id: entry.id,
       kind: 'question',
@@ -460,8 +679,102 @@ export class HomeworkWalkthroughService {
       status: 'ready',
       inputHash: entry.inputHash,
       ...(checks.length > 0 ? { checks } : {}),
-      generatedAt: now,
+      generatedAt: Date.now(),
     }
+  }
+
+  /** Split mode: one request per sub-part, each saved before the next starts. */
+  private async writeSplit(
+    ai: AIService,
+    job: QuestionJob,
+    inputs: QuestionInputs,
+    subparts: WalkthroughSubpart[],
+    resumeFrom: WalkthroughDraft | undefined,
+    persistStart: boolean,
+  ): Promise<WalkthroughSection> {
+    const { entry, label, control } = job
+    const question = entry.question!
+    const labels = subparts.map((part) => part.label)
+    let draft: WalkthroughDraft = resumeFrom ?? {
+      mode: job.mode,
+      ...(job.mode === 'regenerate' && job.suggestion ? { suggestion: job.suggestion } : {}),
+      inputHash: entry.inputHash,
+      labels,
+      parts: [],
+      startedAt: Date.now(),
+    }
+    // A ready section keeps its text until every sub-part is rewritten.
+    const holder = job.current ?? (entry.section?.status === 'ready' ? entry.section : undefined)
+    const saveDraft = (next: WalkthroughDraft): Promise<void> =>
+      job.saveSection(
+        holder
+          ? { ...holder, draft: next }
+          : {
+              id: entry.id,
+              kind: 'question',
+              questionId: question.id,
+              title: label,
+              body: '',
+              status: 'partial',
+              inputHash: entry.inputHash,
+              draft: next,
+              generatedAt: Date.now(),
+            },
+      )
+    // Fallen back after a truncated reply: remember to continue split.
+    if (persistStart && !resumeFrom) await saveDraft(draft)
+    const system = prompts.subjectProfile.withSubject(
+      prompts.homeworkWalkthrough.buildPartSystemPrompt({ linearSystems: inputs.linearSystems }),
+      job.subject,
+    )
+    for (let index = draft.parts.length; index < subparts.length; index++) {
+      // Pausing stops between sub-parts; the finished ones are saved.
+      if (!control.shouldContinue()) throw new GenerationPausedError(control.signal.aborted)
+      const part = subparts[index]!.label
+      job.onPart?.(part, index, subparts.length)
+      const currentPart = job.current?.parts?.find((item) => item.label === part)
+      const messages: ChatMessage[] = [
+        { role: 'system', content: system },
+        {
+          role: 'user',
+          content: prompts.homeworkWalkthrough.buildPartUserPrompt({
+            label,
+            question: question.prompt,
+            sourceText: inputs.sourceText,
+            language: job.language,
+            ...(inputs.professorAnswer ? { professorAnswer: inputs.professorAnswer } : {}),
+            ...(inputs.previousSolution ? { previousSolution: inputs.previousSolution } : {}),
+            part,
+            parts: labels,
+            earlier: earlierParts(draft.parts),
+            ...(job.mode === 'regenerate'
+              ? { revision: revisionOf(job, currentPart ?? job.current) }
+              : {}),
+          }),
+        },
+      ]
+      const normalized = prompts.homeworkWalkthrough.normalizePart(
+        await requestSectionJSON(ai, messages, control.signal),
+      )
+      if (!normalized) throw new AppError(t('homework.walkthrough.invalid'), 'INVALID_RESPONSE')
+      if (normalized.status === 'insufficient')
+        return insufficientSection(entry, label, `(${part}) ${normalized.reason}`)
+      const checks = inputs.linearSystems
+        ? checkLinearSystems(normalized.linearSystems.map((system) => partClaim(part, system)))
+        : []
+      const written: WalkthroughPart = {
+        label: part,
+        heading: stripPartLabel(normalized.heading, part),
+        conclusion: formatHomeworkReviewText(stripPartLabel(normalized.conclusion, part)),
+        body: formatHomeworkReviewText(normalized.body),
+        ...(checks.length > 0 ? { checks } : {}),
+      }
+      draft = { ...draft, parts: [...draft.parts, written] }
+      // The last one is saved as the finished section by the caller.
+      if (index < subparts.length - 1) await saveDraft(draft)
+    }
+    job.onPart?.(null, subparts.length, subparts.length)
+    return joinParts(entry, label, draft.parts)
   }
 
   /** The opening and the summary, from every question that has a section. */
@@ -472,6 +785,8 @@ export class HomeworkWalkthroughService {
     labels: ReadonlyMap<string, string>,
     subject: SubjectContext | undefined,
     signal?: AbortSignal,
+    /** Rewrite one of the two parts (the other is returned but not saved). */
+    revision?: FrameRevision,
   ): Promise<WalkthroughSection[] | null> {
     const stored = await this.repo.get(walkthroughId(setId, state.language))
     const byId = new Map((stored?.sections ?? []).map((section) => [section.id, section]))
@@ -500,6 +815,7 @@ export class HomeworkWalkthroughService {
           title: state.set.title,
           questions,
           language: state.language,
+          ...(revision ? { revision } : {}),
         }),
       },
     ]
@@ -556,6 +872,182 @@ function failedSection(
     inputHash: entry.inputHash,
     generatedAt: Date.now(),
   }
+}
+
+interface QuestionInputs {
+  sourceText: string
+  professorAnswer?: string
+  previousSolution?: string
+  linearSystems: boolean
+}
+
+/** One question section to write, and how it reports and saves progress. */
+interface QuestionJob {
+  entry: WalkthroughPlanEntry
+  label: string
+  language: WalkthroughLanguage
+  subject: SubjectContext | undefined
+  control: GenerationControl
+  /** `regenerate` — this section on its own, with the revision block. */
+  mode: 'generate' | 'regenerate'
+  suggestion?: string
+  /** The ready version being rewritten (regenerate). */
+  current?: WalkthroughSection
+  /** Drafts started before this time are not continued ("rewrite everything"). */
+  draftSince?: number
+  saveSection: (section: WalkthroughSection) => Promise<void>
+  /** Split mode: the sub-part now being written (`null` when all are done). */
+  onPart?: (part: string | null, done: number, total: number) => void
+}
+
+/** A saved draft this job may continue: same inputs, same request, same sub-parts. */
+function usableDraft(
+  job: QuestionJob,
+  subparts: readonly WalkthroughSubpart[],
+): WalkthroughDraft | undefined {
+  const draft = job.entry.section?.draft
+  if (!draft || draft.inputHash !== job.entry.inputHash || draft.mode !== job.mode) return undefined
+  if (job.mode === 'regenerate' && (draft.suggestion ?? '') !== (job.suggestion ?? ''))
+    return undefined
+  if (draft.labels.join('|') !== subparts.map((part) => part.label).join('|')) return undefined
+  if (job.draftSince !== undefined && draft.startedAt < job.draftSince) return undefined
+  return draft
+}
+
+function revisionOf(
+  job: QuestionJob,
+  current: { conclusion?: string; body: string } | undefined,
+): { current?: { conclusion?: string; body: string }; suggestion?: string } {
+  return {
+    ...(current
+      ? {
+          current: {
+            ...(current.conclusion ? { conclusion: current.conclusion } : {}),
+            body: current.body,
+          },
+        }
+      : {}),
+    ...(job.suggestion ? { suggestion: job.suggestion } : {}),
+  }
+}
+
+/** The sub-parts already written, each cut so all of them fit one budget. */
+function earlierParts(
+  parts: readonly WalkthroughPart[],
+): Array<{ label: string; conclusion: string; body: string }> {
+  if (parts.length === 0) return []
+  const each = Math.max(PART_EARLIER_MIN_CHARS, Math.floor(PART_EARLIER_CHARS / parts.length))
+  return parts.map((part) => ({
+    label: part.label,
+    conclusion: part.conclusion,
+    body: part.body.length > each ? `${part.body.slice(0, each)}…` : part.body,
+  }))
+}
+
+/** Drop a leading `(b)` / `（b）` / `b)` the model repeated before a heading or result. */
+function stripPartLabel(text: string, part: string): string {
+  const pattern = new RegExp(`^\\s*[(（]?${part}[)）]\\s*[:：.、-]?\\s*`, 'i')
+  return text.replace(pattern, '').trim()
+}
+
+/** Label a sub-part's linear system with the sub-part, e.g. `(b)` or `(b) #2`. */
+function partClaim(part: string, system: ClaimedLinearSystem): ClaimedLinearSystem {
+  const tag = `(${part})`
+  const own = system.label.trim()
+  const label = !own || /^#\d+$/.test(own) ? tag : own.includes(tag) ? own : `${tag} ${own}`
+  return { ...system, label }
+}
+
+/** The finished section of a split question: its sub-parts in order. */
+function joinParts(
+  entry: WalkthroughPlanEntry,
+  label: string,
+  parts: readonly WalkthroughPart[],
+): WalkthroughSection {
+  const checks = parts.flatMap((part) => part.checks ?? [])
+  return {
+    id: entry.id,
+    kind: 'question',
+    questionId: entry.question!.id,
+    title: label,
+    conclusion: parts.map((part) => `(${part.label}) ${part.conclusion}`).join('\n\n'),
+    body: parts
+      .map((part) => `### (${part.label}) ${part.heading}`.trimEnd() + `\n\n${part.body}`)
+      .join('\n\n'),
+    status: 'ready',
+    inputHash: entry.inputHash,
+    parts: [...parts],
+    ...(checks.length > 0 ? { checks } : {}),
+    generatedAt: Date.now(),
+  }
+}
+
+function insufficientSection(
+  entry: WalkthroughPlanEntry,
+  label: string,
+  reason: string,
+): WalkthroughSection {
+  return {
+    id: entry.id,
+    kind: 'question',
+    questionId: entry.question!.id,
+    title: label,
+    body: '',
+    status: 'insufficient',
+    error: reason,
+    inputHash: entry.inputHash,
+    generatedAt: Date.now(),
+  }
+}
+
+/** The replaceable content of a ready section. */
+function versionOf(section: WalkthroughSection): WalkthroughSectionVersion {
+  return {
+    ...(section.conclusion ? { conclusion: section.conclusion } : {}),
+    body: section.body,
+    ...(section.checks ? { checks: section.checks } : {}),
+    ...(section.suggestions ? { suggestions: section.suggestions } : {}),
+    ...(section.parts ? { parts: section.parts } : {}),
+    inputHash: section.inputHash,
+    generatedAt: section.generatedAt,
+  }
+}
+
+/** A section showing `version` (a ready one), without draft or history. */
+function applyVersion(
+  section: WalkthroughSection,
+  version: WalkthroughSectionVersion,
+): WalkthroughSection {
+  return {
+    id: section.id,
+    kind: section.kind,
+    ...(section.questionId ? { questionId: section.questionId } : {}),
+    title: section.title,
+    ...(version.conclusion ? { conclusion: version.conclusion } : {}),
+    body: version.body,
+    ...(version.suggestions ? { suggestions: version.suggestions } : {}),
+    status: 'ready',
+    inputHash: version.inputHash,
+    ...(version.checks ? { checks: version.checks } : {}),
+    ...(version.parts ? { parts: version.parts } : {}),
+    generatedAt: version.generatedAt,
+  }
+}
+
+/** The rewritten section, keeping the ready one it replaces (one level). */
+function withPrevious(
+  section: WalkthroughSection,
+  replaced: WalkthroughSection | undefined,
+): WalkthroughSection {
+  return replaced ? { ...section, previous: versionOf(replaced) } : section
+}
+
+/** An opening / summary as the revision request shows it. */
+function frameText(section: WalkthroughSection): string {
+  const suggestions = section.suggestions?.length
+    ? `\n\nReview suggestions:\n${section.suggestions.map((item) => `- ${item}`).join('\n')}`
+    : ''
+  return `${section.body}${suggestions}`
 }
 
 /**

@@ -20,7 +20,11 @@ export type WalkthroughLanguage = 'zh_terms' | 'zh' | 'en'
 
 export type WalkthroughSectionKind = 'overview' | 'question' | 'summary'
 
-export type WalkthroughSectionStatus = 'ready' | 'failed' | 'insufficient'
+/**
+ * `partial` — a long multipart question written one sub-part per request has
+ * some sub-parts done (see `draft`); the next run continues from there.
+ */
+export type WalkthroughSectionStatus = 'ready' | 'failed' | 'insufficient' | 'partial'
 
 /** One linear system the model worked, re-checked locally with exact fractions. */
 export interface LinearSystemCheck {
@@ -33,6 +37,46 @@ export interface LinearSystemCheck {
   computedKind: SolutionKind
   /** LaTeX of the locally computed RREF, shown when the model's differs. */
   computedRref: string
+}
+
+/** One sub-part of a question written on its own (split mode). */
+export interface WalkthroughPart {
+  /** `a`, `b`, … */
+  label: string
+  heading: string
+  conclusion: string
+  body: string
+  checks?: LinearSystemCheck[]
+}
+
+/**
+ * Sub-parts finished so far for a question being written in split mode. Kept
+ * on the section so a pause, a reload or a failure continues with the next
+ * unfinished sub-part. On a ready section it is an unfinished rewrite, which
+ * never replaces the ready text until every sub-part is done.
+ */
+export interface WalkthroughDraft {
+  /** `generate` — a normal (or "rewrite everything") run; `regenerate` — this section only. */
+  mode: 'generate' | 'regenerate'
+  /** The student's revision request of a `regenerate` draft. */
+  suggestion?: string
+  /** The section inputs the draft was written for. */
+  inputHash: string
+  /** Sub-part labels of the question, in order. */
+  labels: string[]
+  parts: WalkthroughPart[]
+  startedAt: number
+}
+
+/** The version a regeneration replaced (one level, for 恢复上一版). */
+export interface WalkthroughSectionVersion {
+  conclusion?: string
+  body: string
+  checks?: LinearSystemCheck[]
+  suggestions?: string[]
+  parts?: WalkthroughPart[]
+  inputHash: string
+  generatedAt: number
 }
 
 export interface WalkthroughSection {
@@ -52,6 +96,12 @@ export interface WalkthroughSection {
   error?: string
   inputHash: string
   checks?: LinearSystemCheck[]
+  /** Split question: the sub-parts the body was joined from. */
+  parts?: WalkthroughPart[]
+  /** Split question in progress (see `WalkthroughDraft`). */
+  draft?: WalkthroughDraft
+  /** The ready version a section regeneration replaced. */
+  previous?: WalkthroughSectionVersion
   generatedAt: number
 }
 

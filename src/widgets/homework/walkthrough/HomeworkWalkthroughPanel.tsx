@@ -10,11 +10,13 @@ import {
   RotateCcw,
   ShieldCheck,
   Sparkles,
+  Undo2,
 } from 'lucide-react'
 import type { HomeworkQuestion, HomeworkSet } from '@/entities/homework/types'
 import type {
   LinearSystemCheck,
   WalkthroughNote,
+  WalkthroughPart,
   WalkthroughPlanEntry,
 } from '@/entities/homework/walkthrough'
 import { formatHomeworkQuestion } from '@/entities/homework/formatQuestion'
@@ -28,6 +30,7 @@ import { Badge } from '@/shared/ui/Badge'
 import { Button } from '@/shared/ui/Button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/shared/ui/Card'
 import { ConfirmDialog } from '@/shared/ui/ConfirmDialog'
+import { RegenerateSectionDialog } from './RegenerateSectionDialog'
 import { LoadingState } from '@/shared/ui/LoadingState'
 import { Math as TeX } from '@/shared/ui/Math'
 import { Progress } from '@/shared/ui/Progress'
@@ -85,6 +88,9 @@ export function HomeworkWalkthroughPanel({
     paused,
     requestPause,
     stopNow,
+    aiReady = false,
+    regenerateSection,
+    restorePrevious,
   } = useWalkthrough(set.id)
   const homework = useHomeworkService()
   // The spoiler notice appears once per assignment; dismissing it is stored on
@@ -94,6 +100,8 @@ export function HomeworkWalkthroughPanel({
   )
   const [notesOpen, setNotesOpen] = useState(false)
   const [confirmRedo, setConfirmRedo] = useState(false)
+  /** The section whose 重新生成 dialog is open. */
+  const [regenTarget, setRegenTarget] = useState<WalkthroughPlanEntry | null>(null)
   const [printing, setPrinting] = useState(false)
   const [located, setLocated] = useState<ReadonlySet<string>>(new Set())
   const noteRanges = useRef(new Map<string, Range>())
@@ -247,6 +255,24 @@ export function HomeworkWalkthroughPanel({
     else toast({ variant: 'success', title: t('homework.walkthrough.done') })
   }
 
+  async function regenerate(entry: WalkthroughPlanEntry, suggestion?: string): Promise<void> {
+    if (!regenerateSection) return
+    const result = await regenerateSection(entry.id, suggestion)
+    if (!result) {
+      toast({ variant: 'error', title: t('homework.walkthrough.regenerateFailed') })
+      return
+    }
+    // Paused or stopped: the section is unchanged (finished sub-parts kept).
+    if (result.paused) return
+    toast({ variant: 'success', title: t('homework.walkthrough.regenerated') })
+  }
+
+  async function restore(entry: WalkthroughPlanEntry): Promise<void> {
+    if (!restorePrevious) return
+    if (await restorePrevious(entry.id))
+      toast({ variant: 'success', title: t('homework.walkthrough.restored') })
+  }
+
   function openFromList(note: WalkthroughNote): void {
     setNotesOpen(false)
     openNote(note, set.title, qaLanguage)
@@ -360,15 +386,30 @@ export function HomeworkWalkthroughPanel({
           <CardContent className="space-y-2 p-4">
             <p role="status" className="flex items-center gap-2 text-sm">
               <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
-              {t('homework.walkthrough.progress', { done: progress.done, total: progress.total })}
+              {progress.section
+                ? t('homework.walkthrough.regenerating', {
+                    title: regeneratingTitle(progress.section.id, entries, labels, t),
+                  })
+                : t('homework.walkthrough.progress', {
+                    done: progress.done,
+                    total: progress.total,
+                  })}
             </p>
+            {Object.entries(progress.parts ?? {}).map(([sectionId, part]) => (
+              <p key={sectionId} className="text-xs text-muted-foreground">
+                {t('homework.walkthrough.writingPartOf', {
+                  title: regeneratingTitle(sectionId, entries, labels, t),
+                  part,
+                })}
+              </p>
+            ))}
             <div className="flex flex-wrap items-center gap-3">
               <Progress
                 className="min-w-[12rem] flex-1"
                 value={progress.total ? (progress.done / progress.total) * 100 : 0}
               />
               <GenerationControls
-                kind="parts"
+                kind={progress.section && !progress.section.split ? 'single' : 'parts'}
                 state={runState}
                 stopRequested={stopRequested}
                 onPause={requestPause}
@@ -487,6 +528,7 @@ export function HomeworkWalkthroughPanel({
                     title={sectionTitle(entry, labels, t)}
                     marker={sectionMarker(entry, labels)}
                     running={progress?.running.includes(entry.id) ?? false}
+                    runningPart={progress?.parts?.[entry.id]}
                     notes={notes.filter((note) => note.sectionId === entry.id)}
                     tucked={tucked.filter(
                       (window) => window.passage.sectionId === entry.id && !window.noteId,
@@ -494,6 +536,15 @@ export function HomeworkWalkthroughPanel({
                     onOpenNote={(note) => openNote(note, set.title, qaLanguage)}
                     // Fills only the missing / outdated parts, like the toolbar button.
                     {...(running ? {} : { onGenerate: () => void run(false) })}
+                    {...(running || !regenerateSection
+                      ? {}
+                      : {
+                          onRegenerate: () => setRegenTarget(entry),
+                          onContinueRegenerate: (suggestion?: string) =>
+                            void regenerate(entry, suggestion),
+                          onRestore: () => void restore(entry),
+                        })}
+                    aiReady={aiReady}
                   />
                 ))}
               </article>
@@ -532,6 +583,19 @@ export function HomeworkWalkthroughPanel({
         onOpenNote={openFromList}
       />
 
+      <RegenerateSectionDialog
+        open={regenTarget !== null}
+        onOpenChange={(open) => {
+          if (!open) setRegenTarget(null)
+        }}
+        title={regenTarget ? sectionTitle(regenTarget, labels, t) : ''}
+        onConfirm={(suggestion) => {
+          const target = regenTarget
+          setRegenTarget(null)
+          if (target) void regenerate(target, suggestion)
+        }}
+      />
+
       <ConfirmDialog
         open={confirmRedo}
         onOpenChange={setConfirmRedo}
@@ -568,6 +632,16 @@ function sectionTitle(
   return /^[\d(（]/.test(label) ? t('homework.walkthrough.questionTitle', { label }) : label
 }
 
+function regeneratingTitle(
+  sectionId: string,
+  entries: readonly WalkthroughPlanEntry[],
+  labels: ReadonlyMap<string, string>,
+  t: T,
+): string {
+  const entry = entries.find((item) => item.id === sectionId)
+  return entry ? sectionTitle(entry, labels, t) : ''
+}
+
 /** The lab style's mono section number: Q1, Q2(a) … for questions, § otherwise. */
 function sectionMarker(entry: WalkthroughPlanEntry, labels: ReadonlyMap<string, string>): string {
   if (!entry.question) return '§'
@@ -579,12 +653,21 @@ interface SectionViewProps {
   title: string
   marker: string
   running: boolean
+  /** Split question: the sub-part being written now (`b`). */
+  runningPart?: string | undefined
   notes: WalkthroughNote[]
   /** Unsaved conversations tucked into this section's text. */
   tucked: FloatingQAWindow[]
   onOpenNote: (note: WalkthroughNote) => void
   /** Generate the missing or outdated parts; absent while a run is in progress. */
   onGenerate?: () => void
+  /** Open the 重新生成这一节 dialog; absent while a run is in progress. */
+  onRegenerate?: () => void
+  /** Continue an unfinished regeneration of a split question. */
+  onContinueRegenerate?: (suggestion?: string) => void
+  /** Swap with the version the last regeneration replaced. */
+  onRestore?: () => void
+  aiReady: boolean
 }
 
 function WalkthroughSectionView({
@@ -592,13 +675,22 @@ function WalkthroughSectionView({
   title,
   marker,
   running,
+  runningPart,
   notes,
   tucked,
   onOpenNote,
   onGenerate,
+  onRegenerate,
+  onContinueRegenerate,
+  onRestore,
+  aiReady,
 }: SectionViewProps): JSX.Element {
   const { t } = useTranslation()
   const section = entry.section
+  const draft = section?.draft
+  const canRegenerate =
+    Boolean(onRegenerate) && (section?.status === 'ready' || section?.status === 'insufficient')
+  const noProvider = aiReady ? undefined : t('homework.noProvider')
   return (
     <section
       id={`wt-${entry.id}`}
@@ -621,17 +713,59 @@ function WalkthroughSectionView({
         {running && (
           <Badge variant="outline" className="gap-1">
             <Loader2 className="h-3 w-3 animate-spin" aria-hidden />
-            {t('homework.walkthrough.writing')}
+            {runningPart
+              ? t('homework.walkthrough.writingPart', { part: runningPart })
+              : t('homework.walkthrough.writing')}
           </Badge>
         )}
         {!running && entry.outdated && (
           <Badge variant="outline">{t('homework.walkthrough.outdated')}</Badge>
         )}
+        {(canRegenerate || (onRestore && section?.previous)) && (
+          <div className="ml-auto flex flex-wrap items-center gap-1" data-print-hidden>
+            {onRestore && section?.previous && (
+              <Button variant="ghost" size="sm" onClick={onRestore}>
+                <Undo2 className="h-4 w-4" aria-hidden />
+                {t('homework.walkthrough.restorePrevious')}
+              </Button>
+            )}
+            {canRegenerate && (
+              <Button
+                variant="ghost"
+                size="sm"
+                disabled={!aiReady}
+                title={noProvider}
+                onClick={onRegenerate}
+              >
+                <RotateCcw className="h-4 w-4" aria-hidden />
+                {t('homework.walkthrough.regenerateSection')}
+              </Button>
+            )}
+          </div>
+        )}
       </div>
 
       {entry.question && <QuestionPrompt question={entry.question} />}
 
-      {!section ? (
+      {section && draft && section.status !== 'ready' && draft.parts.length > 0 && (
+        <PartialParts parts={draft.parts} total={draft.labels.length} />
+      )}
+
+      {section?.status === 'partial' ? (
+        <div className="flex flex-wrap items-center gap-3">
+          {draft && draft.parts.length === 0 && (
+            <p className="text-sm text-muted-foreground">
+              {t('homework.walkthrough.partialDone', { done: 0, total: draft.labels.length })}
+            </p>
+          )}
+          {onGenerate && !running && (
+            <Button variant="outline" size="sm" onClick={onGenerate}>
+              <RefreshCw className="h-4 w-4" aria-hidden />
+              {t('homework.walkthrough.continueGenerating')}
+            </Button>
+          )}
+        </div>
+      ) : !section ? (
         <div className="flex flex-wrap items-center gap-3">
           <p className="text-sm text-muted-foreground">
             {running ? t('homework.walkthrough.writing') : t('homework.walkthrough.notYetHint')}
@@ -698,6 +832,31 @@ function WalkthroughSectionView({
             </div>
           )}
           {section.checks && section.checks.length > 0 && <ChecksView checks={section.checks} />}
+          {draft?.mode === 'regenerate' && !running && (
+            <div
+              className="flex flex-wrap items-center gap-3 border-t pt-3 text-sm text-muted-foreground"
+              data-print-hidden
+            >
+              <span>
+                {t('homework.walkthrough.regeneratePaused', {
+                  done: draft.parts.length,
+                  total: draft.labels.length,
+                })}
+              </span>
+              {onContinueRegenerate && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={!aiReady}
+                  title={noProvider}
+                  onClick={() => onContinueRegenerate(draft.suggestion)}
+                >
+                  <RefreshCw className="h-4 w-4" aria-hidden />
+                  {t('homework.walkthrough.continueGenerating')}
+                </Button>
+              )}
+            </div>
+          )}
         </>
       )}
 
@@ -734,6 +893,37 @@ function WalkthroughSectionView({
         </div>
       )}
     </section>
+  )
+}
+
+/** The sub-parts of a split question finished so far. */
+function PartialParts({ parts, total }: { parts: WalkthroughPart[]; total: number }): JSX.Element {
+  const { t } = useTranslation()
+  return (
+    <div className="space-y-4">
+      <Badge variant="outline">
+        {t('homework.walkthrough.partialDone', { done: parts.length, total })}
+      </Badge>
+      {parts.map((part) => (
+        <div key={part.label} className="space-y-2">
+          <h3 className="font-heading text-base font-semibold lecture:text-lg lecture:font-bold">
+            {`(${part.label}) ${part.heading}`.trim()}
+          </h3>
+          <RichText
+            text={part.conclusion}
+            format="markdown"
+            paragraphClassName="text-[15px] font-medium leading-relaxed"
+          />
+          <RichText
+            text={part.body}
+            format="markdown"
+            className="min-w-0 space-y-3"
+            paragraphClassName="text-[15px] leading-[1.8] lecture:text-[17px] lecture:leading-[1.9]"
+          />
+          {part.checks && part.checks.length > 0 && <ChecksView checks={part.checks} />}
+        </div>
+      ))}
+    </div>
   )
 }
 

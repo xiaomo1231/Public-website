@@ -742,6 +742,30 @@ export const en = {
   'homework.walkthrough.kind.none': 'no solution',
   'homework.walkthrough.kind.unique': 'a unique solution',
   'homework.walkthrough.kind.infinite': 'infinitely many solutions',
+  'homework.walkthrough.busy':
+    'The walkthrough is being written right now. Try again when it has finished.',
+  'homework.walkthrough.frameNeedsQuestions':
+    'Write at least one question first: the opening and the summary are based on them.',
+  'homework.walkthrough.regenerateSection': 'Regenerate this section',
+  'homework.walkthrough.regenerateTitle': 'Regenerate “{title}”',
+  'homework.walkthrough.regenerateBody':
+    'Only this section is rewritten. The current version is kept, so you can switch back.',
+  'homework.walkthrough.suggestionLabel': 'Suggestions (optional)',
+  'homework.walkthrough.suggestionPlaceholder':
+    'e.g. more detailed steps / use s for the free variable / first explain why column 4 is not a pivot column',
+  'homework.walkthrough.regenerateConfirm': 'Regenerate',
+  'homework.walkthrough.regenerating': 'Regenerating “{title}”…',
+  'homework.walkthrough.regenerated': 'Section regenerated',
+  'homework.walkthrough.regenerateFailed':
+    'This section could not be regenerated; it is unchanged.',
+  'homework.walkthrough.restorePrevious': 'Restore previous version',
+  'homework.walkthrough.restored': 'Switched to the other version',
+  'homework.walkthrough.partialDone': '{done} / {total} sub-questions written',
+  'homework.walkthrough.continueGenerating': 'Continue writing',
+  'homework.walkthrough.writingPart': 'Writing ({part})',
+  'homework.walkthrough.writingPartOf': '{title} ({part}) is being written',
+  'homework.walkthrough.regeneratePaused':
+    'Regeneration paused: {done} / {total} sub-questions rewritten. The current version stays until it finishes.',
   'walkthroughQA.title': 'Questions about this passage',
   'walkthroughQA.askHint': 'Type your question below, e.g. "Why swap these two rows here?"',
   'walkthroughQA.placeholder': 'Ask a follow-up… (Enter to send, Shift+Enter for a new line)',

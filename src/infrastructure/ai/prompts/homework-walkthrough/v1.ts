@@ -11,13 +11,13 @@ export const VERSION = 'v1' as const
 
 export type WalkthroughPromptLanguage = 'zh_terms' | 'zh' | 'en'
 
-function languageRule(language: WalkthroughPromptLanguage): string {
+export function languageRule(language: WalkthroughPromptLanguage): string {
   if (language === 'en') return 'Write in English.'
   if (language === 'zh') return 'Write in Simplified Chinese.'
   return 'Write in Simplified Chinese. The first time a key technical term appears, add its English name in parentheses, e.g. 主元（pivot）、简化行阶梯形（RREF）. Keep mathematical notation unchanged.'
 }
 
-const NOTATION_RULES = [
+export const NOTATION_RULES = [
   'Use LaTeX for all mathematics: inline $...$, display $$...$$ on lines of their own.',
   'Write an augmented matrix as \\left[\\begin{array}{ccc|c} ... \\end{array}\\right] with the bar before the last column.',
   'Write a row operation as $R_2 \\to R_2 - 2R_1$, a swap as $R_1 \\leftrightarrow R_2$.',

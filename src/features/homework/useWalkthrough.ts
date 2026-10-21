@@ -35,6 +35,15 @@ export interface UseWalkthrough {
   paused: WalkthroughPausedRun | undefined
   requestPause: () => void
   stopNow: () => void
+  /** An AI provider is configured. */
+  aiReady: boolean
+  /** Rewrite one section, optionally following the student's suggestion. */
+  regenerateSection: (
+    sectionId: string,
+    suggestion?: string,
+  ) => Promise<WalkthroughRunResult | null>
+  /** Swap a section with the version its last regeneration replaced. */
+  restorePrevious: (sectionId: string) => Promise<boolean>
 }
 
 /**
@@ -140,6 +149,32 @@ export function useWalkthrough(setId: string): UseWalkthrough {
     () => start((svc, run) => svc.resume(setId, { control: run })),
     [start, setId],
   )
+  const regenerateSection = useCallback(
+    (sectionId: string, suggestion?: string) =>
+      start((svc, run) =>
+        svc.regenerateSection(setId, sectionId, {
+          ...(suggestion?.trim() ? { suggestion } : {}),
+          control: run,
+        }),
+      ),
+    [start, setId],
+  )
+  const restorePrevious = useCallback(
+    async (sectionId: string) => {
+      if (!service) return false
+      setError(null)
+      try {
+        await service.restorePrevious(setId, sectionId)
+        return true
+      } catch (err) {
+        setError(friendlyAIError(err))
+        return false
+      } finally {
+        await reload()
+      }
+    },
+    [service, setId, reload],
+  )
 
   // The run state shown: the live run, else a paused run of this visit.
   const live = control.state === 'running' || control.state === 'pausing'
@@ -166,5 +201,8 @@ export function useWalkthrough(setId: string): UseWalkthrough {
     paused,
     requestPause: control.requestPause,
     stopNow: control.stopNow,
+    aiReady: service?.hasAI() ?? false,
+    regenerateSection,
+    restorePrevious,
   }
 }

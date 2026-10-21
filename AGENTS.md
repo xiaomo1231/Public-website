@@ -383,7 +383,10 @@ Topic
 ### 作业完整讲解（作业页「完整讲解」标签）
 
 - **结构**：`HomeworkWalkthrough`（id = `<setId>:<language>`，Dexie v17 `homeworkWalkthroughs`）按部分存 `sections`：`overview`（必须掌握的工具）、每题 `q:<questionId>`（`conclusion` + Markdown `body` + 可选 `checks`）、`summary`（小结 + `suggestions`）。标题在渲染时按 UI 语言生成，不存。
-- **生成**（`services/homeworkWalkthroughService.ts`，提示词 `homework-walkthrough/v1`，带科目画像；缓存版本 `subjectPromptVersion('homework-walkthrough/v1', subject)`）：每题一次请求（并发 2，单部分 240 s 时限；截断时输出预算翻倍至 ≤16k，`output-limit` 减半，限流 / 超时 / 不可用重试 2 次），再一次请求写开头与小结（只看各题题目、结论与正文开头）。每部分完成即 `putSection`（事务内读改写）；**已就绪的部分绝不被失败覆盖**；账号类错误（额度 / 鉴权）停止后续请求。不会自动生成：首次与更新都由学生点击。语言 = `walkthroughLanguage(questionLanguage, set.language)`（默认 `zh_terms`）。教授答案规则同复习讲解（已对上题号才用，「留给学生」不用）。
+- **生成**（`services/homeworkWalkthroughService.ts`，提示词 `homework-walkthrough/v2`（无修改块时与 v1 逐字相同），带科目画像；缓存版本仍为 `subjectPromptVersion('homework-walkthrough/v1', subject)`）：每题一次请求（并发 2，单部分 240 s 时限；截断时输出预算翻倍至 ≤16k，`output-limit` 减半，限流 / 超时 / 不可用重试 2 次），再一次请求写开头与小结（只看各题题目、结论与正文开头）。每部分完成即 `putSection`（事务内读改写）；**已就绪的部分绝不被失败覆盖**；账号类错误（额度 / 鉴权）停止后续请求。不会自动生成：首次与更新都由学生点击。语言 = `walkthroughLanguage(questionLanguage, set.language)`（默认 `zh_terms`）。教授答案规则同复习讲解（已对上题号才用，「留给学生」不用）。
+- **提示词 `homework-walkthrough/v2`**（v1 保留）：在 v1 上给单题与开头 / 小结提示加可选的 `revision` 块（当前版本 + 学生修改建议），并新增小题提示 `buildPartSystemPrompt` / `buildPartUserPrompt`（只写某一小题，带完整题面、已对上的教授答案与已写小题的结论 + 正文，按 6000 字预算截断）。**无 `revision` 时提示与 v1 逐字相同**，缓存版本用 `CACHE_VERSION = 'v1'`，已有讲解的哈希不变（有测试）。
+- **重新生成这一节**（`regenerateSection(setId, sectionId, { suggestion?, control? })`，与整份生成共用 `runs`，进行中时按钮隐藏，未配置 AI 时禁用）：题目节 = 原输入 + `revision`；开头 / 小结 = 开头小结请求带 `revision.target`，返回两部分但只保存所请求的那一部分。成功时把被替换的就绪版本存进 `section.previous`（一层），`restorePrevious` 互换（再点即切回）；`inputHash` 用当前哈希（过时的节重写后不再过时），题目节重写不影响开头 / 小结（其哈希只依赖题目输入）。停止 / 失败 / `insufficient` 都不替换就绪内容。单次请求用「停止」，分小题时用暂停 / 继续。
+- **长题分小题**（`entities/homework/splitQuestion.ts` 的 `walkthroughSubparts` / `shouldSplitWalkthrough`）：(a)(b)… 字母须从 a 连续（全角括号也认），≥3 小题，或题面 >1500 字且 ≥2 小题时按小题请求；整题请求在预算处理后仍 `truncated` 时自动改为分小题（不显示失败）。进度存在 `section.draft`（`mode` / `suggestion` / `inputHash` / `labels` / 已完成 `parts`）：没有就绪内容时节状态为 `partial`（界面「已完成 x / y 小题」+「继续生成」），已就绪的节在重写期间保持原文、草稿另存；小题之间检查 `shouldContinue()`，暂停 / 刷新 / 失败后只写剩余小题。结论与正文在本地按小题拼接（`### (b) 标题`），RREF 核对按小题标签合并。「全部重新生成」只续用 `startedAt ≥ forceSince` 的草稿，`partial` / `failed` 不算已重写。进度 `progress.parts` 显示「第 2 题 (b) 正在编写」。
 - **freshness**（`planWalkthrough`，纯函数）：题目部分哈希 = 提示词版本 + 语言 + 题号 / 题面 / 指纹 / 来源 chunk / 已对上的教授答案；开头与小结的哈希 = 全部题目哈希。只有变化的题目 + 开头小结显示“可更新”；`insufficient` / `failed` / 缺失也算需要更新；退役题目的部分在下次生成后移除。
 - **RREF 本地核对**（`infrastructure/math/rref.ts` BigInt 精确分数；`entities/homework/walkthroughChecks.ts`）：线性代数科目或题面含增广 / 行阶梯 / RREF / 线性方程组等关键词时，模型额外返回 `linearSystems`（增广矩阵、最终 RREF、解的类型）；本地重算 RREF 并比较（忽略零行）与解的类型，不一致在该题下标出并显示正确 RREF。读不出的矩阵跳过，不报错误。
 - **划词提问**：讲解 `<article data-selection-context="walkthrough" data-walkthrough-project data-walkthrough-set>`，每部分 `<section data-walkthrough-section data-section-title>`。`SelectionTranslator` 在此范围内选「解释 / 提问」时不弹原来的贴边弹窗，而是 `openPassage()` 打开**浮动窗口**（`features/homework/floatingQAStore.ts` zustand：位置 / 大小 / 层级 / 最小化，最多同时 3 个，第 4 个把最靠后的收进右下角停靠栏；整窗始终在视口内；层级按排名 41–43，停靠栏 z-44，均低于对话框 z-50）。问答走 `contextual-tutor/v3`（新增 `walkthrough` 语境：解法已在眼前，可完整解释并指出计算错误；`history` 带最近 6 轮）。
@@ -533,6 +536,7 @@ docs/             architecture.md
 ### 待用户拍板的决策点
 
 1. **简答题**：已决定并实现——按得分点覆盖率计分（见 §6 Quiz）；第二期（教授练习题、交互导师）已实现。
+   2a. **题库式自适应测验（待做，等额度）**：第一次出题时一次生成多个难度的题存入题库，做完一题后按对错从题库挑下一题（现状：开考前一次性出完，`submitAnswer` 返回的 `nextDifficulty` 未被使用）。
 2. **作答时间**：需求提到「回答时间（如果可获得）」，当前**未采集**。是否加 `QuestionAttempt.durationMs` 并纳入难度模型。
 3. **检索策略**：Phase 6 RAG 是否现在做？当前是「按主题 sourceRefs 取块 + 长上下文」，资料量大时才需要向量检索。
 4. **增量分析**：**章节级增量生成已实现**（§5.1）。边界：只支持「按章节/小节」的局部更新，且要求受影响 topic 都已有经本地校验的 `sourceChunkIds`；旧数据缺依赖时返回 `ANALYSIS_SCOPE_UNSUPPORTED`（`dependencies-missing`）而非降级。跨章节 Topic 的**多来源扩展**仍是保守策略（只在其自身来源被证明变化时才重建）。

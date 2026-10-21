@@ -20,7 +20,7 @@ import * as HomeworkAnalyzerV2 from './homework-analyzer/v2'
 import * as HomeworkQuestionV3 from './homework-question/v3'
 import * as HomeworkQaV1 from './homework-qa/v1'
 import * as HomeworkReviewV1 from './homework-review/v1'
-import * as HomeworkWalkthroughV1 from './homework-walkthrough/v1'
+import * as HomeworkWalkthroughV2 from './homework-walkthrough/v2'
 import * as HomeworkAnswerCheckV1 from './homework-answer-check/v1'
 import * as SlideLessonV1 from './slide-lesson/v1'
 import * as SubjectProfileV1 from './subject-profile/v1'
@@ -56,7 +56,7 @@ export const PROMPT_VERSIONS = {
   homeworkQuestion: 'v3',
   homeworkQa: 'v1',
   homeworkReview: 'v1',
-  homeworkWalkthrough: 'v1',
+  homeworkWalkthrough: 'v2',
   homeworkAnswerCheck: 'v1',
   slideLesson: 'v1',
   subjectProfile: 'v1',
@@ -93,7 +93,7 @@ export const prompts = {
   homeworkQuestion: HomeworkQuestionV3,
   homeworkQa: HomeworkQaV1,
   homeworkReview: HomeworkReviewV1,
-  homeworkWalkthrough: HomeworkWalkthroughV1,
+  homeworkWalkthrough: HomeworkWalkthroughV2,
   homeworkAnswerCheck: HomeworkAnswerCheckV1,
   slideLesson: SlideLessonV1,
   /** Appended to other prompts; see `withSubject` / `subjectPromptVersion`. */
