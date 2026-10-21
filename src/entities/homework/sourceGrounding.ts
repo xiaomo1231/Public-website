@@ -35,10 +35,7 @@ const LABEL_SEPARATORS = /[\s·\],;"]+/
  * truncated id (e.g. `c:9f3a…`), a bare number, or prose. Matching is on the
  * whole token (case-insensitive on hex only), never a substring.
  */
-export function parseSourceChunkId(
-  raw: string,
-  allowed: ReadonlySet<string>,
-): string | null {
+export function parseSourceChunkId(raw: string, allowed: ReadonlySet<string>): string | null {
   const trimmed = raw.trim()
   if (!trimmed) return null
   if (allowed.has(trimmed)) return trimmed
@@ -140,7 +137,11 @@ function sliceToBoundary(chunkText: string, start: number, minEnd: number, maxEn
  * in this chunk (the caller must then show page + source entry and mark the
  * excerpt as pending rather than showing a neighbouring question).
  */
-export function locateQuestionExcerpt(chunkText: string, prompt: string, number?: string): string | null {
+export function locateQuestionExcerpt(
+  chunkText: string,
+  prompt: string,
+  number?: string,
+): string | null {
   const chunk = normalizeWithMap(chunkText)
   const normalizedPrompt = normalizeWithMap(prompt).text.trim()
   if (!chunk.text || !normalizedPrompt) return null
@@ -161,7 +162,10 @@ export function locateQuestionExcerpt(chunkText: string, prompt: string, number?
     // evidence than a generic token from a neighbouring question.
     const digits = number?.match(/\d+/)?.[0]
     if (!digits) return null
-    const marker = new RegExp(`(?:^|\\n)\\s*(?:problem|question|exercise|题)\\s*${digits}\\s*[:：.、)]`, 'im')
+    const marker = new RegExp(
+      `(?:^|\\n)\\s*(?:problem|question|exercise|题)\\s*${digits}\\s*[:：.、)]`,
+      'im',
+    )
     const match = marker.exec(chunkText)
     if (!match) return null
     const start = match.index + (match[0].startsWith('\n') ? 1 : 0)

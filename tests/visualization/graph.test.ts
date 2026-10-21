@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import { normalizeVisualizations } from '@/entities/tutorVisualization/normalize'
-import { dedupeGraphEdges, layoutGraph, resolveGraphLayout } from '@/entities/tutorVisualization/graph'
+import {
+  dedupeGraphEdges,
+  layoutGraph,
+  resolveGraphLayout,
+} from '@/entities/tutorVisualization/graph'
 import type { GraphVisualization } from '@/entities/tutorVisualization/types'
 import { VISUALIZATION_LIMITS } from '@/entities/tutorVisualization/limits'
 
@@ -228,8 +232,12 @@ describe('graph layout', () => {
       layout: 'circular',
     })
     const area = {
-      cx: LAYOUT_INPUT.pad.left + (LAYOUT_INPUT.width - LAYOUT_INPUT.pad.left - LAYOUT_INPUT.pad.right) / 2,
-      cy: LAYOUT_INPUT.pad.top + (LAYOUT_INPUT.height - LAYOUT_INPUT.pad.top - LAYOUT_INPUT.pad.bottom) / 2,
+      cx:
+        LAYOUT_INPUT.pad.left +
+        (LAYOUT_INPUT.width - LAYOUT_INPUT.pad.left - LAYOUT_INPUT.pad.right) / 2,
+      cy:
+        LAYOUT_INPUT.pad.top +
+        (LAYOUT_INPUT.height - LAYOUT_INPUT.pad.top - LAYOUT_INPUT.pad.bottom) / 2,
     }
     expect(one.nodes[0]?.x).toBeCloseTo(area.cx, 6)
     expect(one.nodes[0]?.y).toBeCloseTo(area.cy, 6)

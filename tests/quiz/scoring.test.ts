@@ -31,7 +31,12 @@ function makeQuiz(questionIds: string[]): Quiz {
     id: 'q1',
     projectId: 'p1',
     title: 'Test quiz',
-    config: { mode: 'topic', count: questionIds.length, difficulty: 'adaptive', types: ['numeric'] },
+    config: {
+      mode: 'topic',
+      count: questionIds.length,
+      difficulty: 'adaptive',
+      types: ['numeric'],
+    },
     questionIds,
     status: 'completed',
     difficultyPlan: [],
@@ -100,7 +105,13 @@ describe('scoreQuiz', () => {
       attempt('q3', false, { knowledgePoint: 'Chain Rule' }),
     ])
     const chain = score.byKnowledgePoint.find((k) => k.knowledgePoint === 'Chain Rule')
-    expect(chain).toEqual({ knowledgePoint: 'Chain Rule', correct: 0, wrong: 2, unverified: 0, total: 2 })
+    expect(chain).toEqual({
+      knowledgePoint: 'Chain Rule',
+      correct: 0,
+      wrong: 2,
+      unverified: 0,
+      total: 2,
+    })
   })
 
   it('flags weak knowledge points below 60% accuracy', () => {

@@ -82,7 +82,16 @@ export function scheduleReview(card: ReviewCard, grade: ReviewGrade, now: number
     reps += 1
     dueIn = interval * DAY_MS
   }
-  return { ...card, interval, ease, reps, lapses, due: now + dueIn, lastReviewedAt: now, updatedAt: now }
+  return {
+    ...card,
+    interval,
+    ease,
+    reps,
+    lapses,
+    due: now + dueIn,
+    lastReviewedAt: now,
+    updatedAt: now,
+  }
 }
 
 /** How often one card may come back within a single review session after "again". */

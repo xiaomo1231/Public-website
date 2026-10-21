@@ -30,7 +30,10 @@ export function stripThinkBlocks(input: string): string {
 
   // A removed block can leave blank lines behind; tidy only when we changed
   // something, so think-free content is returned byte-for-byte.
-  return stripped.replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim()
+  return stripped
+    .replace(/[ \t]+\n/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
 }
 
 /**

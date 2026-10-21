@@ -1,11 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { OpenAICompatibleProvider } from '@/infrastructure/ai/openaiCompatible'
 import { ensureConfig } from '@/infrastructure/ai/types'
-import {
-  AIProviderError,
-  MissingAPIKeyError,
-  TimeoutError,
-} from '@/infrastructure/ai/errors'
+import { AIProviderError, MissingAPIKeyError, TimeoutError } from '@/infrastructure/ai/errors'
 import { AIService } from '@/services/aiService'
 import type { ProviderConfig } from '@/infrastructure/ai/types'
 
@@ -91,9 +87,7 @@ describe('Provider failure modes', () => {
   })
 
   it('surfaces provider unavailable', async () => {
-    mockFetch.mockResolvedValueOnce(
-      new Response('Service Unavailable', { status: 503 }),
-    )
+    mockFetch.mockResolvedValueOnce(new Response('Service Unavailable', { status: 503 }))
     const provider = new OpenAICompatibleProvider('openai', 'OpenAI', baseConfig, {
       defaultModel: 'gpt-test',
       supportsJsonMode: true,

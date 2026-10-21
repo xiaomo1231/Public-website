@@ -8,11 +8,25 @@ import { appendSpeechText } from '@/features/homework/useSpeechInput'
 import { resetUILanguageForTesting, setUILanguage } from '@/i18n'
 
 const question: HomeworkQuestion = {
-  id: 'q1', projectId: 'p1', setId: 's1', documentId: 'd1', documentName: 'hw.txt',
-  order: 0, number: '1', prompt: 'Solve the equation.', sourceRefs: [],
-  hints: [], solution: '', generationStatus: 'ready', promptVersion: 'v1',
-  draftText: 'saved working', revealedHints: 0, solutionRevealed: false,
-  messages: [], createdAt: 1, updatedAt: 1,
+  id: 'q1',
+  projectId: 'p1',
+  setId: 's1',
+  documentId: 'd1',
+  documentName: 'hw.txt',
+  order: 0,
+  number: '1',
+  prompt: 'Solve the equation.',
+  sourceRefs: [],
+  hints: [],
+  solution: '',
+  generationStatus: 'ready',
+  promptVersion: 'v1',
+  draftText: 'saved working',
+  revealedHints: 0,
+  solutionRevealed: false,
+  messages: [],
+  createdAt: 1,
+  updatedAt: 1,
 }
 
 class FakeRecognition {
@@ -21,14 +35,23 @@ class FakeRecognition {
   continuous = false
   interimResults = false
   onstart: (() => void) | null = null
-  onresult: ((event: { resultIndex: number; results: ArrayLike<{ isFinal: boolean; 0: { transcript: string } }> }) => void) | null = null
+  onresult:
+    | ((event: {
+        resultIndex: number
+        results: ArrayLike<{ isFinal: boolean; 0: { transcript: string } }>
+      }) => void)
+    | null = null
   onerror: ((event: { error: string }) => void) | null = null
   onend: (() => void) | null = null
-  start = vi.fn(() => { this.onstart?.() })
+  start = vi.fn(() => {
+    this.onstart?.()
+  })
   stop = vi.fn()
   abort = vi.fn()
 
-  constructor() { FakeRecognition.instances.push(this) }
+  constructor() {
+    FakeRecognition.instances.push(this)
+  }
 
   result(index: number, transcript: string, isFinal = true): void {
     const results = Array.from({ length: index + 1 }, (_, i) => ({
@@ -43,13 +66,21 @@ function stubService(): HomeworkService {
   return {
     loadQuestionSourcePages: vi.fn(async () => []),
     resolveQuestionSources: vi.fn(async () => []),
-    ask: vi.fn(async () => ({ id: 'a1', role: 'assistant', content: 'Try this step.', createdAt: 2 })),
+    ask: vi.fn(async () => ({
+      id: 'a1',
+      role: 'assistant',
+      content: 'Try this step.',
+      createdAt: 2,
+    })),
   } as unknown as HomeworkService
 }
 
 beforeEach(() => {
   FakeRecognition.instances = []
-  Object.defineProperty(window, 'webkitSpeechRecognition', { configurable: true, value: FakeRecognition })
+  Object.defineProperty(window, 'webkitSpeechRecognition', {
+    configurable: true,
+    value: FakeRecognition,
+  })
 })
 
 afterEach(() => {
@@ -99,14 +130,21 @@ describe('homework speech input', () => {
     const user = userEvent.setup()
     setUILanguage('zh-CN')
     const service = stubService()
-    const { rerender } = render(<HomeworkQuestionView key="q1" question={question} service={service} />)
+    const { rerender } = render(
+      <HomeworkQuestionView key="q1" question={question} service={service} />,
+    )
     await user.click(screen.getByRole('button', { name: '语音提问' }))
     const first = FakeRecognition.instances[0]!
     expect(first.lang).toBe('zh-CN')
     const lateResult = first.onresult
-    rerender(<HomeworkQuestionView key="q2" question={{ ...question, id: 'q2' }} service={service} />)
+    rerender(
+      <HomeworkQuestionView key="q2" question={{ ...question, id: 'q2' }} service={service} />,
+    )
     expect(first.abort).toHaveBeenCalledOnce()
-    lateResult?.({ resultIndex: 0, results: [{ isFinal: true, 0: { transcript: 'old question' } }] })
+    lateResult?.({
+      resultIndex: 0,
+      results: [{ isFinal: true, 0: { transcript: 'old question' } }],
+    })
     expect(screen.getByLabelText('就该题提问')).toHaveValue('')
     await user.selectOptions(screen.getByLabelText('语音识别语言'), 'en-US')
     await user.click(screen.getByRole('button', { name: '语音提问' }))

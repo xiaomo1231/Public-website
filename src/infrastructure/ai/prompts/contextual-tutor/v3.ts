@@ -71,10 +71,15 @@ export function buildUserPrompt(input: ContextualTutorInput): string {
       ? untrustedContentWrapper(
           'EARLIER IN THIS CONVERSATION',
           history
-            .map((turn, index) => `Q${index + 1}: ${turn.question}\nA${index + 1}: ${turn.answer.slice(0, MAX_HISTORY_ANSWER)}`)
+            .map(
+              (turn, index) =>
+                `Q${index + 1}: ${turn.question}\nA${index + 1}: ${turn.answer.slice(0, MAX_HISTORY_ANSWER)}`,
+            )
             .join('\n\n'),
         )
       : '',
     untrustedContentWrapper('LEARNER QUESTION', input.question),
-  ].filter(Boolean).join('\n')
+  ]
+    .filter(Boolean)
+    .join('\n')
 }

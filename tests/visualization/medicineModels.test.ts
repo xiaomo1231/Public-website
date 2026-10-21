@@ -53,7 +53,12 @@ describe('membrane potentials', () => {
     near(implicit, explicit, 1e-9)
     expect(implicit).toBeLessThan(-60)
     // No permeabilities at all: nothing to weigh, no GHK value.
-    expect(goldman([{ ion: 'K+', inside: 140, outside: 4 }, { ion: 'Na+', inside: 12, outside: 145 }])).toBeNull()
+    expect(
+      goldman([
+        { ion: 'K+', inside: 140, outside: 4 },
+        { ion: 'Na+', inside: 12, outside: 145 },
+      ]),
+    ).toBeNull()
   })
 })
 
@@ -65,7 +70,16 @@ describe('oxygen and circulation', () => {
   })
 
   it('computes stroke volume, EF and cardiac output', () => {
-    const facts = cardiacFacts({ edv: 120, esv: 50, edp: 8, aorticOpen: 80, peak: 120, endSystolic: 100, minimum: 4, hr: 70 })
+    const facts = cardiacFacts({
+      edv: 120,
+      esv: 50,
+      edp: 8,
+      aorticOpen: 80,
+      peak: 120,
+      endSystolic: 100,
+      minimum: 4,
+      hr: 70,
+    })
     expect(facts.strokeVolume).toBe(70)
     near(facts.ejectionFraction, 0.5833, 1e-3)
     near(facts.cardiacOutput!, 4.9, 1e-9)
@@ -73,7 +87,12 @@ describe('oxygen and circulation', () => {
   })
 
   it('derives lung capacities', () => {
-    expect(lungCapacities({ tv: 500, irv: 3000, erv: 1100, rv: 1200 })).toEqual({ ic: 3500, frc: 2300, vc: 4600, tlc: 5800 })
+    expect(lungCapacities({ tv: 500, irv: 3000, erv: 1100, rv: 1200 })).toEqual({
+      ic: 3500,
+      frc: 2300,
+      vc: 4600,
+      tlc: 5800,
+    })
   })
 
   it('computes net filtration pressure and clearance', () => {
@@ -167,7 +186,14 @@ describe('pharmacokinetics', () => {
   })
 
   it('peaks after absorption for an oral dose', () => {
-    const oral = { route: 'oral' as const, dose: 100, vd: 50, halfLife: 4, bioavailability: 0.8, ka: 1.5 }
+    const oral = {
+      route: 'oral' as const,
+      dose: 100,
+      vd: 50,
+      halfLife: 4,
+      bioavailability: 0.8,
+      ka: 1.5,
+    }
     expect(concentrationAtTime(oral, 0)).toBe(0)
     expect(concentrationAtTime(oral, 1.5)).toBeGreaterThan(concentrationAtTime(oral, 12))
   })

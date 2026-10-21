@@ -29,15 +29,24 @@ export async function checkBlanksWithAi(
           role: 'user',
           content: prompts.fillBlankCheck.buildUserPrompt({
             question: question.prompt,
-            blanks: asked.map((blank) => ({ index: blank.index, accepted: blank.accepted, answer: blank.given })),
+            blanks: asked.map((blank) => ({
+              index: blank.index,
+              accepted: blank.accepted,
+              answer: blank.given,
+            })),
           }),
         },
       ],
       { maxTokens: 256 },
     )
-    const verdicts = prompts.fillBlankCheck.readEquivalence(data, asked.map((blank) => blank.index))
+    const verdicts = prompts.fillBlankCheck.readEquivalence(
+      data,
+      asked.map((blank) => blank.index),
+    )
     if (![...verdicts.values()].some(Boolean)) return evaluation
-    const blanks = results.map((blank, i) => (verdicts.get(i + 1) ? { ...blank, correct: true, byAi: true } : blank))
+    const blanks = results.map((blank, i) =>
+      verdicts.get(i + 1) ? { ...blank, correct: true, byAi: true } : blank,
+    )
     const earned = blanks.filter((blank) => blank.correct).length
     return {
       ...evaluation,
@@ -47,7 +56,9 @@ export async function checkBlanksWithAi(
       note: t('fillBlank.aiAccepted'),
     }
   } catch (err) {
-    logger.warn('Fill-blank equivalence check failed; keeping the local result', { error: (err as Error)?.message })
+    logger.warn('Fill-blank equivalence check failed; keeping the local result', {
+      error: (err as Error)?.message,
+    })
     return evaluation
   }
 }

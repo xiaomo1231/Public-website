@@ -95,7 +95,9 @@ describe('asPseudoHeading', () => {
 
 describe('promotePseudoHeadings', () => {
   it('turns a bold pseudo-heading paragraph into a real heading', () => {
-    const blocks = promotePseudoHeadings(parseMarkdownBlocks('**Intuition:**\n\nThe idea is simple.'))
+    const blocks = promotePseudoHeadings(
+      parseMarkdownBlocks('**Intuition:**\n\nThe idea is simple.'),
+    )
     expect(blocks[0]).toMatchObject({ kind: 'heading', level: 2 })
   })
 

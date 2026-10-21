@@ -55,9 +55,7 @@ describe('DeleteProjectDialog', () => {
   })
 
   it('lists every project with its name and id', async () => {
-    render(
-      <DeleteProjectDialog open onOpenChange={vi.fn()} onDeleted={vi.fn()} />,
-    )
+    render(<DeleteProjectDialog open onOpenChange={vi.fn()} onDeleted={vi.fn()} />)
     await waitFor(() => expect(screen.getByText('Calculus I')).toBeInTheDocument())
     expect(screen.getByText('Physics I')).toBeInTheDocument()
     // The id is shown so the user can disambiguate same-named projects.
@@ -66,9 +64,7 @@ describe('DeleteProjectDialog', () => {
   })
 
   it('does not preselect a project — the user must choose', async () => {
-    render(
-      <DeleteProjectDialog open onOpenChange={vi.fn()} onDeleted={vi.fn()} />,
-    )
+    render(<DeleteProjectDialog open onOpenChange={vi.fn()} onDeleted={vi.fn()} />)
     await waitFor(() => expect(screen.getByText('Calculus I')).toBeInTheDocument())
     const radios = screen.getAllByRole('radio')
     expect(radios).toHaveLength(2)
@@ -79,9 +75,7 @@ describe('DeleteProjectDialog', () => {
 
   it('keeps delete disabled until the exact name is typed', async () => {
     const user = userEvent.setup()
-    render(
-      <DeleteProjectDialog open onOpenChange={vi.fn()} onDeleted={vi.fn()} />,
-    )
+    render(<DeleteProjectDialog open onOpenChange={vi.fn()} onDeleted={vi.fn()} />)
     await waitFor(() => expect(screen.getByText('Calculus I')).toBeInTheDocument())
 
     await user.click(screen.getByRole('radio', { name: /Calculus I/ }))
@@ -100,9 +94,7 @@ describe('DeleteProjectDialog', () => {
   it('deletes only the selected project', async () => {
     const onDeleted = vi.fn()
     const user = userEvent.setup()
-    render(
-      <DeleteProjectDialog open onOpenChange={vi.fn()} onDeleted={onDeleted} />,
-    )
+    render(<DeleteProjectDialog open onOpenChange={vi.fn()} onDeleted={onDeleted} />)
     await waitFor(() => expect(screen.getByText('Physics I')).toBeInTheDocument())
 
     await user.click(screen.getByRole('radio', { name: /Physics I/ }))
@@ -118,9 +110,27 @@ describe('DeleteProjectDialog', () => {
   it('cascades: deleting a project removes its documents and mistakes', async () => {
     const docs = new DocumentRepository(db)
     const mistakes = new MistakeService(db)
-    await docs.create({ projectId: a.id, type: 'text', name: 'a.txt', sizeBytes: 1, blob: new Blob(['x']) })
-    await mistakes.addManual({ projectId: a.id, question: 'Q', studentAnswer: 'x', correctAnswer: 'y', knowledgePoint: 'KP' })
-    await docs.create({ projectId: b.id, type: 'text', name: 'b.txt', sizeBytes: 1, blob: new Blob(['y']) })
+    await docs.create({
+      projectId: a.id,
+      type: 'text',
+      name: 'a.txt',
+      sizeBytes: 1,
+      blob: new Blob(['x']),
+    })
+    await mistakes.addManual({
+      projectId: a.id,
+      question: 'Q',
+      studentAnswer: 'x',
+      correctAnswer: 'y',
+      knowledgePoint: 'KP',
+    })
+    await docs.create({
+      projectId: b.id,
+      type: 'text',
+      name: 'b.txt',
+      sizeBytes: 1,
+      blob: new Blob(['y']),
+    })
 
     const user = userEvent.setup()
     render(<DeleteProjectDialog open onOpenChange={vi.fn()} onDeleted={vi.fn()} />)
@@ -144,18 +154,24 @@ describe('DeleteProjectDialog', () => {
     await new DataManagementService(db).deleteProject(a.id)
     await new DataManagementService(db).deleteProject(b.id)
     render(<DeleteProjectDialog open onOpenChange={vi.fn()} onDeleted={vi.fn()} />)
-    await waitFor(() =>
-      expect(screen.getByText(/no projects to delete/i)).toBeInTheDocument(),
-    )
+    await waitFor(() => expect(screen.getByText(/no projects to delete/i)).toBeInTheDocument())
   })
 
   it('honours a valid initialProjectId but still requires the name', async () => {
     const user = userEvent.setup()
     render(
-      <DeleteProjectDialog open initialProjectId={b.id} onOpenChange={vi.fn()} onDeleted={vi.fn()} />,
+      <DeleteProjectDialog
+        open
+        initialProjectId={b.id}
+        onOpenChange={vi.fn()}
+        onDeleted={vi.fn()}
+      />,
     )
     await waitFor(() =>
-      expect(screen.getByRole('radio', { name: /Physics I/ })).toHaveAttribute('aria-checked', 'true'),
+      expect(screen.getByRole('radio', { name: /Physics I/ })).toHaveAttribute(
+        'aria-checked',
+        'true',
+      ),
     )
 
     const deleteButton = screen.getByRole('button', { name: /delete project/i })
@@ -166,7 +182,12 @@ describe('DeleteProjectDialog', () => {
 
   it('ignores an initialProjectId that no longer exists', async () => {
     render(
-      <DeleteProjectDialog open initialProjectId="gone" onOpenChange={vi.fn()} onDeleted={vi.fn()} />,
+      <DeleteProjectDialog
+        open
+        initialProjectId="gone"
+        onOpenChange={vi.fn()}
+        onDeleted={vi.fn()}
+      />,
     )
     await waitFor(() => expect(screen.getByText('Calculus I')).toBeInTheDocument())
     expect(screen.getByRole('button', { name: /delete project/i })).toBeDisabled()

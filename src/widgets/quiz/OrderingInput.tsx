@@ -21,11 +21,18 @@ export interface OrderingInputProps {
  * the student moves an item, so Enter or the submit button cannot hand in the
  * untouched starting order.
  */
-export function OrderingInput({ question, value, onChange, disabled }: OrderingInputProps): JSX.Element {
+export function OrderingInput({
+  question,
+  value,
+  onChange,
+  disabled,
+}: OrderingInputProps): JSX.Element {
   const { t } = useTranslation()
   const [dragIndex, setDragIndex] = useState<number | null>(null)
   const initial = useMemo(() => {
-    const source = question.orderItems?.length ? question.orderItems : orderingItems(question.correctAnswer)
+    const source = question.orderItems?.length
+      ? question.orderItems
+      : orderingItems(question.correctAnswer)
     return shuffledForDisplay(source, question.id)
   }, [question])
   const touched = Boolean(value)
@@ -63,7 +70,9 @@ export function OrderingInput({ question, value, onChange, disabled }: OrderingI
             )}
           >
             <GripVertical className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
-            <span className="data-num w-5 shrink-0 text-right text-xs text-muted-foreground">{index + 1}.</span>
+            <span className="data-num w-5 shrink-0 text-right text-xs text-muted-foreground">
+              {index + 1}.
+            </span>
             <span className="min-w-0 flex-1 break-words">{item}</span>
             <span className="flex shrink-0 gap-0.5">
               <button
@@ -71,7 +80,7 @@ export function OrderingInput({ question, value, onChange, disabled }: OrderingI
                 onClick={() => move(index, index - 1)}
                 disabled={disabled || index === 0}
                 aria-label={t('answerInput.moveUp', { item })}
-                className="focus-ring grid h-7 w-7 place-items-center rounded-md text-muted-foreground transition-[color,background-color,border-color,transform] duration-press ease-out motion-safe:active:scale-[0.97] hover:bg-accent hover:text-foreground disabled:opacity-30"
+                className="focus-ring grid h-7 w-7 place-items-center rounded-md text-muted-foreground transition-[color,background-color,border-color,transform] duration-press ease-out hover:bg-accent hover:text-foreground disabled:opacity-30 motion-safe:active:scale-[0.97]"
               >
                 <ArrowUp className="h-3.5 w-3.5" />
               </button>
@@ -80,7 +89,7 @@ export function OrderingInput({ question, value, onChange, disabled }: OrderingI
                 onClick={() => move(index, index + 1)}
                 disabled={disabled || index === items.length - 1}
                 aria-label={t('answerInput.moveDown', { item })}
-                className="focus-ring grid h-7 w-7 place-items-center rounded-md text-muted-foreground transition-[color,background-color,border-color,transform] duration-press ease-out motion-safe:active:scale-[0.97] hover:bg-accent hover:text-foreground disabled:opacity-30"
+                className="focus-ring grid h-7 w-7 place-items-center rounded-md text-muted-foreground transition-[color,background-color,border-color,transform] duration-press ease-out hover:bg-accent hover:text-foreground disabled:opacity-30 motion-safe:active:scale-[0.97]"
               >
                 <ArrowDown className="h-3.5 w-3.5" />
               </button>

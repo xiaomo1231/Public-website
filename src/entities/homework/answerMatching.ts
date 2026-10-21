@@ -31,8 +31,14 @@ export interface AnswerEntry {
  */
 export function isDeferredProfessorAnswer(text: string): boolean {
   const normalized = text.replace(/\s+/g, ' ').trim().toLowerCase()
-  return /(?:left (?:to|for) you|leave (?:it|this|the problem|the exercise) (?:to|for) you|(?:left|assigned) as an exercise|exercise (?:for|to) (?:the )?(?:reader|student)|homework for (?:the )?(?:reader|student)|try (?:it|this) (?:yourself|on your own)|solution (?:omitted|is omitted)|no (?:solution|answer) (?:provided|given))\b/.test(normalized) ||
-    /(?:留给(?:你|学生|读者)(?:自己)?(?:完成|解答|练习)|请(?:你|学生|读者)自行(?:完成|解答|求解)|答案略|解答略|解略|不提供(?:答案|解答))/.test(normalized)
+  return (
+    /(?:left (?:to|for) you|leave (?:it|this|the problem|the exercise) (?:to|for) you|(?:left|assigned) as an exercise|exercise (?:for|to) (?:the )?(?:reader|student)|homework for (?:the )?(?:reader|student)|try (?:it|this) (?:yourself|on your own)|solution (?:omitted|is omitted)|no (?:solution|answer) (?:provided|given))\b/.test(
+      normalized,
+    ) ||
+    /(?:留给(?:你|学生|读者)(?:自己)?(?:完成|解答|练习)|请(?:你|学生|读者)自行(?:完成|解答|求解)|答案略|解答略|解略|不提供(?:答案|解答))/.test(
+      normalized,
+    )
+  )
 }
 
 /** Minimal chunk shape the parser needs; extra fields are ignored. */
@@ -287,14 +293,19 @@ export function segmentsToAnswerEntries(
   starts: readonly number[],
   numbers: Readonly<Record<number, string>> = {},
 ): AnswerEntry[] {
-  const sorted = [...new Set(starts)].filter((i) => i >= 0 && i < lines.length).sort((a, b) => a - b)
+  const sorted = [...new Set(starts)]
+    .filter((i) => i >= 0 && i < lines.length)
+    .sort((a, b) => a - b)
   if (sorted.length === 0) return []
   const entries: AnswerEntry[] = []
   for (let s = 0; s < sorted.length; s++) {
     const start = sorted[s]!
     const end = s + 1 < sorted.length ? sorted[s + 1]! : lines.length
     const slice = lines.slice(start, end)
-    const text = slice.map((line) => line.text).join('\n').trim()
+    const text = slice
+      .map((line) => line.text)
+      .join('\n')
+      .trim()
     if (!text) continue
     const rawNumber = (numbers[start] ?? '').trim()
     entries.push({
@@ -404,7 +415,11 @@ export function matchAnswersToQuestions(
   const used = new Set<number>()
   for (const question of questions) {
     if (!question.number) {
-      assignments.push({ questionId: question.id, status: 'needs_review', reason: 'question-number-missing' })
+      assignments.push({
+        questionId: question.id,
+        status: 'needs_review',
+        reason: 'question-number-missing',
+      })
       continue
     }
     const key = normalizeAnswerNumber(question.number)
@@ -414,13 +429,26 @@ export function matchAnswersToQuestions(
     if (answerIndices.length === 0) {
       assignments.push({ questionId: question.id, status: 'none', reason: 'answer-number-missing' })
     } else if (answerIndices.length > 1) {
-      assignments.push({ questionId: question.id, status: 'needs_review', reason: 'answer-number-duplicate' })
+      assignments.push({
+        questionId: question.id,
+        status: 'needs_review',
+        reason: 'answer-number-duplicate',
+      })
     } else if (questionIds.length > 1) {
-      assignments.push({ questionId: question.id, status: 'needs_review', reason: 'question-number-duplicate' })
+      assignments.push({
+        questionId: question.id,
+        status: 'needs_review',
+        reason: 'question-number-duplicate',
+      })
     } else {
       const answerIndex = answerIndices[0]!
       used.add(answerIndex)
-      assignments.push({ questionId: question.id, answerIndex, status: 'matched', reason: 'number-unique' })
+      assignments.push({
+        questionId: question.id,
+        answerIndex,
+        status: 'matched',
+        reason: 'number-unique',
+      })
     }
   }
 

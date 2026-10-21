@@ -130,7 +130,13 @@ describe('structure bindings', () => {
     await addMaterial(
       'professor_practice',
       'practice.txt',
-      ['1. Find the derivative, the instantaneous rate of change, of the function.', 'A. 2x', 'B. x', 'Answer Key', '1. A'].join('\n'),
+      [
+        '1. Find the derivative, the instantaneous rate of change, of the function.',
+        'A. 2x',
+        'B. x',
+        'Answer Key',
+        '1. A',
+      ].join('\n'),
     )
     const documentId = (await new DocumentRepository(db).listByProject(projectId)).find(
       (d) => d.name === 'practice.txt',
@@ -143,9 +149,30 @@ describe('structure bindings', () => {
 
   it('Test 7 — quiz retrieval is scoped to the requested chapter', () => {
     const snippets: SourceSnippet[] = [
-      { chunkId: 'a', documentId: 'd', documentName: 'book', chapterId: 'ch1', sectionId: 's1', text: 'chapter one' },
-      { chunkId: 'b', documentId: 'd', documentName: 'book', chapterId: 'ch3', sectionId: 'sec3-2', text: 'chapter three' },
-      { chunkId: 'c', documentId: 'd', documentName: 'book', chapterId: 'ch3', sectionId: 'sec3-3', text: 'chapter three b' },
+      {
+        chunkId: 'a',
+        documentId: 'd',
+        documentName: 'book',
+        chapterId: 'ch1',
+        sectionId: 's1',
+        text: 'chapter one',
+      },
+      {
+        chunkId: 'b',
+        documentId: 'd',
+        documentName: 'book',
+        chapterId: 'ch3',
+        sectionId: 'sec3-2',
+        text: 'chapter three',
+      },
+      {
+        chunkId: 'c',
+        documentId: 'd',
+        documentName: 'book',
+        chapterId: 'ch3',
+        sectionId: 'sec3-3',
+        text: 'chapter three b',
+      },
     ]
 
     expect(scopeSnippetsByStructure(snippets, { chapterId: 'ch3' }).map((s) => s.chunkId)).toEqual([

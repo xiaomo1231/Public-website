@@ -47,9 +47,20 @@ async function seedProjectWithAnalysis(db: AppDatabase) {
   await analyses.reseedProject(
     p.id,
     {
-      topics: [{ name: 'Derivatives', description: 'rates of change', sourceRefs: [{ documentId: doc.id, documentName: 'calc.txt' }] }],
+      topics: [
+        {
+          name: 'Derivatives',
+          description: 'rates of change',
+          sourceRefs: [{ documentId: doc.id, documentName: 'calc.txt' }],
+        },
+      ],
       concepts: [
-        { name: 'Chain Rule', definition: 'derivative of composition', topicNames: ['Derivatives'], sourceRefs: [{ documentId: doc.id, documentName: 'calc.txt' }] },
+        {
+          name: 'Chain Rule',
+          definition: 'derivative of composition',
+          topicNames: ['Derivatives'],
+          sourceRefs: [{ documentId: doc.id, documentName: 'calc.txt' }],
+        },
       ],
       formulas: [],
       symbols: [],
@@ -103,14 +114,34 @@ describe('QuizService.generateQuiz', () => {
     const chatJSON = vi.fn().mockResolvedValue({
       data: {
         questions: [
-          { prompt: 'What is the derivative of x^2?', type: 'numeric', correctAnswer: '2x', solution: 'power rule', knowledgePoint: 'Power Rule', difficulty: 'basic', hints: ['use the power rule'] },
-          { prompt: 'Differentiate sin(x)', type: 'numeric', correctAnswer: 'cos(x)', solution: 'standard derivative', knowledgePoint: 'Trig Derivatives', difficulty: 'intermediate', hints: [] },
+          {
+            prompt: 'What is the derivative of x^2?',
+            type: 'numeric',
+            correctAnswer: '2x',
+            solution: 'power rule',
+            knowledgePoint: 'Power Rule',
+            difficulty: 'basic',
+            hints: ['use the power rule'],
+          },
+          {
+            prompt: 'Differentiate sin(x)',
+            type: 'numeric',
+            correctAnswer: 'cos(x)',
+            solution: 'standard derivative',
+            knowledgePoint: 'Trig Derivatives',
+            difficulty: 'intermediate',
+            hints: [],
+          },
         ],
       },
       raw: { content: '{}', model: 'gpt-test' },
     })
     const svc = buildService(db, fakeAI(chatJSON))
-    const quiz = await svc.generateQuiz(project.id, { ...baseConfig, topicId, topicName: 'Derivatives' })
+    const quiz = await svc.generateQuiz(project.id, {
+      ...baseConfig,
+      topicId,
+      topicName: 'Derivatives',
+    })
     expect(quiz.status).toBe('ready')
     expect(quiz.questionIds).toHaveLength(2)
     const questions = await svc.getQuestions(quiz.id)
@@ -124,14 +155,33 @@ describe('QuizService.generateQuiz', () => {
     const chatJSON = vi.fn().mockResolvedValue({
       data: {
         questions: [
-          { prompt: 'd/dx x^3 at x=1?', type: 'numeric', correctAnswer: '3', solution: '', difficulty: 'basic', hints: [] },
-          { prompt: 'd/dx x^2 at x=2?', type: 'numeric', correctAnswer: '4', solution: '', knowledgePoint: '', difficulty: 'basic', hints: [] },
+          {
+            prompt: 'd/dx x^3 at x=1?',
+            type: 'numeric',
+            correctAnswer: '3',
+            solution: '',
+            difficulty: 'basic',
+            hints: [],
+          },
+          {
+            prompt: 'd/dx x^2 at x=2?',
+            type: 'numeric',
+            correctAnswer: '4',
+            solution: '',
+            knowledgePoint: '',
+            difficulty: 'basic',
+            hints: [],
+          },
         ],
       },
       raw: { content: '{}', model: 'gpt-test' },
     })
     const svc = buildService(db, fakeAI(chatJSON))
-    const quiz = await svc.generateQuiz(project.id, { ...baseConfig, topicId, topicName: 'Derivatives' })
+    const quiz = await svc.generateQuiz(project.id, {
+      ...baseConfig,
+      topicId,
+      topicName: 'Derivatives',
+    })
     const points = (await svc.getQuestions(quiz.id)).map((q) => q.knowledgePoint)
     expect(points).not.toContain('General')
     expect(points.every((point) => point.length > 0)).toBe(true)
@@ -139,11 +189,13 @@ describe('QuizService.generateQuiz', () => {
 
   it('retries once then fails on malformed AI output', async () => {
     const { project, topicId } = await seedProjectWithAnalysis(db)
-    const chatJSON = vi.fn().mockResolvedValue({ data: { notQuestions: true }, raw: { content: '{}', model: 'm' } })
+    const chatJSON = vi
+      .fn()
+      .mockResolvedValue({ data: { notQuestions: true }, raw: { content: '{}', model: 'm' } })
     const svc = buildService(db, fakeAI(chatJSON))
-    await expect(
-      svc.generateQuiz(project.id, { ...baseConfig, topicId }),
-    ).rejects.toMatchObject({ code: 'QUIZ_GENERATION_FAILED' })
+    await expect(svc.generateQuiz(project.id, { ...baseConfig, topicId })).rejects.toMatchObject({
+      code: 'QUIZ_GENERATION_FAILED',
+    })
     expect(chatJSON).toHaveBeenCalledTimes(2)
   })
 
@@ -152,13 +204,31 @@ describe('QuizService.generateQuiz', () => {
     const chatJSON = vi.fn().mockResolvedValue({
       data: {
         questions: [
-          { prompt: 'Bad MC', type: 'multiple_choice', options: [{ label: 'A', isCorrect: false }, { label: 'B', isCorrect: false }], correctAnswer: 'A', knowledgePoint: 'KP', difficulty: 'basic', hints: [] },
+          {
+            prompt: 'Bad MC',
+            type: 'multiple_choice',
+            options: [
+              { label: 'A', isCorrect: false },
+              { label: 'B', isCorrect: false },
+            ],
+            correctAnswer: 'A',
+            knowledgePoint: 'KP',
+            difficulty: 'basic',
+            hints: [],
+          },
         ],
       },
       raw: { content: '{}', model: 'm' },
     })
     const svc = buildService(db, fakeAI(chatJSON))
-    await expect(svc.generateQuiz(project.id, { ...baseConfig, count: 1, topicId, types: ['multiple_choice'] })).rejects.toMatchObject({
+    await expect(
+      svc.generateQuiz(project.id, {
+        ...baseConfig,
+        count: 1,
+        topicId,
+        types: ['multiple_choice'],
+      }),
+    ).rejects.toMatchObject({
       code: 'QUIZ_GENERATION_FAILED',
     })
   })
@@ -166,7 +236,9 @@ describe('QuizService.generateQuiz', () => {
   it('rejects out-of-range question counts', async () => {
     const { project, topicId } = await seedProjectWithAnalysis(db)
     const svc = buildService(db, fakeAI(vi.fn()))
-    await expect(svc.generateQuiz(project.id, { ...baseConfig, count: 999, topicId })).rejects.toMatchObject({
+    await expect(
+      svc.generateQuiz(project.id, { ...baseConfig, count: 999, topicId }),
+    ).rejects.toMatchObject({
       code: 'INVALID_COUNT',
     })
   })
@@ -179,7 +251,9 @@ describe('QuizService.generateQuiz', () => {
     expect(plan[6]).not.toBe('basic')
     // Never skips more than one level per step.
     for (let i = 1; i < plan.length; i++) {
-      const delta = ['beginner', 'basic', 'intermediate', 'advanced', 'challenge'].indexOf(plan[i]!) - ['beginner', 'basic', 'intermediate', 'advanced', 'challenge'].indexOf(plan[i - 1]!)
+      const delta =
+        ['beginner', 'basic', 'intermediate', 'advanced', 'challenge'].indexOf(plan[i]!) -
+        ['beginner', 'basic', 'intermediate', 'advanced', 'challenge'].indexOf(plan[i - 1]!)
       expect(delta).toBeLessThanOrEqual(1)
     }
   })
@@ -193,7 +267,9 @@ describe('QuizService.submitAnswer', () => {
     setDbForTesting(db)
   })
 
-  async function setupQuiz(questions: Array<Partial<Question> & { type: Question['type']; correctAnswer: string }>) {
+  async function setupQuiz(
+    questions: Array<Partial<Question> & { type: Question['type']; correctAnswer: string }>,
+  ) {
     const { project, topicId } = await seedProjectWithAnalysis(db)
     const questionRepo = new QuestionRepository(db)
     const stored = await questionRepo.addMany(
@@ -383,7 +459,9 @@ describe('QuizService.submitAnswer', () => {
 
   it('reports NO_ACTIVE quiz gracefully when question id is unknown', async () => {
     const { quiz, svc } = await setupQuiz([{ type: 'numeric', correctAnswer: 'a' }])
-    await expect(svc.submitAnswer(quiz.id, 'missing-question', 'a')).rejects.toMatchObject({ code: 'NOT_FOUND' })
+    await expect(svc.submitAnswer(quiz.id, 'missing-question', 'a')).rejects.toMatchObject({
+      code: 'NOT_FOUND',
+    })
   })
 })
 
@@ -400,7 +478,15 @@ describe('QuizService.generateMore', () => {
     const chatJSON = vi.fn().mockResolvedValue({
       data: {
         questions: [
-          { prompt: 'Harder?', type: 'numeric', correctAnswer: 'x', solution: '', knowledgePoint: 'KP', difficulty: 'advanced', hints: [] },
+          {
+            prompt: 'Harder?',
+            type: 'numeric',
+            correctAnswer: 'x',
+            solution: '',
+            knowledgePoint: 'KP',
+            difficulty: 'advanced',
+            hints: [],
+          },
         ],
       },
       raw: { content: '{}', model: 'm' },
@@ -423,7 +509,15 @@ describe('QuizService.generateMore', () => {
     const chatJSON = vi.fn().mockResolvedValue({
       data: {
         questions: [
-          { prompt: 'Easier?', type: 'numeric', correctAnswer: 'x', solution: '', knowledgePoint: 'KP', difficulty: 'basic', hints: [] },
+          {
+            prompt: 'Easier?',
+            type: 'numeric',
+            correctAnswer: 'x',
+            solution: '',
+            knowledgePoint: 'KP',
+            difficulty: 'basic',
+            hints: [],
+          },
         ],
       },
       raw: { content: '{}', model: 'm' },
@@ -445,7 +539,15 @@ describe('QuizService.generateMore', () => {
     const chatJSON = vi.fn().mockResolvedValue({
       data: {
         questions: [
-          { prompt: 'Weak?', type: 'numeric', correctAnswer: 'x', solution: '', knowledgePoint: 'Chain Rule', difficulty: 'basic', hints: [] },
+          {
+            prompt: 'Weak?',
+            type: 'numeric',
+            correctAnswer: 'x',
+            solution: '',
+            knowledgePoint: 'Chain Rule',
+            difficulty: 'basic',
+            hints: [],
+          },
         ],
       },
       raw: { content: '{}', model: 'm' },
@@ -483,10 +585,32 @@ describe('QuizService.generateMore', () => {
 
 describe('adaptiveHistory', () => {
   it('treats a disputed judgement as unverified', () => {
-    const base = { projectId: 'p', questionId: 'q', knowledgePoint: 'K', questionType: 'numeric', difficulty: 'basic', userAnswer: 'x', hintsUsed: 0, createdAt: 1 }
+    const base = {
+      projectId: 'p',
+      questionId: 'q',
+      knowledgePoint: 'K',
+      questionType: 'numeric',
+      difficulty: 'basic',
+      userAnswer: 'x',
+      hintsUsed: 0,
+      createdAt: 1,
+    }
     const history = [
-      { ...base, id: 'a1', evaluation: { isCorrect: false, method: 'exact' as const, confidence: 1 } },
-      { ...base, id: 'a2', evaluation: { isCorrect: false, method: 'rubric_ai' as const, confidence: 1, disputed: true } },
+      {
+        ...base,
+        id: 'a1',
+        evaluation: { isCorrect: false, method: 'exact' as const, confidence: 1 },
+      },
+      {
+        ...base,
+        id: 'a2',
+        evaluation: {
+          isCorrect: false,
+          method: 'rubric_ai' as const,
+          confidence: 1,
+          disputed: true,
+        },
+      },
     ]
     const { recentResults, streaks } = adaptiveHistory(history)
     expect(recentResults.map((r) => r.isCorrect)).toEqual([false, null])

@@ -74,10 +74,9 @@ export function computeLinkFingerprint(
  * Without it a later re-process could not tell "the same passage, new chunk id"
  * from "the passage changed".
  */
-function withTextbookFingerprints<T extends { textbookChunkId: string; textbookChunkFingerprint?: string }>(
-  links: readonly T[],
-  index: ChunkRelinkIndex,
-): T[] {
+function withTextbookFingerprints<
+  T extends { textbookChunkId: string; textbookChunkFingerprint?: string },
+>(links: readonly T[], index: ChunkRelinkIndex): T[] {
   return links.map((link) => {
     const chunk = index.live.get(link.textbookChunkId)
     if (!chunk) return link
@@ -260,13 +259,15 @@ export class CourseContextService {
   private analyses: CourseAnalysisRepository
   private contexts: CourseContextRepository
 
-  constructor(deps: {
-    db?: AppDatabase
-    documents?: DocumentRepository
-    chunks?: ChunkRepository
-    analyses?: CourseAnalysisRepository
-    contexts?: CourseContextRepository
-  } = {}) {
+  constructor(
+    deps: {
+      db?: AppDatabase
+      documents?: DocumentRepository
+      chunks?: ChunkRepository
+      analyses?: CourseAnalysisRepository
+      contexts?: CourseContextRepository
+    } = {},
+  ) {
     this.db = deps.db ?? getDb()
     this.documents = deps.documents ?? new DocumentRepository(this.db)
     this.chunks = deps.chunks ?? new ChunkRepository(this.db)
@@ -294,7 +295,9 @@ export class CourseContextService {
    * re-pointed link can never land on its own.
    */
   async stageDerived(projectId: string): Promise<{ context: CourseContext; changed: boolean }> {
-    const ready = (await this.documents.listByProject(projectId)).filter((d) => d.status === 'ready')
+    const ready = (await this.documents.listByProject(projectId)).filter(
+      (d) => d.status === 'ready',
+    )
     const textbookDocs = ready.filter((d) => resolveMaterialType(d.materialType) === 'textbook')
     const noteDocs = ready.filter((d) => resolveMaterialType(d.materialType) === 'user_notes')
     const transcriptDocs = ready.filter(

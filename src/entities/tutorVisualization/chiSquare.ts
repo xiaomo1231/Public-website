@@ -37,8 +37,14 @@ export function expectedFromRatio(observed: number[], ratio: number[]): number[]
   return ratio.map((r) => (total * r) / parts)
 }
 
-export function chiSquareTest(categories: ChiSquareCategory[], df: number, alpha: number): ChiSquareResult {
-  const contributions = categories.map(({ observed, expected }) => (observed - expected) ** 2 / expected)
+export function chiSquareTest(
+  categories: ChiSquareCategory[],
+  df: number,
+  alpha: number,
+): ChiSquareResult {
+  const contributions = categories.map(
+    ({ observed, expected }) => (observed - expected) ** 2 / expected,
+  )
   const statistic = contributions.reduce((a, b) => a + b, 0)
   const distribution = { family: 'chisquare' as const, df }
   const pValue = Math.min(1, Math.max(0, 1 - cdf(distribution, statistic)))

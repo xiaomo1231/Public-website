@@ -180,9 +180,7 @@ describe('ProcessingService — visual source preservation', () => {
   })
 
   it('does not turn a normal text page into a visual source', async () => {
-    pdfState.pages = [
-      { text: 'A set is a collection of distinct objects.', imageOps: [] },
-    ]
+    pdfState.pages = [{ text: 'A set is a collection of distinct objects.', imageOps: [] }]
     const documentId = await processPdf()
 
     expect(await visuals.listByDocument(documentId)).toEqual([])
@@ -223,8 +221,12 @@ describe('ProcessingService — visual source preservation', () => {
     vi.spyOn(chunks, 'addPrepared').mockRejectedValueOnce(new Error('storage failed'))
     await expect(service().process(documentId)).rejects.toThrow('storage failed')
 
-    expect((await chunks.listByDocument(documentId)).map((chunk) => chunk.id)).toEqual(oldChunks.map((chunk) => chunk.id))
-    expect((await visuals.listByDocument(documentId)).map((figure) => figure.id)).toEqual(oldFigures.map((figure) => figure.id))
+    expect((await chunks.listByDocument(documentId)).map((chunk) => chunk.id)).toEqual(
+      oldChunks.map((chunk) => chunk.id),
+    )
+    expect((await visuals.listByDocument(documentId)).map((figure) => figure.id)).toEqual(
+      oldFigures.map((figure) => figure.id),
+    )
     expect(await visuals.getImage(oldFigures[0]!.id)).toBeTruthy()
     expect((await documents.get(documentId)).status).toBe('ready')
   })

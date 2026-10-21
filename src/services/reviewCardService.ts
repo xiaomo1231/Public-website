@@ -1,5 +1,10 @@
 import { ReviewCardRepository } from '@/entities/reviewCard/repository'
-import { newCard, scheduleReview, type ReviewCard, type ReviewGrade } from '@/entities/reviewCard/types'
+import {
+  newCard,
+  scheduleReview,
+  type ReviewCard,
+  type ReviewGrade,
+} from '@/entities/reviewCard/types'
 import { CourseAnalysisRepository } from '@/entities/courseAnalysis/repository'
 import type { AppDatabase } from '@/infrastructure/db/database'
 import { getDb } from '@/infrastructure/db/database'
@@ -57,9 +62,17 @@ export class ReviewCardService {
   /** Add cards, skipping fronts the project already has. Returns how many were added. */
   async addMany(
     projectId: string,
-    items: Array<{ front: string; back: string; source: ReviewCard['source']; topicId?: string; knowledgePoint?: string }>,
+    items: Array<{
+      front: string
+      back: string
+      source: ReviewCard['source']
+      topicId?: string
+      knowledgePoint?: string
+    }>,
   ): Promise<number> {
-    const existing = new Set((await this.repo.listByProject(projectId)).map((card) => key(card.front)))
+    const existing = new Set(
+      (await this.repo.listByProject(projectId)).map((card) => key(card.front)),
+    )
     const now = Date.now()
     const cards: ReviewCard[] = []
     for (const item of items) {
@@ -129,7 +142,12 @@ export class ReviewCardService {
     const card = await this.repo.get(id)
     if (!card) throw new ValidationError(t('cards.notFound'))
     if (!clean(front) || !back.trim()) throw new ValidationError(t('cards.emptyFields'))
-    return this.repo.put({ ...card, front: clean(front).slice(0, MAX_FIELD), back: back.trim().slice(0, MAX_FIELD * 2), updatedAt: Date.now() })
+    return this.repo.put({
+      ...card,
+      front: clean(front).slice(0, MAX_FIELD),
+      back: back.trim().slice(0, MAX_FIELD * 2),
+      updatedAt: Date.now(),
+    })
   }
 
   remove(id: string): Promise<void> {

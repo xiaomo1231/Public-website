@@ -231,7 +231,10 @@ describe('normalizeVisualizations — nonlinear functions (Phase 2)', () => {
 
   it('ignores an expression on a non-equality relation', () => {
     const { visualizations } = normalizeVisualizations([
-      { type: 'function_2d', expressions: [{ latex: 'y > x^2', relation: '>', expression: 'x^2' }] },
+      {
+        type: 'function_2d',
+        expressions: [{ latex: 'y > x^2', relation: '>', expression: 'x^2' }],
+      },
     ])
     expect(visualizations).toHaveLength(0)
   })
@@ -247,10 +250,7 @@ describe('normalizeVisualizations — nonlinear functions (Phase 2)', () => {
     const { visualizations } = normalizeVisualizations([
       {
         type: 'function_2d',
-        expressions: [
-          { latex: 'y = 2x + 1' },
-          { latex: 'y = x^2', expression: 'x^2' },
-        ],
+        expressions: [{ latex: 'y = 2x + 1' }, { latex: 'y = x^2', expression: 'x^2' }],
       },
     ])
     const viz = visualizations[0]

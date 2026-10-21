@@ -65,7 +65,9 @@ describe('topics bind to the textbook structure', () => {
     const inCh4 = computeLessonContentHash({ ...topic, chapterId: 'ch4', sectionId: 's1' }, 'v1')
     expect(inCh3).not.toBe(inCh4)
     // Same structure → stable cache key.
-    expect(computeLessonContentHash({ ...topic, chapterId: 'ch3', sectionId: 's1' }, 'v1')).toBe(inCh3)
+    expect(computeLessonContentHash({ ...topic, chapterId: 'ch3', sectionId: 's1' }, 'v1')).toBe(
+      inCh3,
+    )
   })
 })
 
@@ -83,7 +85,9 @@ describe('lesson prompt carries the textbook position', () => {
     expect(prompt).toContain('CURRENT MATERIAL')
     expect(prompt).toContain('3 — Derivatives')
     expect(prompt).toContain('3.2 — Derivative Rules')
-    expect(prompts.tutorLesson.buildSystemPrompt()).toMatch(/chapter and section hierarchy is authoritative/i)
+    expect(prompts.tutorLesson.buildSystemPrompt()).toMatch(
+      /chapter and section hierarchy is authoritative/i,
+    )
   })
 })
 

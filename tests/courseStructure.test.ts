@@ -79,7 +79,11 @@ describe('detectStructure', () => {
     ])
     const sections = nodes.filter((n) => n.type === 'section')
     expect(sections.map((n) => n.number)).toEqual(['2.1', '2.2', '2.3'])
-    expect(sections.map((n) => n.title)).toEqual(['Definition', 'Properties', 'Composite Functions'])
+    expect(sections.map((n) => n.title)).toEqual([
+      'Definition',
+      'Properties',
+      'Composite Functions',
+    ])
   })
 
   it('supports unit / part wording without renaming it to Chapter', () => {
@@ -144,7 +148,13 @@ describe('reconcileNodes', () => {
 describe('Test 3 — chunking respects chapter boundaries', () => {
   it('does not merge the end of one chapter with the start of the next', () => {
     const chunks = chunksFromPdf(
-      { documentId: 'd', projectId: 'p', documentName: 'book.pdf', type: 'pdf', materialType: 'textbook' },
+      {
+        documentId: 'd',
+        projectId: 'p',
+        documentName: 'book.pdf',
+        type: 'pdf',
+        materialType: 'textbook',
+      },
       [
         {
           pageNumber: 1,

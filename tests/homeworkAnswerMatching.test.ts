@@ -117,7 +117,12 @@ describe('segmentsToAnswerEntries', () => {
   it('builds entries from a student division with real provenance', () => {
     const entries = segmentsToAnswerEntries(lines, [0, 2], { 0: '1', 2: '2' })
     expect(entries).toHaveLength(2)
-    expect(entries[0]).toMatchObject({ number: '1', text: 'a\nb', chunkIds: ['c1'], pageNumbers: [1] })
+    expect(entries[0]).toMatchObject({
+      number: '1',
+      text: 'a\nb',
+      chunkIds: ['c1'],
+      pageNumbers: [1],
+    })
     expect(entries[1]).toMatchObject({ number: '2', text: 'c', chunkIds: ['c2'], pageNumbers: [2] })
   })
 
@@ -129,7 +134,9 @@ describe('segmentsToAnswerEntries', () => {
 
 describe('summarizeAnswerEntries', () => {
   it('flags a single unnumbered fragment as unsplit', () => {
-    expect(summarizeAnswerEntries(parseAnswerEntries([{ id: 'c1', text: 'one blob' }]))).toMatchObject({
+    expect(
+      summarizeAnswerEntries(parseAnswerEntries([{ id: 'c1', text: 'one blob' }])),
+    ).toMatchObject({
       total: 1,
       numbered: 0,
       unnumbered: 1,
@@ -154,9 +161,7 @@ describe('revalidateStoredEntries', () => {
       ],
       chunks,
     )
-    expect(valid).toEqual([
-      { number: '1', text: 'kept', chunkIds: ['c2'], pageNumbers: [2] },
-    ])
+    expect(valid).toEqual([{ number: '1', text: 'kept', chunkIds: ['c2'], pageNumbers: [2] }])
   })
 
   it('returns null when nothing is usable', () => {
@@ -166,13 +171,15 @@ describe('revalidateStoredEntries', () => {
 })
 
 describe('matchAnswersToQuestions', () => {
-  const entries = parseAnswerEntries([
-    { id: 'c1', text: '1. nine\n2. forty-two\n3. two' },
-  ])
+  const entries = parseAnswerEntries([{ id: 'c1', text: '1. nine\n2. forty-two\n3. two' }])
 
   it('matches a unique one-to-one number on both sides', () => {
     const result = matchAnswersToQuestions(
-      [{ id: 'q1', number: '1' }, { id: 'q2', number: '2' }, { id: 'q3', number: '3' }],
+      [
+        { id: 'q1', number: '1' },
+        { id: 'q2', number: '2' },
+        { id: 'q3', number: '3' },
+      ],
       entries,
     )
     expect(result.assignments.map((a) => a.status)).toEqual(['matched', 'matched', 'matched'])
@@ -183,7 +190,10 @@ describe('matchAnswersToQuestions', () => {
   it('still matches when the answers are in a different order (matched by number)', () => {
     const shuffled = parseAnswerEntries([{ id: 'c1', text: '3. two\n1. nine\n2. forty-two' }])
     const result = matchAnswersToQuestions(
-      [{ id: 'q1', number: '1' }, { id: 'q2', number: '2' }],
+      [
+        { id: 'q1', number: '1' },
+        { id: 'q2', number: '2' },
+      ],
       shuffled,
     )
     expect(result.assignments.every((a) => a.status === 'matched')).toBe(true)
@@ -192,13 +202,19 @@ describe('matchAnswersToQuestions', () => {
   it('does not auto-match duplicate answer numbers', () => {
     const dup = parseAnswerEntries([{ id: 'c1', text: '1. nine\n1. ten' }])
     const result = matchAnswersToQuestions([{ id: 'q1', number: '1' }], dup)
-    expect(result.assignments[0]).toMatchObject({ status: 'needs_review', reason: 'answer-number-duplicate' })
+    expect(result.assignments[0]).toMatchObject({
+      status: 'needs_review',
+      reason: 'answer-number-duplicate',
+    })
     expect(result.unmatchedAnswers).toEqual([0, 1])
   })
 
   it('does not auto-match duplicate question numbers', () => {
     const result = matchAnswersToQuestions(
-      [{ id: 'q1', number: '1' }, { id: 'q2', number: '1' }],
+      [
+        { id: 'q1', number: '1' },
+        { id: 'q2', number: '1' },
+      ],
       entries,
     )
     expect(result.assignments.every((a) => a.status === 'needs_review')).toBe(true)
@@ -207,7 +223,10 @@ describe('matchAnswersToQuestions', () => {
 
   it('marks a question without a number for review rather than guessing', () => {
     const result = matchAnswersToQuestions([{ id: 'q1' }], entries)
-    expect(result.assignments[0]).toMatchObject({ status: 'needs_review', reason: 'question-number-missing' })
+    expect(result.assignments[0]).toMatchObject({
+      status: 'needs_review',
+      reason: 'question-number-missing',
+    })
   })
 
   it('reports a question whose answer number is missing as having no answer', () => {

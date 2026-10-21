@@ -217,8 +217,20 @@ describe('Cross-project data isolation', () => {
   it('deleting one project leaves the other untouched', async () => {
     const docs = new DocumentRepository(db)
     const mistakes = new MistakeService(db)
-    await docs.create({ projectId: a.id, type: 'text', name: 'a.txt', sizeBytes: 1, blob: new Blob(['x']) })
-    await docs.create({ projectId: b.id, type: 'text', name: 'b.txt', sizeBytes: 1, blob: new Blob(['y']) })
+    await docs.create({
+      projectId: a.id,
+      type: 'text',
+      name: 'a.txt',
+      sizeBytes: 1,
+      blob: new Blob(['x']),
+    })
+    await docs.create({
+      projectId: b.id,
+      type: 'text',
+      name: 'b.txt',
+      sizeBytes: 1,
+      blob: new Blob(['y']),
+    })
     await mistakes.addManual({
       projectId: a.id,
       question: 'QA',

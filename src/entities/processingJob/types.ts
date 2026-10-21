@@ -1,10 +1,4 @@
-export type ProcessingStage =
-  | 'queued'
-  | 'extracting'
-  | 'chunking'
-  | 'indexing'
-  | 'done'
-  | 'failed'
+export type ProcessingStage = 'queued' | 'extracting' | 'chunking' | 'indexing' | 'done' | 'failed'
 
 export interface ProcessingJob {
   id: string

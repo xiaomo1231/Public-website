@@ -91,9 +91,7 @@ function readyLesson(): SlideLesson {
 
 function stubService(overrides: Partial<SlideLessonService> = {}): SlideLessonService {
   return {
-    listSlideDocuments: vi.fn(async () => [
-      { document: DOCUMENT, slideCount: 10, ready: true },
-    ]),
+    listSlideDocuments: vi.fn(async () => [{ document: DOCUMENT, slideCount: 10, ready: true }]),
     buildIndex: vi.fn(async () => index()),
     resumeSlideNumber: vi.fn(async () => 1),
     getSlideContent: vi.fn(async (_d: string, n: number) => content(n)),
@@ -154,7 +152,12 @@ describe('SlideStudyPage', () => {
   })
 
   it('offers retry with the reason when the slide failed', async () => {
-    const failed: SlideLesson = { ...readyLesson(), status: 'failed', content: undefined, errorMessage: 'provider exploded' }
+    const failed: SlideLesson = {
+      ...readyLesson(),
+      status: 'failed',
+      content: undefined,
+      errorMessage: 'provider exploded',
+    }
     holder.service = stubService({ getLesson: vi.fn(async () => failed) })
     renderPage('/projects/p1/slides/d1/1')
 

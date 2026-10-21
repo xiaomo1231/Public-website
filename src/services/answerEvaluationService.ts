@@ -64,13 +64,21 @@ const FALSE_WORDS = new Set(['false', 'f', 'no', 'n', '0', '错误', '错', '否
 export function parseTrueFalse(value: unknown): boolean | null {
   if (typeof value === 'boolean') return value
   if (typeof value !== 'string') return null
-  const v = value.normalize('NFKC').trim().toLowerCase().replace(/[。.!！]$/, '')
+  const v = value
+    .normalize('NFKC')
+    .trim()
+    .toLowerCase()
+    .replace(/[。.!！]$/, '')
   if (TRUE_WORDS.has(v)) return true
   if (FALSE_WORDS.has(v)) return false
   return null
 }
 
-function evaluateOption(question: Question, userAnswer: string, isBoolean: boolean): QuestionEvaluation {
+function evaluateOption(
+  question: Question,
+  userAnswer: string,
+  isBoolean: boolean,
+): QuestionEvaluation {
   const expected = question.correctAnswer.trim()
   const given = userAnswer.trim()
 
@@ -120,7 +128,14 @@ function evaluateNumeric(question: Question, userAnswer: string): QuestionEvalua
   const given = userAnswer.trim()
   const expected = question.correctAnswer.trim()
   if (!given) {
-    return { isCorrect: false, method: 'numeric', confidence: 1, expected, normalizedUser: '', note: t('errors.emptyAnswer') }
+    return {
+      isCorrect: false,
+      method: 'numeric',
+      confidence: 1,
+      expected,
+      normalizedUser: '',
+      note: t('errors.emptyAnswer'),
+    }
   }
   if (question.unit) return evaluateQuantity(given, expected, question.unit)
   const result = numericEquivalent(given, expected)
@@ -138,7 +153,14 @@ function evaluateNumeric(question: Question, userAnswer: string): QuestionEvalua
       }
     }
     if (expectedNum === null) {
-      return { isCorrect: null, method: 'unverified', confidence: 0, expected, normalizedUser: given, note: UNVERIFIED_NOTE() }
+      return {
+        isCorrect: null,
+        method: 'unverified',
+        confidence: 0,
+        expected,
+        normalizedUser: given,
+        note: UNVERIFIED_NOTE(),
+      }
     }
   }
   return {
@@ -158,7 +180,12 @@ function evaluateNumeric(question: Question, userAnswer: string): QuestionEvalua
 function evaluateQuantity(given: string, expectedValue: string, unit: string): QuestionEvaluation {
   const expected = `${expectedValue} ${unit}`
   const result = compareQuantity(given, expectedValue, unit)
-  const base = { method: 'unit_conversion' as const, expected, normalizedUser: given, normalizedExpected: expected }
+  const base = {
+    method: 'unit_conversion' as const,
+    expected,
+    normalizedUser: given,
+    normalizedExpected: expected,
+  }
   switch (result.outcome) {
     case 'correct':
     case 'wrong-value':
@@ -167,13 +194,28 @@ function evaluateQuantity(given: string, expectedValue: string, unit: string): Q
         isCorrect: result.isCorrect,
         confidence: 0.99,
         ...(result.outcome === 'wrong-value' && result.convertedValue !== undefined
-          ? { note: t('question.unitConverted', { value: formatConverted(result.convertedValue), unit }) }
+          ? {
+              note: t('question.unitConverted', {
+                value: formatConverted(result.convertedValue),
+                unit,
+              }),
+            }
           : {}),
       }
     case 'missing-unit':
-      return { ...base, isCorrect: false, confidence: 1, note: t('question.unitMissing', { example: `${given} ${unit}` }) }
+      return {
+        ...base,
+        isCorrect: false,
+        confidence: 1,
+        note: t('question.unitMissing', { example: `${given} ${unit}` }),
+      }
     case 'wrong-dimension':
-      return { ...base, isCorrect: false, confidence: 0.99, note: t('question.unitWrongDimension', { unit }) }
+      return {
+        ...base,
+        isCorrect: false,
+        confidence: 0.99,
+        note: t('question.unitWrongDimension', { unit }),
+      }
     case 'unreadable-unit':
       return {
         ...base,
@@ -228,9 +270,21 @@ function evaluateCodeOutput(question: Question, userAnswer: string): QuestionEva
  */
 function evaluateChemEquation(question: Question, userAnswer: string): QuestionEvaluation {
   const expected = question.correctAnswer
-  const base = { method: 'chem_equation' as const, expected, normalizedUser: userAnswer.trim(), normalizedExpected: expected }
+  const base = {
+    method: 'chem_equation' as const,
+    expected,
+    normalizedUser: userAnswer.trim(),
+    normalizedExpected: expected,
+  }
   const reference = parseEquation(expected)
-  if (!reference.ok) return { ...base, isCorrect: null, method: 'unverified', confidence: 0, note: UNVERIFIED_NOTE() }
+  if (!reference.ok)
+    return {
+      ...base,
+      isCorrect: null,
+      method: 'unverified',
+      confidence: 0,
+      note: UNVERIFIED_NOTE(),
+    }
   const result = compareEquations(userAnswer, reference.equation)
   switch (result.verdict) {
     case 'correct':
@@ -251,9 +305,13 @@ function evaluateChemEquation(question: Question, userAnswer: string): QuestionE
         isCorrect: false,
         confidence: 1,
         note: [
-          result.missing.length ? t('chemEquation.missing', { species: result.missing.join(', ') }) : '',
+          result.missing.length
+            ? t('chemEquation.missing', { species: result.missing.join(', ') })
+            : '',
           result.extra.length ? t('chemEquation.extra', { species: result.extra.join(', ') }) : '',
-        ].filter(Boolean).join(' '),
+        ]
+          .filter(Boolean)
+          .join(' '),
       }
     case 'unbalanced':
       return {
@@ -295,12 +353,20 @@ function evaluateChemEquation(question: Question, userAnswer: string): QuestionE
 function evaluateMultipleSelect(question: Question, userAnswer: string): QuestionEvaluation {
   const options = question.options ?? []
   const correct = new Set(options.filter((o) => o.isCorrect).map((o) => o.id))
-  const chosen = new Set(userAnswer.split(',').map((id) => id.trim()).filter((id) => options.some((o) => o.id === id)))
+  const chosen = new Set(
+    userAnswer
+      .split(',')
+      .map((id) => id.trim())
+      .filter((id) => options.some((o) => o.id === id)),
+  )
   const right = [...chosen].filter((id) => correct.has(id)).length
   const wrong = chosen.size - right
   const total = correct.size
   const letters = (ids: Set<string>) =>
-    options.map((o, i) => (ids.has(o.id) ? optionLetter(i) : '')).filter(Boolean).join('')
+    options
+      .map((o, i) => (ids.has(o.id) ? optionLetter(i) : ''))
+      .filter(Boolean)
+      .join('')
   return {
     isCorrect: total > 0 ? right === total && wrong === 0 : null,
     method: 'multi_select',
@@ -332,7 +398,15 @@ function evaluateMatching(question: Question, userAnswer: string): QuestionEvalu
     expected: expectedAnswerText(question),
     normalizedUser: userLetters.map((letter, i) => `${i + 1}${letter}`).join(' '),
     normalizedExpected: expectedLabels
-      .map((label, i) => `${i + 1}${optionLetter(Math.max(0, options.findIndex((o) => o.label === label)))}`)
+      .map(
+        (label, i) =>
+          `${i + 1}${optionLetter(
+            Math.max(
+              0,
+              options.findIndex((o) => o.label === label),
+            ),
+          )}`,
+      )
       .join(' '),
   }
 }
@@ -355,7 +429,11 @@ export function blankAccepted(given: string, accepted: string[]): boolean {
   if (!inner) return false
   const outside = normalizeTerm(given.normalize('NFKC').replace(inner[0], ''))
   const inside = normalizeTerm(inner[1] ?? '')
-  return (targets.has(outside) || !outside) && (targets.has(inside) || !inside) && Boolean(outside || inside)
+  return (
+    (targets.has(outside) || !outside) &&
+    (targets.has(inside) || !inside) &&
+    Boolean(outside || inside)
+  )
 }
 
 /** Fill-blank: each blank against its accepted answers; credit per blank. */

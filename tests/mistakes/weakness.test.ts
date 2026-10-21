@@ -7,7 +7,10 @@ import { MasteryService } from '@/services/masteryService'
 import { ProjectService } from '@/services/projectService'
 import type { Mistake } from '@/entities/mistake/types'
 
-function mistake(knowledgePoint: string, opts: { status?: Mistake['status']; createdAt?: number } = {}): Mistake {
+function mistake(
+  knowledgePoint: string,
+  opts: { status?: Mistake['status']; createdAt?: number } = {},
+): Mistake {
   const now = opts.createdAt ?? Date.now()
   return {
     id: crypto.randomUUID(),
@@ -36,7 +39,14 @@ describe('buildWeaknessAreas', () => {
 
   it('ranks knowledge points by mistake count', () => {
     const areas = buildWeaknessAreas(
-      [mistake('Chain Rule'), mistake('Chain Rule'), mistake('Chain Rule'), mistake('Integration'), mistake('Integration'), mistake('Limits')],
+      [
+        mistake('Chain Rule'),
+        mistake('Chain Rule'),
+        mistake('Chain Rule'),
+        mistake('Integration'),
+        mistake('Integration'),
+        mistake('Limits'),
+      ],
       [],
     )
     expect(areas[0]!.knowledgePoint).toBe('Chain Rule')
@@ -47,7 +57,12 @@ describe('buildWeaknessAreas', () => {
 
   it('weights active mistakes more than understood ones', () => {
     const areas = buildWeaknessAreas(
-      [mistake('A', { status: 'active' }), mistake('A', { status: 'active' }), mistake('B', { status: 'understood' }), mistake('B', { status: 'understood' })],
+      [
+        mistake('A', { status: 'active' }),
+        mistake('A', { status: 'active' }),
+        mistake('B', { status: 'understood' }),
+        mistake('B', { status: 'understood' }),
+      ],
       [],
     )
     const a = areas.find((x) => x.knowledgePoint === 'A')!
@@ -86,7 +101,10 @@ describe('buildWeaknessAreas', () => {
   })
 
   it('returns structured counts (the panel words them in the UI language)', () => {
-    const areas = buildWeaknessAreas([mistake('Chain Rule'), mistake('Chain Rule')], [{ knowledgePoint: 'Chain Rule', mastery: 0.4, attempts: 3 }])
+    const areas = buildWeaknessAreas(
+      [mistake('Chain Rule'), mistake('Chain Rule')],
+      [{ knowledgePoint: 'Chain Rule', mastery: 0.4, attempts: 3 }],
+    )
     expect(areas[0]).toMatchObject({ mistakeCount: 2, mastery: 0.4 })
     expect(areas[0]!.recentMistakeCount).toBeGreaterThanOrEqual(0)
     expect(areas[0]).not.toHaveProperty('reason')
@@ -120,9 +138,27 @@ describe('WeaknessService', () => {
 
   it('analyses a project end to end', async () => {
     const p = await projects.create({ name: 'P', subject: 'calculus' })
-    await mistakes.addManual({ projectId: p.id, question: 'Q1', studentAnswer: 'a', correctAnswer: 'b', knowledgePoint: 'Chain Rule' })
-    await mistakes.addManual({ projectId: p.id, question: 'Q2', studentAnswer: 'a', correctAnswer: 'b', knowledgePoint: 'Chain Rule' })
-    await mistakes.addManual({ projectId: p.id, question: 'Q3', studentAnswer: 'a', correctAnswer: 'b', knowledgePoint: 'Limits' })
+    await mistakes.addManual({
+      projectId: p.id,
+      question: 'Q1',
+      studentAnswer: 'a',
+      correctAnswer: 'b',
+      knowledgePoint: 'Chain Rule',
+    })
+    await mistakes.addManual({
+      projectId: p.id,
+      question: 'Q2',
+      studentAnswer: 'a',
+      correctAnswer: 'b',
+      knowledgePoint: 'Chain Rule',
+    })
+    await mistakes.addManual({
+      projectId: p.id,
+      question: 'Q3',
+      studentAnswer: 'a',
+      correctAnswer: 'b',
+      knowledgePoint: 'Limits',
+    })
     await mastery.record({
       id: 'x',
       projectId: p.id,
@@ -144,8 +180,20 @@ describe('WeaknessService', () => {
 
   it('returns weak knowledge points weakest-first', async () => {
     const p = await projects.create({ name: 'P', subject: 'calculus' })
-    await mistakes.addManual({ projectId: p.id, question: 'Q', studentAnswer: 'a', correctAnswer: 'b', knowledgePoint: 'Chain Rule' })
-    await mistakes.addManual({ projectId: p.id, question: 'Q', studentAnswer: 'a', correctAnswer: 'b', knowledgePoint: 'Limits' })
+    await mistakes.addManual({
+      projectId: p.id,
+      question: 'Q',
+      studentAnswer: 'a',
+      correctAnswer: 'b',
+      knowledgePoint: 'Chain Rule',
+    })
+    await mistakes.addManual({
+      projectId: p.id,
+      question: 'Q',
+      studentAnswer: 'a',
+      correctAnswer: 'b',
+      knowledgePoint: 'Limits',
+    })
     const weak = await service.weakKnowledgePoints(p.id)
     expect(weak).toContain('Chain Rule')
     expect(weak).toContain('Limits')
@@ -161,7 +209,13 @@ describe('WeaknessService', () => {
   it('isolates weakness data between projects', async () => {
     const p1 = await projects.create({ name: 'P1', subject: 'calculus' })
     const p2 = await projects.create({ name: 'P2', subject: 'physics' })
-    await mistakes.addManual({ projectId: p1.id, question: 'Q', studentAnswer: 'a', correctAnswer: 'b', knowledgePoint: 'KP' })
+    await mistakes.addManual({
+      projectId: p1.id,
+      question: 'Q',
+      studentAnswer: 'a',
+      correctAnswer: 'b',
+      knowledgePoint: 'KP',
+    })
     expect((await service.analyze(p1.id)).totalMistakes).toBe(1)
     expect((await service.analyze(p2.id)).totalMistakes).toBe(0)
   })
@@ -169,16 +223,25 @@ describe('WeaknessService', () => {
 
 describe('buildWeaknessAreas review fixes', () => {
   it('treats a mastery row with no graded attempts as unknown', () => {
-    const [area] = buildWeaknessAreas([mistake('Limits')], [{ knowledgePoint: 'Limits', mastery: 0, attempts: 0 }])
+    const [area] = buildWeaknessAreas(
+      [mistake('Limits')],
+      [{ knowledgePoint: 'Limits', mastery: 0, attempts: 0 }],
+    )
     expect(area!.mastery).toBeNull()
-    const [graded] = buildWeaknessAreas([mistake('Limits')], [{ knowledgePoint: 'Limits', mastery: 0, attempts: 2 }])
+    const [graded] = buildWeaknessAreas(
+      [mistake('Limits')],
+      [{ knowledgePoint: 'Limits', mastery: 0, attempts: 2 }],
+    )
     expect(area!.weaknessScore).toBeLessThan(graded!.weaknessScore)
   })
 
   it('counts recency from the latest wrong answer, not the creation time', () => {
     const now = Date.now()
     const old = now - 90 * 24 * 60 * 60 * 1000
-    const [area] = buildWeaknessAreas([{ ...mistake('Limits', { createdAt: old }), lastOccurredAt: now }], [])
+    const [area] = buildWeaknessAreas(
+      [{ ...mistake('Limits', { createdAt: old }), lastOccurredAt: now }],
+      [],
+    )
     expect(area!.recentMistakeCount).toBe(1)
   })
 })

@@ -20,13 +20,21 @@ export class ReferenceImageRepository {
   }
 
   async listByTopic(projectId: string, topicId: string): Promise<ReferenceImage[]> {
-    return this.table().where('[projectId+topicId]').equals([projectId, topicId]).sortBy('createdAt')
+    return this.table()
+      .where('[projectId+topicId]')
+      .equals([projectId, topicId])
+      .sortBy('createdAt')
   }
 
   async save(image: ReferenceImage, bytes: ArrayBuffer): Promise<void> {
     await this.db.transaction('rw', this.table(), this.blobTable(), async () => {
       await this.table().put(image)
-      await this.blobTable().put({ id: image.id, projectId: image.projectId, bytes, mimeType: image.mimeType })
+      await this.blobTable().put({
+        id: image.id,
+        projectId: image.projectId,
+        bytes,
+        mimeType: image.mimeType,
+      })
     })
   }
 

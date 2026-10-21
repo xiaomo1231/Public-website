@@ -128,7 +128,9 @@ describe('DashboardPage — with projects', () => {
     }
     renderDashboard()
 
-    expect(screen.getByText(/2 projects · 2 homework questions open · 4 mistakes to review/)).toBeInTheDocument()
+    expect(
+      screen.getByText(/2 projects · 2 homework questions open · 4 mistakes to review/),
+    ).toBeInTheDocument()
     expect(screen.getByRole('link', { name: /Sheet 3/ })).toHaveAttribute(
       'href',
       '/projects/p1/homework/s1',

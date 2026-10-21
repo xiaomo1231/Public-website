@@ -89,7 +89,8 @@ export class MistakeAnalysisService {
 
   private async runAnalysis(mistake: Mistake, opts: AnalysisOptions): Promise<MistakeAnalysis> {
     const analysis = this.analyses ? await this.analyses.getByProject(mistake.projectId) : undefined
-    const language: AnalysisLanguage = opts.language ?? (await contentLanguage(analysis?.language ?? DEFAULT_LANGUAGE))
+    const language: AnalysisLanguage =
+      opts.language ?? (await contentLanguage(analysis?.language ?? DEFAULT_LANGUAGE))
 
     const sources =
       this.chunks && analysis
@@ -101,10 +102,17 @@ export class MistakeAnalysisService {
           })
         : []
 
-    const recent = await this.mistakes.recentForKnowledgePoint(mistake.projectId, mistake.knowledgePoint, 5)
+    const recent = await this.mistakes.recentForKnowledgePoint(
+      mistake.projectId,
+      mistake.knowledgePoint,
+      5,
+    )
     const recentMistakes = recent
       .filter((m) => m.id !== mistake.id)
-      .map((m) => `Q: ${m.question.slice(0, 120)} | answered: ${m.studentAnswer.slice(0, 60)} | expected: ${m.correctAnswer.slice(0, 60)}`)
+      .map(
+        (m) =>
+          `Q: ${m.question.slice(0, 120)} | answered: ${m.studentAnswer.slice(0, 60)} | expected: ${m.correctAnswer.slice(0, 60)}`,
+      )
 
     const messages: ChatMessage[] = [
       {
@@ -143,11 +151,15 @@ export class MistakeAnalysisService {
  * `unknown`; missing fields get safe, neutral defaults so the UI never
  * renders a blank or a judgemental string.
  */
-export function normalizeAnalysis(raw: Partial<MistakeAnalyzerOutput> | null | undefined): MistakeAnalysis {
+export function normalizeAnalysis(
+  raw: Partial<MistakeAnalyzerOutput> | null | undefined,
+): MistakeAnalysis {
   const type = (raw?.mistakeType ?? 'unknown') as MistakeType
   const safeType: MistakeType = MISTAKE_TYPES.includes(type) ? type : 'unknown'
   const cause =
-    typeof raw?.possibleCause === 'string' && raw.possibleCause.trim() ? raw.possibleCause.trim() : fallbackCause()
+    typeof raw?.possibleCause === 'string' && raw.possibleCause.trim()
+      ? raw.possibleCause.trim()
+      : fallbackCause()
 
   return {
     whereWrong: str(raw?.whereWrong, t('mistakeAnalysis.fallbackWhereWrong')),
@@ -164,7 +176,9 @@ export function normalizeAnalysis(raw: Partial<MistakeAnalyzerOutput> | null | u
         )
       : [],
     shouldPracticeMore: Boolean(raw?.shouldPracticeMore),
-    ...(raw?.similarExample && typeof raw.similarExample.prompt === 'string' && raw.similarExample.prompt.trim()
+    ...(raw?.similarExample &&
+    typeof raw.similarExample.prompt === 'string' &&
+    raw.similarExample.prompt.trim()
       ? {
           similarExample: {
             prompt: raw.similarExample.prompt,

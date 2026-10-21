@@ -10,13 +10,7 @@ import { UploadCancelledError } from './uploadPipeline'
  * the document processing pipeline rather than inventing a parallel one.
  */
 export type UploadStatus =
-  | 'queued'
-  | 'uploading'
-  | 'processing'
-  | 'completed'
-  | 'failed'
-  | 'cancelled'
-  | 'skipped'
+  'queued' | 'uploading' | 'processing' | 'completed' | 'failed' | 'cancelled' | 'skipped'
 
 export type FileIssue = 'unsupported' | 'too-large' | 'duplicate'
 
@@ -280,7 +274,12 @@ export async function runBatchQueue(
         })
       } catch (err) {
         if (err instanceof UploadCancelledError) {
-          onUpdate(item.id, { status: 'cancelled', error: undefined, phase: undefined, progress: undefined })
+          onUpdate(item.id, {
+            status: 'cancelled',
+            error: undefined,
+            phase: undefined,
+            progress: undefined,
+          })
         } else {
           onUpdate(item.id, {
             status: 'failed',
@@ -301,7 +300,13 @@ export async function runBatchQueue(
 export function retryableItems(items: UploadQueueItem[]): UploadQueueItem[] {
   return items.map((item) =>
     item.status === 'failed'
-      ? { ...item, status: 'queued' as const, error: undefined, progress: undefined, phase: undefined }
+      ? {
+          ...item,
+          status: 'queued' as const,
+          error: undefined,
+          progress: undefined,
+          phase: undefined,
+        }
       : item,
   )
 }

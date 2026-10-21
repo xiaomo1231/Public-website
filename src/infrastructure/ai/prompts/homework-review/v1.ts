@@ -35,24 +35,39 @@ export function buildUserPrompt(input: HomeworkReviewInput): string {
       ? untrustedContentWrapper('CURRENT QUESTION SOURCE PASSAGES', input.sourceText)
       : '',
     input.professorAnswer?.trim()
-      ? untrustedContentWrapper('CONFIRMED PROFESSOR ANSWER FOR THIS QUESTION', input.professorAnswer)
+      ? untrustedContentWrapper(
+          'CONFIRMED PROFESSOR ANSWER FOR THIS QUESTION',
+          input.professorAnswer,
+        )
       : '',
     input.previousSolution?.trim()
       ? untrustedContentWrapper('PREVIOUS AI WORKED SOLUTION (UNVERIFIED)', input.previousSolution)
       : '',
     'Return JSON only.',
-  ].filter(Boolean).join('\n')
+  ]
+    .filter(Boolean)
+    .join('\n')
 }
 
 export type NormalizedHomeworkReview =
-  | { status: 'ready'; questionMeaning: string; knowledgePoints: string[]; method: string; steps: string[]; explanation: string; interpretation: string; check: string }
+  | {
+      status: 'ready'
+      questionMeaning: string
+      knowledgePoints: string[]
+      method: string
+      steps: string[]
+      explanation: string
+      interpretation: string
+      check: string
+    }
   | { status: 'insufficient'; reason: string }
 
 /** Reject partial output rather than displaying a plausible but incomplete derivation. */
 export function normalizeReviewOutput(raw: unknown): NormalizedHomeworkReview | null {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null
   const row = raw as Record<string, unknown>
-  const sentence = (value: unknown): string => typeof value === 'string' ? value.trim().slice(0, 12_000) : ''
+  const sentence = (value: unknown): string =>
+    typeof value === 'string' ? value.trim().slice(0, 12_000) : ''
   if (row.status === 'insufficient') {
     const reason = sentence(row.reason)
     return reason ? { status: 'insufficient', reason } : null
@@ -64,10 +79,27 @@ export function normalizeReviewOutput(raw: unknown): NormalizedHomeworkReview | 
   const interpretation = sentence(row.interpretation)
   const check = sentence(row.check)
   const knowledgePoints = Array.isArray(row.knowledgePoints)
-    ? row.knowledgePoints.map(sentence).filter(Boolean).slice(0, 8) : []
-  const steps = Array.isArray(row.steps)
-    ? row.steps.map(sentence).filter(Boolean).slice(0, 16) : []
-  if (!questionMeaning || !method || !explanation || !interpretation || !check ||
-    knowledgePoints.length === 0 || steps.length === 0) return null
-  return { status: 'ready', questionMeaning, knowledgePoints, method, steps, explanation, interpretation, check }
+    ? row.knowledgePoints.map(sentence).filter(Boolean).slice(0, 8)
+    : []
+  const steps = Array.isArray(row.steps) ? row.steps.map(sentence).filter(Boolean).slice(0, 16) : []
+  if (
+    !questionMeaning ||
+    !method ||
+    !explanation ||
+    !interpretation ||
+    !check ||
+    knowledgePoints.length === 0 ||
+    steps.length === 0
+  )
+    return null
+  return {
+    status: 'ready',
+    questionMeaning,
+    knowledgePoints,
+    method,
+    steps,
+    explanation,
+    interpretation,
+    check,
+  }
 }

@@ -1,7 +1,12 @@
 import { Fragment, useMemo, type ReactNode } from 'react'
 import { cn } from '@/shared/lib/utils'
 import { splitMathSegments, splitParagraphs } from '@/shared/lib/mathText'
-import { splitInline, type InlineSpan, type MarkdownBlock, type TableBlock } from '@/shared/lib/markdownText'
+import {
+  splitInline,
+  type InlineSpan,
+  type MarkdownBlock,
+  type TableBlock,
+} from '@/shared/lib/markdownText'
 import type { TableAlignment } from '@/shared/lib/markdownTable'
 import { parseLessonSections, type LessonSection } from '@/shared/lib/lessonDocument'
 import { useTranslation } from '@/i18n'
@@ -68,7 +73,7 @@ function Inline({ spans }: { spans: InlineSpan[] }): JSX.Element {
             return (
               <code
                 key={i}
-                className="rounded bg-muted px-1 py-0.5 font-mono text-[0.9em] break-words"
+                className="break-words rounded bg-muted px-1 py-0.5 font-mono text-[0.9em]"
               >
                 {span.value}
               </code>
@@ -90,13 +95,9 @@ function Block({
 }): JSX.Element {
   switch (block.kind) {
     case 'heading': {
-      const Tag = (block.level === 1
-        ? 'h1'
-        : block.level === 2
-          ? 'h2'
-          : block.level === 3
-            ? 'h3'
-            : 'h4') as 'h1' | 'h2' | 'h3' | 'h4'
+      const Tag = (
+        block.level === 1 ? 'h1' : block.level === 2 ? 'h2' : block.level === 3 ? 'h3' : 'h4'
+      ) as 'h1' | 'h2' | 'h3' | 'h4'
       return (
         <Tag
           className={cn(
@@ -149,7 +150,7 @@ function Block({
       return (
         <p
           className={cn(
-            'whitespace-pre-wrap [overflow-wrap:anywhere] text-foreground',
+            'whitespace-pre-wrap text-foreground [overflow-wrap:anywhere]',
             paragraphClassName,
           )}
         >

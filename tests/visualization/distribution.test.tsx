@@ -89,7 +89,12 @@ describe('distribution_2d normalisation', () => {
 
   it('snaps a discrete interval to whole numbers', () => {
     const { visualizations } = normalizeVisualizations([
-      { type: 'distribution_2d', family: 'binomial', params: { n: 10, p: 0.4 }, interval: { from: 2.5, to: 6.5 } },
+      {
+        type: 'distribution_2d',
+        family: 'binomial',
+        params: { n: 10, p: 0.4 },
+        interval: { from: 2.5, to: 6.5 },
+      },
     ])
     expect((visualizations[0] as DistributionVisualization).interval).toEqual({ from: 3, to: 6 })
   })

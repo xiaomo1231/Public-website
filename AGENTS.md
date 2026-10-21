@@ -126,22 +126,22 @@ Dexie
 
 ## 4. 数据模型（按域）
 
-| 域 | 实体 |
-| --- | --- |
-| 身份/配置 | `UserProfile` `AISettingsRow` `InviteKeyRecord` `CryptoKeyRow` |
-| 项目 | `Project` |
-| 内容 | `Document` `DocumentBlobRow` `DocumentChunk` `ProcessingJob` |
-| 知识结构 | `CourseAnalysis` `Topic` `Concept` `Formula` `CourseSymbol` `Example` `CourseExercise` `Prerequisite` |
-| 教材结构 | `CourseStructure` `CourseStructureNode`（章节唯一真相，扁平 + `parentId`） |
-| 教学 | `TutorLesson`（缓存课时）`TutorSession`（交互会话）`TranslationEntry` |
-| 上下文 | `CourseContext`（教授教学风格、班级进度、note/lecture 关联） |
-| 视觉 | `VisualSource` `VisualSourceImage` `ReferenceImage` `ReferenceImageBlobRow`（联网参考图片缓存，Dexie v14） |
-| 教授练习 | `PracticeSet` `PracticeQuestion` `PracticeAttempt` |
-| 练习 | `Question` `QuestionAttempt` `Quiz` `KnowledgeMastery` |
-| 复习 | `ReviewCard`（复习卡片 / 间隔重复，Dexie v15） |
-| 单词 | `VocabCard` `VocabBook` `VocabEntry` `VocabReview`（背单词，Dexie v16；**进度全局、不带 projectId**，课程词书带 `projectId`） |
-| 作业完整讲解 | `HomeworkWalkthrough`（每份作业 × 语言一行，分部分缓存）`WalkthroughNote`（保存的划词问答，Dexie v17） |
-| 错误 | `Mistake` |
+| 域           | 实体                                                                                                                          |
+| ------------ | ----------------------------------------------------------------------------------------------------------------------------- |
+| 身份/配置    | `UserProfile` `AISettingsRow` `InviteKeyRecord` `CryptoKeyRow`                                                                |
+| 项目         | `Project`                                                                                                                     |
+| 内容         | `Document` `DocumentBlobRow` `DocumentChunk` `ProcessingJob`                                                                  |
+| 知识结构     | `CourseAnalysis` `Topic` `Concept` `Formula` `CourseSymbol` `Example` `CourseExercise` `Prerequisite`                         |
+| 教材结构     | `CourseStructure` `CourseStructureNode`（章节唯一真相，扁平 + `parentId`）                                                    |
+| 教学         | `TutorLesson`（缓存课时）`TutorSession`（交互会话）`TranslationEntry`                                                         |
+| 上下文       | `CourseContext`（教授教学风格、班级进度、note/lecture 关联）                                                                  |
+| 视觉         | `VisualSource` `VisualSourceImage` `ReferenceImage` `ReferenceImageBlobRow`（联网参考图片缓存，Dexie v14）                    |
+| 教授练习     | `PracticeSet` `PracticeQuestion` `PracticeAttempt`                                                                            |
+| 练习         | `Question` `QuestionAttempt` `Quiz` `KnowledgeMastery`                                                                        |
+| 复习         | `ReviewCard`（复习卡片 / 间隔重复，Dexie v15）                                                                                |
+| 单词         | `VocabCard` `VocabBook` `VocabEntry` `VocabReview`（背单词，Dexie v16；**进度全局、不带 projectId**，课程词书带 `projectId`） |
+| 作业完整讲解 | `HomeworkWalkthrough`（每份作业 × 语言一行，分部分缓存）`WalkthroughNote`（保存的划词问答，Dexie v17）                        |
+| 错误         | `Mistake`                                                                                                                     |
 
 关键约定：
 
@@ -196,14 +196,14 @@ Upload → validation → (blob 落 IndexedDB `documentBlobs`) → processingJob
 
 四个版本概念**不可合并**：
 
-| 概念 | 含义 | 存放 |
-| --- | --- | --- |
-| Dexie `verno` | 数据库结构 | `infrastructure/db/database.ts` |
-| `CourseAnalysis.promptVersion` | 产出该结果的 prompt 版本 | 分析行 |
-| `CourseAnalysis.schemaVersion` | 分析结果的**数据形状**版本（`COURSE_ANALYSIS_SCHEMA_VERSION`） | 分析行 |
-| `CourseStructure.version` | 教材结构修订号（粗粒度） | 结构行 |
-| `CourseAnalysis.derivedFromStructureVersion/Hash` | 该结果派生自哪个结构修订 | 分析行 |
-| `CourseAnalysis.sourceHash` | 分析**输入内容**指纹 | 分析行 |
+| 概念                                              | 含义                                                           | 存放                            |
+| ------------------------------------------------- | -------------------------------------------------------------- | ------------------------------- |
+| Dexie `verno`                                     | 数据库结构                                                     | `infrastructure/db/database.ts` |
+| `CourseAnalysis.promptVersion`                    | 产出该结果的 prompt 版本                                       | 分析行                          |
+| `CourseAnalysis.schemaVersion`                    | 分析结果的**数据形状**版本（`COURSE_ANALYSIS_SCHEMA_VERSION`） | 分析行                          |
+| `CourseStructure.version`                         | 教材结构修订号（粗粒度）                                       | 结构行                          |
+| `CourseAnalysis.derivedFromStructureVersion/Hash` | 该结果派生自哪个结构修订                                       | 分析行                          |
+| `CourseAnalysis.sourceHash`                       | 分析**输入内容**指纹                                           | 分析行                          |
 
 - `sourceHash` 是**内容指纹**（chunk 文本 + order + 页码 + chapterId/sectionId + document id/name/size），**不含 `processedAt`、不含 chunk id**。因此「原样重处理」不会误判为内容变化。
 - freshness 判定（`evaluateFreshness`，纯函数）只看：`sourceHash` / `promptVersion` / `schemaVersion` / 结构（优先 `structureHash`，旧行回退 `structureVersion`）/ `status`。期望的 `promptVersion` 按项目科目计算（见 Prompts「科目画像」），所以**改科目 ⇒ `prompt-changed`**。**明暗模式、配色主题、UI 语言、Class Progress、练习记录都不参与。**
@@ -321,7 +321,6 @@ Topic
 
 ---
 
-
 ### 背单词（`/vocab`）
 
 - **数据**：`scripts/build-vocab.mjs` 从 [ECDICT](https://github.com/skywind3000/ECDICT)（MIT）下载到 `.cache/ecdict/`（已 gitignore），生成 `public/vocab/{dictionary.json, common.json, roots.json, LICENSE-ECDICT.txt}`。`dictionary.json` 只保留带考试标签的 14,912 词，每词 `[word, phonetic, meanings[], mask, rank, exchange]`，按词频排序；`mask` 位序 = `TAG_ORDER`（`zk gk cet4 cet6 ky toefl ielts gre`）；释义去掉 `[网络]` / `[计]` 义项（含 `art. [计] …` 写法）。`common.json` = 词频前 6000 及其变形（课程词汇跳过它们）。重跑脚本即可重建；运行时由 `infrastructure/vocab/wordData.ts` fetch。**不要**改用 qwerty-learner / TypeWords（GPL）、Earthworm（AGPL）或无许可证的词表。
@@ -348,20 +347,20 @@ Topic
 
 ## 7. 路由与目录
 
-| 路由 | 页面 |
-| --- | --- |
-| `/login` `/invite` | 邀请码门（本地校验） |
-| `/dashboard` | 总览 |
-| `/projects` `/projects/:id` | 项目列表 / 详情 |
-| `/projects/:id/tutor/:topicId` | **课时页**（阅读，缓存） |
-| `/projects/:id/tutor/:topicId/interactive` | **交互导师**（提问/作答/提示） |
-| `/projects/:id/history` | 对话记录 |
-| `/projects/:id/quiz` `/quiz/:quizId` `/result` | 测验 |
-| `/projects/:id/mastery` `/mistakes` | 掌握度 / 错题本 |
-| `/projects/:id/cards` | 复习卡片（间隔重复） |
-| `/vocab` | 背单词（全局，侧栏「单词」） |
-| `/projects/:id/documents/:did` | 文档详情 |
-| `/settings` | AI 设置 / 数据管理 |
+| 路由                                           | 页面                           |
+| ---------------------------------------------- | ------------------------------ |
+| `/login` `/invite`                             | 邀请码门（本地校验）           |
+| `/dashboard`                                   | 总览                           |
+| `/projects` `/projects/:id`                    | 项目列表 / 详情                |
+| `/projects/:id/tutor/:topicId`                 | **课时页**（阅读，缓存）       |
+| `/projects/:id/tutor/:topicId/interactive`     | **交互导师**（提问/作答/提示） |
+| `/projects/:id/history`                        | 对话记录                       |
+| `/projects/:id/quiz` `/quiz/:quizId` `/result` | 测验                           |
+| `/projects/:id/mastery` `/mistakes`            | 掌握度 / 错题本                |
+| `/projects/:id/cards`                          | 复习卡片（间隔重复）           |
+| `/vocab`                                       | 背单词（全局，侧栏「单词」）   |
+| `/projects/:id/documents/:did`                 | 文档详情                       |
+| `/settings`                                    | AI 设置 / 数据管理             |
 
 响应式（课时页）：**讲义风格** ≥1200px 为「页边目录（sticky）| ~680px 阅读栏 | 旁注（公式符号等，sticky）」三列，<1200px 目录在课时上方、旁注收进课时下方的折叠区；**精密实验室风格** 为一个细线面板，≥lg「目录 | 正文」，≥xl 再加右侧检查栏（248px），更窄时同样收进折叠区。旧的底部 Sheet 公式面板已移除。只做电脑与平板布局。
 
@@ -385,15 +384,15 @@ docs/             architecture.md
 
 ## 8. 常用命令
 
-| 命令 | 作用 |
-| --- | --- |
-| `npm run dev` | 开发服务器（**固定端口 5173**，IndexedDB 按 origin 隔离，勿换地址） |
-| `npm run build` | 类型检查 + 生产构建 |
-| `npm run typecheck` | `tsc -b --noEmit` |
-| `npm run lint` | ESLint |
-| `npm run format` | Prettier |
-| `npm test` | Vitest（`vitest run`） |
-| `npm run test:coverage` | 覆盖率 |
+| 命令                    | 作用                                                                |
+| ----------------------- | ------------------------------------------------------------------- |
+| `npm run dev`           | 开发服务器（**固定端口 5173**，IndexedDB 按 origin 隔离，勿换地址） |
+| `npm run build`         | 类型检查 + 生产构建                                                 |
+| `npm run typecheck`     | `tsc -b --noEmit`                                                   |
+| `npm run lint`          | ESLint                                                              |
+| `npm run format`        | Prettier                                                            |
+| `npm test`              | Vitest（`vitest run`）                                              |
+| `npm run test:coverage` | 覆盖率                                                              |
 
 完成任务后**必须**跑：`npm run lint` + `npm run typecheck` + `npm test`。
 
@@ -403,50 +402,50 @@ docs/             architecture.md
 
 ### 阶段进度
 
-| 阶段 | 内容 | 状态 |
-| --- | --- | --- |
-| 1 | 基础骨架 | 已交付 |
-| 2 | 内容库（PDF/DOCX/PPTX/OCR/文本 + 分块） | 已交付 |
-| 3 | AI Provider · 课程分析 · 导师 · 翻译 | 已交付 |
-| 4 | Quiz · 自适应难度 · 掌握度 | 已交付 |
-| 5 | 错题本 · 薄弱点 · 复习 | 已交付 |
-| 6 | 知识索引 + 检索（RAG） | 未开始 |
-| 7 | 课时化导师 + 公式符号 + KaTeX 打磨 | 已交付（v0.2.4） |
-| 7b | 教材章节结构 + 课程内容持久化 / freshness | 已交付（v0.2.5） |
-| 7c | 配色主题（Color Themes，4 套）+ 可访问性 | 已交付（v0.2.5） |
-| 7d | 章节级增量内容生成（依赖模型 + 稳定 Topic 身份 + 局部提交） | 已交付（v0.2.6） |
-| 7e | 课时级数学可视化（线性/非线性 + 向量/图 + 线性变换/维恩图/特征值 + 教学区块放置） | 已交付（v0.2.6） |
-| 7f | 划词浮层定位修复（真实尺寸 flip/clamp + ResizeObserver/visualViewport） | 已交付（v0.2.6） |
-| 7g | 学习流程导航与连续性 + 无障碍 / 错误态 | 已交付（v0.2.8） |
-| 7h | Precision Lab 视觉方向（蓝图网格 + 仪表细节，四套配色） | 已交付（v0.2.8）；**已被 7z.6 的「精密实验室」界面风格取代** |
-| 7i | 首页滚动修复 + 可交互函数图像（一次/二次/三次/正弦） | 已交付（v0.2.8）；**首页函数图像已在 7z.7 删除** |
-| 7j | 作业讲解（题目 / 提示 / 解法 / 问答 + 归档 / 恢复） | 已交付（v0.2.9） |
-| 7k | 作业讲解加固（识别可靠性 / 来源校验 / 进度 / 阅读原图）+ 项目文件管理 | 已交付（v0.3.1） |
-| 7l | 按幻灯片学习（PPT/PPTX 逐页导师，Dexie v13） | 已交付（v0.3.1） |
-| 7m | 作业作答双栏布局 + 桌面侧栏可收起 + 提示/回复公式渲染 | 已交付（v0.3.1） |
-| 7n | 作业讲解关联教授答案并用于复习 / 做题 | 已交付（v0.3.1） |
-| 7o | 教授答案对应修复（编号解析 / 手动划分 / 一对一校验）+ PDF 数学排版 + 讲解生成可靠性 +「留给学生」识别 | 已交付（v0.3.4） |
-| 7p | 作业复习完整教学讲解 + 「检查答案」+ 最后检查排版 + 逐题问答常驻 + 浏览器语音输入 | 已交付（v0.3.4） |
-| 7q | 线性代数作业逐题六步学习引导试点 + 题面向量箭头 / 上标显示修复 | 已交付（v0.3.4） |
-| 7r | 界面动效 + 首页重设计 + 风格统一（圆角尺度） | 已交付（v0.3.9） |
-| 7s | 学科适配：科目画像（9 科，含生物）、科目推断、物理单位判分、代码输出题、概率分布图、化学 mhchem | 已交付（v0.3.9） |
-| 7t | 符号键盘 + 实时识别预览；简答题按得分点计分（测验 / 教授练习 / 导师）；化学方程式题、排序题 | 已交付（v0.3.9） |
-| 7u | 化学 / 生物配图三层：课程原图优先、本地计算的六种图（schema v7）、联网参考图片（Dexie v14，默认关闭） | 已交付（v0.3.9） |
-| 7v | 大学深度：转录方向与起始密码子、有机方程式与同分异构体、大学单位；t / χ² / F 与卡方检验、伴性与复等位遗传、系谱遗传方式分析、多元酸与弱碱滴定（schema v8） | 已交付（v0.4.0） |
-| 7w | 其它理科可交互图：公式探索器、微积分（切线 / 黎曼和 / 泰勒）、物理（受力 / 运动 / 光路 / 电路）、统计（回归 / 置信区间）、化学动力学、酶动力学、种群增长、排序与 BST（schema v9） | 已交付（v0.4.0） |
-| 7x | 医学适配（临床 + 口腔，大一大二）：医学科目画像与安全边界、X / B / 填空题型、医学单位、生理 / 生化 / 药动 / 形态共 14 种图（schema v10）、医学联网参考图片、复习卡片（Dexie v15） | 已交付（v0.5.0） |
-| 7y | 大教材：取消 100 MB 上传上限（按剩余存储空间检查，单文件 2 GB）、课程分析按章节分部分读完整本教材并合并、流式导出 | 已交付（v0.5.3） |
-| 7z | 测验修复：分批出题与补题、题型按题目自身对应、全书取材、出处无摘录时显示该页原文、按钮防整页翻译 | 已交付（v0.5.4） |
-| 7z.1 | 测验质量：选项本地随机顺序、干扰项规则与可疑题丢弃（`quiz-generator/v6`）、混合复习按主题分组、题目语言偏好（默认中文附英文术语）、难度本地化、设置页版本号 | 已交付（v0.5.5） |
-| 7z.2 | 背单词板块：考试词书（ECDICT）、FSRS 调度、认读 / 拼写 / 填空 / 听写、课程词汇（AI 补释义）、易错词、统计、导入、导出（Anki / CSV / TXT） | 已交付（v0.6.0） |
-| 7z.3 | 作业完整讲解：整份作业的讲义式讲解（工具 / 逐题 / 小结）、线性代数 RREF 本地核对、划词提问浮动窗口（拖动 / 调大小 / 最小化 / 追问带上下文）、保存问答并按原文重新定位、加入复习卡片、打印 / 导出 PDF（Dexie v17） | 已交付（v0.7.0） |
-| 7z.4 | 全站审查修复：分块丢字、判分（小值容差 / 积分常数 / 中文判断题 / 续做）、掌握度重算、删除保护、锁定保留设置、课程分析增量 / 同名主题 / 中断恢复、流式收尾与非流式超时、导师竞态、图示计算、参考图片下载、未找到与错误页、CSV / Anki 导入 | 已交付（v0.7.0） |
-| 7z.5 | 界面动效：统一缓动 / 时长变量、高频导航提速、「减少动态效果」只去位移 | 已提交（未发布） |
-| 7z.6 | 两种界面风格：讲义（默认）/ 精密实验室；风格 token 与配色分层、`lecture:` / `lab:` 变体、全站页面重排、测验键盘作答 | 已提交（未发布） |
-| 7z.7 | 界面验收修复：切换风格不重载、动画与滚动性能、测验键盘与读屏、表格与长文本、焦点与层级、删除首页函数图 | 已提交（未发布） |
-| 7z.8 | 全站审查修复（本轮）：路由级代码分割（页面按需加载）、死代码与无用文案清理、测试噪音与慢测试、文档同步 | 进行中（未发布） |
-| 8 | Dashboard 强化 | 部分交付（v0.2.8：视觉与交互函数图；v0.3.1：构图与动效打磨；指标类未做）；交互函数图已删除，视觉方向已被 7z.6 两种界面风格取代 |
-| 9 | PWA · a11y · 导入导出打磨 | 未开始 |
+| 阶段 | 内容                                                                                                                                                                                                                                     | 状态                                                                                                                           |
+| ---- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| 1    | 基础骨架                                                                                                                                                                                                                                 | 已交付                                                                                                                         |
+| 2    | 内容库（PDF/DOCX/PPTX/OCR/文本 + 分块）                                                                                                                                                                                                  | 已交付                                                                                                                         |
+| 3    | AI Provider · 课程分析 · 导师 · 翻译                                                                                                                                                                                                     | 已交付                                                                                                                         |
+| 4    | Quiz · 自适应难度 · 掌握度                                                                                                                                                                                                               | 已交付                                                                                                                         |
+| 5    | 错题本 · 薄弱点 · 复习                                                                                                                                                                                                                   | 已交付                                                                                                                         |
+| 6    | 知识索引 + 检索（RAG）                                                                                                                                                                                                                   | 未开始                                                                                                                         |
+| 7    | 课时化导师 + 公式符号 + KaTeX 打磨                                                                                                                                                                                                       | 已交付（v0.2.4）                                                                                                               |
+| 7b   | 教材章节结构 + 课程内容持久化 / freshness                                                                                                                                                                                                | 已交付（v0.2.5）                                                                                                               |
+| 7c   | 配色主题（Color Themes，4 套）+ 可访问性                                                                                                                                                                                                 | 已交付（v0.2.5）                                                                                                               |
+| 7d   | 章节级增量内容生成（依赖模型 + 稳定 Topic 身份 + 局部提交）                                                                                                                                                                              | 已交付（v0.2.6）                                                                                                               |
+| 7e   | 课时级数学可视化（线性/非线性 + 向量/图 + 线性变换/维恩图/特征值 + 教学区块放置）                                                                                                                                                        | 已交付（v0.2.6）                                                                                                               |
+| 7f   | 划词浮层定位修复（真实尺寸 flip/clamp + ResizeObserver/visualViewport）                                                                                                                                                                  | 已交付（v0.2.6）                                                                                                               |
+| 7g   | 学习流程导航与连续性 + 无障碍 / 错误态                                                                                                                                                                                                   | 已交付（v0.2.8）                                                                                                               |
+| 7h   | Precision Lab 视觉方向（蓝图网格 + 仪表细节，四套配色）                                                                                                                                                                                  | 已交付（v0.2.8）；**已被 7z.6 的「精密实验室」界面风格取代**                                                                   |
+| 7i   | 首页滚动修复 + 可交互函数图像（一次/二次/三次/正弦）                                                                                                                                                                                     | 已交付（v0.2.8）；**首页函数图像已在 7z.7 删除**                                                                               |
+| 7j   | 作业讲解（题目 / 提示 / 解法 / 问答 + 归档 / 恢复）                                                                                                                                                                                      | 已交付（v0.2.9）                                                                                                               |
+| 7k   | 作业讲解加固（识别可靠性 / 来源校验 / 进度 / 阅读原图）+ 项目文件管理                                                                                                                                                                    | 已交付（v0.3.1）                                                                                                               |
+| 7l   | 按幻灯片学习（PPT/PPTX 逐页导师，Dexie v13）                                                                                                                                                                                             | 已交付（v0.3.1）                                                                                                               |
+| 7m   | 作业作答双栏布局 + 桌面侧栏可收起 + 提示/回复公式渲染                                                                                                                                                                                    | 已交付（v0.3.1）                                                                                                               |
+| 7n   | 作业讲解关联教授答案并用于复习 / 做题                                                                                                                                                                                                    | 已交付（v0.3.1）                                                                                                               |
+| 7o   | 教授答案对应修复（编号解析 / 手动划分 / 一对一校验）+ PDF 数学排版 + 讲解生成可靠性 +「留给学生」识别                                                                                                                                    | 已交付（v0.3.4）                                                                                                               |
+| 7p   | 作业复习完整教学讲解 + 「检查答案」+ 最后检查排版 + 逐题问答常驻 + 浏览器语音输入                                                                                                                                                        | 已交付（v0.3.4）                                                                                                               |
+| 7q   | 线性代数作业逐题六步学习引导试点 + 题面向量箭头 / 上标显示修复                                                                                                                                                                           | 已交付（v0.3.4）                                                                                                               |
+| 7r   | 界面动效 + 首页重设计 + 风格统一（圆角尺度）                                                                                                                                                                                             | 已交付（v0.3.9）                                                                                                               |
+| 7s   | 学科适配：科目画像（9 科，含生物）、科目推断、物理单位判分、代码输出题、概率分布图、化学 mhchem                                                                                                                                          | 已交付（v0.3.9）                                                                                                               |
+| 7t   | 符号键盘 + 实时识别预览；简答题按得分点计分（测验 / 教授练习 / 导师）；化学方程式题、排序题                                                                                                                                              | 已交付（v0.3.9）                                                                                                               |
+| 7u   | 化学 / 生物配图三层：课程原图优先、本地计算的六种图（schema v7）、联网参考图片（Dexie v14，默认关闭）                                                                                                                                    | 已交付（v0.3.9）                                                                                                               |
+| 7v   | 大学深度：转录方向与起始密码子、有机方程式与同分异构体、大学单位；t / χ² / F 与卡方检验、伴性与复等位遗传、系谱遗传方式分析、多元酸与弱碱滴定（schema v8）                                                                               | 已交付（v0.4.0）                                                                                                               |
+| 7w   | 其它理科可交互图：公式探索器、微积分（切线 / 黎曼和 / 泰勒）、物理（受力 / 运动 / 光路 / 电路）、统计（回归 / 置信区间）、化学动力学、酶动力学、种群增长、排序与 BST（schema v9）                                                        | 已交付（v0.4.0）                                                                                                               |
+| 7x   | 医学适配（临床 + 口腔，大一大二）：医学科目画像与安全边界、X / B / 填空题型、医学单位、生理 / 生化 / 药动 / 形态共 14 种图（schema v10）、医学联网参考图片、复习卡片（Dexie v15）                                                        | 已交付（v0.5.0）                                                                                                               |
+| 7y   | 大教材：取消 100 MB 上传上限（按剩余存储空间检查，单文件 2 GB）、课程分析按章节分部分读完整本教材并合并、流式导出                                                                                                                        | 已交付（v0.5.3）                                                                                                               |
+| 7z   | 测验修复：分批出题与补题、题型按题目自身对应、全书取材、出处无摘录时显示该页原文、按钮防整页翻译                                                                                                                                         | 已交付（v0.5.4）                                                                                                               |
+| 7z.1 | 测验质量：选项本地随机顺序、干扰项规则与可疑题丢弃（`quiz-generator/v6`）、混合复习按主题分组、题目语言偏好（默认中文附英文术语）、难度本地化、设置页版本号                                                                              | 已交付（v0.5.5）                                                                                                               |
+| 7z.2 | 背单词板块：考试词书（ECDICT）、FSRS 调度、认读 / 拼写 / 填空 / 听写、课程词汇（AI 补释义）、易错词、统计、导入、导出（Anki / CSV / TXT）                                                                                                | 已交付（v0.6.0）                                                                                                               |
+| 7z.3 | 作业完整讲解：整份作业的讲义式讲解（工具 / 逐题 / 小结）、线性代数 RREF 本地核对、划词提问浮动窗口（拖动 / 调大小 / 最小化 / 追问带上下文）、保存问答并按原文重新定位、加入复习卡片、打印 / 导出 PDF（Dexie v17）                        | 已交付（v0.7.0）                                                                                                               |
+| 7z.4 | 全站审查修复：分块丢字、判分（小值容差 / 积分常数 / 中文判断题 / 续做）、掌握度重算、删除保护、锁定保留设置、课程分析增量 / 同名主题 / 中断恢复、流式收尾与非流式超时、导师竞态、图示计算、参考图片下载、未找到与错误页、CSV / Anki 导入 | 已交付（v0.7.0）                                                                                                               |
+| 7z.5 | 界面动效：统一缓动 / 时长变量、高频导航提速、「减少动态效果」只去位移                                                                                                                                                                    | 已提交（未发布）                                                                                                               |
+| 7z.6 | 两种界面风格：讲义（默认）/ 精密实验室；风格 token 与配色分层、`lecture:` / `lab:` 变体、全站页面重排、测验键盘作答                                                                                                                      | 已提交（未发布）                                                                                                               |
+| 7z.7 | 界面验收修复：切换风格不重载、动画与滚动性能、测验键盘与读屏、表格与长文本、焦点与层级、删除首页函数图                                                                                                                                   | 已提交（未发布）                                                                                                               |
+| 7z.8 | 全站审查修复（本轮）：路由级代码分割（页面按需加载）、死代码与无用文案清理、测试噪音与慢测试、文档同步                                                                                                                                   | 进行中（未发布）                                                                                                               |
+| 8    | Dashboard 强化                                                                                                                                                                                                                           | 部分交付（v0.2.8：视觉与交互函数图；v0.3.1：构图与动效打磨；指标类未做）；交互函数图已删除，视觉方向已被 7z.6 两种界面风格取代 |
+| 9    | PWA · a11y · 导入导出打磨                                                                                                                                                                                                                | 未开始                                                                                                                         |
 
 **V0.7.0 已提交并发布**（tag `v0.7.0`，两个远程仓库各一份 Release + 源码压缩包）。本版包含：**作业完整讲解**（见 §6「作业完整讲解」：`homework-walkthrough/v1`、RREF 本地核对、`contextual-tutor/v3` 浮动问答窗口、`WalkthroughNote` 保存与按原文重新定位、加入复习卡片、打印 / 导出 PDF；新增 Dexie **v17** `homeworkWalkthroughs` / `walkthroughNotes`）；以及**全站审查修复**约 45 项（分块丢字需重新处理旧资料；判分、掌握度、删除保护、锁定、课程分析一致性与中断恢复、AI 流式 / 超时、导师竞态、图示计算、参考图片、路由错误页与未找到页、导入）。
 
@@ -510,9 +509,9 @@ docs/             architecture.md
      - 门控关键词：`looksLikePhysiologyText` / `looksLikeBiochemistryText` / `looksLikePharmacokineticsText` / `looksLikeMorphologyText`；医学加入 `FORMULA_SUBJECTS`。课程原图优先（第 1 层）同样适用于医学。
    - **第 3 层 联网参考图片（默认关闭，设置页开启）**：只在化学 / 生物 / 医学课时、且本主题没有课程原图时，提供“查找参考图片”按钮（学生点击才联网）。`reference-image-query/v2`（v1 保留）对医学追加：优先 Wikimedia 上公有领域的格氏解剖学图版（Gray's Anatomy）、CC 授权组织切片 / 胚胎 / 牙体图，药物结构用 PubChem，**绝不检索患者照片 / 病灶 / 手术 / 可识别个人**。模型只给搜索词（PubChem 需附分子式，与 PubChem 返回值核对）；`infrastructure/referenceImages/sources.ts` 检索并下载；可选 `reference-image-check/v1` 视觉核对（`ChatMessage.images` 以 OpenAI content 数组发送；模型不支持图片时自动降级为“未核对”）。图片与来源 / 许可 / 作者存入 Dexie **v14** `referenceImages` / `referenceImageBlobs`（每主题缓存，可逐张移除，随项目删除；不纳入导出，可重新获取）。
 
-8. **Markdown 表格渲染（Phase 3.1.1 已实现并验证，随 v0.2.6 发布）**：共享 `RichText` 新增 GFM pipe table block（`shared/lib/markdownTable.ts` 纯解析 + `markdownText.ts` block + `RichText` 语义化渲染）；cell 复用现有 inline 文本/code/LaTeX；宽表仅在容器内横向滚动；普通 `|x|` 不误判；code fence / block math 内不解析表格。Tutor Lesson Prompt 升 **v3**（保留 v1/v2）规范表格输出。旧缓存中的多行 Markdown 表格**无需重新调用 AI 即可正确显示**；Prompt v3 经 `contentHash` 使旧课时自然重生成一次。未改 `TUTOR_LESSON_VERSION` / Visualization schema / Dexie。
+10. **Markdown 表格渲染（Phase 3.1.1 已实现并验证，随 v0.2.6 发布）**：共享 `RichText` 新增 GFM pipe table block（`shared/lib/markdownTable.ts` 纯解析 + `markdownText.ts` block + `RichText` 语义化渲染）；cell 复用现有 inline 文本/code/LaTeX；宽表仅在容器内横向滚动；普通 `|x|` 不误判；code fence / block math 内不解析表格。Tutor Lesson Prompt 升 **v3**（保留 v1/v2）规范表格输出。旧缓存中的多行 Markdown 表格**无需重新调用 AI 即可正确显示**；Prompt v3 经 `contentHash` 使旧课时自然重生成一次。未改 `TUTOR_LESSON_VERSION` / Visualization schema / Dexie。
 
-9. **划词浮层定位修复（Phase 3.2 已实现并验证，随 v0.2.6 发布）**：`SelectionTranslator` 不再一次性写入 `top: rect.top - 8` + `translate(-50%,-100%)`，改为纯函数 `computeSelectionPopupPosition`（`shared/lib/popupPosition.ts`）按**真实浮层尺寸**优先上方、空间不足翻转下方、上下都不足取较大侧并给出 `maxHeight`，左右 clamp 到视口；用 `ResizeObserver` + `useLayoutEffect` + `window.resize` + 捕获阶段 `scroll` + `visualViewport`（resize/scroll）在内容/视口/滚动变化后重新定位，监听器与 observer 在卸载时清理；滚动使选区完全离开视口时关闭浮层。移动端仍为底部浮层但以 `visualViewport` 为界。未引入新依赖、未改 Portal、未改动全站其它浮层。
+11. **划词浮层定位修复（Phase 3.2 已实现并验证，随 v0.2.6 发布）**：`SelectionTranslator` 不再一次性写入 `top: rect.top - 8` + `translate(-50%,-100%)`，改为纯函数 `computeSelectionPopupPosition`（`shared/lib/popupPosition.ts`）按**真实浮层尺寸**优先上方、空间不足翻转下方、上下都不足取较大侧并给出 `maxHeight`，左右 clamp 到视口；用 `ResizeObserver` + `useLayoutEffect` + `window.resize` + 捕获阶段 `scroll` + `visualViewport`（resize/scroll）在内容/视口/滚动变化后重新定位，监听器与 observer 在卸载时清理；滚动使选区完全离开视口时关闭浮层。移动端仍为底部浮层但以 `visualViewport` 为界。未引入新依赖、未改 Portal、未改动全站其它浮层。
 
 ### 已知限制
 

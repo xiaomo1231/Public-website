@@ -72,7 +72,13 @@ describe('ConfirmDialog', () => {
     const onConfirm = vi.fn()
     const user = userEvent.setup()
     render(
-      <ConfirmDialog open onOpenChange={vi.fn()} title="X" requireText="DELETE ALL" onConfirm={onConfirm} />,
+      <ConfirmDialog
+        open
+        onOpenChange={vi.fn()}
+        title="X"
+        requireText="DELETE ALL"
+        onConfirm={onConfirm}
+      />,
     )
     await user.type(screen.getByLabelText(/type/i), 'delete all')
     expect(screen.getByRole('button', { name: /confirm/i })).toBeDisabled()
@@ -112,16 +118,34 @@ describe('ConfirmDialog', () => {
   it('resets the typed confirmation after closing', async () => {
     const user = userEvent.setup()
     const { rerender } = render(
-      <ConfirmDialog open onOpenChange={vi.fn()} title="X" requireText="DELETE ALL" onConfirm={vi.fn()} />,
+      <ConfirmDialog
+        open
+        onOpenChange={vi.fn()}
+        title="X"
+        requireText="DELETE ALL"
+        onConfirm={vi.fn()}
+      />,
     )
     await user.type(screen.getByLabelText(/type/i), 'DELETE ALL')
     await waitFor(() => expect(screen.getByRole('button', { name: /confirm/i })).toBeEnabled())
 
     rerender(
-      <ConfirmDialog open={false} onOpenChange={vi.fn()} title="X" requireText="DELETE ALL" onConfirm={vi.fn()} />,
+      <ConfirmDialog
+        open={false}
+        onOpenChange={vi.fn()}
+        title="X"
+        requireText="DELETE ALL"
+        onConfirm={vi.fn()}
+      />,
     )
     rerender(
-      <ConfirmDialog open onOpenChange={vi.fn()} title="X" requireText="DELETE ALL" onConfirm={vi.fn()} />,
+      <ConfirmDialog
+        open
+        onOpenChange={vi.fn()}
+        title="X"
+        requireText="DELETE ALL"
+        onConfirm={vi.fn()}
+      />,
     )
     await waitFor(() => expect(screen.getByRole('button', { name: /confirm/i })).toBeDisabled())
   })
@@ -130,7 +154,12 @@ describe('ConfirmDialog', () => {
 describe('RenameProjectDialog', () => {
   it('stays a plain rename dialog without a subject handler', () => {
     render(
-      <RenameProjectDialog open onOpenChange={vi.fn()} project={makeProject()} onRename={vi.fn()} />,
+      <RenameProjectDialog
+        open
+        onOpenChange={vi.fn()}
+        project={makeProject()}
+        onRename={vi.fn()}
+      />,
     )
     expect(screen.getByRole('heading', { name: 'Rename project' })).toBeInTheDocument()
     expect(screen.queryByLabelText('Subject')).not.toBeInTheDocument()
@@ -166,7 +195,12 @@ describe('RenameProjectDialog', () => {
     const onRename = vi.fn()
     const user = userEvent.setup()
     render(
-      <RenameProjectDialog open onOpenChange={vi.fn()} project={makeProject()} onRename={onRename} />,
+      <RenameProjectDialog
+        open
+        onOpenChange={vi.fn()}
+        project={makeProject()}
+        onRename={onRename}
+      />,
     )
     const input = screen.getByLabelText(/project name/i)
     expect(input).toHaveValue('Calculus I')
@@ -184,7 +218,12 @@ describe('RenameProjectDialog', () => {
     const onRename = vi.fn()
     const user = userEvent.setup()
     render(
-      <RenameProjectDialog open onOpenChange={vi.fn()} project={makeProject()} onRename={onRename} />,
+      <RenameProjectDialog
+        open
+        onOpenChange={vi.fn()}
+        project={makeProject()}
+        onRename={onRename}
+      />,
     )
     const input = screen.getByLabelText(/project name/i)
     await user.clear(input)
@@ -197,7 +236,12 @@ describe('RenameProjectDialog', () => {
     const onRename = vi.fn().mockRejectedValue(new Error('Name already in use'))
     const user = userEvent.setup()
     render(
-      <RenameProjectDialog open onOpenChange={vi.fn()} project={makeProject()} onRename={onRename} />,
+      <RenameProjectDialog
+        open
+        onOpenChange={vi.fn()}
+        project={makeProject()}
+        onRename={onRename}
+      />,
     )
     const input = screen.getByLabelText(/project name/i)
     await user.clear(input)
@@ -211,7 +255,12 @@ describe('RenameProjectDialog', () => {
     const onRename = vi.fn()
     const user = userEvent.setup()
     render(
-      <RenameProjectDialog open onOpenChange={vi.fn()} project={makeProject()} onRename={onRename} />,
+      <RenameProjectDialog
+        open
+        onOpenChange={vi.fn()}
+        project={makeProject()}
+        onRename={onRename}
+      />,
     )
     const input = screen.getByLabelText(/project name/i)
     await user.clear(input)
@@ -229,7 +278,12 @@ describe('RenameProjectDialog', () => {
     )
     const user = userEvent.setup()
     render(
-      <RenameProjectDialog open onOpenChange={vi.fn()} project={makeProject()} onRename={onRename} />,
+      <RenameProjectDialog
+        open
+        onOpenChange={vi.fn()}
+        project={makeProject()}
+        onRename={onRename}
+      />,
     )
     const input = screen.getByLabelText(/project name/i)
     await user.clear(input)

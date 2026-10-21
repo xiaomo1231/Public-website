@@ -60,7 +60,7 @@ describe('OpenAICompatibleProvider', () => {
     expect(mockFetch).toHaveBeenCalledOnce()
     const [url, init] = mockFetch.mock.calls[0] as [string, RequestInit]
     expect(url).toBe('https://api.example.com/v1/chat/completions')
-    const body = JSON.parse((init.body as string))
+    const body = JSON.parse(init.body as string)
     expect(body.model).toBe('gpt-test')
     expect(body.temperature).toBe(0.2)
     expect(body.max_tokens).toBe(32)
@@ -68,23 +68,33 @@ describe('OpenAICompatibleProvider', () => {
   })
 
   it('adds response_format when supportsJsonMode', async () => {
-    mockFetch.mockResolvedValueOnce(jsonResponse(200, { choices: [{ message: { content: '{}' } }] }))
+    mockFetch.mockResolvedValueOnce(
+      jsonResponse(200, { choices: [{ message: { content: '{}' } }] }),
+    )
     const provider = new OpenAICompatibleProvider('openai', 'OpenAI', config, {
       defaultModel: 'gpt-test',
       supportsJsonMode: true,
     })
-    await provider.chat({ messages: [{ role: 'user', content: 'ping' }], responseFormat: { type: 'json_object' } })
+    await provider.chat({
+      messages: [{ role: 'user', content: 'ping' }],
+      responseFormat: { type: 'json_object' },
+    })
     const body = JSON.parse((mockFetch.mock.calls[0] as [string, RequestInit])[1].body as string)
     expect(body.response_format).toEqual({ type: 'json_object' })
   })
 
   it('does not add response_format when supportsJsonMode=false', async () => {
-    mockFetch.mockResolvedValueOnce(jsonResponse(200, { choices: [{ message: { content: '{}' } }] }))
+    mockFetch.mockResolvedValueOnce(
+      jsonResponse(200, { choices: [{ message: { content: '{}' } }] }),
+    )
     const provider = new OpenAICompatibleProvider('deepseek', 'DeepSeek', config, {
       defaultModel: 'deepseek-chat',
       supportsJsonMode: false,
     })
-    await provider.chat({ messages: [{ role: 'user', content: 'ping' }], responseFormat: { type: 'json_object' } })
+    await provider.chat({
+      messages: [{ role: 'user', content: 'ping' }],
+      responseFormat: { type: 'json_object' },
+    })
     const body = JSON.parse((mockFetch.mock.calls[0] as [string, RequestInit])[1].body as string)
     expect(body.response_format).toBeUndefined()
   })
@@ -95,7 +105,9 @@ describe('OpenAICompatibleProvider', () => {
       defaultModel: 'gpt-test',
       supportsJsonMode: true,
     })
-    await expect(provider.chat({ messages: [{ role: 'user', content: 'x' }] })).rejects.toBeInstanceOf(RateLimitedError)
+    await expect(
+      provider.chat({ messages: [{ role: 'user', content: 'x' }] }),
+    ).rejects.toBeInstanceOf(RateLimitedError)
   })
 
   it('maps HTTP 503 to ProviderUnavailableError', async () => {
@@ -104,7 +116,9 @@ describe('OpenAICompatibleProvider', () => {
       defaultModel: 'gpt-test',
       supportsJsonMode: true,
     })
-    await expect(provider.chat({ messages: [{ role: 'user', content: 'x' }] })).rejects.toBeInstanceOf(ProviderUnavailableError)
+    await expect(
+      provider.chat({ messages: [{ role: 'user', content: 'x' }] }),
+    ).rejects.toBeInstanceOf(ProviderUnavailableError)
   })
 
   it('streams SSE and accumulates delta', async () => {
@@ -138,7 +152,9 @@ describe('OpenAICompatibleProvider', () => {
   })
 
   it('testConnection succeeds on 2xx', async () => {
-    mockFetch.mockResolvedValueOnce(jsonResponse(200, { choices: [{ message: { content: 'pong' } }] }))
+    mockFetch.mockResolvedValueOnce(
+      jsonResponse(200, { choices: [{ message: { content: 'pong' } }] }),
+    )
     const provider = new OpenAICompatibleProvider('openai', 'OpenAI', config, {
       defaultModel: 'gpt-test',
       supportsJsonMode: true,

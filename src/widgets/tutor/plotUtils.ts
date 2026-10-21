@@ -57,7 +57,11 @@ export function niceRange(values: number[], include: number[] = [], pad = 0.08):
 }
 
 /** SVG path through the points, broken at non-finite values and off-scale jumps. */
-export function linePath(points: Array<{ x: number; y: number }>, scale: PlotScale, yRange: [number, number]): string {
+export function linePath(
+  points: Array<{ x: number; y: number }>,
+  scale: PlotScale,
+  yRange: [number, number],
+): string {
   const span = yRange[1] - yRange[0]
   let d = ''
   let open = false

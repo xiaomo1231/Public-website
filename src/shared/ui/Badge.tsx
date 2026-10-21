@@ -4,11 +4,7 @@ export interface BadgeProps extends React.HTMLAttributes<HTMLSpanElement> {
   variant?: 'default' | 'secondary' | 'outline' | 'destructive'
 }
 
-export function Badge({
-  className,
-  variant = 'default',
-  ...props
-}: BadgeProps): JSX.Element {
+export function Badge({ className, variant = 'default', ...props }: BadgeProps): JSX.Element {
   const variants: Record<NonNullable<BadgeProps['variant']>, string> = {
     default: 'bg-primary-strong text-primary-foreground',
     secondary: 'bg-secondary text-secondary-foreground',

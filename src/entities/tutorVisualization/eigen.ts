@@ -115,8 +115,7 @@ export function solveEigen(matrix: Matrix2x2): EigenSolveResult {
   }
 
   const discriminant = trace * trace - 4 * determinant
-  const discEpsilon =
-    EIGEN_EPSILON * Math.max(1, trace * trace, 4 * Math.abs(determinant))
+  const discEpsilon = EIGEN_EPSILON * Math.max(1, trace * trace, 4 * Math.abs(determinant))
 
   if (discriminant < -discEpsilon) {
     return { ok: false, reason: 'complex-eigenvalues' }
@@ -178,9 +177,7 @@ export function solveEigen(matrix: Matrix2x2): EigenSolveResult {
   if (!vector) return { ok: false, reason: 'non-finite' }
   return {
     ok: true,
-    pairs: [
-      { value: normalizeZero(lambda), vector, transformed: applyMatrix(matrix, vector) },
-    ],
+    pairs: [{ value: normalizeZero(lambda), vector, transformed: applyMatrix(matrix, vector) }],
     fullEigenspace: false,
     defective: true,
     trace,
@@ -228,7 +225,8 @@ export function matchEigenCandidate(
 
   for (let index = 0; index < pairs.length; index++) {
     const pair = pairs[index]!
-    const valueEpsilon = EIGEN_EPSILON * Math.max(1, Math.abs(candidate.value), Math.abs(pair.value))
+    const valueEpsilon =
+      EIGEN_EPSILON * Math.max(1, Math.abs(candidate.value), Math.abs(pair.value))
     if (Math.abs(candidate.value - pair.value) > valueEpsilon) continue
     if (isCollinear(candidate.vector, pair.vector, EIGEN_VERIFY_TOLERANCE)) return index
   }

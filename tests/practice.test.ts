@@ -62,9 +62,12 @@ describe('parsePracticeQuestions', () => {
 
   it('keeps multi-part questions together', () => {
     const { questions } = parsePracticeQuestions(
-      ['Question 5', 'Consider the function below.', '(a) find its domain', '(b) find its range'].join(
-        '\n',
-      ),
+      [
+        'Question 5',
+        'Consider the function below.',
+        '(a) find its domain',
+        '(b) find its range',
+      ].join('\n'),
     )
     expect(questions).toHaveLength(1)
     expect(questions[0]!.prompt).toContain('(a) find its domain')
@@ -116,9 +119,7 @@ describe('PracticeService', () => {
     await new CourseAnalysisRepository(db).reseedProject(
       projectId,
       {
-        topics: [
-          { name: 'Derivatives', description: 'derivative of a function', sourceRefs: [] },
-        ],
+        topics: [{ name: 'Derivatives', description: 'derivative of a function', sourceRefs: [] }],
         concepts: [],
         formulas: [],
         symbols: [],
@@ -171,7 +172,10 @@ describe('PracticeService', () => {
     expect((await service.recordAttempt(choice!.id, 'B')).isCorrect).toBe(false)
     expect((await service.recordAttempt(numeric!.id, '4.5')).isCorrect).toBe(true)
 
-    const subjectiveResult = await service.recordAttempt(subjective!.id, 'because of the power rule')
+    const subjectiveResult = await service.recordAttempt(
+      subjective!.id,
+      'because of the power rule',
+    )
     expect(subjectiveResult.isCorrect).toBeUndefined()
     expect(subjectiveResult.method).toBe('none')
   })
@@ -211,7 +215,12 @@ describe('PracticeService', () => {
       evaluation: { isCorrect: false, method: 'exact', confidence: 1, disputed: true },
     })
 
-    expect(await service.progress(set.id)).toEqual({ total: 4, completed: 3, correct: 1, needsReview: 0 })
+    expect(await service.progress(set.id)).toEqual({
+      total: 4,
+      completed: 3,
+      correct: 1,
+      needsReview: 0,
+    })
   })
 
   it('builds an evidence-based question-style profile', async () => {

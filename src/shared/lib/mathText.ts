@@ -6,8 +6,7 @@
  */
 
 export type MathSegment =
-  | { kind: 'text'; value: string }
-  | { kind: 'math'; value: string; display: boolean }
+  { kind: 'text'; value: string } | { kind: 'math'; value: string; display: boolean }
 
 /**
  * `$$…$$` and `\[…\]` are display math; `$…$` and `\(…\)` are inline.

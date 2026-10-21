@@ -76,7 +76,11 @@ export function buildSystemPrompt(options: { allowPubChem: boolean; medical?: bo
 
 export function buildUserPrompt(input: ReferenceImageQueryInput): string {
   const language =
-    input.language === 'zh' ? 'Simplified Chinese' : input.language === 'en' ? 'English' : 'the lesson language'
+    input.language === 'zh'
+      ? 'Simplified Chinese'
+      : input.language === 'en'
+        ? 'English'
+        : 'the lesson language'
   return [
     `Topic: ${input.topicName}.`,
     input.topicDescription ? `Topic summary: ${input.topicDescription}.` : '',
@@ -91,17 +95,25 @@ export function buildUserPrompt(input: ReferenceImageQueryInput): string {
 const TERM = /^[\p{L}\p{N} ,'()-]+$/u
 
 /** Validated queries (search terms only), or [] when the output is unusable. */
-export function normalizeReferenceQueries(output: unknown, options: { allowPubChem: boolean }): ReferenceImageQuery[] {
-  const raw = output && typeof output === 'object' ? (output as { queries?: unknown }).queries : undefined
+export function normalizeReferenceQueries(
+  output: unknown,
+  options: { allowPubChem: boolean },
+): ReferenceImageQuery[] {
+  const raw =
+    output && typeof output === 'object' ? (output as { queries?: unknown }).queries : undefined
   if (!Array.isArray(raw)) return []
   const seen = new Set<string>()
   const queries: ReferenceImageQuery[] = []
   for (const item of raw) {
     if (!item || typeof item !== 'object') continue
     const record = item as Record<string, unknown>
-    const source = record.source === 'pubchem' ? 'pubchem' : record.source === 'wikimedia' ? 'wikimedia' : null
+    const source =
+      record.source === 'pubchem' ? 'pubchem' : record.source === 'wikimedia' ? 'wikimedia' : null
     const term = typeof record.term === 'string' ? record.term.replace(/\s+/g, ' ').trim() : ''
-    const purpose = typeof record.purpose === 'string' ? record.purpose.replace(/\s+/g, ' ').trim().slice(0, 80) : ''
+    const purpose =
+      typeof record.purpose === 'string'
+        ? record.purpose.replace(/\s+/g, ' ').trim().slice(0, 80)
+        : ''
     if (!source || (source === 'pubchem' && !options.allowPubChem)) continue
     if (!term || term.length > 60 || !TERM.test(term) || !purpose) continue
     const formula =

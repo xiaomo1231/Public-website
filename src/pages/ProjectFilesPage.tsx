@@ -48,7 +48,11 @@ export function ProjectFilesPage(): JSX.Element {
       await rename(id, name)
       toast({ variant: 'success', title: t('documents.renamed') })
     } catch (err) {
-      toast({ variant: 'error', title: t('documents.renameFailed'), description: (err as Error).message })
+      toast({
+        variant: 'error',
+        title: t('documents.renameFailed'),
+        description: (err as Error).message,
+      })
     }
   }
 
@@ -84,7 +88,9 @@ export function ProjectFilesPage(): JSX.Element {
 
   const removes: string[] = impact
     ? [
-        impact.removes.chunks > 0 ? t('files.removes.chunks', { count: impact.removes.chunks }) : '',
+        impact.removes.chunks > 0
+          ? t('files.removes.chunks', { count: impact.removes.chunks })
+          : '',
         impact.removes.courseStructures > 0 ? t('files.removes.structures') : '',
         impact.removes.visualSources > 0
           ? t('files.removes.visuals', { count: impact.removes.visualSources })
@@ -184,8 +190,16 @@ export function ProjectFilesPage(): JSX.Element {
               {impact?.blocked ? t('common.close') : t('common.cancel')}
             </Button>
             {!impact?.blocked && (
-              <Button variant="destructive" onClick={() => void confirmDelete()} disabled={deleting}>
-                {deleting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+              <Button
+                variant="destructive"
+                onClick={() => void confirmDelete()}
+                disabled={deleting}
+              >
+                {deleting ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Trash2 className="h-4 w-4" />
+                )}
                 {t('files.deleteConfirm')}
               </Button>
             )}

@@ -25,7 +25,7 @@ export interface ContextualTutorInput {
 
 export function buildSystemPrompt(): string {
   return [
-    "You are helping the learner understand a specific piece of the current lesson.",
+    'You are helping the learner understand a specific piece of the current lesson.',
     '',
     "Answer the learner's question using the selected passage and its nearby context.",
     'Do not regenerate the lesson.',

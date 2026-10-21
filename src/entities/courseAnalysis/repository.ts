@@ -67,7 +67,11 @@ export class CourseAnalysisRepository {
   }
 
   async getByProject(projectId: string): Promise<CourseAnalysis | undefined> {
-    return this.db.table<CourseAnalysis, string>('courseAnalyses').where('projectId').equals(projectId).first()
+    return this.db
+      .table<CourseAnalysis, string>('courseAnalyses')
+      .where('projectId')
+      .equals(projectId)
+      .first()
   }
 
   async upsert(analysis: CourseAnalysis): Promise<CourseAnalysis> {
@@ -82,7 +86,11 @@ export class CourseAnalysisRepository {
     return items
   }
   async listTopics(projectId: string): Promise<Topic[]> {
-    return this.db.table<Topic, string>('topics').where('projectId').equals(projectId).sortBy('order')
+    return this.db
+      .table<Topic, string>('topics')
+      .where('projectId')
+      .equals(projectId)
+      .sortBy('order')
   }
   async getTopic(id: string): Promise<Topic | undefined> {
     return this.db.table<Topic, string>('topics').get(id)
@@ -119,7 +127,11 @@ export class CourseAnalysisRepository {
     return items
   }
   async listSymbols(projectId: string): Promise<CourseSymbol[]> {
-    return this.db.table<CourseSymbol, string>('symbols').where('projectId').equals(projectId).toArray()
+    return this.db
+      .table<CourseSymbol, string>('symbols')
+      .where('projectId')
+      .equals(projectId)
+      .toArray()
   }
   async listSymbolsByTopic(topicId: string): Promise<CourseSymbol[]> {
     const all = await this.db.table<CourseSymbol, string>('symbols').toArray()
@@ -143,7 +155,11 @@ export class CourseAnalysisRepository {
     return items
   }
   async listExercises(projectId: string): Promise<CourseExercise[]> {
-    return this.db.table<CourseExercise, string>('courseExercises').where('projectId').equals(projectId).toArray()
+    return this.db
+      .table<CourseExercise, string>('courseExercises')
+      .where('projectId')
+      .equals(projectId)
+      .toArray()
   }
 
   // Prerequisites
@@ -153,7 +169,11 @@ export class CourseAnalysisRepository {
     return items
   }
   async listPrerequisites(projectId: string): Promise<Prerequisite[]> {
-    return this.db.table<Prerequisite, string>('prerequisites').where('projectId').equals(projectId).toArray()
+    return this.db
+      .table<Prerequisite, string>('prerequisites')
+      .where('projectId')
+      .equals(projectId)
+      .toArray()
   }
 
   /** Remove the analysis row and all of its derived entities for a project. */
@@ -217,11 +237,42 @@ export class CourseAnalysisRepository {
         needsFullReanalysis?: boolean
         promptVersion?: string
       }>
-      concepts: Array<{ name: string; definition: string; explanation?: string; topicNames: string[]; sourceRefs: SourceReference[] }>
-      formulas: Array<{ name: string; latex: string; description: string; variables: Array<{ symbol: string; meaning: string }>; topicNames: string[]; sourceRefs: SourceReference[] }>
-      symbols: Array<{ symbol: string; meaning: string; context: string; unit?: string; topicNames: string[]; sourceRefs: SourceReference[] }>
-      examples: Array<{ title: string; problem: string; solution?: string; topicNames: string[]; sourceRefs: SourceReference[] }>
-      exercises: Array<{ prompt: string; difficulty: DifficultyLevel; topicNames: string[]; sourceRefs: SourceReference[] }>
+      concepts: Array<{
+        name: string
+        definition: string
+        explanation?: string
+        topicNames: string[]
+        sourceRefs: SourceReference[]
+      }>
+      formulas: Array<{
+        name: string
+        latex: string
+        description: string
+        variables: Array<{ symbol: string; meaning: string }>
+        topicNames: string[]
+        sourceRefs: SourceReference[]
+      }>
+      symbols: Array<{
+        symbol: string
+        meaning: string
+        context: string
+        unit?: string
+        topicNames: string[]
+        sourceRefs: SourceReference[]
+      }>
+      examples: Array<{
+        title: string
+        problem: string
+        solution?: string
+        topicNames: string[]
+        sourceRefs: SourceReference[]
+      }>
+      exercises: Array<{
+        prompt: string
+        difficulty: DifficultyLevel
+        topicNames: string[]
+        sourceRefs: SourceReference[]
+      }>
       prerequisites: Array<{ name: string; description: string; topicNames: string[] }>
       topicsByName: Map<string, string>
       /** Documents that contributed to this analysis (used for source grounding). */
@@ -269,7 +320,9 @@ export class CourseAnalysisRepository {
         ...(t.sourceChapterIds ? { sourceChapterIds: t.sourceChapterIds } : {}),
         ...(t.sourceSectionIds ? { sourceSectionIds: t.sourceSectionIds } : {}),
         ...(t.dependencyHash ? { dependencyHash: t.dependencyHash } : {}),
-        ...(t.sourceChunkFingerprints ? { sourceChunkFingerprints: t.sourceChunkFingerprints } : {}),
+        ...(t.sourceChunkFingerprints
+          ? { sourceChunkFingerprints: t.sourceChunkFingerprints }
+          : {}),
         ...(t.needsFullReanalysis ? { needsFullReanalysis: true } : {}),
         ...(t.promptVersion ? { promptVersion: t.promptVersion } : {}),
         createdAt: now,
@@ -336,17 +389,15 @@ export class CourseAnalysisRepository {
       createdAt: now,
     }))
 
-    await this.replaceProjectData(
-      projectId,
-      {
-        topics,
-        concepts,
-        formulas,
-        symbols,
-        examples,
-        exercises,
-        prerequisites,
-        analysis: {
+    await this.replaceProjectData(projectId, {
+      topics,
+      concepts,
+      formulas,
+      symbols,
+      examples,
+      exercises,
+      prerequisites,
+      analysis: {
         id: meta.analysisId ?? crypto.randomUUID(),
         projectId,
         status: 'ready',
@@ -372,8 +423,7 @@ export class CourseAnalysisRepository {
         ...(meta.inputParts !== undefined ? { inputParts: meta.inputParts } : {}),
       },
       ...(meta.sideWrites ? { sideWrites: meta.sideWrites } : {}),
-      },
-    )
+    })
   }
 
   /**
@@ -580,7 +630,8 @@ export class CourseAnalysisRepository {
     for (const question of sideWrites.practiceQuestions ?? []) {
       const current = await practice.get(question.id)
       if (!current) continue
-      if (current.chunkId !== question.chunkId && current.chunkId !== question.previousChunkId) continue
+      if (current.chunkId !== question.chunkId && current.chunkId !== question.previousChunkId)
+        continue
       await practice.update(question.id, {
         chunkId: question.chunkId,
         chunkFingerprint: question.chunkFingerprint,
@@ -600,7 +651,9 @@ export class CourseAnalysisRepository {
     if (!project) throw new NotFoundError('Project', projectId)
   }
 
-  private async applyDerivedCollection<T extends { id: string; projectId: string; topicIds: string[] }>(
+  private async applyDerivedCollection<
+    T extends { id: string; projectId: string; topicIds: string[] },
+  >(
     tableName: string,
     projectId: string,
     updates: TopicDerivedUpdate[],

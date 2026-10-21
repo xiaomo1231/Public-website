@@ -11,7 +11,9 @@ export class KnowledgeMasteryRepository {
   }
 
   async get(projectId: string, knowledgePoint: string): Promise<KnowledgeMastery | undefined> {
-    return this.db.table<KnowledgeMastery, string>('knowledgeMastery').get(masteryId(projectId, knowledgePoint))
+    return this.db
+      .table<KnowledgeMastery, string>('knowledgeMastery')
+      .get(masteryId(projectId, knowledgePoint))
   }
 
   async listByProject(projectId: string): Promise<KnowledgeMastery[]> {
@@ -33,6 +35,10 @@ export class KnowledgeMasteryRepository {
   }
 
   async deleteByProject(projectId: string): Promise<number> {
-    return this.db.table<KnowledgeMastery, string>('knowledgeMastery').where('projectId').equals(projectId).delete()
+    return this.db
+      .table<KnowledgeMastery, string>('knowledgeMastery')
+      .where('projectId')
+      .equals(projectId)
+      .delete()
   }
 }

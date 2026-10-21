@@ -11,8 +11,18 @@ import {
 } from './TutorChemistryFigure'
 import { TutorPedigreeSvg, TutorPunnettFigure, TutorTranslationFigure } from './TutorBiologyFigure'
 import { TutorChiSquareFigure } from './TutorChiSquareFigure'
-import { TutorFormulaFigure, TutorRiemannFigure, TutorTangentFigure, TutorTaylorFigure } from './TutorFormulaFigure'
-import { TutorCircuitFigure, TutorForcesFigure, TutorMotionFigure, TutorOpticsFigure } from './TutorPhysicsFigure'
+import {
+  TutorFormulaFigure,
+  TutorRiemannFigure,
+  TutorTangentFigure,
+  TutorTaylorFigure,
+} from './TutorFormulaFigure'
+import {
+  TutorCircuitFigure,
+  TutorForcesFigure,
+  TutorMotionFigure,
+  TutorOpticsFigure,
+} from './TutorPhysicsFigure'
 import {
   TutorArrheniusFigure,
   TutorConfidenceFigure,
@@ -31,7 +41,11 @@ import {
   TutorOxygenFigure,
   TutorRenalFigure,
 } from './TutorPhysiologyFigure'
-import { TutorAminoAcidFigure, TutorMetabolismFigure, TutorPharmacokineticsFigure } from './TutorBiochemFigure'
+import {
+  TutorAminoAcidFigure,
+  TutorMetabolismFigure,
+  TutorPharmacokineticsFigure,
+} from './TutorBiochemFigure'
 import {
   TutorAnatomyTableFigure,
   TutorDentalChartFigure,
@@ -47,7 +61,12 @@ interface ScienceProps {
 }
 
 /** The figure itself, drawn inside the shared visualization card. */
-export function ScienceFigureBody({ visualization, layout, t, language }: ScienceProps): JSX.Element | null {
+export function ScienceFigureBody({
+  visualization,
+  layout,
+  t,
+  language,
+}: ScienceProps): JSX.Element | null {
   switch (visualization.type) {
     case 'molecule_2d':
       return <TutorMoleculeFigure visualization={visualization} t={t} />
@@ -127,8 +146,12 @@ export function ScienceFigureBody({ visualization, layout, t, language }: Scienc
 }
 
 /** Computed facts shown under the card, where a figure has them. */
-export function ScienceFigureFacts({ visualization, t }: Omit<ScienceProps, 'layout' | 'language'>): JSX.Element | null {
+export function ScienceFigureFacts({
+  visualization,
+  t,
+}: Omit<ScienceProps, 'layout' | 'language'>): JSX.Element | null {
   if (visualization.type === 'energy_2d') return <EnergyFacts visualization={visualization} t={t} />
-  if (visualization.type === 'titration_2d') return <TitrationFacts visualization={visualization} t={t} />
+  if (visualization.type === 'titration_2d')
+    return <TitrationFacts visualization={visualization} t={t} />
   return null
 }

@@ -39,7 +39,10 @@ export class CourseStructureRepository {
   }
 
   async deleteByDocument(documentId: string): Promise<number> {
-    const structures = await this.structures().where('sourceDocumentId').equals(documentId).toArray()
+    const structures = await this.structures()
+      .where('sourceDocumentId')
+      .equals(documentId)
+      .toArray()
     for (const structure of structures) {
       await this.nodes().where('structureId').equals(structure.id).delete()
       await this.structures().delete(structure.id)

@@ -113,7 +113,8 @@ export function genotypePairs(genotype: string): Array<[string, string]> | null 
     const sexB = b.startsWith('X^') || isYChromosome(b, sexLinked)
     if (sexA || sexB) {
       if (!sexA || !sexB || (a === 'Y' && b === 'Y')) return null
-      if (a !== 'Y' && b !== 'Y' && deciding(a).toLowerCase() !== deciding(b).toLowerCase()) return null
+      if (a !== 'Y' && b !== 'Y' && deciding(a).toLowerCase() !== deciding(b).toLowerCase())
+        return null
     } else if (a[0]!.toLowerCase() !== b[0]!.toLowerCase()) {
       return null
     }
@@ -135,7 +136,14 @@ export function sexOf(pairs: Array<[string, string]>): Sex | undefined {
 /** Gametes as strings, e.g. AaBb → AB, Ab, aB, ab. */
 export function gametes(pairs: Array<[string, string]>): string[] {
   return pairs
-    .reduce<string[][]>((acc, [a, b]) => acc.flatMap((prefix) => [[...prefix, a], [...prefix, b]]), [[]])
+    .reduce<string[][]>(
+      (acc, [a, b]) =>
+        acc.flatMap((prefix) => [
+          [...prefix, a],
+          [...prefix, b],
+        ]),
+      [[]],
+    )
     .map((alleles) => alleles.join(''))
 }
 
@@ -167,7 +175,8 @@ export function phenotypeOf(
       return `${gene}:${expressed.join('+')}`
     }
     if (dominant.length >= 2) expressed = dominant.sort()
-    else if (dominant.length === 1 && a !== b && dominance === 'incomplete') return `${gene}:intermediate`
+    else if (dominant.length === 1 && a !== b && dominance === 'incomplete')
+      return `${gene}:intermediate`
     else if (dominant.length === 1 && a !== b && dominance === 'codominant') expressed = [a, b]
     else if (dominant.length === 1) expressed = dominant
     else expressed = [...new Set(pair)].sort()
@@ -254,11 +263,16 @@ function tally(keys: string[]): Array<[string, number]> {
 }
 
 /** Gene order must match: the father's pairs reordered to the mother's genes. */
-function alignGenes(mother: Array<[string, string]>, father: Array<[string, string]>): Array<[string, string]> | null {
+function alignGenes(
+  mother: Array<[string, string]>,
+  father: Array<[string, string]>,
+): Array<[string, string]> | null {
   const genes = mother.map(geneOf)
   const byGene = new Map(father.map((pair) => [geneOf(pair), pair]))
   const aligned = genes.map((gene) => byGene.get(gene))
-  return aligned.every(Boolean) && father.length === mother.length ? (aligned as Array<[string, string]>) : null
+  return aligned.every(Boolean) && father.length === mother.length
+    ? (aligned as Array<[string, string]>)
+    : null
 }
 
 /** Why two parental genotypes cannot be crossed, or null when they can. */
@@ -280,8 +294,22 @@ export function punnettSquare(
   order: DominanceOrder = {},
 ): PunnettResult {
   const father = alignGenes(mother, fatherInput) ?? fatherInput
-  const eggs = mother.reduce<string[][]>((acc, [a, b]) => acc.flatMap((p) => [[...p, a], [...p, b]]), [[]])
-  const sperm = father.reduce<string[][]>((acc, [a, b]) => acc.flatMap((p) => [[...p, a], [...p, b]]), [[]])
+  const eggs = mother.reduce<string[][]>(
+    (acc, [a, b]) =>
+      acc.flatMap((p) => [
+        [...p, a],
+        [...p, b],
+      ]),
+    [[]],
+  )
+  const sperm = father.reduce<string[][]>(
+    (acc, [a, b]) =>
+      acc.flatMap((p) => [
+        [...p, a],
+        [...p, b],
+      ]),
+    [[]],
+  )
   const cells = eggs.map((egg) =>
     sperm.map((s) => {
       const pairs = combineAlleles(egg, s)
@@ -298,14 +326,23 @@ export function punnettSquare(
     rows: eggs.map((egg) => egg.join('')),
     columns: sperm.map((s) => s.join('')),
     cells,
-    genotypes: tally(flat.map((cell) => cell.genotype)).map(([genotype, count]) => ({ genotype, count })),
+    genotypes: tally(flat.map((cell) => cell.genotype)).map(([genotype, count]) => ({
+      genotype,
+      count,
+    })),
     phenotypes: tally(flat.map((cell) => cell.phenotype)).map(([key, count]) => ({ key, count })),
     total: flat.length,
   }
   if (flat.some((cell) => cell.sex)) {
     const group = (sex: Sex) => {
       const within = flat.filter((cell) => cell.sex === sex)
-      return { total: within.length, phenotypes: tally(within.map((cell) => cell.phenotype)).map(([key, count]) => ({ key, count })) }
+      return {
+        total: within.length,
+        phenotypes: tally(within.map((cell) => cell.phenotype)).map(([key, count]) => ({
+          key,
+          count,
+        })),
+      }
     }
     result.bySex = { female: group('female'), male: group('male') }
   }

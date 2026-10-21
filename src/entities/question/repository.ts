@@ -26,7 +26,12 @@ export class QuestionRepository {
   }
 
   async listByProject(projectId: string): Promise<Question[]> {
-    return this.db.table<Question, string>('questions').where('projectId').equals(projectId).reverse().sortBy('createdAt')
+    return this.db
+      .table<Question, string>('questions')
+      .where('projectId')
+      .equals(projectId)
+      .reverse()
+      .sortBy('createdAt')
   }
 
   async listByTopic(projectId: string, topicId: string): Promise<Question[]> {
@@ -53,8 +58,12 @@ export class QuestionRepository {
         correctAnswer: input.correctAnswer,
         ...(input.type === 'numeric' && input.unit ? { unit: input.unit } : {}),
         ...(input.type === 'short_answer' && input.rubric?.length ? { rubric: input.rubric } : {}),
-        ...(input.type === 'ordering' && input.orderItems?.length ? { orderItems: input.orderItems } : {}),
-        ...(input.type === 'matching' && input.matchItems?.length ? { matchItems: input.matchItems } : {}),
+        ...(input.type === 'ordering' && input.orderItems?.length
+          ? { orderItems: input.orderItems }
+          : {}),
+        ...(input.type === 'matching' && input.matchItems?.length
+          ? { matchItems: input.matchItems }
+          : {}),
         ...(input.type === 'fill_blank' && input.blanks?.length ? { blanks: input.blanks } : {}),
         ...(input.solution ? { solution: input.solution } : {}),
         hints: input.hints ?? [],
@@ -73,7 +82,11 @@ export class QuestionRepository {
   }
 
   async deleteByProject(projectId: string): Promise<number> {
-    return this.db.table<Question, string>('questions').where('projectId').equals(projectId).delete()
+    return this.db
+      .table<Question, string>('questions')
+      .where('projectId')
+      .equals(projectId)
+      .delete()
   }
 
   async countByProject(projectId: string): Promise<number> {

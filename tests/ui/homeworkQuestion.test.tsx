@@ -37,18 +37,34 @@ function stubService(): HomeworkService {
     revealSolution: vi.fn(async () => ({ ...QUESTION, solutionRevealed: true })),
     generateContent: vi.fn(async () => QUESTION),
     checkAnswer: vi.fn(async () => ({
-      method: 'ai' as const, verdict: 'partial' as const, similarityPercent: 75,
-      feedback: 'The result is right; explain the method.', matchedPoints: ['Correct result'],
-      missingPoints: ['Reasoning'], referenceKind: 'ai_solution' as const,
-      inputHash: '', language: 'en' as const, promptVersion: 'v1',
-      questionSourceRefs: [], answerChunkIds: [], createdAt: 1,
+      method: 'ai' as const,
+      verdict: 'partial' as const,
+      similarityPercent: 75,
+      feedback: 'The result is right; explain the method.',
+      matchedPoints: ['Correct result'],
+      missingPoints: ['Reasoning'],
+      referenceKind: 'ai_solution' as const,
+      inputHash: '',
+      language: 'en' as const,
+      promptVersion: 'v1',
+      questionSourceRefs: [],
+      answerChunkIds: [],
+      createdAt: 1,
     })),
     getOrGenerateReviewGuide: vi.fn(async () => ({
-      questionMeaning: 'Find the limit.', knowledgePoints: ['Use continuity.'],
-      method: 'Substitute the value.', steps: ['Set $x=3$.', 'Compute $3^2=9$.'],
-      explanation: 'A polynomial is continuous.', interpretation: 'The limit is 9.',
-      check: 'Compare nearby values.', language: 'en' as const, promptVersion: 'v1',
-      inputHash: 'test', questionSourceRefs: [], answerChunkIds: [], createdAt: 1,
+      questionMeaning: 'Find the limit.',
+      knowledgePoints: ['Use continuity.'],
+      method: 'Substitute the value.',
+      steps: ['Set $x=3$.', 'Compute $3^2=9$.'],
+      explanation: 'A polynomial is continuous.',
+      interpretation: 'The limit is 9.',
+      check: 'Compare nearby values.',
+      language: 'en' as const,
+      promptVersion: 'v1',
+      inputHash: 'test',
+      questionSourceRefs: [],
+      answerChunkIds: [],
+      createdAt: 1,
     })),
     ask: vi.fn(async () => ({
       id: 'a1',
@@ -96,7 +112,10 @@ describe('HomeworkQuestionView', () => {
     const { container } = render(<HomeworkQuestionView question={QUESTION} service={service} />)
 
     expect(screen.getByText(/Find the limit/)).toBeInTheDocument()
-    expect(container.querySelector('[data-selection-context="homework"]')).toHaveAttribute('data-selection-title', '1')
+    expect(container.querySelector('[data-selection-context="homework"]')).toHaveAttribute(
+      'data-selection-title',
+      '1',
+    )
     expect(screen.queryByText('Hint one')).not.toBeInTheDocument()
     expect(screen.queryByText('The full solution.')).not.toBeInTheDocument()
 
@@ -116,11 +135,19 @@ describe('HomeworkQuestionView', () => {
     const service = stubService()
     const { answerCheckInputHash } = await import('@/entities/homework/answerCheck')
     vi.mocked(service.checkAnswer).mockImplementation(async (_id, draft) => ({
-      method: 'ai', verdict: 'partial', similarityPercent: 75,
-      feedback: 'The result is right; explain the method.', matchedPoints: ['Correct result'],
-      missingPoints: ['Reasoning'], referenceKind: 'ai_solution',
-      inputHash: answerCheckInputHash(QUESTION, draft, 'en'), language: 'en', promptVersion: 'v1',
-      questionSourceRefs: [], answerChunkIds: [], createdAt: 1,
+      method: 'ai',
+      verdict: 'partial',
+      similarityPercent: 75,
+      feedback: 'The result is right; explain the method.',
+      matchedPoints: ['Correct result'],
+      missingPoints: ['Reasoning'],
+      referenceKind: 'ai_solution',
+      inputHash: answerCheckInputHash(QUESTION, draft, 'en'),
+      language: 'en',
+      promptVersion: 'v1',
+      questionSourceRefs: [],
+      answerChunkIds: [],
+      createdAt: 1,
     }))
     render(<HomeworkQuestionView question={QUESTION} service={service} />)
     await user.click(screen.getByRole('button', { name: 'Check answer' }))
@@ -140,7 +167,9 @@ describe('HomeworkQuestionView', () => {
     // action is no longer required.
     const hintTitle = screen.getByText('Hint 0 of 2')
     const chatTitle = screen.getByText('Ask AI')
-    expect(hintTitle.compareDocumentPosition(chatTitle) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(
+      hintTitle.compareDocumentPosition(chatTitle) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy()
     const input = screen.getByLabelText('Ask about this question')
     await user.type(input, 'Where do I start?')
     await user.click(screen.getByRole('button', { name: /Send/ }))
@@ -181,14 +210,22 @@ describe('HomeworkQuestionView', () => {
     })
     const { unmount } = render(
       <MemoryRouter>
-        <HomeworkQuestionView question={answer} service={service} mode="review" answerDocumentId="a1" />
+        <HomeworkQuestionView
+          question={answer}
+          service={service}
+          mode="review"
+          answerDocumentId="a1"
+        />
       </MemoryRouter>,
     )
     expect(await screen.findByText('Use continuity.')).toBeInTheDocument()
     expect(service.loadAnswerSourcePages).not.toHaveBeenCalled()
     expect(screen.queryByRole('img', { name: 'Original answer · page 8' })).not.toBeInTheDocument()
     await userEvent.setup().click(screen.getByText('Professor answer (verbatim)'))
-    expect(await screen.findByRole('img', { name: 'Original answer · page 8' })).toHaveAttribute('src', 'blob:answer-page')
+    expect(await screen.findByRole('img', { name: 'Original answer · page 8' })).toHaveAttribute(
+      'src',
+      'blob:answer-page',
+    )
     expect(screen.getByText('Extracted text').closest('details')).not.toHaveAttribute('open')
     expect(screen.getByText(/PDF extraction may lose mathematical layout/)).toBeInTheDocument()
     unmount()

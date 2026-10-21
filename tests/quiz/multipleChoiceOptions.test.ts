@@ -60,7 +60,10 @@ function isRejected(bad: unknown): boolean {
 
 describe('multiple-choice option validation', () => {
   it('keeps a well-formed option set, in order', () => {
-    const out = service().validateGenerated({ questions: [GOOD] } as unknown as QuizGenerationOutput, 1)
+    const out = service().validateGenerated(
+      { questions: [GOOD] } as unknown as QuizGenerationOutput,
+      1,
+    )
     expect(out).toHaveLength(1)
     expect(out[0]!.options?.map((o) => o.label)).toEqual(['3', '4', '5', '6'])
     expect(out[0]!.correctAnswer).toBe('4')
@@ -105,7 +108,10 @@ describe('multiple-choice option validation', () => {
   })
 
   it('stores the flagged option as the answer', () => {
-    const out = service().validateGenerated({ questions: [GOOD] } as unknown as QuizGenerationOutput, 1)
+    const out = service().validateGenerated(
+      { questions: [GOOD] } as unknown as QuizGenerationOutput,
+      1,
+    )
     expect(out[0]!.correctAnswer).toBe(out[0]!.options!.find((o) => o.isCorrect)!.label)
   })
 
@@ -245,7 +251,15 @@ describe('other question types are unaffected', () => {
     const out = service().validateGenerated(
       {
         questions: [
-          { prompt: 'Derivative of x^2 is 2x?', type: 'true_false', correctAnswer: 'true', solution: '', knowledgePoint: 'Power Rule', difficulty: 'basic', hints: [] },
+          {
+            prompt: 'Derivative of x^2 is 2x?',
+            type: 'true_false',
+            correctAnswer: 'true',
+            solution: '',
+            knowledgePoint: 'Power Rule',
+            difficulty: 'basic',
+            hints: [],
+          },
         ],
       } as unknown as QuizGenerationOutput,
       1,
@@ -260,7 +274,15 @@ describe('other question types are unaffected', () => {
     const out = service().validateGenerated(
       {
         questions: [
-          { prompt: 'd/dx x^2 at x=3', type: 'numeric', correctAnswer: '6', solution: '', knowledgePoint: 'Power Rule', difficulty: 'basic', hints: [] },
+          {
+            prompt: 'd/dx x^2 at x=3',
+            type: 'numeric',
+            correctAnswer: '6',
+            solution: '',
+            knowledgePoint: 'Power Rule',
+            difficulty: 'basic',
+            hints: [],
+          },
         ],
       } as unknown as QuizGenerationOutput,
       1,
@@ -274,7 +296,15 @@ describe('other question types are unaffected', () => {
     const out = service().validateGenerated(
       {
         questions: [
-          { prompt: 'Derivative of x^3', type: 'math_expr', correctAnswer: '3x^2', solution: '', knowledgePoint: 'Power Rule', difficulty: 'basic', hints: [] },
+          {
+            prompt: 'Derivative of x^3',
+            type: 'math_expr',
+            correctAnswer: '3x^2',
+            solution: '',
+            knowledgePoint: 'Power Rule',
+            difficulty: 'basic',
+            hints: [],
+          },
         ],
       } as unknown as QuizGenerationOutput,
       1,
@@ -286,7 +316,15 @@ describe('other question types are unaffected', () => {
 
   it('rejects the removed short-answer type', () => {
     expect(
-      isRejected({ prompt: 'Explain?', type: 'short_answer', correctAnswer: 'rate of change', solution: '', knowledgePoint: 'KP', difficulty: 'basic', hints: [] }),
+      isRejected({
+        prompt: 'Explain?',
+        type: 'short_answer',
+        correctAnswer: 'rate of change',
+        solution: '',
+        knowledgePoint: 'KP',
+        difficulty: 'basic',
+        hints: [],
+      }),
     ).toBe(true)
   })
 })

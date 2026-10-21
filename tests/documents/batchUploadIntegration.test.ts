@@ -349,9 +349,9 @@ describe('batch upload against the real pipeline', () => {
     it('refuses a file the free space cannot hold and saves nothing', async () => {
       const projectId = await makeProject('Anatomy')
       stubStorage(async () => ({ quota: 1000, usage: 990 }))
-      await expect(uploadDocument({ projectId, type: 'pdf', file: pdfFile('Atlas.pdf') })).rejects.toThrow(
-        /Not enough browser storage/,
-      )
+      await expect(
+        uploadDocument({ projectId, type: 'pdf', file: pdfFile('Atlas.pdf') }),
+      ).rejects.toThrow(/Not enough browser storage/)
       expect(await new DocumentRepository(db).listByProject(projectId)).toHaveLength(0)
     })
 
@@ -370,9 +370,9 @@ describe('batch upload against the real pipeline', () => {
       const projectId = await makeProject('Anatomy')
       const quota = Object.assign(new Error('QuotaExceededError'), { name: 'QuotaExceededError' })
       const add = vi.spyOn(db.documentBlobs, 'add').mockRejectedValueOnce(quota)
-      await expect(uploadDocument({ projectId, type: 'pdf', file: pdfFile('Atlas.pdf') })).rejects.toThrow(
-        /storage is full/,
-      )
+      await expect(
+        uploadDocument({ projectId, type: 'pdf', file: pdfFile('Atlas.pdf') }),
+      ).rejects.toThrow(/storage is full/)
       add.mockRestore()
       expect(await new DocumentRepository(db).listByProject(projectId)).toHaveLength(0)
     })

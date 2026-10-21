@@ -146,7 +146,10 @@ export function buildSystemPrompt(): string {
             sets: [{ id: 'a', label: 'A', elements: ['1', '2', '3'] }],
             universe: ['1', '2', '3', '4', '5'],
             operands: ['a', 'b'],
-            elements: [{ id: 'a', label: 'a' }, { id: 'b', label: 'b' }],
+            elements: [
+              { id: 'a', label: 'a' },
+              { id: 'b', label: 'b' },
+            ],
             relations: [{ lower: 'a', upper: 'b' }],
           },
         ],

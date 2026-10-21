@@ -25,8 +25,10 @@ function tf(correctAnswer: string): Question {
 
 describe('true/false answers', () => {
   it('reads Chinese words, ticks and JSON booleans', () => {
-    for (const v of ['true', 'True', '正确', '对', '是', '√', '✓', true]) expect(parseTrueFalse(v)).toBe(true)
-    for (const v of ['false', '错误', '错', '否', '×', '✗', false]) expect(parseTrueFalse(v)).toBe(false)
+    for (const v of ['true', 'True', '正确', '对', '是', '√', '✓', true])
+      expect(parseTrueFalse(v)).toBe(true)
+    for (const v of ['false', '错误', '错', '否', '×', '✗', false])
+      expect(parseTrueFalse(v)).toBe(false)
     expect(parseTrueFalse('maybe')).toBeNull()
     expect(parseTrueFalse(1)).toBeNull()
   })
@@ -37,7 +39,10 @@ describe('true/false answers', () => {
   })
 
   it('normalizes generated true/false answers and drops unreadable ones', () => {
-    const svc = new QuizService({ ai: { chatJSON: vi.fn() } as unknown as AIService, db: new AppDatabase() })
+    const svc = new QuizService({
+      ai: { chatJSON: vi.fn() } as unknown as AIService,
+      db: new AppDatabase(),
+    })
     const base = { solution: '', knowledgePoint: 'Logic', difficulty: 'basic', hints: [] }
     const data = {
       questions: [

@@ -25,7 +25,14 @@ interface ParseState {
 
 function handleTag(state: ParseState, tag: string, attrs: Record<string, string>): string {
   const lower = tag.toLowerCase()
-  if (lower === 'h1' || lower === 'h2' || lower === 'h3' || lower === 'h4' || lower === 'h5' || lower === 'h6') {
+  if (
+    lower === 'h1' ||
+    lower === 'h2' ||
+    lower === 'h3' ||
+    lower === 'h4' ||
+    lower === 'h5' ||
+    lower === 'h6'
+  ) {
     state.blocks.push({ type: 'heading', level: Number(lower[1]), text: '' })
     return ''
   }
@@ -68,10 +75,7 @@ function handleText(state: ParseState, text: string): void {
 }
 
 function escapeHtml(s: string): string {
-  return s
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
 }
 
 function handleCloseTag(state: ParseState, tag: string): void {
@@ -108,7 +112,9 @@ function parseMammothHtml(html: string): DocxExtractedBlock[] {
   const tail = html.slice(cursor)
   if (tail) handleText(state, tail)
 
-  return state.blocks.filter((b) => b.text.trim().length > 0 || (b.type === 'table' && (b.rows?.length ?? 0) > 0))
+  return state.blocks.filter(
+    (b) => b.text.trim().length > 0 || (b.type === 'table' && (b.rows?.length ?? 0) > 0),
+  )
 }
 
 function parseAttrs(raw: string): Record<string, string> {

@@ -21,8 +21,13 @@ import type { PracticeQuestion } from '@/entities/practice/types'
 import type { AIService } from '@/services/aiService'
 import type { ChatMessage } from '@/infrastructure/ai/types'
 
-const REFERENCE = 'Enzymes lower the activation energy. They are not consumed. Each acts on a specific substrate.'
-const POINTS = ['Enzymes lower the activation energy.', 'Enzymes are not consumed.', 'Each enzyme acts on a specific substrate.']
+const REFERENCE =
+  'Enzymes lower the activation energy. They are not consumed. Each acts on a specific substrate.'
+const POINTS = [
+  'Enzymes lower the activation energy.',
+  'Enzymes are not consumed.',
+  'Each enzyme acts on a specific substrate.',
+]
 const ANSWER = 'They make the activation energy lower, and they are not used up by the reaction.'
 
 /** Routes each call by its system prompt, the way the real services call the AI. */
@@ -61,7 +66,8 @@ function routedAI(extra: (system: string) => unknown = () => undefined) {
 }
 
 const calls = (spy: ReturnType<typeof vi.fn>, marker: string) =>
-  spy.mock.calls.filter(([messages]) => (messages as ChatMessage[])[0]!.content.includes(marker)).length
+  spy.mock.calls.filter(([messages]) => (messages as ChatMessage[])[0]!.content.includes(marker))
+    .length
 
 describe('professor practice short answers', () => {
   let db: AppDatabase
@@ -141,7 +147,9 @@ describe('professor practice short answers', () => {
     const disputed = await service(ai).disputeAttempt(feedback.attemptId)
     expect(disputed.evaluation?.disputed).toBe(true)
     expect(await mistakes.findByQuestion(projectId, question.id)).toBeUndefined()
-    expect((await new KnowledgeMasteryRepository(db).get(projectId, 'practice.pdf'))?.attempts).toBe(0)
+    expect(
+      (await new KnowledgeMasteryRepository(db).get(projectId, 'practice.pdf'))?.attempts,
+    ).toBe(0)
   })
 
   it('does not grade without a reference answer or without AI', async () => {
@@ -160,7 +168,9 @@ describe('professor practice short answers', () => {
   it('regenerates the points when the professor answer changes', async () => {
     const { ai, chatJSON } = routedAI()
     await service(ai).recordAttempt(question.id, ANSWER)
-    await new PracticeRepository(db).updateQuestion(question.id, { expectedAnswer: `${REFERENCE} Edited.` })
+    await new PracticeRepository(db).updateQuestion(question.id, {
+      expectedAnswer: `${REFERENCE} Edited.`,
+    })
     await service(ai).recordAttempt(question.id, ANSWER)
     expect(calls(chatJSON, 'split a reference answer')).toBe(2)
   })
@@ -198,15 +208,33 @@ describe('tutor short answers', () => {
     const docs = new DocumentRepository(db)
     const chunks = new ChunkRepository(db)
     const analyses = new CourseAnalysisRepository(db)
-    const doc = await docs.create({ projectId: project.id, type: 'text', name: 'b.txt', sizeBytes: 0 })
+    const doc = await docs.create({
+      projectId: project.id,
+      type: 'text',
+      name: 'b.txt',
+      sizeBytes: 0,
+    })
     await docs.update(doc.id, { status: 'ready' })
     await chunks.addMany([
-      { documentId: doc.id, projectId: project.id, contentType: 'paragraph', text: REFERENCE, sourceReference: 'b.txt', order: 0 },
+      {
+        documentId: doc.id,
+        projectId: project.id,
+        contentType: 'paragraph',
+        text: REFERENCE,
+        sourceReference: 'b.txt',
+        order: 0,
+      },
     ])
     await analyses.reseedProject(
       project.id,
       {
-        topics: [{ name: 'Enzymes', description: '', sourceRefs: [{ documentId: doc.id, documentName: 'b.txt' }] }],
+        topics: [
+          {
+            name: 'Enzymes',
+            description: '',
+            sourceRefs: [{ documentId: doc.id, documentName: 'b.txt' }],
+          },
+        ],
         concepts: [],
         formulas: [],
         symbols: [],

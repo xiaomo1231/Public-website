@@ -38,40 +38,92 @@ export function PlotFrame({
     right: width - pad.right,
     top: pad.top,
     bottom: height - pad.bottom,
-    sx: (x) => pad.left + ((x - xRange[0]) / (xRange[1] - xRange[0])) * (width - pad.left - pad.right),
-    sy: (y) => pad.top + (1 - (y - yRange[0]) / (yRange[1] - yRange[0])) * (height - pad.top - pad.bottom),
+    sx: (x) =>
+      pad.left + ((x - xRange[0]) / (xRange[1] - xRange[0])) * (width - pad.left - pad.right),
+    sy: (y) =>
+      pad.top + (1 - (y - yRange[0]) / (yRange[1] - yRange[0])) * (height - pad.top - pad.bottom),
   }
   const xTicks = ticks(xRange[0], xRange[1], compact ? 4 : 7)
   const yTicks = ticks(yRange[0], yRange[1], compact ? 4 : 5)
   const axisY = yRange[0] <= 0 && yRange[1] >= 0 ? scale.sy(0) : scale.bottom
   const axisX = xRange[0] <= 0 && xRange[1] >= 0 ? scale.sx(0) : scale.left
   return (
-    <svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label={label} className="block h-auto w-full max-w-full">
+    <svg
+      viewBox={`0 0 ${width} ${height}`}
+      role="img"
+      aria-label={label}
+      className="block h-auto w-full max-w-full"
+    >
       <title>{label}</title>
       <defs>
         <clipPath id={clip}>
-          <rect x={scale.left} y={scale.top} width={scale.right - scale.left} height={scale.bottom - scale.top} />
+          <rect
+            x={scale.left}
+            y={scale.top}
+            width={scale.right - scale.left}
+            height={scale.bottom - scale.top}
+          />
         </clipPath>
       </defs>
       <g aria-hidden="true">
         {yTicks.map((v) => (
           <g key={`y${v}`}>
-            <line x1={scale.left} x2={scale.right} y1={scale.sy(v)} y2={scale.sy(v)} stroke={GRID} strokeWidth="1" />
-            <text x={scale.left - 6} y={scale.sy(v) + 4} textAnchor="end" fontSize="11" fill={LABEL}>
+            <line
+              x1={scale.left}
+              x2={scale.right}
+              y1={scale.sy(v)}
+              y2={scale.sy(v)}
+              stroke={GRID}
+              strokeWidth="1"
+            />
+            <text
+              x={scale.left - 6}
+              y={scale.sy(v) + 4}
+              textAnchor="end"
+              fontSize="11"
+              fill={LABEL}
+            >
               {formatNumber(v, 3)}
             </text>
           </g>
         ))}
         {xTicks.map((v) => (
           <g key={`x${v}`}>
-            <line x1={scale.sx(v)} x2={scale.sx(v)} y1={scale.top} y2={scale.bottom} stroke={GRID} strokeWidth="1" />
-            <text x={scale.sx(v)} y={scale.bottom + 15} textAnchor="middle" fontSize="11" fill={LABEL}>
+            <line
+              x1={scale.sx(v)}
+              x2={scale.sx(v)}
+              y1={scale.top}
+              y2={scale.bottom}
+              stroke={GRID}
+              strokeWidth="1"
+            />
+            <text
+              x={scale.sx(v)}
+              y={scale.bottom + 15}
+              textAnchor="middle"
+              fontSize="11"
+              fill={LABEL}
+            >
               {formatNumber(v, 3)}
             </text>
           </g>
         ))}
-        <line x1={scale.left} x2={scale.right} y1={axisY} y2={axisY} stroke={AXIS} strokeWidth="1.2" />
-        <line x1={axisX} x2={axisX} y1={scale.top} y2={scale.bottom} stroke={AXIS} strokeWidth="1.2" />
+        <line
+          x1={scale.left}
+          x2={scale.right}
+          y1={axisY}
+          y2={axisY}
+          stroke={AXIS}
+          strokeWidth="1.2"
+        />
+        <line
+          x1={axisX}
+          x2={axisX}
+          y1={scale.top}
+          y2={scale.bottom}
+          stroke={AXIS}
+          strokeWidth="1.2"
+        />
         {xLabel && (
           <text x={scale.right} y={height - 4} textAnchor="end" fontSize="11" fill={LABEL}>
             {xLabel}

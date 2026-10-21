@@ -42,10 +42,7 @@ export interface TransformGeometry {
   vectors: TransformVectorResult[]
 }
 
-export function computeTransform(
-  matrix: Matrix2x2,
-  vectors: TransformVector[],
-): TransformGeometry {
+export function computeTransform(matrix: Matrix2x2, vectors: TransformVector[]): TransformGeometry {
   const det = determinant(matrix)
   const areaScale = Math.abs(det)
   const unitSquare: Vec2[] = [

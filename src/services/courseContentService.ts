@@ -39,7 +39,10 @@ import { normalizeTopicAnalysis } from '@/infrastructure/ai/prompts/topic-analyz
 import { normalizeMathNotation } from '@/infrastructure/files/mathNotation'
 import { buildAIServices } from './aiServices'
 import type { AIService } from './aiService'
-import { ANALYSIS_MIN_OUTPUT_TOKENS, type DocumentAnalysisProgress } from './documentAnalysisService'
+import {
+  ANALYSIS_MIN_OUTPUT_TOKENS,
+  type DocumentAnalysisProgress,
+} from './documentAnalysisService'
 import { AppError, isAppError } from '@/infrastructure/errors/AppError'
 import { logger } from '@/infrastructure/logger/logger'
 import { t } from '@/i18n'
@@ -71,12 +74,7 @@ export interface IncrementalPlan {
   executionScope: 'project' | 'local'
 }
 
-export type EnsureAnalyzedReason =
-  | 'fresh'
-  | 'no-provider'
-  | 'no-documents'
-  | 'failed'
-  | 'analyzed'
+export type EnsureAnalyzedReason = 'fresh' | 'no-provider' | 'no-documents' | 'failed' | 'analyzed'
 
 export interface EnsureAnalyzedResult {
   analyzed: boolean
@@ -154,7 +152,10 @@ const INTERRUPTED_AFTER_MS = 5 * 60_000
  * actionable message, so the course offers a re-run. (A run still going in
  * another tab simply overwrites this when it finishes.)
  */
-export async function recoverInterruptedAnalyses(db: AppDatabase = getDb(), now = Date.now()): Promise<number> {
+export async function recoverInterruptedAnalyses(
+  db: AppDatabase = getDb(),
+  now = Date.now(),
+): Promise<number> {
   const stuck = await db.courseAnalyses
     .where('status')
     .anyOf(['analyzing', 'pending'])
@@ -356,7 +357,8 @@ export class CourseContentService {
       // request arriving meanwhile is the same request (e.g. a double click).
       const forcedAgain = entry.forceRequested && !force
       const endHash = await this.currentSourceHash(projectId)
-      const materialChanged = startHash !== undefined && endHash !== undefined && endHash !== startHash
+      const materialChanged =
+        startHash !== undefined && endHash !== undefined && endHash !== startHash
       if (!forcedAgain && !materialChanged) return result
       if (signalAborted(options.signal)) return result
       logger.info('Course material changed during analysis; running once more', {
@@ -428,11 +430,7 @@ export class CourseContentService {
     // Only topics that touch the requested chapter/section are regenerated —
     // a scoped call must never spend AI work on (or rewrite) the rest of the
     // course. Pending topic work elsewhere keeps the analysis non-fresh.
-    const inScope = topicScopeFilter(
-      nodes,
-      targetNodeId,
-      await this.content.getTopics(projectId),
-    )
+    const inScope = topicScopeFilter(nodes, targetNodeId, await this.content.getTopics(projectId))
     const isTopicWork = (op: IncrementalOp) =>
       op.entity === 'topic' &&
       (op.kind === 'regenerateTopic' || (op.kind === 'relinkOnly' && op.inputChunkIds.length > 0))
@@ -578,9 +576,7 @@ export class CourseContentService {
     // still committed, but the analysis row keeps its old hashes, so it stays
     // stale and the rest is redone.
     const complete =
-      flaggedForFullReanalysis.length === 0 &&
-      skipped.length === 0 &&
-      outOfScopeWork.length === 0
+      flaggedForFullReanalysis.length === 0 && skipped.length === 0 && outOfScopeWork.length === 0
     if (!complete) {
       logger.info('Incremental update left work pending; the analysis stays stale', {
         projectId,
@@ -808,9 +804,7 @@ export class CourseContentService {
       await services.documentAnalysis.analyzeProject(projectId, {
         ...(options.onProgress ? { onProgress: options.onProgress } : {}),
         ...(options.signal ? { signal: options.signal } : {}),
-        ...(practiceQuestions.length > 0
-          ? { sideWrites: { practiceQuestions } }
-          : {}),
+        ...(practiceQuestions.length > 0 ? { sideWrites: { practiceQuestions } } : {}),
       })
       return { analyzed: true, reason: 'analyzed' }
     } catch (err) {
@@ -851,7 +845,7 @@ export function topicScopeFilter(
 ): (topicId: string) => boolean {
   const scopeNodes = new Set<string>([targetNodeId])
   // Walk down the flat tree until no new descendants appear.
-  for (let grew = true; grew; ) {
+  for (let grew = true; grew;) {
     grew = false
     for (const node of nodes) {
       if (node.parentId && scopeNodes.has(node.parentId) && !scopeNodes.has(node.id)) {

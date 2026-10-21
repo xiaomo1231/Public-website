@@ -56,10 +56,7 @@ function section(
   return chapter(id, sourceChunkIds, { type: 'section', depth: 1, order: 1, ...overrides })
 }
 
-function chunk(
-  id: string,
-  overrides: Partial<DocumentChunk> = {},
-): DocumentChunk {
+function chunk(id: string, overrides: Partial<DocumentChunk> = {}): DocumentChunk {
   return {
     id,
     documentId: 'doc-1',
@@ -266,10 +263,7 @@ describe('CourseContentService.ensureAnalyzed', () => {
     const other = await new ProjectService(db).create({ name: 'Physics', subject: 'physics' })
     const service = new CourseContentService({ content })
 
-    await Promise.all([
-      service.ensureAnalyzed(projectId),
-      service.ensureAnalyzed(other.id),
-    ])
+    await Promise.all([service.ensureAnalyzed(projectId), service.ensureAnalyzed(other.id)])
 
     expect(mocks.analyzeProject).toHaveBeenCalledTimes(2)
   })

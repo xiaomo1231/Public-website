@@ -57,7 +57,11 @@ describe('formulas with parameters', () => {
   })
 
   it('integrates and forms Riemann sums', () => {
-    near(integrate((x) => x * x, 0, 3), 9, 1e-9)
+    near(
+      integrate((x) => x * x, 0, 3),
+      9,
+      1e-9,
+    )
     const { sum } = riemannSum((x) => x * x, 0, 3, 3, 'left')
     near(sum, 5)
     near(riemannSum((x) => x * x, 0, 3, 3, 'right').sum, 14)
@@ -111,7 +115,13 @@ describe('physics', () => {
       kind: 'series',
       items: [
         { kind: 'resistor', label: 'R1', resistance: 4 },
-        { kind: 'parallel', items: [{ kind: 'resistor', label: 'R2', resistance: 6 }, { kind: 'resistor', label: 'R3', resistance: 3 }] },
+        {
+          kind: 'parallel',
+          items: [
+            { kind: 'resistor', label: 'R2', resistance: 6 },
+            { kind: 'resistor', label: 'R3', resistance: 3 },
+          ],
+        },
       ],
     }
     near(equivalentResistance(network), 6)
@@ -131,16 +141,28 @@ describe('chemistry, biology and statistics models', () => {
 
   it('fits the activation energy from data', () => {
     const ea = 50000
-    const points = [300, 320, 340, 360].map((t) => ({ t, k: 1e7 * Math.exp(-ea / (8.314462618 * t)) }))
+    const points = [300, 320, 340, 360].map((t) => ({
+      t,
+      k: 1e7 * Math.exp(-ea / (8.314462618 * t)),
+    }))
     const fit = fitArrhenius(points)!
     near(fit.ea, ea, 1e-3)
     near(fit.r2!, 1, 1e-9)
   })
 
   it('applies each inhibition type', () => {
-    expect(apparentConstants(10, 2, { type: 'competitive', concentration: 1, ki: 1 })).toEqual({ vmax: 10, km: 4 })
-    expect(apparentConstants(10, 2, { type: 'noncompetitive', concentration: 1, ki: 1 })).toEqual({ vmax: 5, km: 2 })
-    expect(apparentConstants(10, 2, { type: 'uncompetitive', concentration: 1, ki: 1 })).toEqual({ vmax: 5, km: 1 })
+    expect(apparentConstants(10, 2, { type: 'competitive', concentration: 1, ki: 1 })).toEqual({
+      vmax: 10,
+      km: 4,
+    })
+    expect(apparentConstants(10, 2, { type: 'noncompetitive', concentration: 1, ki: 1 })).toEqual({
+      vmax: 5,
+      km: 2,
+    })
+    expect(apparentConstants(10, 2, { type: 'uncompetitive', concentration: 1, ki: 1 })).toEqual({
+      vmax: 5,
+      km: 1,
+    })
   })
 
   it('grows populations', () => {

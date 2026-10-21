@@ -13,15 +13,12 @@ import {
 } from 'lucide-react'
 import type { HomeworkQuestion, HomeworkSet } from '@/entities/homework/types'
 import type { AnswerEntry, AnswerLine } from '@/entities/homework/answerMatching'
-import { isDeferredProfessorAnswer, segmentsToAnswerEntries } from '@/entities/homework/answerMatching'
-import type { AnswerGenerationProgress, HomeworkService } from '@/services/homeworkService'
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/shared/ui/Select2'
+  isDeferredProfessorAnswer,
+  segmentsToAnswerEntries,
+} from '@/entities/homework/answerMatching'
+import type { AnswerGenerationProgress, HomeworkService } from '@/services/homeworkService'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/shared/ui/Select2'
 import { Badge } from '@/shared/ui/Badge'
 import { Button } from '@/shared/ui/Button'
 import { Input } from '@/shared/ui/Input'
@@ -149,7 +146,9 @@ export function HomeworkAnswerDialog({
   const [documentStatus, setDocumentStatus] = useState<string | null>(null)
   const [documentType, setDocumentType] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
-  const [generationProgress, setGenerationProgress] = useState<AnswerGenerationProgress | null>(null)
+  const [generationProgress, setGenerationProgress] = useState<AnswerGenerationProgress | null>(
+    null,
+  )
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
   const [confirmDelete, setConfirmDelete] = useState(false)
@@ -259,11 +258,15 @@ export function HomeworkAnswerDialog({
       onChanged()
       // Reload first: `load()` clears the notice, so set it afterwards.
       await load()
-      setNotice(result.generated === 0 && result.failed === 0
-        ? t('homework.answer.upToDate')
-        : t('homework.answer.generatedSummary', {
-          generated: result.generated, failed: result.failed, skipped: result.skipped ?? 0,
-        }))
+      setNotice(
+        result.generated === 0 && result.failed === 0
+          ? t('homework.answer.upToDate')
+          : t('homework.answer.generatedSummary', {
+              generated: result.generated,
+              failed: result.failed,
+              skipped: result.skipped ?? 0,
+            }),
+      )
     } catch (err) {
       setError(friendlyAIError(err))
     } finally {
@@ -278,12 +281,20 @@ export function HomeworkAnswerDialog({
     setNotice(null)
     setGenerationProgress(null)
     try {
-      const result = await service.generateAnswerContent(set.id, [questionId], setGenerationProgress)
+      const result = await service.generateAnswerContent(
+        set.id,
+        [questionId],
+        setGenerationProgress,
+      )
       onChanged()
       await load()
-      setNotice(t('homework.answer.generatedSummary', {
-        generated: result.generated, failed: result.failed, skipped: 0,
-      }))
+      setNotice(
+        t('homework.answer.generatedSummary', {
+          generated: result.generated,
+          failed: result.failed,
+          skipped: 0,
+        }),
+      )
     } catch (err) {
       setError(friendlyAIError(err))
     } finally {
@@ -347,7 +358,9 @@ export function HomeworkAnswerDialog({
     setError(null)
     setNotice(null)
     try {
-      const sorted = [...new Set(manualStarts)].filter((i) => i >= 0 && i < lines.length).sort((a, b) => a - b)
+      const sorted = [...new Set(manualStarts)]
+        .filter((i) => i >= 0 && i < lines.length)
+        .sort((a, b) => a - b)
       if (sorted.length === 0 || sorted[0] !== 0) {
         setError(t('homework.answer.invalidSplit'))
         return
@@ -401,7 +414,10 @@ export function HomeworkAnswerDialog({
   }
 
   return (
-    <Dialog open={open} onOpenChange={(next) => (!busy || generationProgress !== null) && onOpenChange(next)}>
+    <Dialog
+      open={open}
+      onOpenChange={(next) => (!busy || generationProgress !== null) && onOpenChange(next)}
+    >
       <DialogContent className="max-w-3xl">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
@@ -422,7 +438,10 @@ export function HomeworkAnswerDialog({
           </div>
         )}
         {generationProgress && generationProgress.total > 0 && (
-          <div className="space-y-2 rounded-lg border border-border/70 bg-muted/20 p-3" aria-live="polite">
+          <div
+            className="space-y-2 rounded-lg border border-border/70 bg-muted/20 p-3"
+            aria-live="polite"
+          >
             <p className="text-sm font-medium">
               {t('homework.answer.generationProgress', {
                 completed: generationProgress.completed,
@@ -430,13 +449,17 @@ export function HomeworkAnswerDialog({
               })}
             </p>
             <Progress
-              value={100 * generationProgress.completed / generationProgress.total}
+              value={(100 * generationProgress.completed) / generationProgress.total}
               aria-label={t('homework.answer.generationProgressLabel')}
-              aria-valuenow={Math.round(100 * generationProgress.completed / generationProgress.total)}
+              aria-valuenow={Math.round(
+                (100 * generationProgress.completed) / generationProgress.total,
+              )}
               aria-valuemin={0}
               aria-valuemax={100}
             />
-            <p className="text-xs text-muted-foreground">{t('homework.answer.generationCanClose')}</p>
+            <p className="text-xs text-muted-foreground">
+              {t('homework.answer.generationCanClose')}
+            </p>
           </div>
         )}
 
@@ -452,9 +475,7 @@ export function HomeworkAnswerDialog({
           <div className="space-y-4">
             <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border/70 bg-muted/20 p-3">
               <div className="min-w-0">
-                <p className="text-xs text-muted-foreground">
-                  {t('homework.answer.linked')}
-                </p>
+                <p className="text-xs text-muted-foreground">{t('homework.answer.linked')}</p>
                 <p className="min-w-0 text-sm font-medium">
                   <TruncatedText text={documentName ?? ''} className="min-w-0" />
                 </p>
@@ -473,7 +494,12 @@ export function HomeworkAnswerDialog({
                     </Link>
                   </Button>
                 )}
-                <Button variant="ghost" size="icon" onClick={() => void load()} aria-label={t('homework.menu.refresh')}>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => void load()}
+                  aria-label={t('homework.menu.refresh')}
+                >
                   <RefreshCw className="h-4 w-4" />
                 </Button>
               </div>
@@ -497,7 +523,9 @@ export function HomeworkAnswerDialog({
                 </div>
                 <ul className="max-h-[45vh] space-y-1 overflow-y-auto pr-1">
                   {lines.length === 0 && (
-                    <li className="text-sm text-muted-foreground">{t('homework.answer.emptyEntries')}</li>
+                    <li className="text-sm text-muted-foreground">
+                      {t('homework.answer.emptyEntries')}
+                    </li>
                   )}
                   {lines.map((line, index) => {
                     const isStart = manualStarts.includes(index)
@@ -523,14 +551,20 @@ export function HomeworkAnswerDialog({
                         </Button>
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
-                            <span>{line.pageNumber !== undefined ? t('homework.answer.sourcePage', { page: line.pageNumber }) : t('homework.answer.noSourcePage')}</span>
+                            <span>
+                              {line.pageNumber !== undefined
+                                ? t('homework.answer.sourcePage', { page: line.pageNumber })
+                                : t('homework.answer.noSourcePage')}
+                            </span>
                             {isStart && (
                               <span className="text-primary">
                                 {t('homework.answer.manualNumber')}:
                               </span>
                             )}
                           </div>
-                          <p className="whitespace-pre-wrap break-words text-sm text-foreground">{line.text}</p>
+                          <p className="whitespace-pre-wrap break-words text-sm text-foreground">
+                            {line.text}
+                          </p>
                         </div>
                         {isStart && (
                           <Input
@@ -552,14 +586,22 @@ export function HomeworkAnswerDialog({
                 </ul>
                 <div className="flex flex-wrap items-center gap-2">
                   <Button onClick={() => void handleApplyDivision()} disabled={busy}>
-                    {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Scissors className="h-4 w-4" />}
+                    {busy ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Scissors className="h-4 w-4" />
+                    )}
                     {t('homework.answer.manualApply')}
                   </Button>
                   <Button variant="outline" onClick={() => setManualMode(false)} disabled={busy}>
                     {t('homework.answer.manualCancel')}
                   </Button>
                   {manual && (
-                    <Button variant="ghost" onClick={() => void handleResetDivision()} disabled={busy}>
+                    <Button
+                      variant="ghost"
+                      onClick={() => void handleResetDivision()}
+                      disabled={busy}
+                    >
                       {t('homework.answer.manualReset')}
                     </Button>
                   )}
@@ -569,7 +611,9 @@ export function HomeworkAnswerDialog({
               <>
                 <div>
                   <p className="text-sm font-medium">{t('homework.answer.previewTitle')}</p>
-                  <p className="text-xs text-muted-foreground">{t('homework.answer.previewHint')}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {t('homework.answer.previewHint')}
+                  </p>
                   <p className="text-xs text-muted-foreground">
                     {t('homework.answer.parseSummary', {
                       total: summary.total,
@@ -591,7 +635,9 @@ export function HomeworkAnswerDialog({
                       <AlertTriangle className="h-4 w-4" />
                       {t('homework.answer.singleFragmentTitle')}
                     </p>
-                    <p className="text-xs text-muted-foreground">{t('homework.answer.singleFragmentHint')}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {t('homework.answer.singleFragmentHint')}
+                    </p>
                     <div className="flex flex-wrap items-center gap-2">
                       {set.answerDocumentId && (
                         <Button variant="outline" size="sm" asChild>
@@ -610,7 +656,9 @@ export function HomeworkAnswerDialog({
                 )}
 
                 {entries.length === 0 && (
-                  <p className="text-sm text-muted-foreground">{t('homework.answer.emptyEntries')}</p>
+                  <p className="text-sm text-muted-foreground">
+                    {t('homework.answer.emptyEntries')}
+                  </p>
                 )}
 
                 {duplicateSelection && (
@@ -624,7 +672,9 @@ export function HomeworkAnswerDialog({
                     const value = selections[question.id]
                     const reason = reasons[question.id]
                     const preview = previewEntry(question.id)
-                    const deferredAnswer = Boolean(preview && isDeferredProfessorAnswer(preview.text))
+                    const deferredAnswer = Boolean(
+                      preview && isDeferredProfessorAnswer(preview.text),
+                    )
                     return (
                       <li key={question.id} className="rounded-lg border border-border/70 p-3">
                         <div className="flex items-start gap-2">
@@ -650,7 +700,9 @@ export function HomeworkAnswerDialog({
                                   <SelectValue />
                                 </SelectTrigger>
                                 <SelectContent>
-                                  <SelectItem value={NONE}>{t('homework.answer.noneOption')}</SelectItem>
+                                  <SelectItem value={NONE}>
+                                    {t('homework.answer.noneOption')}
+                                  </SelectItem>
                                   {entries.map((entry, index) => (
                                     <SelectItem key={index} value={String(index)}>
                                       {answerLabel(entry, index)}
@@ -661,11 +713,14 @@ export function HomeworkAnswerDialog({
                               {value === undefined ? (
                                 <Badge variant="outline">{t('homework.answer.status.none')}</Badge>
                               ) : (
-                                <Badge variant="default">{t('homework.answer.status.matched')}</Badge>
+                                <Badge variant="default">
+                                  {t('homework.answer.status.matched')}
+                                </Badge>
                               )}
                             </div>
-                            {value === undefined && reason && (
-                              summary.unsplit && reason === 'answer-number-missing' ? (
+                            {value === undefined &&
+                              reason &&
+                              (summary.unsplit && reason === 'answer-number-missing' ? (
                                 <p className="text-xs text-amber-600 dark:text-amber-400">
                                   {t('homework.answer.reason.unsplit')}
                                 </p>
@@ -673,25 +728,33 @@ export function HomeworkAnswerDialog({
                                 <p className="text-xs text-amber-600 dark:text-amber-400">
                                   {t(REASON_KEYS[reason]!)}
                                 </p>
-                              ) : null
-                            )}
+                              ) : null)}
                             {deferredAnswer && (
-                              <p className="text-xs text-muted-foreground">{t('homework.answer.deferredAnswer')}</p>
+                              <p className="text-xs text-muted-foreground">
+                                {t('homework.answer.deferredAnswer')}
+                              </p>
                             )}
-                            {!deferredAnswer && question.generationStatus === 'failed' && question.generationError && (
-                              <div className="flex flex-wrap items-center gap-2">
-                                <p className="text-xs text-destructive">
-                                  {t('homework.answer.questionGenerationFailed')}: {question.generationError}
-                                </p>
-                                {question.answerStatus === 'matched' && (
-                                  <Button variant="outline" size="sm" disabled={busy}
-                                    onClick={() => void handleRetryQuestion(question.id)}>
-                                    <RefreshCw className="h-4 w-4" />
-                                    {t('homework.answer.retryQuestion')}
-                                  </Button>
-                                )}
-                              </div>
-                            )}
+                            {!deferredAnswer &&
+                              question.generationStatus === 'failed' &&
+                              question.generationError && (
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <p className="text-xs text-destructive">
+                                    {t('homework.answer.questionGenerationFailed')}:{' '}
+                                    {question.generationError}
+                                  </p>
+                                  {question.answerStatus === 'matched' && (
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      disabled={busy}
+                                      onClick={() => void handleRetryQuestion(question.id)}
+                                    >
+                                      <RefreshCw className="h-4 w-4" />
+                                      {t('homework.answer.retryQuestion')}
+                                    </Button>
+                                  )}
+                                </div>
+                              )}
                             {preview && (
                               <div className="rounded-lg border border-border/60 bg-muted/20 p-2">
                                 <p className="mb-1 text-xs text-muted-foreground">
@@ -722,25 +785,38 @@ export function HomeworkAnswerDialog({
 
             {!manualMode && (
               <div className="flex flex-wrap items-center gap-2">
-                {documentType === 'pdf' && (
-                  confirmReprocess ? (
+                {documentType === 'pdf' &&
+                  (confirmReprocess ? (
                     <span className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
                       {t('homework.answer.reprocessHint')}
                       <Button size="sm" onClick={() => void handleReprocess()} disabled={busy}>
-                        {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+                        {busy ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <RefreshCw className="h-4 w-4" />
+                        )}
                         {t('homework.answer.reprocessConfirm')}
                       </Button>
-                      <Button variant="ghost" size="sm" onClick={() => setConfirmReprocess(false)} disabled={busy}>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setConfirmReprocess(false)}
+                        disabled={busy}
+                      >
                         {t('common.cancel')}
                       </Button>
                     </span>
                   ) : (
-                    <Button variant="outline" size="sm" onClick={() => setConfirmReprocess(true)} disabled={busy}>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setConfirmReprocess(true)}
+                      disabled={busy}
+                    >
                       <RefreshCw className="h-4 w-4" />
                       {t('homework.answer.reprocess')}
                     </Button>
-                  )
-                )}
+                  ))}
                 <Button variant="outline" size="sm" onClick={onRequestUpload} disabled={busy}>
                   {t('homework.answer.replace')}
                 </Button>
@@ -770,7 +846,12 @@ export function HomeworkAnswerDialog({
                       <Trash2 className="h-4 w-4" />
                       {t('homework.answer.deleteFile')}
                     </Button>
-                    <Button variant="ghost" size="sm" onClick={() => setConfirmDelete(false)} disabled={busy}>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setConfirmDelete(false)}
+                      disabled={busy}
+                    >
                       {t('common.cancel')}
                     </Button>
                   </span>
@@ -792,7 +873,11 @@ export function HomeworkAnswerDialog({
         )}
 
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={busy && generationProgress === null}>
+          <Button
+            variant="outline"
+            onClick={() => onOpenChange(false)}
+            disabled={busy && generationProgress === null}
+          >
             {t('common.close')}
           </Button>
           {set.answerDocumentId && ready && !manualMode && (
@@ -805,8 +890,15 @@ export function HomeworkAnswerDialog({
                 {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
                 {t('homework.answer.confirm')}
               </Button>
-              <Button onClick={() => void handleSaveAndGenerate()} disabled={busy || duplicateSelection}>
-                {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Wand2 className="h-4 w-4" />}
+              <Button
+                onClick={() => void handleSaveAndGenerate()}
+                disabled={busy || duplicateSelection}
+              >
+                {busy ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Wand2 className="h-4 w-4" />
+                )}
                 {t('homework.answer.confirmAndGenerate')}
               </Button>
             </>

@@ -158,7 +158,11 @@ export function tooShortEvaluation(question: Question, answer: string): Question
 }
 
 /** Not graded (no AI, or the check could not be completed): shown, not scored. */
-export function unverifiedShortAnswer(question: Question, answer: string, note: string): QuestionEvaluation {
+export function unverifiedShortAnswer(
+  question: Question,
+  answer: string,
+  note: string,
+): QuestionEvaluation {
   return {
     ...baseEvaluation(question, answer),
     isCorrect: null,

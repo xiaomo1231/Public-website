@@ -51,7 +51,8 @@ describe('citations stored without an excerpt', () => {
       db,
     )
     expect(filled[0]).toMatchObject({
-      quote: 'The subacromial bursa is separated from the joint cavity. The subscapular bursa often communicates with it.',
+      quote:
+        'The subacromial bursa is separated from the joint cavity. The subscapular bursa often communicates with it.',
       pageExcerpt: true,
     })
     expect(filled[1]).toMatchObject({ quote: 'The glenoid labrum deepens the glenoid cavity.' })

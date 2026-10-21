@@ -39,7 +39,13 @@ describe('DataManagementService', () => {
       blob: new Blob(['hello'], { type: 'text/plain' }),
     })
     const mistakes = new MistakeService(db)
-    await mistakes.addManual({ projectId: p.id, question: 'Q', studentAnswer: 'a', correctAnswer: 'b', knowledgePoint: 'KP' })
+    await mistakes.addManual({
+      projectId: p.id,
+      question: 'Q',
+      studentAnswer: 'a',
+      correctAnswer: 'b',
+      knowledgePoint: 'KP',
+    })
     const mastery = new MasteryService(db)
     await mastery.record({
       id: 'x',
@@ -108,19 +114,41 @@ describe('DataManagementService', () => {
   it('exports all project tables and lossless binary data without API credentials', async () => {
     const project = await new ProjectService(db).create({ name: 'P', subject: 'cs' })
     const bytes = new Uint8Array([0, 1, 127, 255]).buffer
-    await db.documentBlobs.put({ id: 'doc', projectId: project.id, mimeType: 'application/pdf', bytes })
-    await db.visualSourceImages.put({ id: 'figure', projectId: project.id, mimeType: 'image/png', bytes })
+    await db.documentBlobs.put({
+      id: 'doc',
+      projectId: project.id,
+      mimeType: 'application/pdf',
+      bytes,
+    })
+    await db.visualSourceImages.put({
+      id: 'figure',
+      projectId: project.id,
+      mimeType: 'image/png',
+      bytes,
+    })
     await db.table('practiceSets').put({ id: 'set', projectId: project.id })
     await db.table('practiceQuestions').put({ id: 'practice-q', projectId: project.id })
     await db.table('practiceAttempts').put({ id: 'practice-a', projectId: project.id })
     await db.table('courseStructureNodes').put({ id: 'chapter', projectId: project.id })
     await db.settings.put({
-      id: 'singleton', provider: 'openai', baseURL: '', model: '', temperature: 0.7,
-      maxTokens: 100, updatedAt: 1, apiKey: 'legacy-secret', apiKeyEncrypted: 'encrypted-secret',
+      id: 'singleton',
+      provider: 'openai',
+      baseURL: '',
+      model: '',
+      temperature: 0.7,
+      maxTokens: 100,
+      updatedAt: 1,
+      apiKey: 'legacy-secret',
+      apiKeyEncrypted: 'encrypted-secret',
     })
 
     const bundle = await new DataManagementService(db).exportAll()
-    for (const name of ['practiceSets', 'practiceQuestions', 'practiceAttempts', 'courseStructureNodes']) {
+    for (const name of [
+      'practiceSets',
+      'practiceQuestions',
+      'practiceAttempts',
+      'courseStructureNodes',
+    ]) {
       expect((bundle.json[name] as unknown[]).length).toBe(1)
     }
     expect(JSON.stringify(bundle)).not.toContain('legacy-secret')
@@ -134,7 +162,12 @@ describe('DataManagementService', () => {
   it('preserves binary bytes across base64 segment boundaries', async () => {
     const project = await new ProjectService(db).create({ name: 'P', subject: 'cs' })
     const bytes = Uint8Array.from({ length: 8195 }, (_, index) => index % 256)
-    await db.documentBlobs.put({ id: 'large', projectId: project.id, mimeType: 'application/pdf', bytes: bytes.buffer })
+    await db.documentBlobs.put({
+      id: 'large',
+      projectId: project.id,
+      mimeType: 'application/pdf',
+      bytes: bytes.buffer,
+    })
     const { blobs } = await new DataManagementService(db).exportAll()
     const decoded = Uint8Array.from(atob(blobs[0]!.bytesBase64), (char) => char.charCodeAt(0))
     expect(decoded).toEqual(bytes)
@@ -145,12 +178,24 @@ describe('DataManagementService', () => {
     // Larger than one ~11 MB base64 piece, so the pieces must concatenate cleanly.
     const big = new Uint8Array(8190 * 1024 + 7)
     for (let i = 0; i < big.length; i++) big[i] = (i * 31) % 256
-    await db.documentBlobs.put({ id: 'big', projectId: project.id, mimeType: 'application/pdf', bytes: big.buffer })
-    await db.visualSourceImages.put({ id: 'figure', projectId: project.id, mimeType: 'image/png', bytes: new Uint8Array([1, 2, 3]).buffer })
+    await db.documentBlobs.put({
+      id: 'big',
+      projectId: project.id,
+      mimeType: 'application/pdf',
+      bytes: big.buffer,
+    })
+    await db.visualSourceImages.put({
+      id: 'figure',
+      projectId: project.id,
+      mimeType: 'image/png',
+      bytes: new Uint8Array([1, 2, 3]).buffer,
+    })
     const service = new DataManagementService(db)
     const file = await service.exportFile()
     expect(file.type).toBe('application/json')
-    const parsed = JSON.parse(await file.text()) as Awaited<ReturnType<DataManagementService['exportAll']>>
+    const parsed = JSON.parse(await file.text()) as Awaited<
+      ReturnType<DataManagementService['exportAll']>
+    >
     const expected = await service.exportAll()
     expect({ ...parsed.json, exportedAt: 0 }).toEqual({ ...expected.json, exportedAt: 0 })
     // exportAll's encoding is checked byte for byte above; the pieces must match it exactly.
@@ -169,9 +214,21 @@ describe('DataManagementService', () => {
     const projects = new ProjectService(db)
     const p = await projects.create({ name: 'P', subject: 'cs' })
     const docs = new DocumentRepository(db)
-    const doc = await docs.create({ projectId: p.id, type: 'text', name: 'a.txt', sizeBytes: 5, blob: new Blob(['x'], { type: 'text/plain' }) })
+    const doc = await docs.create({
+      projectId: p.id,
+      type: 'text',
+      name: 'a.txt',
+      sizeBytes: 5,
+      blob: new Blob(['x'], { type: 'text/plain' }),
+    })
     const mistakes = new MistakeService(db)
-    const mistake = await mistakes.addManual({ projectId: p.id, question: 'Q', studentAnswer: 'a', correctAnswer: 'b', knowledgePoint: 'KP' })
+    const mistake = await mistakes.addManual({
+      projectId: p.id,
+      question: 'Q',
+      studentAnswer: 'a',
+      correctAnswer: 'b',
+      knowledgePoint: 'KP',
+    })
     const mastery = new MasteryService(db)
     await mastery.record({
       id: 'x',
@@ -278,13 +335,20 @@ describe('DataManagementService', () => {
   it('rolls back project deletion when the final delete fails', async () => {
     const project = await new ProjectService(db).create({ name: 'P', subject: 'cs' })
     const doc = await new DocumentRepository(db).create({
-      projectId: project.id, type: 'text', name: 'a.txt', sizeBytes: 1,
+      projectId: project.id,
+      type: 'text',
+      name: 'a.txt',
+      sizeBytes: 1,
       blob: new Blob(['x'], { type: 'text/plain' }),
     })
     await db.table('practiceSets').put({ id: 'set', projectId: project.id })
-    db.projects.hook('deleting', () => { throw new Error('delete blocked') })
+    db.projects.hook('deleting', () => {
+      throw new Error('delete blocked')
+    })
 
-    await expect(new DataManagementService(db).deleteProject(project.id)).rejects.toThrow('delete blocked')
+    await expect(new DataManagementService(db).deleteProject(project.id)).rejects.toThrow(
+      'delete blocked',
+    )
     expect(await db.projects.get(project.id)).toBeDefined()
     expect(await db.documents.get(doc.id)).toBeDefined()
     expect(await db.documentBlobs.get(doc.id)).toBeDefined()

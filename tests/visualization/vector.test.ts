@@ -97,13 +97,14 @@ describe('normalizeVisualizations — vectors_2d', () => {
   it('drops zero-length vectors and rejects an all-zero diagram', () => {
     const viz = vectorsViz({
       type: 'vectors_2d',
-      vectors: [{ x: 0, y: 0 }, { x: 1, y: 1 }],
+      vectors: [
+        { x: 0, y: 0 },
+        { x: 1, y: 1 },
+      ],
     })
     expect(viz.vectors).toHaveLength(1)
 
-    const rejected = normalizeVisualizations([
-      { type: 'vectors_2d', vectors: [{ x: 0, y: 0 }] },
-    ])
+    const rejected = normalizeVisualizations([{ type: 'vectors_2d', vectors: [{ x: 0, y: 0 }] }])
     expect(rejected.visualizations).toHaveLength(0)
     expect(rejected.rejected[0]?.reason).toBe('no-valid-vectors')
   })
@@ -121,9 +122,9 @@ describe('normalizeVisualizations — vectors_2d', () => {
   })
 
   it('falls back to the display operation for an unknown value', () => {
-    expect(vectorsViz({ type: 'vectors_2d', operation: 'rotate', vectors: [{ x: 1, y: 0 }] }).operation).toBe(
-      'display',
-    )
+    expect(
+      vectorsViz({ type: 'vectors_2d', operation: 'rotate', vectors: [{ x: 1, y: 0 }] }).operation,
+    ).toBe('display')
   })
 
   it('re-derives a wrong addition result locally', () => {

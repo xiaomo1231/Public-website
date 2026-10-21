@@ -66,7 +66,8 @@ export interface HomeworkWalkthrough {
   updatedAt: number
 }
 
-export const walkthroughId = (setId: string, language: WalkthroughLanguage) => `${setId}:${language}`
+export const walkthroughId = (setId: string, language: WalkthroughLanguage) =>
+  `${setId}:${language}`
 export const questionSectionId = (questionId: string) => `q:${questionId}`
 
 /** The question-language preference, applied to a whole assignment. */
@@ -75,7 +76,8 @@ export function walkthroughLanguage(
   setLanguage: HomeworkSet['language'],
 ): WalkthroughLanguage {
   if (preference === 'en') return 'en'
-  if (preference === 'source') return setLanguage === 'en' ? 'en' : setLanguage === 'zh' ? 'zh' : 'zh_terms'
+  if (preference === 'source')
+    return setLanguage === 'en' ? 'en' : setLanguage === 'zh' ? 'zh' : 'zh_terms'
   return 'zh_terms'
 }
 
@@ -87,24 +89,30 @@ export function questionSectionHash(
 ): string {
   const matched = question.answerStatus === 'matched'
   const deferred = matched && isDeferredProfessorAnswer(question.answerText ?? '')
-  return fnv1a(JSON.stringify({
-    promptVersion,
-    language,
-    number: question.number,
-    prompt: question.prompt,
-    contentFingerprint: question.contentFingerprint,
-    sourceRefs: question.sourceRefs.map((ref) => ref.chunkId),
-    answerStatus: question.answerStatus,
-    answerText: matched ? question.answerText : undefined,
-    // The prompt also shows the question's existing worked solution (unless
-    // the professor's answer is left to the student); undefined keys drop out
-    // of the JSON, so questions without one keep their hash.
-    previousSolution: !deferred && question.solution ? question.solution : undefined,
-  }))
+  return fnv1a(
+    JSON.stringify({
+      promptVersion,
+      language,
+      number: question.number,
+      prompt: question.prompt,
+      contentFingerprint: question.contentFingerprint,
+      sourceRefs: question.sourceRefs.map((ref) => ref.chunkId),
+      answerStatus: question.answerStatus,
+      answerText: matched ? question.answerText : undefined,
+      // The prompt also shows the question's existing worked solution (unless
+      // the professor's answer is left to the student); undefined keys drop out
+      // of the JSON, so questions without one keep their hash.
+      previousSolution: !deferred && question.solution ? question.solution : undefined,
+    }),
+  )
 }
 
 /** The opening and the summary depend on every question, in order. */
-export function frameSectionHash(questionHashes: readonly string[], language: WalkthroughLanguage, promptVersion: string): string {
+export function frameSectionHash(
+  questionHashes: readonly string[],
+  language: WalkthroughLanguage,
+  promptVersion: string,
+): string {
   return fnv1a(JSON.stringify({ promptVersion, language, questions: questionHashes }))
 }
 
@@ -128,7 +136,12 @@ export function planWalkthrough(
   promptVersion: string,
 ): WalkthroughPlanEntry[] {
   const byId = new Map((stored?.sections ?? []).map((section) => [section.id, section]))
-  const entry = (id: string, kind: WalkthroughSectionKind, inputHash: string, question?: HomeworkQuestion): WalkthroughPlanEntry => {
+  const entry = (
+    id: string,
+    kind: WalkthroughSectionKind,
+    inputHash: string,
+    question?: HomeworkQuestion,
+  ): WalkthroughPlanEntry => {
     const section = byId.get(id)
     const settled = section?.status === 'ready' || section?.status === 'insufficient'
     const outdated = Boolean(section && settled && section.inputHash !== inputHash)
@@ -145,10 +158,23 @@ export function planWalkthrough(
     }
   }
   const questionEntries = questions.map((question) =>
-    entry(questionSectionId(question.id), 'question', questionSectionHash(question, language, promptVersion), question),
+    entry(
+      questionSectionId(question.id),
+      'question',
+      questionSectionHash(question, language, promptVersion),
+      question,
+    ),
   )
-  const frameHash = frameSectionHash(questionEntries.map((item) => item.inputHash), language, promptVersion)
-  return [entry('overview', 'overview', frameHash), ...questionEntries, entry('summary', 'summary', frameHash)]
+  const frameHash = frameSectionHash(
+    questionEntries.map((item) => item.inputHash),
+    language,
+    promptVersion,
+  )
+  return [
+    entry('overview', 'overview', frameHash),
+    ...questionEntries,
+    entry('summary', 'summary', frameHash),
+  ]
 }
 
 // --- Saved questions about the walkthrough ----------------------------------

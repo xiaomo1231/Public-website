@@ -238,7 +238,9 @@ function compileNode(node: MathNode): CompiledFunction {
       const op = String(n.op)
       const args = (n.args as MathNode[]) ?? []
       if (op === '+') {
-        return args.length === 1 ? compileNode(args[0]!) : binary(compileNode(args[0]!), compileNode(args[1]!), (a, b) => a + b)
+        return args.length === 1
+          ? compileNode(args[0]!)
+          : binary(compileNode(args[0]!), compileNode(args[1]!), (a, b) => a + b)
       }
       if (op === '-') {
         if (args.length === 1) {

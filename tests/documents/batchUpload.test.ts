@@ -56,11 +56,7 @@ describe('createFileQueueItems', () => {
       makeFile('Lecture 02.pdf'),
       makeFile('Lecture 03.pdf'),
     ])
-    expect(items.map((i) => i.name)).toEqual([
-      'Lecture 01.pdf',
-      'Lecture 02.pdf',
-      'Lecture 03.pdf',
-    ])
+    expect(items.map((i) => i.name)).toEqual(['Lecture 01.pdf', 'Lecture 02.pdf', 'Lecture 03.pdf'])
     expect(items.every((i) => i.status === 'queued')).toBe(true)
   })
 
@@ -161,7 +157,9 @@ describe('isSameFile', () => {
     expect(
       isSameFile({ name: 'a.pdf', size: 1, modified: 1 }, { name: 'a.pdf', size: 1, modified: 2 }),
     ).toBe(false)
-    expect(isSameFile({ name: 'a.pdf', size: 1 }, { name: 'a.pdf', size: 1, modified: 2 })).toBe(true)
+    expect(isSameFile({ name: 'a.pdf', size: 1 }, { name: 'a.pdf', size: 1, modified: 2 })).toBe(
+      true,
+    )
   })
 })
 

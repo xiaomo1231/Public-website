@@ -10,13 +10,7 @@
  */
 
 export type VisualSourceType =
-  | 'diagram'
-  | 'chart'
-  | 'math_image'
-  | 'screenshot'
-  | 'illustration'
-  | 'table_image'
-  | 'unknown'
+  'diagram' | 'chart' | 'math_image' | 'screenshot' | 'illustration' | 'table_image' | 'unknown'
 
 export interface VisualSource {
   id: string

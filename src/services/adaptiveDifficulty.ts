@@ -130,7 +130,10 @@ export function decideNextDifficulty(input: AdaptiveInput): AdaptiveDecision {
     return {
       difficulty,
       changed: difficulty !== input.currentDifficulty,
-      reason: t('difficultyReason.streakWrong', { streak: input.consecutiveWrong, accuracy: Math.round(recentAccuracy * 100) }),
+      reason: t('difficultyReason.streakWrong', {
+        streak: input.consecutiveWrong,
+        accuracy: Math.round(recentAccuracy * 100),
+      }),
       metrics,
     }
   }
@@ -139,7 +142,10 @@ export function decideNextDifficulty(input: AdaptiveInput): AdaptiveDecision {
     return {
       difficulty,
       changed: difficulty !== input.currentDifficulty,
-      reason: t('difficultyReason.streakCorrect', { streak: input.consecutiveCorrect, accuracy: Math.round(recentAccuracy * 100) }),
+      reason: t('difficultyReason.streakCorrect', {
+        streak: input.consecutiveCorrect,
+        accuracy: Math.round(recentAccuracy * 100),
+      }),
       metrics,
     }
   }

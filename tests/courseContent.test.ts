@@ -143,10 +143,7 @@ describe('course content freshness (pure)', () => {
   })
 
   it('Test 5 — a changed structure hash is stale', () => {
-    const result = evaluateFreshness(
-      { ...saved, derivedFromStructureHash: 'struct999' },
-      current,
-    )
+    const result = evaluateFreshness({ ...saved, derivedFromStructureHash: 'struct999' }, current)
     expect(result.fresh).toBe(false)
     expect(result.reasons).toContain('structure-changed')
   })

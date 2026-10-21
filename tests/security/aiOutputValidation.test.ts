@@ -74,14 +74,9 @@ describe('normalizeDocumentAnalysis', () => {
         { name: 'Chain', latex: '\\frac{dy}{dx}', description: '', variables: [], sourceRefs: [] },
         { name: 'Missing latex' },
       ],
-      symbols: [
-        { symbol: 'μ', meaning: 'mean', context: 'statistics' },
-        { meaning: 'no symbol' },
-      ],
+      symbols: [{ symbol: 'μ', meaning: 'mean', context: 'statistics' }, { meaning: 'no symbol' }],
       examples: [],
-      exercises: [
-        { prompt: 'Differentiate x^2', difficulty: 'nonsense', topicNames: [] },
-      ],
+      exercises: [{ prompt: 'Differentiate x^2', difficulty: 'nonsense', topicNames: [] }],
       prerequisites: [{ name: 'Algebra', description: 'basics' }],
     })
 
@@ -209,7 +204,12 @@ describe('DocumentAnalysisService with malformed AI output', () => {
     const docs = new DocumentRepository(db)
     const chunks = new ChunkRepository(db)
     const analyses = new CourseAnalysisRepository(db)
-    const doc = await docs.create({ projectId: project.id, type: 'text', name: 'c.txt', sizeBytes: 0 })
+    const doc = await docs.create({
+      projectId: project.id,
+      type: 'text',
+      name: 'c.txt',
+      sizeBytes: 0,
+    })
     await docs.update(doc.id, { status: 'ready' })
     await chunks.addMany([
       {
@@ -290,7 +290,11 @@ describe('DocumentAnalysisService with malformed AI output', () => {
       ai: fakeAI({
         language: 'en',
         topics: [
-          { name: 'Derivatives', description: 'rates of change', sourceRefs: [{ documentName: 'c.txt' }] },
+          {
+            name: 'Derivatives',
+            description: 'rates of change',
+            sourceRefs: [{ documentName: 'c.txt' }],
+          },
           { description: 'missing name' },
         ],
         concepts: [],

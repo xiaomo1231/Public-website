@@ -312,7 +312,6 @@ export const zhCN: Record<TranslationKey, string> = {
   'mastery.loadFailedHint': '你的练习记录仍然安全，请重试。',
   'common.skipToContent': '跳到主要内容',
 
-
   'homework.title': '作业讲解',
   'homework.subtitle': '上传一份作业，AI 帮你识别题目，再逐题完成。',
   'homework.upload': '上传作业',
@@ -1002,7 +1001,6 @@ export const zhCN: Record<TranslationKey, string> = {
   'teach.summary': '总结',
   'teach.overview': '概述',
 
-
   'quiz.title': '测验',
   'quiz.starting': '正在开始',
   'quiz.noProvider': '请先配置 AI 服务商',
@@ -1640,7 +1638,8 @@ export const zhCN: Record<TranslationKey, string> = {
   'errors.aiKeyRequired': '需要 API 密钥。请在设置中配置。',
   'errors.aiRateLimited': 'AI 服务商限流',
   'errors.aiQuotaExceeded': 'AI 服务商账户余额或额度不足',
-  'errors.aiEndpointNotFound': 'AI 服务地址或模型不存在（HTTP 404），请在设置中检查 Base URL 与模型名称',
+  'errors.aiEndpointNotFound':
+    'AI 服务地址或模型不存在（HTTP 404），请在设置中检查 Base URL 与模型名称',
   'errors.aiContextTooLong': '请求超出模型的上下文长度',
   'errors.aiOutputLimit': '模型拒绝所请求的输出 Token 上限',
   'errors.aiTimeout': 'AI 请求在 {ms} 毫秒后超时',

@@ -1,8 +1,4 @@
-import {
-  SYMBOL_FONT_MAP,
-  isPrivateUseCodePoint,
-  isSymbolFontCodePoint,
-} from './textEncoding'
+import { SYMBOL_FONT_MAP, isPrivateUseCodePoint, isSymbolFontCodePoint } from './textEncoding'
 
 /**
  * Canonicalise mathematical notation in tutor text.
@@ -105,36 +101,36 @@ const SYMBOL_LATEX: Readonly<Record<string, string>> = {
   '∗': '\\ast',
   '⋅': '\\cdot',
   // Greek
-  'α': '\\alpha',
-  'β': '\\beta',
-  'γ': '\\gamma',
-  'δ': '\\delta',
-  'ε': '\\epsilon',
-  'ζ': '\\zeta',
-  'η': '\\eta',
-  'θ': '\\theta',
-  'λ': '\\lambda',
-  'μ': '\\mu',
-  'ν': '\\nu',
-  'ξ': '\\xi',
-  'π': '\\pi',
-  'ρ': '\\rho',
-  'σ': '\\sigma',
-  'τ': '\\tau',
-  'φ': '\\phi',
-  'χ': '\\chi',
-  'ψ': '\\psi',
-  'ω': '\\omega',
-  'Γ': '\\Gamma',
-  'Δ': '\\Delta',
-  'Θ': '\\Theta',
-  'Λ': '\\Lambda',
-  'Ξ': '\\Xi',
-  'Π': '\\Pi',
-  'Σ': '\\Sigma',
-  'Φ': '\\Phi',
-  'Ψ': '\\Psi',
-  'Ω': '\\Omega',
+  α: '\\alpha',
+  β: '\\beta',
+  γ: '\\gamma',
+  δ: '\\delta',
+  ε: '\\epsilon',
+  ζ: '\\zeta',
+  η: '\\eta',
+  θ: '\\theta',
+  λ: '\\lambda',
+  μ: '\\mu',
+  ν: '\\nu',
+  ξ: '\\xi',
+  π: '\\pi',
+  ρ: '\\rho',
+  σ: '\\sigma',
+  τ: '\\tau',
+  φ: '\\phi',
+  χ: '\\chi',
+  ψ: '\\psi',
+  ω: '\\omega',
+  Γ: '\\Gamma',
+  Δ: '\\Delta',
+  Θ: '\\Theta',
+  Λ: '\\Lambda',
+  Ξ: '\\Xi',
+  Π: '\\Pi',
+  Σ: '\\Sigma',
+  Φ: '\\Phi',
+  Ψ: '\\Psi',
+  Ω: '\\Omega',
 }
 
 /**
@@ -263,7 +259,7 @@ function processLine(line: string, startsInMath: boolean, wrap: boolean): LineRe
   const emit = (latex: string, insideMath: boolean): string =>
     insideMath || !wrap ? latex : `\\(${latex}\\)`
 
-  for (let i = 0; i < line.length; ) {
+  for (let i = 0; i < line.length;) {
     const char = line[i]!
 
     // Inline code spans are opaque; never rewrite their contents.

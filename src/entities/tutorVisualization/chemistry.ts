@@ -15,7 +15,11 @@ export const MAX_SMILES_LENGTH = 300
 
 /** Molecular formula of a SMILES string (implicit H included), or null. */
 export function smilesFormula(smiles: string): string | null {
-  if (!smiles || smiles.length > MAX_SMILES_LENGTH || !/^[A-Za-z0-9@+\-[\]()=#$/\\%.:*]+$/.test(smiles)) {
+  if (
+    !smiles ||
+    smiles.length > MAX_SMILES_LENGTH ||
+    !/^[A-Za-z0-9@+\-[\]()=#$/\\%.:*]+$/.test(smiles)
+  ) {
     return null
   }
   let formula: string | null = null
@@ -174,7 +178,9 @@ export function equivalenceVolume(setup: TitrationSetup | LegacyTitrationSetup):
 }
 
 /** Half-equivalence points of weak species, where pH = pKₐ of that step. */
-export function bufferPoints(input: TitrationSetup | LegacyTitrationSetup): Array<{ volume: number; pKa: number }> {
+export function bufferPoints(
+  input: TitrationSetup | LegacyTitrationSetup,
+): Array<{ volume: number; pKa: number }> {
   const setup = asTitrationSetup(input)
   const first = equivalenceVolume(setup)
   if (setup.analyte === 'acid') {

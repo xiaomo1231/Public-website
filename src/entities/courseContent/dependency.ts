@@ -151,7 +151,10 @@ export function planContentDependencies(input: ContentDependencyInput): ContentD
 
   const ops: IncrementalOp[] = []
   const chunksIn = (predicate: (chunk: DocumentChunk) => boolean): string[] =>
-    chunks.filter(predicate).map((chunk) => chunk.id).sort()
+    chunks
+      .filter(predicate)
+      .map((chunk) => chunk.id)
+      .sort()
 
   // Structure-level ops: they say where the change landed and feed the UI.
   for (const chapterId of affected.chapterIds) {
@@ -303,10 +306,7 @@ export function planContentDependencies(input: ContentDependencyInput): ContentD
       continue
     }
 
-    if (
-      topic.dependencyHash &&
-      topic.dependencyHash === computeTopicDependencyHash(live, chunks)
-    ) {
+    if (topic.dependencyHash && topic.dependencyHash === computeTopicDependencyHash(live, chunks)) {
       ops.push({
         kind: 'relinkOnly',
         entity: 'topic',
@@ -360,8 +360,7 @@ export function planContentDependencies(input: ContentDependencyInput): ContentD
   const practiceQuestionIds: string[] = []
   for (const question of practiceQuestions) {
     const hit =
-      refAffected(question) ||
-      (question.chunkId !== undefined && chunkAffected(question.chunkId))
+      refAffected(question) || (question.chunkId !== undefined && chunkAffected(question.chunkId))
     if (!hit) continue
     practiceQuestionIds.push(question.id)
     ops.push({

@@ -13,9 +13,17 @@ import {
   classifyVisualType,
   looksLikeUnreliableVisualText,
 } from '@/infrastructure/files/visualDetection'
-import { extractPdf, renderPdfPageImage, type RenderedPageImage } from '@/infrastructure/files/pdfExtractor'
+import {
+  extractPdf,
+  renderPdfPageImage,
+  type RenderedPageImage,
+} from '@/infrastructure/files/pdfExtractor'
 import { extractDocx } from '@/infrastructure/files/docxExtractor'
-import { extractPptx, extractPptxSlideImages, type PptxSlideImage } from '@/infrastructure/files/pptxExtractor'
+import {
+  extractPptx,
+  extractPptxSlideImages,
+  type PptxSlideImage,
+} from '@/infrastructure/files/pptxExtractor'
 import { extractOcr } from '@/infrastructure/files/ocrExtractor'
 import {
   chunksFromDocx,
@@ -116,7 +124,11 @@ export class ProcessingService {
     await this.run(document, job.id, options)
   }
 
-  private async run(document: Document, jobId: string, options: ProcessingServiceOptions): Promise<void> {
+  private async run(
+    document: Document,
+    jobId: string,
+    options: ProcessingServiceOptions,
+  ): Promise<void> {
     const { onProgress } = options
     try {
       onProgress?.({ stage: 'extracting', progress: 5 })
@@ -125,7 +137,9 @@ export class ProcessingService {
       onProgress?.({ stage: 'chunking', progress: 50 })
       await this.jobs.setStage(jobId, 'chunking', 50)
 
-      const { chunks: newChunks, report } = this.normalizeChunks(await this.chunk(document, extraction))
+      const { chunks: newChunks, report } = this.normalizeChunks(
+        await this.chunk(document, extraction),
+      )
       onProgress?.({ stage: 'indexing', progress: 80 })
       await this.jobs.setStage(jobId, 'indexing', 80)
 
@@ -173,7 +187,8 @@ export class ProcessingService {
       }
 
       const warnings = (extraction.warnings ?? []).slice()
-      if (extraction.lowConfidence) warnings.push(t('errors.ocrLowConfidence', { value: `${extraction.confidence}%` }))
+      if (extraction.lowConfidence)
+        warnings.push(t('errors.ocrLowConfidence', { value: `${extraction.confidence}%` }))
       if (report.suspicious) {
         // Characters we cannot decode are kept, never guessed at — the user is
         // told the source PDF's font encoding is the problem instead.
@@ -188,42 +203,52 @@ export class ProcessingService {
           control: report.control,
           questionRuns: report.questionRuns,
           missingGlyphBox: report.missingGlyphBox,
-          codePoints: report.codePoints.map((cp) => `U+${cp.toString(16).toUpperCase().padStart(4, '0')}`),
+          codePoints: report.codePoints.map(
+            (cp) => `U+${cp.toString(16).toUpperCase().padStart(4, '0')}`,
+          ),
         })
       }
-      await this.db.transaction('rw', [
-        this.db.chunks,
-        this.db.courseStructures,
-        this.db.courseStructureNodes,
-        this.db.visualSources,
-        this.db.visualSourceImages,
-        this.db.documents,
-        this.db.processingJobs,
-      ], async () => {
-        // The document may have been deleted while it was being extracted.
-        // Writing now would leave orphan chunks / figures / structure behind.
-        if (!(await this.db.documents.get(document.id))) throw new DocumentDeletedDuringProcessing()
-        await this.chunks.deleteByDocument(document.id)
-        await this.chunks.addPrepared(storedChunks)
-        if (prepared) {
-          await this.structure.persist(prepared, storedChunks.map((chunk) => chunk.id))
-        }
-        await this.visuals.deleteByDocument(document.id)
-        for (const { source, image } of visualSources) {
-          await this.visuals.upsert(source)
-          if (image) await this.visuals.putImage(source, image.bytes, image.mimeType)
-        }
-        await this.documents.update(document.id, {
-          status: 'ready',
-          errorMessage: '',
-          warnings,
-          textLength: extraction.textLength,
-          chunkCount: newChunks.length,
-          processedAt: Date.now(),
-          metadata: extraction.metadata,
-        })
-        await this.jobs.setStage(jobId, 'done', 100)
-      })
+      await this.db.transaction(
+        'rw',
+        [
+          this.db.chunks,
+          this.db.courseStructures,
+          this.db.courseStructureNodes,
+          this.db.visualSources,
+          this.db.visualSourceImages,
+          this.db.documents,
+          this.db.processingJobs,
+        ],
+        async () => {
+          // The document may have been deleted while it was being extracted.
+          // Writing now would leave orphan chunks / figures / structure behind.
+          if (!(await this.db.documents.get(document.id)))
+            throw new DocumentDeletedDuringProcessing()
+          await this.chunks.deleteByDocument(document.id)
+          await this.chunks.addPrepared(storedChunks)
+          if (prepared) {
+            await this.structure.persist(
+              prepared,
+              storedChunks.map((chunk) => chunk.id),
+            )
+          }
+          await this.visuals.deleteByDocument(document.id)
+          for (const { source, image } of visualSources) {
+            await this.visuals.upsert(source)
+            if (image) await this.visuals.putImage(source, image.bytes, image.mimeType)
+          }
+          await this.documents.update(document.id, {
+            status: 'ready',
+            errorMessage: '',
+            warnings,
+            textLength: extraction.textLength,
+            chunkCount: newChunks.length,
+            processedAt: Date.now(),
+            metadata: extraction.metadata,
+          })
+          await this.jobs.setStage(jobId, 'done', 100)
+        },
+      )
 
       onProgress?.({ stage: 'done', progress: 100 })
       logger.info('Document processed', { id: document.id, chunks: newChunks.length })
@@ -232,7 +257,14 @@ export class ProcessingService {
         // Nothing was written (the transaction aborted); there is no document
         // left to mark as failed.
         logger.info('Document deleted during processing; results discarded', { id: document.id })
-        await this.jobs.update(jobId, { stage: 'failed', progress: 100, errorMessage: err.message, finishedAt: Date.now() }).catch(() => undefined)
+        await this.jobs
+          .update(jobId, {
+            stage: 'failed',
+            progress: 100,
+            errorMessage: err.message,
+            finishedAt: Date.now(),
+          })
+          .catch(() => undefined)
         return
       }
       // The commit is one transaction, so a full quota leaves the previous
@@ -248,7 +280,12 @@ export class ProcessingService {
         status: document.status === 'ready' ? 'ready' : 'failed',
         errorMessage: message,
       })
-      await this.jobs.update(jobId, { stage: 'failed', progress: 100, errorMessage: message, finishedAt: Date.now() })
+      await this.jobs.update(jobId, {
+        stage: 'failed',
+        progress: 100,
+        errorMessage: message,
+        finishedAt: Date.now(),
+      })
       if (quotaFull) throw new ValidationError(message)
       throw err instanceof AppError ? err : new AppError(message, 'PROCESSING_FAILED', err)
     }
@@ -292,7 +329,11 @@ export class ProcessingService {
         const result = await extractPptx(blob)
         return {
           textLength: result.textLength,
-          metadata: { title: result.metadata.title, author: result.metadata.author, slideCount: result.slideCount },
+          metadata: {
+            title: result.metadata.title,
+            author: result.metadata.author,
+            slideCount: result.slideCount,
+          },
           warnings: result.warnings,
           raw: { slides: result.slides },
         }
@@ -323,8 +364,14 @@ export class ProcessingService {
    * Chunks are normalised *before* storage so that quiz `quote`s — which are
    * verified against stored chunk text — stay consistent.
    */
-  private normalizeChunks(chunks: NewChunk[]): { chunks: NewChunk[]; report: SuspiciousUnicodeReport } {
-    const normalized = chunks.map((chunk) => ({ ...chunk, text: normalizeExtractedText(chunk.text) }))
+  private normalizeChunks(chunks: NewChunk[]): {
+    chunks: NewChunk[]
+    report: SuspiciousUnicodeReport
+  } {
+    const normalized = chunks.map((chunk) => ({
+      ...chunk,
+      text: normalizeExtractedText(chunk.text),
+    }))
     const report = detectSuspiciousUnicode(normalized.map((chunk) => chunk.text).join('\n'))
     return { chunks: normalized, report }
   }
@@ -512,8 +559,19 @@ interface ExtractionOutput {
       /** Image-painting operators on the page; 0/absent means text-only. */
       imageCount?: number
     }>
-    blocks?: Array<{ type: 'heading' | 'paragraph' | 'table' | 'list'; text: string; rows?: string[][] }>
-    slides?: Array<{ slideNumber: number; title?: string; body: string; notes: string; tables: string[][][]; imageCount: number }>
+    blocks?: Array<{
+      type: 'heading' | 'paragraph' | 'table' | 'list'
+      text: string
+      rows?: string[][]
+    }>
+    slides?: Array<{
+      slideNumber: number
+      title?: string
+      body: string
+      notes: string
+      tables: string[][][]
+      imageCount: number
+    }>
     ocr?: { text: string; confidence: number; language: string }
   }
   lowConfidence?: boolean

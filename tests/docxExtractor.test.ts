@@ -11,9 +11,9 @@ describe('extractDocx', () => {
     const result = await extractDocx(blob)
     expect(result.textLength).toBeGreaterThan(0)
     expect(result.blocks.some((b) => b.type === 'heading' && /Lecture 3/.test(b.text))).toBe(true)
-    expect(
-      result.blocks.some((b) => b.type === 'paragraph' && /Eigenvalues/.test(b.text)),
-    ).toBe(true)
+    expect(result.blocks.some((b) => b.type === 'paragraph' && /Eigenvalues/.test(b.text))).toBe(
+      true,
+    )
   })
 
   it('captures mammoth warnings', async () => {

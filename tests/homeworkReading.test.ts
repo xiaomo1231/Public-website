@@ -17,7 +17,8 @@ describe('homework reading', () => {
     expect(formatHomeworkQuestion(prompt)).not.toContain('\u20d7')
     expect(formatHomeworkQuestion('where x\u20d7 = (x₁, x₂)')).toContain('$\\vec{x}$')
 
-    const oldExcerpt = 'Problem 5: V ⊆ R\n3\ndefined by equations.\nwhere \u20d7 x ∈ R\n3\n. Show that V is a subspace of R\n3\n.'
+    const oldExcerpt =
+      'Problem 5: V ⊆ R\n3\ndefined by equations.\nwhere \u20d7 x ∈ R\n3\n. Show that V is a subspace of R\n3\n.'
     const formatted = formatHomeworkQuestion(oldExcerpt)
     expect(formatted).toContain('V ⊆ $\\mathbb{R}^{3}$')
     expect(formatted).toContain('$\\vec{x}$ ∈ $\\mathbb{R}^{3}$')
@@ -33,7 +34,8 @@ describe('homework reading', () => {
   })
 
   it('locates a numbered question despite PDF formula line breaks', () => {
-    const chunk = 'Problem 5: A different exercise.\nProblem 6: Consider R\n2\n(a) x = 1\n(b) x = 2\nProblem 7: Next exercise.'
+    const chunk =
+      'Problem 5: A different exercise.\nProblem 6: Consider R\n2\n(a) x = 1\n(b) x = 2\nProblem 7: Next exercise.'
     const excerpt = locateQuestionExcerpt(chunk, 'Consider the real vector space R²...', '6')
     expect(excerpt).toContain('Problem 6:')
     expect(excerpt).not.toContain('Problem 5:')

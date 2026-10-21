@@ -26,10 +26,21 @@ function stubAI(handler: StubHandler): AIService {
 
 function questionsFromUser(user: string): { questions: Array<Record<string, unknown>> } {
   const ids = [...user.matchAll(/\[c:([^ ·\]]+)/g)].map((m) => m[1]!)
-  return { questions: ids.map((id, i) => ({ number: String(i + 1), prompt: `Q ${id}.`, sourceChunkIds: [id] })) }
+  return {
+    questions: ids.map((id, i) => ({
+      number: String(i + 1),
+      prompt: `Q ${id}.`,
+      sourceChunkIds: [id],
+    })),
+  }
 }
 
-function question(setId: string, projectId: string, documentId: string, draftText: string): HomeworkQuestion {
+function question(
+  setId: string,
+  projectId: string,
+  documentId: string,
+  draftText: string,
+): HomeworkQuestion {
   const now = Date.now()
   return {
     id: crypto.randomUUID(),
@@ -202,8 +213,17 @@ describe('HomeworkService — one set per document', () => {
 
   it('does not touch a document whose duplicate sets both hold student work', async () => {
     const a: HomeworkSet = {
-      id: crypto.randomUUID(), projectId, documentId, documentName: 'HW1.pdf', title: 'HW1.pdf',
-      status: 'ready', language: 'en', questionCount: 1, promptVersion: 'v1', createdAt: 1, updatedAt: 1,
+      id: crypto.randomUUID(),
+      projectId,
+      documentId,
+      documentName: 'HW1.pdf',
+      title: 'HW1.pdf',
+      status: 'ready',
+      language: 'en',
+      questionCount: 1,
+      promptVersion: 'v1',
+      createdAt: 1,
+      updatedAt: 1,
     }
     const b: HomeworkSet = { ...a, id: crypto.randomUUID(), createdAt: 2, updatedAt: 2 }
     await homework.upsertSet(a)

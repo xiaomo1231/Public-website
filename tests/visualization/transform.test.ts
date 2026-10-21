@@ -105,7 +105,10 @@ describe('normalizeVisualizations — transform_2d', () => {
     const filtered = transformViz({
       type: 'transform_2d',
       matrix: { a: 1, b: 0, c: 0, d: 1 },
-      vectors: [{ x: Number.NaN, y: 1 }, { x: 1, y: 1 }],
+      vectors: [
+        { x: Number.NaN, y: 1 },
+        { x: 1, y: 1 },
+      ],
     })
     expect(filtered.vectors).toHaveLength(1)
   })

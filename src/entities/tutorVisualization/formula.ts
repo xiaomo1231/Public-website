@@ -82,7 +82,12 @@ function normalizeSource(input: string): string {
     .trim()
 }
 
-function validate(node: MathNode, symbols: Set<string>, depth: number, state: { nodes: number }): boolean {
+function validate(
+  node: MathNode,
+  symbols: Set<string>,
+  depth: number,
+  state: { nodes: number },
+): boolean {
   state.nodes += 1
   if (state.nodes > FORMULA_LIMITS.maxNodes || depth > FORMULA_LIMITS.maxDepth) return false
   const n = node as unknown as NodeLike
@@ -100,12 +105,14 @@ function validate(node: MathNode, symbols: Set<string>, depth: number, state: { 
     case 'OperatorNode': {
       const op = String(n.op)
       const args = n.args ?? []
-      if (!['+', '-', '*', '/', '^'].includes(op) || args.length < 1 || args.length > 2) return false
+      if (!['+', '-', '*', '/', '^'].includes(op) || args.length < 1 || args.length > 2)
+        return false
       return args.every((arg) => validate(arg, symbols, depth + 1, state))
     }
     case 'FunctionNode': {
       const fn = n.fn as unknown as NodeLike | undefined
-      if (!fn || fn.type !== 'SymbolNode' || !Object.hasOwn(FUNCTIONS, String(fn.name))) return false
+      if (!fn || fn.type !== 'SymbolNode' || !Object.hasOwn(FUNCTIONS, String(fn.name)))
+        return false
       const args = n.args ?? []
       return args.length === 1 && validate(args[0]!, symbols, depth + 1, state)
     }
@@ -177,7 +184,9 @@ export function parseFormula(input: unknown, symbols: string[]): ParsedFormula |
   const trimmed = input.trim()
   if (!trimmed || trimmed.length > FORMULA_LIMITS.maxLength || trimmed.includes('\\')) return null
   // A formula is the right-hand side; tolerate "y = …" / "f(x) = …".
-  const rhs = normalizeSource(trimmed.includes('=') ? trimmed.slice(trimmed.lastIndexOf('=') + 1) : trimmed)
+  const rhs = normalizeSource(
+    trimmed.includes('=') ? trimmed.slice(trimmed.lastIndexOf('=') + 1) : trimmed,
+  )
   if (!rhs) return null
   let node: MathNode
   try {
@@ -190,7 +199,10 @@ export function parseFormula(input: unknown, symbols: string[]): ParsedFormula |
 }
 
 /** d/dvariable of a parsed formula, compiled; null when mathjs cannot differentiate it. */
-export function derivativeOf(formula: ParsedFormula | MathNode, variable: string): { node: MathNode; evaluate: Compiled } | null {
+export function derivativeOf(
+  formula: ParsedFormula | MathNode,
+  variable: string,
+): { node: MathNode; evaluate: Compiled } | null {
   try {
     const source = 'node' in formula ? formula.node : formula
     const node = derivative(source, variable)
@@ -204,7 +216,10 @@ export function derivativeOf(formula: ParsedFormula | MathNode, variable: string
 export function numericDerivative(evaluate: Compiled, scope: Scope, variable: string): number {
   const x = scope[variable]!
   const h = 1e-5 * Math.max(1, Math.abs(x))
-  return (evaluate({ ...scope, [variable]: x + h }) - evaluate({ ...scope, [variable]: x - h })) / (2 * h)
+  return (
+    (evaluate({ ...scope, [variable]: x + h }) - evaluate({ ...scope, [variable]: x - h })) /
+    (2 * h)
+  )
 }
 
 /** Taylor coefficients c₀ … c_order of f around `center` (f⁽ᵏ⁾(a)/k!), or null. */
@@ -279,7 +294,14 @@ export function riemannSum(
     const x1 = x0 + width
     const left = f(x0)
     const right = f(x1)
-    const height = method === 'left' ? left : method === 'right' ? right : method === 'midpoint' ? f((x0 + x1) / 2) : (left + right) / 2
+    const height =
+      method === 'left'
+        ? left
+        : method === 'right'
+          ? right
+          : method === 'midpoint'
+            ? f((x0 + x1) / 2)
+            : (left + right) / 2
     sum += height * width
     pieces.push({ x0, x1, height, left, right })
   }
@@ -302,9 +324,17 @@ export function sampleFormula(
 }
 
 /** "2.5x^2 − 0.3x + 1" style polynomial text for the Taylor legend (plain text). */
-export function polynomialText(coefficients: number[], center: number, variable: string, format: (v: number) => string): string {
+export function polynomialText(
+  coefficients: number[],
+  center: number,
+  variable: string,
+  format: (v: number) => string,
+): string {
   const term = (k: number) => {
-    const base = center === 0 ? variable : `(${variable} ${center > 0 ? '−' : '+'} ${format(Math.abs(center))})`
+    const base =
+      center === 0
+        ? variable
+        : `(${variable} ${center > 0 ? '−' : '+'} ${format(Math.abs(center))})`
     return k === 0 ? '' : k === 1 ? base : `${base}^${k}`
   }
   const parts = coefficients

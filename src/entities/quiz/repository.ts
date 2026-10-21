@@ -14,7 +14,12 @@ export class QuizRepository {
   }
 
   async listByProject(projectId: string): Promise<Quiz[]> {
-    return this.db.table<Quiz, string>('quizzes').where('projectId').equals(projectId).reverse().sortBy('startedAt')
+    return this.db
+      .table<Quiz, string>('quizzes')
+      .where('projectId')
+      .equals(projectId)
+      .reverse()
+      .sortBy('startedAt')
   }
 
   async upsert(quiz: Quiz): Promise<Quiz> {

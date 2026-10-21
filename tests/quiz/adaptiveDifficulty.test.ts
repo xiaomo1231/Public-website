@@ -8,7 +8,10 @@ import {
 } from '@/services/adaptiveDifficulty'
 import type { MasteryObservation } from '@/entities/knowledgeMastery/types'
 
-function result(isCorrect: boolean | null, difficulty: 'beginner' | 'basic' | 'intermediate' | 'advanced' | 'challenge' = 'basic') {
+function result(
+  isCorrect: boolean | null,
+  difficulty: 'beginner' | 'basic' | 'intermediate' | 'advanced' | 'challenge' = 'basic',
+) {
   return { isCorrect, difficulty }
 }
 
@@ -152,7 +155,10 @@ describe('decideNextDifficulty', () => {
 })
 
 describe('computeMastery', () => {
-  const obs = (isCorrect: boolean | null, difficulty: MasteryObservation['difficulty']): MasteryObservation => ({
+  const obs = (
+    isCorrect: boolean | null,
+    difficulty: MasteryObservation['difficulty'],
+  ): MasteryObservation => ({
     at: Date.now(),
     isCorrect,
     difficulty,
@@ -176,8 +182,18 @@ describe('computeMastery', () => {
   })
 
   it('weights recent observations more heavily', () => {
-    const improving = computeMastery([obs(false, 'basic'), obs(false, 'basic'), obs(true, 'basic'), obs(true, 'basic')])
-    const worsening = computeMastery([obs(true, 'basic'), obs(true, 'basic'), obs(false, 'basic'), obs(false, 'basic')])
+    const improving = computeMastery([
+      obs(false, 'basic'),
+      obs(false, 'basic'),
+      obs(true, 'basic'),
+      obs(true, 'basic'),
+    ])
+    const worsening = computeMastery([
+      obs(true, 'basic'),
+      obs(true, 'basic'),
+      obs(false, 'basic'),
+      obs(false, 'basic'),
+    ])
     expect(improving).toBeGreaterThan(worsening)
   })
 

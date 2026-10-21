@@ -148,7 +148,9 @@ export class SlideLessonService {
   /** The slide list (table of contents) for one document. */
   async buildIndex(documentId: string): Promise<SlideIndex> {
     const document = await this.getDocument(documentId)
-    const chunks = (await this.chunks.listByDocument(documentId)).slice().sort((a, b) => a.order - b.order)
+    const chunks = (await this.chunks.listByDocument(documentId))
+      .slice()
+      .sort((a, b) => a.order - b.order)
     const visuals = await this.visuals.listByDocument(documentId)
     const imagePages = new Set(visuals.map((visual) => visual.pageNumber))
 
@@ -287,7 +289,12 @@ export class SlideLessonService {
     if (!answer) throw new AppError(t('slides.emptyReply'), 'EMPTY_TUTOR_RESPONSE')
 
     const now = Date.now()
-    const student: SlideMessage = { id: crypto.randomUUID(), role: 'student', content: trimmed, createdAt: now }
+    const student: SlideMessage = {
+      id: crypto.randomUUID(),
+      role: 'student',
+      content: trimmed,
+      createdAt: now,
+    }
     const assistant: SlideMessage = {
       id: crypto.randomUUID(),
       role: 'assistant',
@@ -401,7 +408,9 @@ export class SlideLessonService {
       ...(input.signal ? { signal: input.signal } : {}),
     })
     const normalized = normalizeSlideLessonOutput(data)
-    const explanation = normalizeMathNotation(normalizeExtractedText(normalized.explanation)).text.trim()
+    const explanation = normalizeMathNotation(
+      normalizeExtractedText(normalized.explanation),
+    ).text.trim()
     const question = normalizeMathNotation(normalizeExtractedText(normalized.question)).text.trim()
     if (!explanation || !question) {
       throw new AppError(t('slides.incompleteResponse'), 'INVALID_RESPONSE')
@@ -542,7 +551,9 @@ export function buildSlideMaterial(chunks: readonly DocumentChunk[]): {
   material: string
 } {
   const ordered = [...chunks].sort((a, b) => a.order - b.order)
-  const titleChunks = ordered.filter((chunk) => chunk.contentType === 'heading' && chunk.text.trim())
+  const titleChunks = ordered.filter(
+    (chunk) => chunk.contentType === 'heading' && chunk.text.trim(),
+  )
   const noteChunks = ordered.filter((chunk) => chunk.contentType === 'note' && chunk.text.trim())
   const bodyChunks = ordered.filter(
     (chunk) => chunk.contentType !== 'heading' && chunk.contentType !== 'note' && chunk.text.trim(),
@@ -553,8 +564,14 @@ export function buildSlideMaterial(chunks: readonly DocumentChunk[]): {
     .filter(Boolean)
     .join(' ')
     .trim()
-  const text = bodyChunks.map((chunk) => chunk.text.trim()).join('\n\n').trim()
-  const notes = noteChunks.map((chunk) => chunk.text.trim()).join('\n\n').trim()
+  const text = bodyChunks
+    .map((chunk) => chunk.text.trim())
+    .join('\n\n')
+    .trim()
+  const notes = noteChunks
+    .map((chunk) => chunk.text.trim())
+    .join('\n\n')
+    .trim()
 
   const lines: string[] = []
   if (title) lines.push(`Title: ${title}`)
@@ -580,7 +597,10 @@ export function buildSlideMaterial(chunks: readonly DocumentChunk[]): {
 }
 
 /** Validate the model's structured slide output. Throws on an unusable shape. */
-export function normalizeSlideLessonOutput(raw: unknown): { explanation: string; question: string } {
+export function normalizeSlideLessonOutput(raw: unknown): {
+  explanation: string
+  question: string
+} {
   const record = asRecord(raw)
   const explanation = asTrimmedString(record?.explanation)
   const question = asTrimmedString(record?.question)

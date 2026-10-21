@@ -15,7 +15,16 @@ export interface MistakeAnalyzerInput {
 }
 
 export interface MistakeAnalyzerOutput {
-  mistakeType: 'conceptual' | 'calculation' | 'formula' | 'sign' | 'unit' | 'misreading' | 'incomplete_reasoning' | 'careless' | 'unknown'
+  mistakeType:
+    | 'conceptual'
+    | 'calculation'
+    | 'formula'
+    | 'sign'
+    | 'unit'
+    | 'misreading'
+    | 'incomplete_reasoning'
+    | 'careless'
+    | 'unknown'
   analysis: string
   /** Phrased as a *possible* cause — never declaring the student "careless". */
   framing: string

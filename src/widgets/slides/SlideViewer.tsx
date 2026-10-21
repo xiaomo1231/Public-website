@@ -26,7 +26,10 @@ export function SlideViewer({ content }: SlideViewerProps): JSX.Element {
 
   return (
     <section
-      aria-label={t('slides.viewerLabel', { current: content.slideNumber, total: content.slideTotal })}
+      aria-label={t('slides.viewerLabel', {
+        current: content.slideNumber,
+        total: content.slideTotal,
+      })}
       className="space-y-3 rounded-lg border border-border/70 bg-card p-4 sm:p-5"
     >
       <header className="flex flex-wrap items-baseline justify-between gap-2">
@@ -41,7 +44,11 @@ export function SlideViewer({ content }: SlideViewerProps): JSX.Element {
       {content.visuals.length > 0 && (
         <div className="space-y-1">
           {content.visuals.map((visual) => (
-            <VisualSourceFigure key={visual.id} visual={visual} documentName={content.document.name} />
+            <VisualSourceFigure
+              key={visual.id}
+              visual={visual}
+              documentName={content.document.name}
+            />
           ))}
         </div>
       )}
@@ -74,7 +81,9 @@ export function SlideViewer({ content }: SlideViewerProps): JSX.Element {
 
       {content.notes.trim().length > 0 && (
         <div className="rounded-lg border border-border/60 bg-muted/20 p-3">
-          <p className="text-xs font-medium text-muted-foreground mb-1">{t('slides.speakerNotes')}</p>
+          <p className="mb-1 text-xs font-medium text-muted-foreground">
+            {t('slides.speakerNotes')}
+          </p>
           <RichText
             text={content.notes}
             format="markdown"

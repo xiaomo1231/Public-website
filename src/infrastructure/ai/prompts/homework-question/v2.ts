@@ -17,12 +17,16 @@ export interface HomeworkQuestionOutput {
   solution: string
 }
 
-export function buildSystemPrompt(mode: HomeworkQuestionMode = 'combined', compact = false): string {
-  const task = mode === 'hints'
-    ? 'Return strictly valid JSON with one field: {"hints":["string","..."]}. Write 2 to 4 progressive hints. Never state the final answer.'
-    : mode === 'solution'
-      ? 'Return strictly valid JSON with one field: {"solution":"string"}. Give a complete worked solution with the necessary steps and final answer.'
-      : 'Return strictly valid JSON with exactly two fields: {"hints":["string","..."],"solution":"string"}. Write 2 to 4 progressive hints and a complete worked solution.'
+export function buildSystemPrompt(
+  mode: HomeworkQuestionMode = 'combined',
+  compact = false,
+): string {
+  const task =
+    mode === 'hints'
+      ? 'Return strictly valid JSON with one field: {"hints":["string","..."]}. Write 2 to 4 progressive hints. Never state the final answer.'
+      : mode === 'solution'
+        ? 'Return strictly valid JSON with one field: {"solution":"string"}. Give a complete worked solution with the necessary steps and final answer.'
+        : 'Return strictly valid JSON with exactly two fields: {"hints":["string","..."],"solution":"string"}. Write 2 to 4 progressive hints and a complete worked solution.'
   return [
     'You are a patient tutor preparing help for one homework question.',
     task,
@@ -37,11 +41,12 @@ export function buildSystemPrompt(mode: HomeworkQuestionMode = 'combined', compa
 }
 
 export function buildUserPrompt(input: HomeworkQuestionInput): string {
-  const langHint = input.language === 'zh'
-    ? 'Write in Simplified Chinese.'
-    : input.language === 'en'
-      ? 'Write in English.'
-      : 'Write in the language of the question.'
+  const langHint =
+    input.language === 'zh'
+      ? 'Write in Simplified Chinese.'
+      : input.language === 'en'
+        ? 'Write in English.'
+        : 'Write in the language of the question.'
   return [
     `Prepare help for this question. ${langHint}`,
     untrustedContentWrapper('HOMEWORK QUESTION', input.question),
@@ -49,5 +54,7 @@ export function buildUserPrompt(input: HomeworkQuestionInput): string {
       ? untrustedContentWrapper('RELEVANT SOURCE PASSAGES', input.sourceText)
       : '',
     'Return JSON only.',
-  ].filter(Boolean).join('\n')
+  ]
+    .filter(Boolean)
+    .join('\n')
 }

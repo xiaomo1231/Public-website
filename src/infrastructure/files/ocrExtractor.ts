@@ -42,7 +42,10 @@ function looksLikeMath(text: string): boolean {
   return mathSymbols.test(text)
 }
 
-export async function extractOcr(blob: Blob, opts: { languages?: string[] } = {}): Promise<OcrExtractionResult> {
+export async function extractOcr(
+  blob: Blob,
+  opts: { languages?: string[] } = {},
+): Promise<OcrExtractionResult> {
   const languages = opts.languages ?? ['eng']
   let worker: TesseractWorker | null = null
   try {

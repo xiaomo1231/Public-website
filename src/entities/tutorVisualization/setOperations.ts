@@ -94,10 +94,7 @@ export function computeVennRegions(sets: VennSet[], universe?: string[]): VennRe
     ABC: [],
     outside: [],
   }
-  const ordered = dedupeElements([
-    ...sets.flatMap((set) => set.elements),
-    ...(universe ?? []),
-  ])
+  const ordered = dedupeElements([...sets.flatMap((set) => set.elements), ...(universe ?? [])])
   for (const element of ordered) {
     let mask = 0
     sets.forEach((set, index) => {

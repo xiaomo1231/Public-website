@@ -147,7 +147,11 @@ export interface VocabSettings {
 }
 
 export const DEFAULT_DAILY_NEW = 20
-export const DEFAULT_VOCAB_SETTINGS: VocabSettings = { bookId: null, dailyNew: DEFAULT_DAILY_NEW, reviewMode: 'auto' }
+export const DEFAULT_VOCAB_SETTINGS: VocabSettings = {
+  bookId: null,
+  dailyNew: DEFAULT_DAILY_NEW,
+  reviewMode: 'auto',
+}
 
 /** One item of a study session. */
 export interface SessionItem {

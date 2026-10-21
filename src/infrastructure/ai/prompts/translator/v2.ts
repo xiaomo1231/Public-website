@@ -25,7 +25,9 @@ export function buildUserPrompt(input: TranslateInput): string {
     untrustedContentWrapper('SELECTED TEXT', input.selectedText),
     untrustedContentWrapper('SURROUNDING TEXT', input.surroundingContext),
     'Return JSON only. The translation field must contain a complete translation of SELECTED TEXT, not the surrounding text.',
-  ].filter(Boolean).join('\n')
+  ]
+    .filter(Boolean)
+    .join('\n')
 }
 
 export type { TranslateInput, TranslationOutput }

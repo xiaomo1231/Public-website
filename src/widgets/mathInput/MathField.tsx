@@ -20,7 +20,12 @@ import {
   type SymbolGroupId,
   type SymbolItem,
 } from '@/shared/lib/mathInput'
-import { parseNumeric, previewEquation, previewExpression, previewQuantity } from '@/services/answerPreview'
+import {
+  parseNumeric,
+  previewEquation,
+  previewExpression,
+  previewQuantity,
+} from '@/services/answerPreview'
 import { useTranslation, type TranslationKey } from '@/i18n'
 
 const GROUP_LABEL_KEYS: Record<SymbolGroupId, TranslationKey> = {
@@ -262,7 +267,7 @@ export function MathField({
                 onClick={() => insert(item)}
                 title={t('symbolBar.inserts', { text: item.insert })}
                 aria-label={t('symbolBar.inserts', { text: item.insert })}
-                className="focus-ring inline-flex h-8 min-w-8 items-center justify-center rounded-md border border-border/70 bg-card px-2 text-sm text-foreground transition-[color,background-color,border-color,transform] duration-press ease-out motion-safe:active:scale-[0.97] hover:border-primary/40 hover:bg-accent"
+                className="focus-ring inline-flex h-8 min-w-8 items-center justify-center rounded-md border border-border/70 bg-card px-2 text-sm text-foreground transition-[color,background-color,border-color,transform] duration-press ease-out hover:border-primary/40 hover:bg-accent motion-safe:active:scale-[0.97]"
               >
                 {item.glyph}
               </button>
@@ -311,12 +316,20 @@ function AnswerPreview({
       content = <>{t('mathPreview.numberError')}</>
       warn = true
     } else if (String(parsed) !== trimmed) {
-      content = <>{t('mathPreview.numberValue', { value: String(Number.parseFloat(parsed.toPrecision(10))) })}</>
+      content = (
+        <>
+          {t('mathPreview.numberValue', {
+            value: String(Number.parseFloat(parsed.toPrecision(10))),
+          })}
+        </>
+      )
     }
   } else if (mode === 'quantity') {
     const preview = previewQuantity(trimmed)
     if (preview.status === 'ok') {
-      content = <>{t('mathPreview.quantity', { value: String(preview.value), unit: preview.unit })}</>
+      content = (
+        <>{t('mathPreview.quantity', { value: String(preview.value), unit: preview.unit })}</>
+      )
     } else if (preview.status === 'no-unit') {
       content = <>{t('mathPreview.quantityNoUnit')}</>
       warn = true

@@ -101,7 +101,11 @@ export class DocumentRepository {
         await this.db.documentBlobs.add(row)
       }
     })
-    logger.info('Document created', { id: document.id, projectId: document.projectId, type: document.type })
+    logger.info('Document created', {
+      id: document.id,
+      projectId: document.projectId,
+      type: document.type,
+    })
     return document
   }
 
@@ -129,10 +133,7 @@ export class DocumentRepository {
   async delete(id: string): Promise<void> {
     const doc = await this.get(id)
     const visualIds = await this.db.visualSources.where('documentId').equals(id).primaryKeys()
-    const structures = await this.db.courseStructures
-      .where('sourceDocumentId')
-      .equals(id)
-      .toArray()
+    const structures = await this.db.courseStructures.where('sourceDocumentId').equals(id).toArray()
     await this.db.transaction(
       'rw',
       [
@@ -162,10 +163,7 @@ export class DocumentRepository {
   }
 
   async deleteByProject(projectId: string): Promise<number> {
-    const ids = await this.db.documents
-      .where('projectId')
-      .equals(projectId)
-      .primaryKeys()
+    const ids = await this.db.documents.where('projectId').equals(projectId).primaryKeys()
     if (ids.length === 0) return 0
     await this.db.transaction(
       'rw',

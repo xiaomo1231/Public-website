@@ -97,8 +97,15 @@ export class MistakeRepository {
   }
 
   async stats(projectId: string): Promise<MistakeStats> {
-    const rows = await this.db.table<Mistake, string>('mistakes').where('projectId').equals(projectId).toArray()
-    const byType = Object.fromEntries(MISTAKE_TYPES.map((t) => [t, 0])) as Record<MistakeType, number>
+    const rows = await this.db
+      .table<Mistake, string>('mistakes')
+      .where('projectId')
+      .equals(projectId)
+      .toArray()
+    const byType = Object.fromEntries(MISTAKE_TYPES.map((t) => [t, 0])) as Record<
+      MistakeType,
+      number
+    >
     const kpCounts = new Map<string, number>()
     let active = 0
     let understood = 0
@@ -130,7 +137,8 @@ function applyFilter(rows: Mistake[], filter: MistakeFilter): Mistake[] {
     if (filter.knowledgePoint && m.knowledgePoint !== filter.knowledgePoint) return false
     if (filter.mistakeType && m.mistakeType !== filter.mistakeType) return false
     if (filter.quizId && m.quizId !== filter.quizId) return false
-    if (q && !m.question.toLowerCase().includes(q) && !m.knowledgePoint.toLowerCase().includes(q)) return false
+    if (q && !m.question.toLowerCase().includes(q) && !m.knowledgePoint.toLowerCase().includes(q))
+      return false
     return true
   })
 }

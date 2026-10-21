@@ -41,12 +41,19 @@ export class QuestionAttemptRepository {
       .sortBy('createdAt')
   }
 
-  async listByKnowledgePoint(projectId: string, knowledgePoint: string): Promise<QuestionAttempt[]> {
+  async listByKnowledgePoint(
+    projectId: string,
+    knowledgePoint: string,
+  ): Promise<QuestionAttempt[]> {
     const rows = await this.listByProject(projectId)
     return rows.filter((a) => a.knowledgePoint === knowledgePoint)
   }
 
   async deleteByProject(projectId: string): Promise<number> {
-    return this.db.table<QuestionAttempt, string>('questionAttempts').where('projectId').equals(projectId).delete()
+    return this.db
+      .table<QuestionAttempt, string>('questionAttempts')
+      .where('projectId')
+      .equals(projectId)
+      .delete()
   }
 }

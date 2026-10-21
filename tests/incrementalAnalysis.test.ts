@@ -14,7 +14,11 @@ import { QuestionRepository } from '@/entities/question/repository'
 import { QuizRepository } from '@/entities/quiz/repository'
 import { CourseContentRepository } from '@/entities/courseContent/repository'
 import { matchTopicIdentities, normalizeTopicName } from '@/entities/courseAnalysis/topicIdentity'
-import { buildTopicDependency, chunkFingerprintMap, validateTopicSourceChunks } from '@/entities/courseContent/topicDependency'
+import {
+  buildTopicDependency,
+  chunkFingerprintMap,
+  validateTopicSourceChunks,
+} from '@/entities/courseContent/topicDependency'
 import { planContentDependencies } from '@/entities/courseContent/dependency'
 import { DocumentAnalysisService } from '@/services/documentAnalysisService'
 import { CourseContentService } from '@/services/courseContentService'
@@ -44,7 +48,11 @@ vi.mock('@/services/aiServices', () => ({
 // Fixtures
 // ---------------------------------------------------------------------------
 
-function chapter(id: string, sourceChunkIds: string[], overrides: Partial<CourseStructureNode> = {}): CourseStructureNode {
+function chapter(
+  id: string,
+  sourceChunkIds: string[],
+  overrides: Partial<CourseStructureNode> = {},
+): CourseStructureNode {
   return {
     id,
     structureId: 'structure-1',
@@ -196,10 +204,10 @@ describe('tiered incremental plan', () => {
   const liveChunks = [chunk('c2', { chapterId: 'ch2' })]
 
   it('4 �?a spanning topic is regenerated from ALL still-valid sources', () => {
-    const dependency = buildTopicDependency(['c1', 'c2'], [
-      chunk('c1', { chapterId: 'ch1' }),
-      chunk('c2', { chapterId: 'ch2' }),
-    ])
+    const dependency = buildTopicDependency(
+      ['c1', 'c2'],
+      [chunk('c1', { chapterId: 'ch1' }), chunk('c2', { chapterId: 'ch2' })],
+    )
     const report = planContentDependencies({
       nodes,
       chunks: liveChunks,
@@ -473,7 +481,6 @@ describe('analyzer writes stable ids and validated dependencies', () => {
     expect((await contexts.get(project.id))!.lectureLinks[0]!.topicId).toBe(topicId)
   })
 
-
   it('1 �?a second analysis keeps the id of a topic that matched', async () => {
     const { project, stored } = await seedProject(db)
     const analyses = new CourseAnalysisRepository(db)
@@ -739,7 +746,6 @@ describe('incremental scope execution', () => {
     expect(after.sourceChapterIds).toEqual(['ch1', 'ch2'])
   })
 
-
   it('9 �?an unsupported scope is refused and never triggers a full analysis', async () => {
     const { project } = await seedIncremental()
     const service = new CourseContentService({ content: new CourseContentRepository({ db }) })
@@ -810,7 +816,11 @@ describe('incremental scope execution', () => {
     const beforeUntouched = (await analyses.listTopics(project.id)).find(
       (entry) => entry.id === untouchedTopic.id,
     )!
-    const beforeLesson = await lessons.find({ projectId: project.id, topicId: untouchedTopic.id, language: 'en' })
+    const beforeLesson = await lessons.find({
+      projectId: project.id,
+      topicId: untouchedTopic.id,
+      language: 'en',
+    })
 
     mocks.chatJSON.mockResolvedValue({
       data: {
@@ -820,7 +830,9 @@ describe('incremental scope execution', () => {
           description: 'regenerated',
           sourceChunkIds: [replacement[0]!.id, stored[1]!.id],
         },
-        concepts: [{ name: 'Derivative', definition: 'rate of change', topicNames: ['Spanning Topic'] }],
+        concepts: [
+          { name: 'Derivative', definition: 'rate of change', topicNames: ['Spanning Topic'] },
+        ],
         formulas: [],
         symbols: [],
         examples: [],

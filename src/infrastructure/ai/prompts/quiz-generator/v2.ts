@@ -15,7 +15,8 @@ import { securityFooter, untrustedContentWrapper } from '../security'
 export const VERSION = 'v2' as const
 export const PROMPT_KIND = 'quiz-generator' as const
 
-export type QuizQuestionType = 'multiple_choice' | 'true_false' | 'numeric' | 'math_expr' | 'code_output'
+export type QuizQuestionType =
+  'multiple_choice' | 'true_false' | 'numeric' | 'math_expr' | 'code_output'
 
 export interface QuizGenerationInput {
   topicName: string

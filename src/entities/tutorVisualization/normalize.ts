@@ -31,13 +31,23 @@ import { asRecord, readNumber, sanitizeText } from './sanitize'
 import { SCIENCE_NORMALIZERS } from './normalizeScience'
 import { SUBJECT_NORMALIZERS } from './normalizeSubjects'
 import { MEDICAL_NORMALIZERS } from './normalizeMedicine'
-import { DISTRIBUTION_FAMILIES, isDiscrete, validateParams, type DistributionFamily } from './distribution'
+import {
+  DISTRIBUTION_FAMILIES,
+  isDiscrete,
+  validateParams,
+  type DistributionFamily,
+} from './distribution'
 import { normalizeViewport, parseRelationLatex } from './linear'
 import { normalizeFunctionDomain, parseExplicitFunction } from './nonlinear'
 import { dedupeGraphEdges, resolveGraphLayout } from './graph'
 import { computeTransform } from './transform'
 import { matchEigenCandidate, solveEigen, verifyEigenPair } from './eigen'
-import { VENN_OPERATIONS, applyVennOperation, computeVennRegions, dedupeElements } from './setOperations'
+import {
+  VENN_OPERATIONS,
+  applyVennOperation,
+  computeVennRegions,
+  dedupeElements,
+} from './setOperations'
 import {
   addVectors,
   approxEqualVector,
@@ -243,7 +253,8 @@ function reconcileVectorResult(
   if (resultIndex === -1) return vectors
   const result = vectors[resultIndex]!
   const inputs = vectors.filter(
-    (vector, index) => index !== resultIndex && vector.role !== 'basis' && vector.role !== 'component',
+    (vector, index) =>
+      index !== resultIndex && vector.role !== 'basis' && vector.role !== 'component',
   )
 
   if (operation === 'addition') {
@@ -266,7 +277,9 @@ function reconcileVectorResult(
   }
 
   if (operation === 'linear_combination') {
-    const basis = vectors.filter((vector, index) => index !== resultIndex && vector.role === 'basis')
+    const basis = vectors.filter(
+      (vector, index) => index !== resultIndex && vector.role === 'basis',
+    )
     if (basis.length !== 2) return vectors
     const b1 = { x: basis[0]!.x, y: basis[0]!.y }
     const b2 = { x: basis[1]!.x, y: basis[1]!.y }
@@ -657,19 +670,24 @@ function normalizeHasse(draft: VisualizationDraft, base: CommonBase): Normalized
   // full order; the renderer derives the transitive reduction from reachability.
   const reach = new Map(elements.map(({ id }) => [id, new Set<string>()]))
   for (const { lower, upper } of relations) reach.get(lower)!.add(upper)
-  for (const pivot of ids) for (const source of ids) {
-    if (reach.get(source)!.has(pivot)) {
-      for (const target of reach.get(pivot)!) reach.get(source)!.add(target)
+  for (const pivot of ids)
+    for (const source of ids) {
+      if (reach.get(source)!.has(pivot)) {
+        for (const target of reach.get(pivot)!) reach.get(source)!.add(target)
+      }
     }
-  }
   if ([...ids].some((id) => reach.get(id)!.has(id))) {
     return { ok: false, reason: 'cyclic-hasse-relation' }
   }
-  const covers = relations.filter(({ lower, upper }) =>
-    ![...ids].some(
-      (middle) => middle !== lower && middle !== upper &&
-        reach.get(lower)!.has(middle) && reach.get(middle)!.has(upper),
-    ),
+  const covers = relations.filter(
+    ({ lower, upper }) =>
+      ![...ids].some(
+        (middle) =>
+          middle !== lower &&
+          middle !== upper &&
+          reach.get(lower)!.has(middle) &&
+          reach.get(middle)!.has(upper),
+      ),
   )
   const value: HasseVisualization = { ...base, type: 'hasse_2d', elements, relations: covers }
   return { ok: true, value }
@@ -735,7 +753,8 @@ function normalizeOne(raw: unknown, index: number): Normalized {
   if (type === 'venn_2d') return normalizeVenn(draft, base)
   if (type === 'hasse_2d') return normalizeHasse(draft, base)
   if (type === 'distribution_2d') return normalizeDistribution(draft, base)
-  const science = SCIENCE_NORMALIZERS[type] ?? SUBJECT_NORMALIZERS[type] ?? MEDICAL_NORMALIZERS[type]
+  const science =
+    SCIENCE_NORMALIZERS[type] ?? SUBJECT_NORMALIZERS[type] ?? MEDICAL_NORMALIZERS[type]
   if (science) return science(draft, base)
 
   const planeBase: CommonBase & { viewport?: VisualizationViewport } = {

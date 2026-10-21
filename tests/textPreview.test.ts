@@ -62,7 +62,9 @@ describe('collapseText', () => {
   })
 
   it('preserves math symbols when cutting', () => {
-    const text = 'The union A ∪ B and the intersection A ∩ B are both defined. ' + 'More text here. '.repeat(20)
+    const text =
+      'The union A ∪ B and the intersection A ∩ B are both defined. ' +
+      'More text here. '.repeat(20)
     const result = collapseText(text, 60)
     expect(result.shown).toContain('∪')
     expect(result.shown).toContain('∩')

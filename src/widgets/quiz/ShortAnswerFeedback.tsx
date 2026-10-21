@@ -41,11 +41,11 @@ export function ShortAnswerFeedback({
           <span className="data-num font-semibold">
             {t('shortAnswer.score', { earned: score.earned, total: score.total, percent })}
           </span>
-          <span
-            aria-hidden
-            className="ml-1 h-1.5 w-24 overflow-hidden rounded-full bg-muted"
-          >
-            <span className="block h-full rounded-full bg-primary" style={{ width: `${percent}%` }} />
+          <span aria-hidden className="ml-1 h-1.5 w-24 overflow-hidden rounded-full bg-muted">
+            <span
+              className="block h-full rounded-full bg-primary"
+              style={{ width: `${percent}%` }}
+            />
           </span>
         </div>
       ) : null}
@@ -59,15 +59,23 @@ export function ShortAnswerFeedback({
               <li key={point.pointId} className="flex gap-2">
                 {graded ? (
                   point.covered ? (
-                    <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-primary" aria-label={t('shortAnswer.covered')} />
+                    <CheckCircle2
+                      className="mt-0.5 h-4 w-4 shrink-0 text-primary"
+                      aria-label={t('shortAnswer.covered')}
+                    />
                   ) : (
-                    <XCircle className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" aria-label={t('shortAnswer.missing')} />
+                    <XCircle
+                      className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground"
+                      aria-label={t('shortAnswer.missing')}
+                    />
                   )
                 ) : (
                   <Circle className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
                 )}
                 <div className="min-w-0 space-y-0.5">
-                  <p className={cn(graded && !point.covered && 'text-muted-foreground')}>{point.text}</p>
+                  <p className={cn(graded && !point.covered && 'text-muted-foreground')}>
+                    {point.text}
+                  </p>
                   {point.evidence && (
                     <p className="break-words text-xs text-muted-foreground">
                       {t('shortAnswer.evidence', { text: point.evidence })}
@@ -82,7 +90,9 @@ export function ShortAnswerFeedback({
 
       {evaluation.contradictions && evaluation.contradictions.length > 0 && (
         <div className="space-y-1">
-          <p className="text-xs font-medium text-muted-foreground">{t('shortAnswer.contradictions')}</p>
+          <p className="text-xs font-medium text-muted-foreground">
+            {t('shortAnswer.contradictions')}
+          </p>
           <ul className="ml-4 list-disc space-y-0.5 text-xs">
             {evaluation.contradictions.map((item) => (
               <li key={item} className="break-words">
@@ -98,7 +108,11 @@ export function ShortAnswerFeedback({
       {evaluation.expected && (
         <div className="space-y-1 border-t border-border/70 pt-2">
           <p className="text-xs font-medium text-muted-foreground">{t('shortAnswer.reference')}</p>
-          <RichText text={evaluation.expected} format="markdown" paragraphClassName="text-sm leading-relaxed" />
+          <RichText
+            text={evaluation.expected}
+            format="markdown"
+            paragraphClassName="text-sm leading-relaxed"
+          />
         </div>
       )}
 

@@ -38,7 +38,9 @@ export function openPassage(
   anchor: { left: number; top: number; width: number; height: number },
 ): string {
   const rect = rectNearAnchor(anchor)
-  return useFloatingQA.getState().open({ passage, turns: [], rect, start, enterOrigin: enterOriginNear(rect, anchor) })
+  return useFloatingQA
+    .getState()
+    .open({ passage, turns: [], rect, start, enterOrigin: enterOriginNear(rect, anchor) })
 }
 
 /** Bring a saved note back, in the window it already has or where it was left. */
@@ -100,7 +102,8 @@ export async function askInWindow(id: string, question: string): Promise<void> {
     })
     const turn = { question: text, answer, at: Date.now() }
     const current = useFloatingQA.getState().windows.find((item) => item.id === id)
-    if (current) useFloatingQA.getState().update(id, { pending: undefined, turns: [...current.turns, turn] })
+    if (current)
+      useFloatingQA.getState().update(id, { pending: undefined, turns: [...current.turns, turn] })
     // A saved conversation keeps saving, even if its window was closed meanwhile.
     const noteId = current?.noteId ?? win.noteId
     if (noteId) {
@@ -136,7 +139,8 @@ export async function saveWindow(id: string): Promise<WalkthroughNote | null> {
 export async function renameNote(noteId: string, title: string): Promise<WalkthroughNote> {
   const note = await notes().rename(noteId, title)
   const store = useFloatingQA.getState()
-  for (const window of store.windows) if (window.noteId === noteId) store.update(window.id, { title: note.title })
+  for (const window of store.windows)
+    if (window.noteId === noteId) store.update(window.id, { title: note.title })
   notifyNoteChanges()
   return note
 }

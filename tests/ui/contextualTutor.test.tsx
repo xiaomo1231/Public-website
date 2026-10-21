@@ -2,7 +2,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { act, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { SelectionTranslator } from '@/widgets/translation/SelectionTranslator'
-import { ContextualTutorPopup, type ContextualTutorContext } from '@/widgets/tutor/ContextualTutorPopup'
+import {
+  ContextualTutorPopup,
+  type ContextualTutorContext,
+} from '@/widgets/tutor/ContextualTutorPopup'
 import { buildAIServices } from '@/services/aiServices'
 
 vi.mock('@/services/aiServices', () => ({ buildAIServices: vi.fn() }))
@@ -143,7 +146,9 @@ describe('SelectionTranslator — three separate actions', () => {
     await screen.findByRole('button', { name: 'Ask AI' })
     await user.keyboard('{Escape}')
 
-    await waitFor(() => expect(screen.queryByRole('button', { name: 'Ask AI' })).not.toBeInTheDocument())
+    await waitFor(() =>
+      expect(screen.queryByRole('button', { name: 'Ask AI' })).not.toBeInTheDocument(),
+    )
     expect(translateMock).not.toHaveBeenCalled()
     expect(askMock).not.toHaveBeenCalled()
   })
@@ -199,7 +204,9 @@ describe('SelectionTranslator — homework question', () => {
     })
     expect(askMock.mock.calls[0]![0].topicId).toBeUndefined()
     expect(translateMock).not.toHaveBeenCalled()
-    expect(within(dialog).queryByRole('link', { name: /Continue in Interactive Tutor/ })).not.toBeInTheDocument()
+    expect(
+      within(dialog).queryByRole('link', { name: /Continue in Interactive Tutor/ }),
+    ).not.toBeInTheDocument()
   })
 
   it('translates homework text without invoking the question service', async () => {
@@ -241,9 +248,7 @@ describe('ContextualTutorPopup', () => {
       />,
     )
 
-    expect(
-      await screen.findByText(/This part comes from a diagram/),
-    ).toBeInTheDocument()
+    expect(await screen.findByText(/This part comes from a diagram/)).toBeInTheDocument()
     expect(askMock).not.toHaveBeenCalled()
   })
 

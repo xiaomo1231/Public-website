@@ -49,7 +49,11 @@ export interface ArrheniusFit {
 export function fitArrhenius(points: Array<{ t: number; k: number }>): ArrheniusFit | null {
   const fit = linearFit(points.map((p) => ({ x: 1 / p.t, y: Math.log(p.k) })))
   if (!fit) return null
-  return { ea: -fit.slope * GAS_CONSTANT, a: Math.exp(fit.intercept), ...(fit.r2 !== null ? { r2: fit.r2 } : {}) }
+  return {
+    ea: -fit.slope * GAS_CONSTANT,
+    a: Math.exp(fit.intercept),
+    ...(fit.r2 !== null ? { r2: fit.r2 } : {}),
+  }
 }
 
 export function arrheniusK(ea: number, a: number, t: number): number {
@@ -71,7 +75,11 @@ export interface Inhibitor {
 }
 
 /** Apparent Vmax and Km with an inhibitor present. */
-export function apparentConstants(vmax: number, km: number, inhibitor?: Inhibitor): { vmax: number; km: number } {
+export function apparentConstants(
+  vmax: number,
+  km: number,
+  inhibitor?: Inhibitor,
+): { vmax: number; km: number } {
   if (!inhibitor) return { vmax, km }
   const alpha = 1 + inhibitor.concentration / inhibitor.ki
   const alphaPrime = 1 + inhibitor.concentration / (inhibitor.kiPrime ?? inhibitor.ki)
@@ -95,7 +103,13 @@ export function michaelisMenten(vmax: number, km: number, s: number): number {
 
 export type GrowthModel = 'exponential' | 'logistic'
 
-export function populationAt(model: GrowthModel, n0: number, r: number, t: number, k?: number): number {
+export function populationAt(
+  model: GrowthModel,
+  n0: number,
+  r: number,
+  t: number,
+  k?: number,
+): number {
   if (model === 'exponential' || k === undefined) return n0 * Math.exp(r * t)
   return k / (1 + ((k - n0) / n0) * Math.exp(-r * t))
 }
@@ -107,7 +121,12 @@ export interface PopulationFacts {
   maxGrowthRate?: number
 }
 
-export function populationFacts(model: GrowthModel, n0: number, r: number, k?: number): PopulationFacts {
+export function populationFacts(
+  model: GrowthModel,
+  n0: number,
+  r: number,
+  k?: number,
+): PopulationFacts {
   const facts: PopulationFacts = { doublingTime: Math.LN2 / r }
   if (model === 'logistic' && k !== undefined) {
     facts.maxGrowthRate = (r * k) / 4
@@ -156,11 +175,25 @@ export function linearFit(points: Array<{ x: number; y: number }>): LinearFit | 
   // Flat y data: the line fits perfectly but r and R² are 0 / 0, not 1.
   const r = syy === 0 ? null : sxy / Math.sqrt(sxx * syy)
   const residualSe = n > 2 ? Math.sqrt(sse / (n - 2)) : 0
-  return { slope, intercept, r, r2: r === null ? null : r * r, n, residualSe, slopeSe: residualSe / Math.sqrt(sxx), meanX, sxx }
+  return {
+    slope,
+    intercept,
+    r,
+    r2: r === null ? null : r * r,
+    n,
+    residualSe,
+    slopeSe: residualSe / Math.sqrt(sxx),
+    meanX,
+    sxx,
+  }
 }
 
 /** Half-widths of the confidence band (mean response) and prediction band at x. */
-export function regressionBands(fit: LinearFit, x: number, level = 0.95): { confidence: number; prediction: number } {
+export function regressionBands(
+  fit: LinearFit,
+  x: number,
+  level = 0.95,
+): { confidence: number; prediction: number } {
   if (fit.n <= 2) return { confidence: 0, prediction: 0 }
   const t = quantile({ family: 't', df: fit.n - 2 }, 1 - (1 - level) / 2)
   const leverage = 1 / fit.n + (x - fit.meanX) ** 2 / fit.sxx
@@ -188,10 +221,25 @@ export interface ConfidenceInterval {
   distribution: 'z' | 't'
 }
 
-export function confidenceInterval(mean: number, sd: number, n: number, level: number, sigmaKnown: boolean): ConfidenceInterval {
+export function confidenceInterval(
+  mean: number,
+  sd: number,
+  n: number,
+  level: number,
+  sigmaKnown: boolean,
+): ConfidenceInterval {
   const standardError = sd / Math.sqrt(n)
   const p = 1 - (1 - level) / 2
-  const critical = sigmaKnown ? quantile({ family: 'normal', mu: 0, sigma: 1 }, p) : quantile({ family: 't', df: n - 1 }, p)
+  const critical = sigmaKnown
+    ? quantile({ family: 'normal', mu: 0, sigma: 1 }, p)
+    : quantile({ family: 't', df: n - 1 }, p)
   const margin = critical * standardError
-  return { standardError, critical, margin, lower: mean - margin, upper: mean + margin, distribution: sigmaKnown ? 'z' : 't' }
+  return {
+    standardError,
+    critical,
+    margin,
+    lower: mean - margin,
+    upper: mean + margin,
+    distribution: sigmaKnown ? 'z' : 't',
+  }
 }

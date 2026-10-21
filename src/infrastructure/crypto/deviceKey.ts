@@ -49,7 +49,10 @@ export async function getDeviceKey(): Promise<CryptoKey> {
 
 async function loadOrCreate(): Promise<CryptoKey> {
   if (!isEncryptionAvailable()) {
-    throw new AppError('Web Crypto is unavailable; cannot store secrets securely', 'CRYPTO_UNAVAILABLE')
+    throw new AppError(
+      'Web Crypto is unavailable; cannot store secrets securely',
+      'CRYPTO_UNAVAILABLE',
+    )
   }
   const db = getDb()
   const existing = await db.cryptoKeys.get(DEVICE_KEY_ID)

@@ -196,7 +196,9 @@ describe('TutorService 鈥?explanation and question are independent', () => {
     const result = await tutor.beginTopic(session.id)
 
     expect(result.session.pendingQuestion).toBeUndefined()
-    expect(result.questionError).toBe('The AI tutor returned data that could not be read. Please try again.')
+    expect(result.questionError).toBe(
+      'The AI tutor returned data that could not be read. Please try again.',
+    )
   })
 
   it('does not fail the question half when the quiz-style output is empty', async () => {
@@ -405,7 +407,12 @@ describe('TutorService.collectSources 鈥?grounded in the topic, not the project
         description: '',
         order: 1,
         sourceRefs: [
-          { documentId: docId, documentName: 'c.txt', chunkId: target.id, quote: 'geometric series' },
+          {
+            documentId: docId,
+            documentName: 'c.txt',
+            chunkId: target.id,
+            quote: 'geometric series',
+          },
         ],
         createdAt: Date.now(),
       },
@@ -467,7 +474,11 @@ describe('Tutor is architecturally independent of Quiz', () => {
       p.id,
       {
         topics: [
-          { name: 'Derivatives', description: '', sourceRefs: [{ documentId: doc.id, documentName: 'c.txt' }] },
+          {
+            name: 'Derivatives',
+            description: '',
+            sourceRefs: [{ documentId: doc.id, documentName: 'c.txt' }],
+          },
         ],
         concepts: [],
         formulas: [],

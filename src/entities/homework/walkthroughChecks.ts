@@ -46,5 +46,7 @@ export function checkLinearSystems(claims: readonly ClaimedLinearSystem[]): Line
 
 /** Cues that a question involves solving a linear system by row reduction. */
 export function involvesRowReduction(text: string): boolean {
-  return /augmented|row[- ]?echelon|\bRREF\b|row[- ]reduc|gaussian elimination|linear (?:system|equations)|system of (?:linear )?equations|增广|行阶梯|行化简|初等行变换|线性方程组|高斯消元/i.test(text)
+  return /augmented|row[- ]?echelon|\bRREF\b|row[- ]reduc|gaussian elimination|linear (?:system|equations)|system of (?:linear )?equations|增广|行阶梯|行化简|初等行变换|线性方程组|高斯消元/i.test(
+    text,
+  )
 }

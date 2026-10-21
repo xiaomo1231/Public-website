@@ -42,7 +42,10 @@ export function buildUserPrompt(input: VocabGlossInput): string {
   return [
     input.subject ? `Course subject: ${input.subject}.` : '',
     'Terms and the sentence each was found in:',
-    untrustedContentWrapper('TERMS', input.terms.map((term, i) => `${i + 1}. ${term.word} — ${term.sentence}`).join('\n')),
+    untrustedContentWrapper(
+      'TERMS',
+      input.terms.map((term, i) => `${i + 1}. ${term.word} — ${term.sentence}`).join('\n'),
+    ),
     '',
     'Respond with JSON only.',
   ]
@@ -54,7 +57,8 @@ export function buildUserPrompt(input: VocabGlossInput): string {
 export function readGlosses(output: unknown, requested: string[]): Map<string, VocabGloss | null> {
   const result = new Map<string, VocabGloss | null>()
   const wanted = new Set(requested)
-  const list = output && typeof output === 'object' ? (output as { terms?: unknown }).terms : undefined
+  const list =
+    output && typeof output === 'object' ? (output as { terms?: unknown }).terms : undefined
   if (!Array.isArray(list)) return result
   for (const item of list) {
     if (!item || typeof item !== 'object') continue
@@ -70,7 +74,14 @@ export function readGlosses(output: unknown, requested: string[]): Map<string, V
     const text = `${typeof pos === 'string' && pos.trim() ? `${pos.trim()} ` : ''}${meaning.trim().slice(0, 60)}`
     result.set(key, {
       meaning: text,
-      ...(typeof phonetic === 'string' && phonetic.trim() ? { phonetic: phonetic.trim().replace(/^\/|\/$/g, '').slice(0, 40) } : {}),
+      ...(typeof phonetic === 'string' && phonetic.trim()
+        ? {
+            phonetic: phonetic
+              .trim()
+              .replace(/^\/|\/$/g, '')
+              .slice(0, 40),
+          }
+        : {}),
     })
   }
   return result

@@ -112,8 +112,8 @@ export class CourseStructureService {
     detected.assignments.forEach((nodeIndex, chunkIndex) => {
       if (nodeIndex >= 0) nodeChunkIndexes[nodeIndex]!.push(chunkIndex)
     })
-    const assignments: Array<ChunkStructureRef | undefined> = detected.assignments.map((nodeIndex) =>
-      nodeIndex < 0 ? undefined : this.refFor(nodes, parents, nodeIndex),
+    const assignments: Array<ChunkStructureRef | undefined> = detected.assignments.map(
+      (nodeIndex) => (nodeIndex < 0 ? undefined : this.refFor(nodes, parents, nodeIndex)),
     )
 
     const now = Date.now()
@@ -135,9 +135,9 @@ export class CourseStructureService {
   async persist(prepared: PreparedStructure, storedChunkIds: string[]): Promise<void> {
     const nodes = prepared.nodes.map((node, index) => ({
       ...node,
-      sourceChunkIds: prepared.nodeChunkIndexes[index]!
-        .map((chunkIndex) => storedChunkIds[chunkIndex])
-        .filter((id): id is string => Boolean(id)),
+      sourceChunkIds: prepared.nodeChunkIndexes[index]!.map(
+        (chunkIndex) => storedChunkIds[chunkIndex],
+      ).filter((id): id is string => Boolean(id)),
     }))
     await this.repo.replace(prepared.structure, nodes)
     logger.debug('Course structure stored', {

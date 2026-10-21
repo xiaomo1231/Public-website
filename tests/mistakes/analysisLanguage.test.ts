@@ -53,7 +53,10 @@ describe('MistakeAnalysisService language', () => {
   })
 
   // These cases follow the textbook; the default preference is tested below.
-  async function setup(language: 'zh' | 'en' | 'mixed' | null, preference: QuestionLanguage | null = 'source') {
+  async function setup(
+    language: 'zh' | 'en' | 'mixed' | null,
+    preference: QuestionLanguage | null = 'source',
+  ) {
     if (preference) await new UserRepository(db).update({ questionLanguage: preference })
     const projects = new ProjectService(db)
     const project = await projects.create({ name: 'Calculus', subject: 'calculus' })
@@ -112,7 +115,8 @@ describe('MistakeAnalysisService language', () => {
     const { project, service, mistake, chatJSON } = await setup('en', null)
     expect(await service.resolveLanguage(project.id)).toBe('zh')
     await service.explain(mistake)
-    const userPrompt = chatJSON.mock.calls[0]?.[0]?.find((m: ChatMessage) => m.role === 'user')?.content as string
+    const userPrompt = chatJSON.mock.calls[0]?.[0]?.find((m: ChatMessage) => m.role === 'user')
+      ?.content as string
     expect(userPrompt).toContain('Simplified Chinese')
   })
 
@@ -129,28 +133,32 @@ describe('MistakeAnalysisService language', () => {
   it('sends the project language to the AI prompt', async () => {
     const { mistake, service, chatJSON } = await setup('zh')
     await service.explain(mistake)
-    const userPrompt = chatJSON.mock.calls[0]?.[0]?.find((m: ChatMessage) => m.role === 'user')?.content as string
+    const userPrompt = chatJSON.mock.calls[0]?.[0]?.find((m: ChatMessage) => m.role === 'user')
+      ?.content as string
     expect(userPrompt).toContain('Simplified Chinese')
   })
 
   it('sends the overridden language to the AI prompt', async () => {
     const { mistake, service, chatJSON } = await setup('en')
     await service.explain(mistake, { language: 'zh' })
-    const userPrompt = chatJSON.mock.calls[0]?.[0]?.find((m: ChatMessage) => m.role === 'user')?.content as string
+    const userPrompt = chatJSON.mock.calls[0]?.[0]?.find((m: ChatMessage) => m.role === 'user')
+      ?.content as string
     expect(userPrompt).toContain('Simplified Chinese')
   })
 
   it('uses bilingual instructions for a mixed project', async () => {
     const { mistake, service, chatJSON } = await setup('mixed')
     await service.explain(mistake)
-    const userPrompt = chatJSON.mock.calls[0]?.[0]?.find((m: ChatMessage) => m.role === 'user')?.content as string
+    const userPrompt = chatJSON.mock.calls[0]?.[0]?.find((m: ChatMessage) => m.role === 'user')
+      ?.content as string
     expect(userPrompt).toMatch(/English with key Chinese terms/i)
   })
 
   it('does not hardcode English for a Chinese project', async () => {
     const { mistake, service, chatJSON } = await setup('zh')
     await service.explain(mistake)
-    const userPrompt = chatJSON.mock.calls[0]?.[0]?.find((m: ChatMessage) => m.role === 'user')?.content as string
+    const userPrompt = chatJSON.mock.calls[0]?.[0]?.find((m: ChatMessage) => m.role === 'user')
+      ?.content as string
     expect(userPrompt).not.toContain('Respond in: English.')
   })
 

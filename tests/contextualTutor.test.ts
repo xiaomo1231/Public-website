@@ -1,7 +1,10 @@
 import 'fake-indexeddb/auto'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { AppDatabase, setDbForTesting } from '@/infrastructure/db/database'
-import { ContextualTutorService, type ContextualTutorInput } from '@/services/contextualTutorService'
+import {
+  ContextualTutorService,
+  type ContextualTutorInput,
+} from '@/services/contextualTutorService'
 import { prompts } from '@/infrastructure/ai/prompts'
 import type { AIService } from '@/services/aiService'
 

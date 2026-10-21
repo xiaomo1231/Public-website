@@ -17,9 +17,7 @@ describe('splitMathSegments', () => {
 
   it('extracts display $$…$$ math', () => {
     const segments = splitMathSegments('$$\\int_0^1 x dx$$')
-    expect(segments).toEqual([
-      { kind: 'math', value: '\\int_0^1 x dx', display: true },
-    ])
+    expect(segments).toEqual([{ kind: 'math', value: '\\int_0^1 x dx', display: true }])
   })
 
   it('extracts \\[…\\] display math', () => {

@@ -27,12 +27,11 @@ export async function makeTestDocx(options: TestDocxOptions = {}): Promise<Blob>
   <w:body>
     ${headings
       .map(
-        (h) => `<w:p><w:pPr><w:pStyle w:val="Heading1"/></w:pPr><w:r><w:t>${escape(h)}</w:t></w:r></w:p>`,
+        (h) =>
+          `<w:p><w:pPr><w:pStyle w:val="Heading1"/></w:pPr><w:r><w:t>${escape(h)}</w:t></w:r></w:p>`,
       )
       .join('\n')}
-    ${paragraphs
-      .map((p) => `<w:p><w:r><w:t>${escape(p)}</w:t></w:r></w:p>`)
-      .join('\n')}
+    ${paragraphs.map((p) => `<w:p><w:r><w:t>${escape(p)}</w:t></w:r></w:p>`).join('\n')}
   </w:body>
 </w:document>`
 
@@ -56,8 +55,5 @@ export async function makeTestDocx(options: TestDocxOptions = {}): Promise<Blob>
 }
 
 function escape(s: string): string {
-  return s
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
 }

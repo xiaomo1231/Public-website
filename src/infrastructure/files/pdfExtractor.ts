@@ -142,28 +142,59 @@ export async function renderPdfPageImage(
             const key = Math.round(y / 3) * 3
             rows.set(key, `${rows.get(key) ?? ''} ${item.str ?? ''}`)
           }
-          const headings = [...rows].map(([y, value]) => ({ y, value: value.trim() }))
-            .filter(({ value }) => /(?:problem|question|exercise)\s*\d+\s*[:：.]|第\s*\d+\s*题/i.test(value))
+          const headings = [...rows]
+            .map(([y, value]) => ({ y, value: value.trim() }))
+            .filter(({ value }) =>
+              /(?:problem|question|exercise)\s*\d+\s*[:：.]|第\s*\d+\s*题/i.test(value),
+            )
             .sort((a, b) => b.y - a.y)
           const number = questionRegion.number.match(/\d+/)?.[0]
-          const marker = number ? new RegExp(`(?:problem|question|exercise)\\s*${number}\\s*[:：.]|第\\s*${number}\\s*题`, 'i') : undefined
+          const marker = number
+            ? new RegExp(
+                `(?:problem|question|exercise)\\s*${number}\\s*[:：.]|第\\s*${number}\\s*题`,
+                'i',
+              )
+            : undefined
           const ownIndex = marker ? headings.findIndex(({ value }) => marker.test(value)) : -1
-          const start = !questionRegion.continuation && ownIndex >= 0
-            ? Math.max(0, Math.floor(viewport.convertToViewportPoint(0, headings[ownIndex]!.y)[1] - 32))
-            : 0
+          const start =
+            !questionRegion.continuation && ownIndex >= 0
+              ? Math.max(
+                  0,
+                  Math.floor(viewport.convertToViewportPoint(0, headings[ownIndex]!.y)[1] - 32),
+                )
+              : 0
           const nextHeading = questionRegion.continuation
             ? headings.find(({ value }) => !marker?.test(value))
-            : ownIndex >= 0 ? headings[ownIndex + 1] : undefined
+            : ownIndex >= 0
+              ? headings[ownIndex + 1]
+              : undefined
           const end = nextHeading
-            ? Math.min(canvas.height, Math.ceil(viewport.convertToViewportPoint(0, nextHeading.y)[1] - 12))
+            ? Math.min(
+                canvas.height,
+                Math.ceil(viewport.convertToViewportPoint(0, nextHeading.y)[1] - 12),
+              )
             : canvas.height
-          if ((ownIndex >= 0 || questionRegion.continuation) && end - start >= 80 && end - start < canvas.height - 40) {
+          if (
+            (ownIndex >= 0 || questionRegion.continuation) &&
+            end - start >= 80 &&
+            end - start < canvas.height - 40
+          ) {
             const cropped = document.createElement('canvas')
             cropped.width = canvas.width
             cropped.height = end - start
             const croppedContext = cropped.getContext('2d')
             if (croppedContext) {
-              croppedContext.drawImage(canvas, 0, start, canvas.width, cropped.height, 0, 0, canvas.width, cropped.height)
+              croppedContext.drawImage(
+                canvas,
+                0,
+                start,
+                canvas.width,
+                cropped.height,
+                0,
+                0,
+                canvas.width,
+                cropped.height,
+              )
               output = cropped
             }
           }
@@ -171,7 +202,9 @@ export async function renderPdfPageImage(
           // A missing or unusual text layer must never hide the original page.
         }
       }
-      const rendered = await new Promise<Blob | null>((resolve) => output.toBlob(resolve, 'image/png'))
+      const rendered = await new Promise<Blob | null>((resolve) =>
+        output.toBlob(resolve, 'image/png'),
+      )
       if (!rendered) return null
       return {
         bytes: await rendered.arrayBuffer(),
@@ -225,12 +258,28 @@ function looksLikeHeading(line: string): boolean {
 }
 
 const SUPERSCRIPT_DIGITS: Record<string, string> = {
-  '0': '⁰', '1': '¹', '2': '²', '3': '³', '4': '⁴',
-  '5': '⁵', '6': '⁶', '7': '⁷', '8': '⁸', '9': '⁹',
+  '0': '⁰',
+  '1': '¹',
+  '2': '²',
+  '3': '³',
+  '4': '⁴',
+  '5': '⁵',
+  '6': '⁶',
+  '7': '⁷',
+  '8': '⁸',
+  '9': '⁹',
 }
 const SUBSCRIPT_DIGITS: Record<string, string> = {
-  '0': '₀', '1': '₁', '2': '₂', '3': '₃', '4': '₄',
-  '5': '₅', '6': '₆', '7': '₇', '8': '₈', '9': '₉',
+  '0': '₀',
+  '1': '₁',
+  '2': '₂',
+  '3': '₃',
+  '4': '₄',
+  '5': '₅',
+  '6': '₆',
+  '7': '₇',
+  '8': '₈',
+  '9': '₉',
 }
 
 function itemHeight(item: PdfTextItem): number {
@@ -253,11 +302,19 @@ function orderVectorMarks(items: PdfTextItem[]): PdfTextItem[] {
     const baseX = base?.transform?.[4]
     const markY = mark.transform?.[5]
     const baseY = base?.transform?.[5]
-    if (!base || !/^[A-Za-z]$/.test(base.str ?? '') ||
-      markX === undefined || baseX === undefined || base.width === undefined ||
-      markY === undefined || baseY === undefined ||
+    if (
+      !base ||
+      !/^[A-Za-z]$/.test(base.str ?? '') ||
+      markX === undefined ||
+      baseX === undefined ||
+      base.width === undefined ||
+      markY === undefined ||
+      baseY === undefined ||
       Math.abs(markY - baseY) > itemHeight(base) * 0.3 ||
-      markX < baseX - 1 || markX > baseX + base.width + 1) continue
+      markX < baseX - 1 ||
+      markX > baseX + base.width + 1
+    )
+      continue
     ordered.splice(index, 1)
     ordered.splice(baseIndex, 0, mark)
     index = baseIndex
@@ -284,7 +341,8 @@ export function groupTextItemsIntoLines(items: PdfTextItem[]): string[] {
     if (!str) continue
     const height = itemHeight(item)
     if (
-      baselineY !== undefined && y !== undefined &&
+      baselineY !== undefined &&
+      y !== undefined &&
       Math.abs(baselineY - y) > Math.max(2, Math.max(baselineHeight, height) * 0.55)
     ) {
       const joined = current.replace(/\s+/g, ' ').trim()
@@ -294,27 +352,46 @@ export function groupTextItemsIntoLines(items: PdfTextItem[]): string[] {
       previous = undefined
     }
     const x = item.transform?.[4]
-    const previousEnd = previous?.transform?.[4] !== undefined && previous.width !== undefined
-      ? previous.transform[4]! + previous.width
-      : undefined
-    const closeToPrevious = x !== undefined && previousEnd !== undefined &&
-      x >= previousEnd - 1 && x - previousEnd < baselineHeight * 0.45
+    const previousEnd =
+      previous?.transform?.[4] !== undefined && previous.width !== undefined
+        ? previous.transform[4]! + previous.width
+        : undefined
+    const closeToPrevious =
+      x !== undefined &&
+      previousEnd !== undefined &&
+      x >= previousEnd - 1 &&
+      x - previousEnd < baselineHeight * 0.45
     const scriptOffset = Math.max(0.8, baselineHeight * 0.12)
-    const raised = y !== undefined && baselineY !== undefined &&
-      y - baselineY > scriptOffset && height < baselineHeight * 0.85
-    const lowered = y !== undefined && baselineY !== undefined &&
-      baselineY - y > scriptOffset && height < baselineHeight * 0.85
-    const script = closeToPrevious && /^\d+$/.test(str.trim())
-      ? raised ? SUPERSCRIPT_DIGITS : lowered ? SUBSCRIPT_DIGITS : undefined
-      : undefined
+    const raised =
+      y !== undefined &&
+      baselineY !== undefined &&
+      y - baselineY > scriptOffset &&
+      height < baselineHeight * 0.85
+    const lowered =
+      y !== undefined &&
+      baselineY !== undefined &&
+      baselineY - y > scriptOffset &&
+      height < baselineHeight * 0.85
+    const script =
+      closeToPrevious && /^\d+$/.test(str.trim())
+        ? raised
+          ? SUPERSCRIPT_DIGITS
+          : lowered
+            ? SUBSCRIPT_DIGITS
+            : undefined
+        : undefined
     if (script) {
       current = current.trimEnd() + [...str.trim()].map((digit) => script[digit]).join('')
     } else if (!current) {
       current = str
     } else {
       const gap = x !== undefined && previousEnd !== undefined ? x - previousEnd : undefined
-      const separator = /\s$/.test(current) || /^\s/.test(str) ||
-        (gap !== undefined && gap < Math.min(baselineHeight, height) * 0.18) ? '' : ' '
+      const separator =
+        /\s$/.test(current) ||
+        /^\s/.test(str) ||
+        (gap !== undefined && gap < Math.min(baselineHeight, height) * 0.18)
+          ? ''
+          : ' '
       current += separator + str
     }
     if (y !== undefined && (baselineY === undefined || height > baselineHeight)) {

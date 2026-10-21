@@ -15,7 +15,7 @@ export const TooltipContent = forwardRef<
       ref={ref}
       sideOffset={sideOffset}
       className={cn(
-        'z-50 origin-[--radix-tooltip-content-transform-origin] overflow-hidden rounded-lg bg-primary-strong px-2.5 py-1 text-xs text-primary-foreground shadow data-[state=delayed-open]:animate-pop-in data-[state=closed]:animate-pop-out',
+        'z-50 origin-[--radix-tooltip-content-transform-origin] overflow-hidden rounded-lg bg-primary-strong px-2.5 py-1 text-xs text-primary-foreground shadow data-[state=closed]:animate-pop-out data-[state=delayed-open]:animate-pop-in',
         className,
       )}
       {...props}
@@ -30,7 +30,11 @@ export interface TooltipWrapperProps {
   delayDuration?: number
 }
 
-export function TooltipWrapper({ content, children, delayDuration = 300 }: TooltipWrapperProps): JSX.Element {
+export function TooltipWrapper({
+  content,
+  children,
+  delayDuration = 300,
+}: TooltipWrapperProps): JSX.Element {
   return (
     <Tooltip delayDuration={delayDuration}>
       <TooltipTrigger asChild>{children}</TooltipTrigger>

@@ -50,7 +50,10 @@ export function ChunkPreview({
     { label: t('sourceReader.chunkId'), value: chunk.id },
     { label: t('sourceReader.documentId'), value: chunk.documentId },
     { label: t('documentDetail.type'), value: chunk.contentType },
-    { label: t('documentDetail.textLength'), value: t('sourceReader.characters', { count: chunk.text.length }) },
+    {
+      label: t('documentDetail.textLength'),
+      value: t('sourceReader.characters', { count: chunk.text.length }),
+    },
   ]
 
   return (
@@ -97,7 +100,7 @@ export function ChunkPreview({
           </Button>
 
           <details className="group ml-auto">
-            <summary className="w-fit cursor-pointer list-none rounded text-[11px] text-muted-foreground underline-offset-2 hover:text-foreground hover:underline focus-ring">
+            <summary className="focus-ring w-fit cursor-pointer list-none rounded text-[11px] text-muted-foreground underline-offset-2 hover:text-foreground hover:underline">
               {t('sourceReader.advanced')}
             </summary>
             <dl className="mt-2 grid gap-1 text-[11px] text-muted-foreground">

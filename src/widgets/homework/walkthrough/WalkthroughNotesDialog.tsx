@@ -6,7 +6,13 @@ import { toast } from '@/features/toast/toastStore'
 import { Badge } from '@/shared/ui/Badge'
 import { Button } from '@/shared/ui/Button'
 import { ConfirmDialog } from '@/shared/ui/ConfirmDialog'
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/shared/ui/Dialog'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/shared/ui/Dialog'
 import { Input } from '@/shared/ui/Input'
 import { friendlyAIError } from '@/shared/lib/aiErrors'
 import { relativeTime } from '@/shared/lib/utils'
@@ -22,7 +28,13 @@ export interface WalkthroughNotesDialogProps {
 }
 
 /** Every question saved about this walkthrough: search, open, rename, delete. */
-export function WalkthroughNotesDialog({ open, onOpenChange, notes, located, onOpenNote }: WalkthroughNotesDialogProps): JSX.Element {
+export function WalkthroughNotesDialog({
+  open,
+  onOpenChange,
+  notes,
+  located,
+  onOpenNote,
+}: WalkthroughNotesDialogProps): JSX.Element {
   const { t } = useTranslation()
   const [query, setQuery] = useState('')
   const [editing, setEditing] = useState<{ id: string; title: string } | null>(null)
@@ -32,7 +44,12 @@ export function WalkthroughNotesDialog({ open, onOpenChange, notes, located, onO
     const needle = query.trim().toLowerCase()
     if (!needle) return notes
     return notes.filter((note) =>
-      [note.title, note.quote, note.sectionTitle, ...note.turns.flatMap((turn) => [turn.question, turn.answer])]
+      [
+        note.title,
+        note.quote,
+        note.sectionTitle,
+        ...note.turns.flatMap((turn) => [turn.question, turn.answer]),
+      ]
         .join('\n')
         .toLowerCase()
         .includes(needle),
@@ -59,7 +76,10 @@ export function WalkthroughNotesDialog({ open, onOpenChange, notes, located, onO
           </DialogHeader>
           {notes.length > 0 && (
             <div className="relative">
-              <Search className="pointer-events-none absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" aria-hidden />
+              <Search
+                className="pointer-events-none absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground"
+                aria-hidden
+              />
               <Input
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
@@ -71,9 +91,13 @@ export function WalkthroughNotesDialog({ open, onOpenChange, notes, located, onO
           )}
           <div className="max-h-[60vh] space-y-2 overflow-y-auto pr-1">
             {notes.length === 0 ? (
-              <p className="py-6 text-center text-sm text-muted-foreground">{t('walkthroughQA.listEmpty')}</p>
+              <p className="py-6 text-center text-sm text-muted-foreground">
+                {t('walkthroughQA.listEmpty')}
+              </p>
             ) : shown.length === 0 ? (
-              <p className="py-6 text-center text-sm text-muted-foreground">{t('walkthroughQA.noMatch')}</p>
+              <p className="py-6 text-center text-sm text-muted-foreground">
+                {t('walkthroughQA.noMatch')}
+              </p>
             ) : (
               shown.map((note) => (
                 <div key={note.id} className="space-y-1.5 rounded-lg border p-3">
@@ -97,7 +121,10 @@ export function WalkthroughNotesDialog({ open, onOpenChange, notes, located, onO
                     </form>
                   ) : (
                     <div className="flex items-start gap-2">
-                      <MessageSquareText className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
+                      <MessageSquareText
+                        className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground"
+                        aria-hidden
+                      />
                       <div className="min-w-0 flex-1">
                         <p className="truncate text-sm font-medium">{note.title}</p>
                         <p className="text-xs text-muted-foreground">
@@ -108,15 +135,23 @@ export function WalkthroughNotesDialog({ open, onOpenChange, notes, located, onO
                           })}
                         </p>
                       </div>
-                      {!located.has(note.id) && <Badge variant="outline">{t('walkthroughQA.passageChangedBadge')}</Badge>}
+                      {!located.has(note.id) && (
+                        <Badge variant="outline">{t('walkthroughQA.passageChangedBadge')}</Badge>
+                      )}
                     </div>
                   )}
-                  <p className="line-clamp-2 rounded bg-muted/50 px-2 py-1 text-xs text-muted-foreground">“{note.quote}”</p>
+                  <p className="line-clamp-2 rounded bg-muted/50 px-2 py-1 text-xs text-muted-foreground">
+                    “{note.quote}”
+                  </p>
                   <div className="flex flex-wrap gap-1.5">
                     <Button size="sm" variant="outline" onClick={() => onOpenNote(note)}>
                       {t('walkthroughQA.open')}
                     </Button>
-                    <Button size="sm" variant="ghost" onClick={() => setEditing({ id: note.id, title: note.title })}>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => setEditing({ id: note.id, title: note.title })}
+                    >
                       <Pencil className="h-3.5 w-3.5" />
                       {t('walkthroughQA.rename')}
                     </Button>

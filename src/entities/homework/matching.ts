@@ -19,11 +19,7 @@ export interface MatchableQuestion {
 }
 
 export type MatchReason =
-  | 'prompt-exact'
-  | 'prompt-similar'
-  | 'number-and-source'
-  | 'prompt-partial'
-  | 'source-overlap'
+  'prompt-exact' | 'prompt-similar' | 'number-and-source' | 'prompt-partial' | 'source-overlap'
 
 export interface QuestionMatch {
   newIndex: number
@@ -117,7 +113,8 @@ export function scoreQuestionPair(
   const similarity = jaccard(tokenSet(incoming.prompt), tokenSet(existing.prompt))
   const overlap = overlapRatio(incoming.chunkIds, existing.chunkIds)
   const sameNumber =
-    Boolean(incoming.number) && normalizeNumber(incoming.number) === normalizeNumber(existing.number)
+    Boolean(incoming.number) &&
+    normalizeNumber(incoming.number) === normalizeNumber(existing.number)
 
   if (similarity >= 0.8) return { score: 70 + similarity * 10, reason: 'prompt-similar' }
   if (sameNumber && overlap >= MIN_OVERLAP) {
@@ -146,9 +143,7 @@ export function matchHomeworkQuestions(
     }
   }
 
-  candidates.sort(
-    (a, b) => b.score - a.score || a.newIndex - b.newIndex || a.oldIndex - b.oldIndex,
-  )
+  candidates.sort((a, b) => b.score - a.score || a.newIndex - b.newIndex || a.oldIndex - b.oldIndex)
 
   const usedNew = new Set<number>()
   const usedOld = new Set<number>()
@@ -165,12 +160,8 @@ export function matchHomeworkQuestions(
     })
   }
 
-  const unmatchedNew = incoming
-    .map((_, index) => index)
-    .filter((index) => !usedNew.has(index))
-  const unmatchedOld = existing
-    .map((_, index) => index)
-    .filter((index) => !usedOld.has(index))
+  const unmatchedNew = incoming.map((_, index) => index).filter((index) => !usedNew.has(index))
+  const unmatchedOld = existing.map((_, index) => index).filter((index) => !usedOld.has(index))
 
   return { pairs, unmatchedNew, unmatchedOld }
 }

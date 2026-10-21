@@ -43,7 +43,14 @@ async function seed(topics = TOPICS, language: 'en' | 'zh' = 'en') {
     p.id,
     {
       topics: topics.map((name) => ({ name, description: `${name} joint`, sourceRefs: [] })),
-      concepts: topics.flatMap((topic) => [0, 1].map((k) => ({ name: `${topic}-L${k}`, definition: 'd', topicNames: [topic], sourceRefs: [] }))),
+      concepts: topics.flatMap((topic) =>
+        [0, 1].map((k) => ({
+          name: `${topic}-L${k}`,
+          definition: 'd',
+          topicNames: [topic],
+          sourceRefs: [],
+        })),
+      ),
       formulas: [],
       symbols: [],
       examples: [],
@@ -58,12 +65,14 @@ async function seed(topics = TOPICS, language: 'en' | 'zh' = 'en') {
 }
 
 /** Answers each plan line with a choice question; the correct option always first, like a real model. */
-function choiceAI(options: (call: number, index: number) => Array<{ label: string; isCorrect: boolean }> = () => [
-  { label: 'right answer', isCorrect: true },
-  { label: 'wrong one aa', isCorrect: false },
-  { label: 'wrong two bb', isCorrect: false },
-  { label: 'wrong three', isCorrect: false },
-]) {
+function choiceAI(
+  options: (call: number, index: number) => Array<{ label: string; isCorrect: boolean }> = () => [
+    { label: 'right answer', isCorrect: true },
+    { label: 'wrong one aa', isCorrect: false },
+    { label: 'wrong two bb', isCorrect: false },
+    { label: 'wrong three', isCorrect: false },
+  ],
+) {
   let call = 0
   const chatJSON = vi.fn(async (messages: ChatMessage[], _options?: { maxTokens?: number }) => {
     call++
@@ -91,7 +100,13 @@ function choiceAI(options: (call: number, index: number) => Array<{ label: strin
 }
 
 const mixed = (count: number, extra: Partial<QuizConfig> = {}): QuizConfig =>
-  ({ mode: 'mixed', count, difficulty: 'basic', types: ['multiple_choice'], ...extra }) as QuizConfig
+  ({
+    mode: 'mixed',
+    count,
+    difficulty: 'basic',
+    types: ['multiple_choice'],
+    ...extra,
+  }) as QuizConfig
 
 beforeEach(() => {
   db = new AppDatabase()
@@ -110,14 +125,16 @@ describe('answer positions', () => {
     for (const q of questions) {
       const right = q.options!.find((o) => o.isCorrect)!
       expect(evaluateDeterministic(q, right.id).isCorrect).toBe(true)
-      expect(evaluateDeterministic(q, q.options!.find((o) => !o.isCorrect)!.id).isCorrect).toBe(false)
+      expect(evaluateDeterministic(q, q.options!.find((o) => !o.isCorrect)!.id).isCorrect).toBe(
+        false,
+      )
     }
   })
 
   it('shuffles fairly', () => {
     const counts = [0, 0, 0, 0]
     let seed = 7
-    const random = () => ((seed = (seed * 16807) % 2147483647) / 2147483647)
+    const random = () => (seed = (seed * 16807) % 2147483647) / 2147483647
     for (let i = 0; i < 4000; i++) counts[shuffled([0, 1, 2, 3], random).indexOf(0)]!++
     for (const n of counts) expect(n).toBeGreaterThan(850)
   })
@@ -137,15 +154,22 @@ describe('answer positions', () => {
       { label: 'third one', isCorrect: false },
     ]
     const { ai, chatJSON } = choiceAI((call, index) =>
-      call === 1 && index === 0 ? giveaway : call === 1 && index === 1 ? duplicate : [
-        { label: 'balanced answer', isCorrect: true },
-        { label: 'balanced wrong1', isCorrect: false },
-        { label: 'balanced wrong2', isCorrect: false },
-        { label: 'balanced wrong3', isCorrect: false },
-      ],
+      call === 1 && index === 0
+        ? giveaway
+        : call === 1 && index === 1
+          ? duplicate
+          : [
+              { label: 'balanced answer', isCorrect: true },
+              { label: 'balanced wrong1', isCorrect: false },
+              { label: 'balanced wrong2', isCorrect: false },
+              { label: 'balanced wrong3', isCorrect: false },
+            ],
     )
     const service = new QuizService({ ai, db })
-    const quiz = await service.generateQuiz(projectId, mixed(3, { mode: 'topic', topicId: 'topic-Hip' }))
+    const quiz = await service.generateQuiz(
+      projectId,
+      mixed(3, { mode: 'topic', topicId: 'topic-Hip' }),
+    )
     expect(chatJSON).toHaveBeenCalledTimes(2)
     const questions = await service.getQuestions(quiz.id)
     expect(questions).toHaveLength(3)
@@ -160,7 +184,9 @@ describe('mixed review across topics', () => {
     const service = new QuizService({ ai, db })
     const quiz = await service.generateQuiz(projectId, mixed(10))
     const questions = await service.getQuestions(quiz.id)
-    expect(new Set(questions.map((q) => q.topicId))).toEqual(new Set(TOPICS.map((name) => `topic-${name}`)))
+    expect(new Set(questions.map((q) => q.topicId))).toEqual(
+      new Set(TOPICS.map((name) => `topic-${name}`)),
+    )
     // Batch 1 (questions 1–5) and batch 2 (6–10) each cover the five topics once.
     for (const call of chatJSON.mock.calls) {
       const user = (call[0] as ChatMessage[])[1]!.content
@@ -182,13 +208,16 @@ describe('mixed review across topics', () => {
 })
 
 describe('question language', () => {
-  const userPrompt = (chatJSON: ReturnType<typeof choiceAI>['chatJSON']) => (chatJSON.mock.calls[0]![0] as ChatMessage[])[1]!.content
+  const userPrompt = (chatJSON: ReturnType<typeof choiceAI>['chatJSON']) =>
+    (chatJSON.mock.calls[0]![0] as ChatMessage[])[1]!.content
 
   it('writes Chinese with English terms by default, even from an English textbook', async () => {
     const projectId = await seed()
     const { ai, chatJSON } = choiceAI()
     await new QuizService({ ai, db }).generateQuiz(projectId, mixed(1))
-    expect(userPrompt(chatJSON)).toContain('Respond in: Simplified Chinese. At the first mention of each key technical term')
+    expect(userPrompt(chatJSON)).toContain(
+      'Respond in: Simplified Chinese. At the first mention of each key technical term',
+    )
   })
 
   it('follows the saved preference, and a quiz may override it', async () => {
@@ -198,7 +227,10 @@ describe('question language', () => {
     await new QuizService({ ai: first.ai, db }).generateQuiz(projectId, mixed(1))
     expect(userPrompt(first.chatJSON)).toContain('Respond in: English.')
     const second = choiceAI()
-    await new QuizService({ ai: second.ai, db }).generateQuiz(projectId, mixed(1, { questionLanguage: 'zh_terms' }))
+    await new QuizService({ ai: second.ai, db }).generateQuiz(
+      projectId,
+      mixed(1, { questionLanguage: 'zh_terms' }),
+    )
     expect(userPrompt(second.chatJSON)).toContain('Simplified Chinese')
     expect(quizLanguage('source', 'zh')).toBe('zh')
     expect(quizLanguage(undefined, 'en')).toBe('zh_terms')
@@ -209,7 +241,19 @@ describe('display', () => {
   it('shows the difficulty as words, not its id', () => {
     render(
       <QuestionCard
-        question={{ id: 'q', projectId: 'p', knowledgePoint: 'K', type: 'true_false', difficulty: 'basic', prompt: 'P', correctAnswer: 'true', hints: [], sourceRefs: [], promptVersion: 'v6', createdAt: 1 }}
+        question={{
+          id: 'q',
+          projectId: 'p',
+          knowledgePoint: 'K',
+          type: 'true_false',
+          difficulty: 'basic',
+          prompt: 'P',
+          correctAnswer: 'true',
+          hints: [],
+          sourceRefs: [],
+          promptVersion: 'v6',
+          createdAt: 1,
+        }}
         index={0}
         total={1}
         difficulty="basic"

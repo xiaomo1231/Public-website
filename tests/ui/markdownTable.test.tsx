@@ -27,10 +27,7 @@ describe('RichText — markdown tables', () => {
 
   it('applies controlled alignment classes', () => {
     const { container } = render(
-      <RichText
-        format="markdown"
-        text={'| L | C | R |\n| :--- | :---: | ---: |\n| a | b | c |'}
-      />,
+      <RichText format="markdown" text={'| L | C | R |\n| :--- | :---: | ---: |\n| a | b | c |'} />,
     )
     const headers = [...container.querySelectorAll('th')]
     expect(headers[0]?.className).toContain('text-left')
@@ -40,10 +37,7 @@ describe('RichText — markdown tables', () => {
 
   it('renders inline math and inline code inside cells', () => {
     const { container } = render(
-      <RichText
-        format="markdown"
-        text={'| E | M |\n| --- | --- |\n| $A \\cap B$ | `x && y` |'}
-      />,
+      <RichText format="markdown" text={'| E | M |\n| --- | --- |\n| $A \\cap B$ | `x && y` |'} />,
     )
     expect(container.querySelector('td .katex')).toBeInTheDocument()
     expect(container.querySelector('td code')?.textContent).toBe('x && y')

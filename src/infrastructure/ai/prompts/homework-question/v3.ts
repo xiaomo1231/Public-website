@@ -35,11 +35,12 @@ export function buildSystemPrompt(
   compact = false,
   hasProfessorAnswer = false,
 ): string {
-  const task = mode === 'hints'
-    ? 'Return strictly valid JSON with one field: {"hints":["string","..."]}. Write 2 to 4 progressive hints. Never state the final answer.'
-    : mode === 'solution'
-      ? 'Return strictly valid JSON with one field: {"solution":"string"}. Give a complete worked solution with the necessary steps and final answer.'
-      : 'Return strictly valid JSON with exactly two fields: {"hints":["string","..."],"solution":"string"}. Write 2 to 4 progressive hints and a complete worked solution.'
+  const task =
+    mode === 'hints'
+      ? 'Return strictly valid JSON with one field: {"hints":["string","..."]}. Write 2 to 4 progressive hints. Never state the final answer.'
+      : mode === 'solution'
+        ? 'Return strictly valid JSON with one field: {"solution":"string"}. Give a complete worked solution with the necessary steps and final answer.'
+        : 'Return strictly valid JSON with exactly two fields: {"hints":["string","..."],"solution":"string"}. Write 2 to 4 progressive hints and a complete worked solution.'
   return [
     'You are a patient tutor preparing help for one homework question.',
     task,
@@ -47,11 +48,11 @@ export function buildSystemPrompt(
     'Use simple LaTeX only where it helps, wrapped in $...$. Do not invent facts or source citations.',
     ...(hasProfessorAnswer
       ? [
-          'A professor\'s official answer for THIS question is supplied in the user message.',
-          '  - The worked solution MUST reach and state the professor\'s answer, following the professor\'s method where it is shown.',
+          "A professor's official answer for THIS question is supplied in the user message.",
+          "  - The worked solution MUST reach and state the professor's answer, following the professor's method where it is shown.",
           '  - Hints must still guide the student without revealing the final answer, even though the answer is known to you.',
-          '  - Never attribute your own wording to the professor. If you add steps the professor did not write, they are your explanation, not the professor\'s words.',
-          '  - If the professor\'s answer is incomplete, ambiguous, or disagrees with the source passages, say so plainly instead of inventing a reconciliation.',
+          "  - Never attribute your own wording to the professor. If you add steps the professor did not write, they are your explanation, not the professor's words.",
+          "  - If the professor's answer is incomplete, ambiguous, or disagrees with the source passages, say so plainly instead of inventing a reconciliation.",
         ]
       : []),
     compact
@@ -63,11 +64,12 @@ export function buildSystemPrompt(
 }
 
 export function buildUserPrompt(input: HomeworkQuestionInput): string {
-  const langHint = input.language === 'zh'
-    ? 'Write in Simplified Chinese.'
-    : input.language === 'en'
-      ? 'Write in English.'
-      : 'Write in the language of the question.'
+  const langHint =
+    input.language === 'zh'
+      ? 'Write in Simplified Chinese.'
+      : input.language === 'en'
+        ? 'Write in English.'
+        : 'Write in the language of the question.'
   const professorAnswer = input.professorAnswer?.trim()
   return [
     `Prepare help for this question. ${langHint}`,
@@ -82,5 +84,7 @@ export function buildUserPrompt(input: HomeworkQuestionInput): string {
         )
       : '',
     'Return JSON only.',
-  ].filter(Boolean).join('\n')
+  ]
+    .filter(Boolean)
+    .join('\n')
 }

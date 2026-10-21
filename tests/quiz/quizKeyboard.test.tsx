@@ -203,7 +203,12 @@ describe('quiz keyboard', () => {
 describe('ordering and held keys', () => {
   const steps = ['Transcription', 'mRNA processing', 'Export', 'Translation']
   const ordering = () =>
-    question({ type: 'ordering', options: undefined, correctAnswer: steps.join('\n'), orderItems: steps })
+    question({
+      type: 'ordering',
+      options: undefined,
+      correctAnswer: steps.join('\n'),
+      orderItems: steps,
+    })
 
   it('does not submit the untouched starting order', () => {
     const onSubmit = vi.fn()

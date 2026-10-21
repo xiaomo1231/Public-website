@@ -29,38 +29,61 @@ export function buildUserPrompt(input: HomeworkAnswerCheckInput): string {
     `Reply in ${input.language === 'zh' ? 'Simplified Chinese' : 'English'}.`,
     `Reference kind: ${input.referenceKind === 'professor' ? 'confirmed professor answer' : 'unverified AI worked solution'}.`,
     untrustedContentWrapper('CURRENT QUESTION', input.question),
-    input.sourceText.trim() ? untrustedContentWrapper('QUESTION SOURCE PASSAGES', input.sourceText) : '',
+    input.sourceText.trim()
+      ? untrustedContentWrapper('QUESTION SOURCE PASSAGES', input.sourceText)
+      : '',
     untrustedContentWrapper('REFERENCE ANSWER', input.referenceAnswer),
     untrustedContentWrapper('STUDENT ANSWER', input.studentAnswer),
     'Return JSON only.',
-  ].filter(Boolean).join('\n')
+  ]
+    .filter(Boolean)
+    .join('\n')
 }
 
 export type NormalizedAnswerAssessment =
-  | { status: 'ready'; similarityPercent: number; verdict: 'correct' | 'partial' | 'incorrect' | 'uncertain'; feedback: string; matchedPoints: string[]; missingPoints: string[] }
+  | {
+      status: 'ready'
+      similarityPercent: number
+      verdict: 'correct' | 'partial' | 'incorrect' | 'uncertain'
+      feedback: string
+      matchedPoints: string[]
+      missingPoints: string[]
+    }
   | { status: 'insufficient'; reason: string }
 
 export function normalizeAssessment(raw: unknown): NormalizedAnswerAssessment | null {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null
   const row = raw as Record<string, unknown>
-  const text = (value: unknown): string => typeof value === 'string' ? value.trim().slice(0, 3000) : ''
+  const text = (value: unknown): string =>
+    typeof value === 'string' ? value.trim().slice(0, 3000) : ''
   if (row.status === 'insufficient') {
     const reason = text(row.reason)
     return reason ? { status: 'insufficient', reason } : null
   }
-  if (row.status !== 'ready' || typeof row.similarityPercent !== 'number' ||
-    !Number.isInteger(row.similarityPercent) || row.similarityPercent < 0 || row.similarityPercent > 100 ||
-    !['correct', 'partial', 'incorrect', 'uncertain'].includes(String(row.verdict))) return null
+  if (
+    row.status !== 'ready' ||
+    typeof row.similarityPercent !== 'number' ||
+    !Number.isInteger(row.similarityPercent) ||
+    row.similarityPercent < 0 ||
+    row.similarityPercent > 100 ||
+    !['correct', 'partial', 'incorrect', 'uncertain'].includes(String(row.verdict))
+  )
+    return null
   const feedback = text(row.feedback)
   if (!feedback) return null
-  const list = (value: unknown): string[] | null => Array.isArray(value) && value.every((item) => typeof item === 'string')
-    ? value.map(text).filter(Boolean).slice(0, 8) : null
+  const list = (value: unknown): string[] | null =>
+    Array.isArray(value) && value.every((item) => typeof item === 'string')
+      ? value.map(text).filter(Boolean).slice(0, 8)
+      : null
   const matchedPoints = list(row.matchedPoints)
   const missingPoints = list(row.missingPoints)
   if (!matchedPoints || !missingPoints) return null
   return {
-    status: 'ready', similarityPercent: row.similarityPercent,
+    status: 'ready',
+    similarityPercent: row.similarityPercent,
     verdict: row.verdict as 'correct' | 'partial' | 'incorrect' | 'uncertain',
-    feedback, matchedPoints, missingPoints,
+    feedback,
+    matchedPoints,
+    missingPoints,
   }
 }

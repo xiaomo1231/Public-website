@@ -20,7 +20,13 @@ import {
   type VocabSettings,
   type WordView,
 } from '@/entities/vocab/types'
-import { isLearning, isMature, newVocabCard, previewVocabIntervals, rateVocabCard } from '@/entities/vocab/schedule'
+import {
+  isLearning,
+  isMature,
+  newVocabCard,
+  previewVocabIntervals,
+  rateVocabCard,
+} from '@/entities/vocab/schedule'
 import {
   buildLemmaIndex,
   clozeOf,
@@ -78,7 +84,11 @@ export function startOfDay(now: number): number {
 }
 
 /** The dictionary with a lookup by headword and a form → headword index, built once. */
-let indexed: Promise<{ entries: DictEntry[]; byWord: Map<string, DictEntry>; lemmas: Map<string, string> }> | null = null
+let indexed: Promise<{
+  entries: DictEntry[]
+  byWord: Map<string, DictEntry>
+  lemmas: Map<string, string>
+}> | null = null
 
 /** Test helper: forget the indexed dictionary (after swapping the data loader). */
 export function resetVocabIndexForTesting(): void {
@@ -96,7 +106,13 @@ export async function vocabIndex() {
 }
 
 function viewOfEntry(entry: DictEntry): WordView {
-  return { word: entry.word, phonetic: entry.phonetic, meanings: entry.meanings, tags: entry.tags, forms: entry.forms }
+  return {
+    word: entry.word,
+    phonetic: entry.phonetic,
+    meanings: entry.meanings,
+    tags: entry.tags,
+    forms: entry.forms,
+  }
 }
 
 /**
@@ -125,7 +141,9 @@ export class VocabService {
   async updateSettings(patch: Partial<VocabSettings>): Promise<VocabSettings> {
     await this.users.update({
       ...(patch.bookId ? { vocabBookId: patch.bookId } : {}),
-      ...(patch.dailyNew !== undefined ? { vocabDailyNew: Math.max(1, Math.min(MAX_DAILY_NEW, Math.round(patch.dailyNew))) } : {}),
+      ...(patch.dailyNew !== undefined
+        ? { vocabDailyNew: Math.max(1, Math.min(MAX_DAILY_NEW, Math.round(patch.dailyNew))) }
+        : {}),
       ...(patch.reviewMode ? { vocabReviewMode: patch.reviewMode } : {}),
     })
     return this.settings()
@@ -134,7 +152,11 @@ export class VocabService {
   // ---------------------------------------------------------------- books
 
   async books(): Promise<BookSummary[]> {
-    const [{ entries }, cards, stored] = await Promise.all([vocabIndex(), this.repo.listCards(), this.repo.listBooks()])
+    const [{ entries }, cards, stored] = await Promise.all([
+      vocabIndex(),
+      this.repo.listCards(),
+      this.repo.listBooks(),
+    ])
     const learned = new Set(cards.map((card) => card.word))
     const exam: BookSummary[] = TAG_ORDER.map((tag) => {
       const words = entries.filter((entry) => entry.tags.includes(tag))
@@ -176,7 +198,9 @@ export class VocabService {
     const book = await this.repo.getBook(bookId)
     const ordered =
       book?.kind === 'course'
-        ? entries.sort((a, b) => (b.occurrences ?? 0) - (a.occurrences ?? 0) || a.createdAt - b.createdAt)
+        ? entries.sort(
+            (a, b) => (b.occurrences ?? 0) - (a.occurrences ?? 0) || a.createdAt - b.createdAt,
+          )
         : entries.sort((a, b) => a.createdAt - b.createdAt)
     return Promise.all(ordered.map((entry) => this.viewOfStored(entry)))
   }
@@ -213,7 +237,11 @@ export class VocabService {
   /** Everything known about a word: dictionary entry, course context, progress, root hints. */
   async details(word: string): Promise<WordDetails> {
     const key = normalizeWord(word)
-    const [view, card, roots] = await Promise.all([this.view(key), this.repo.getCard(key), loadRoots().catch(() => [])])
+    const [view, card, roots] = await Promise.all([
+      this.view(key),
+      this.repo.getCard(key),
+      loadRoots().catch(() => []),
+    ])
     return { view, ...(card ? { card } : {}), roots: rootHints(key, roots) }
   }
 
@@ -225,7 +253,10 @@ export class VocabService {
     const known = byWord.get(key)
     if (withContext) {
       const fromBook = await this.viewOfStored(withContext)
-      return { ...fromBook, ...(known && fromBook.meanings.length === 0 ? { meanings: known.meanings } : {}) }
+      return {
+        ...fromBook,
+        ...(known && fromBook.meanings.length === 0 ? { meanings: known.meanings } : {}),
+      }
     }
     if (known) return viewOfEntry(known)
     return { word: key, phonetic: '', meanings: [], tags: [] }
@@ -239,7 +270,10 @@ export class VocabService {
    */
   async session(now = Date.now()): Promise<SessionItem[]> {
     const settings = await this.settings()
-    const [due, cards] = await Promise.all([this.repo.dueCards(now, MAX_SESSION_REVIEWS), this.repo.listCards()])
+    const [due, cards] = await Promise.all([
+      this.repo.dueCards(now, MAX_SESSION_REVIEWS),
+      this.repo.listCards(),
+    ])
     const items: SessionItem[] = []
     for (const card of due) {
       const view = await this.view(card.word)
@@ -250,7 +284,9 @@ export class VocabService {
       const room = Math.max(0, settings.dailyNew - newToday)
       if (room > 0) {
         const known = new Set(cards.map((card) => card.word))
-        const fresh = (await this.bookWords(settings.bookId)).filter((view) => !known.has(normalizeWord(view.word))).slice(0, room)
+        const fresh = (await this.bookWords(settings.bookId))
+          .filter((view) => !known.has(normalizeWord(view.word)))
+          .slice(0, room)
         for (const view of fresh) items.push({ view, kind: 'new', mode: 'learn' })
       }
     }
@@ -261,7 +297,13 @@ export class VocabService {
   async mistakeSession(): Promise<SessionItem[]> {
     const cards = (await this.repo.listCards()).filter((card) => card.mistakes > 0)
     cards.sort((a, b) => (b.lastMistakeAt ?? 0) - (a.lastMistakeAt ?? 0))
-    return Promise.all(cards.map(async (card) => ({ view: await this.view(card.word), kind: 'review' as const, mode: 'spell' as const })))
+    return Promise.all(
+      cards.map(async (card) => ({
+        view: await this.view(card.word),
+        kind: 'review' as const,
+        mode: 'spell' as const,
+      })),
+    )
   }
 
   /**
@@ -274,7 +316,8 @@ export class VocabService {
     if (isLearning(card) || card.reps < 2) return 'recognize'
     const cycle: VocabMode[] = ['spell', 'cloze', 'dictation']
     const pick = cycle[card.reps % cycle.length]!
-    if (pick === 'cloze' && !(view.context && clozeOf(view.context.text, view.word, view.forms))) return 'spell'
+    if (pick === 'cloze' && !(view.context && clozeOf(view.context.text, view.word, view.forms)))
+      return 'spell'
     return pick
   }
 
@@ -288,7 +331,9 @@ export class VocabService {
     const now = options.now ?? Date.now()
     const key = normalizeWord(word)
     const existing = await this.repo.getCard(key)
-    const base = existing ?? newVocabCard(key, options.bookId ?? (await this.settings()).bookId ?? 'unknown', now)
+    const base =
+      existing ??
+      newVocabCard(key, options.bookId ?? (await this.settings()).bookId ?? 'unknown', now)
     let next = rateVocabCard(base, rating, now)
     // Only a typed answer that was wrong ("forgot", rating 1) counts toward the
     // mistake list; a near miss (one letter off, rating 2) does not.
@@ -327,7 +372,11 @@ export class VocabService {
   }
 
   async stats(now = Date.now()): Promise<VocabStats> {
-    const [settings, cards, reviews] = await Promise.all([this.settings(), this.repo.listCards(), this.repo.listReviews()])
+    const [settings, cards, reviews] = await Promise.all([
+      this.settings(),
+      this.repo.listCards(),
+      this.repo.listReviews(),
+    ])
     const today = startOfDay(now)
     const days = new Set(reviews.map((review) => startOfDay(review.at)))
     let streak = 0
@@ -359,7 +408,11 @@ export class VocabService {
    * A custom book from a pasted or uploaded list ("word" or "word<TAB>meaning"
    * per line). Words without a meaning take the dictionary's.
    */
-  async importList(name: string, text: string, now = Date.now()): Promise<{ book: VocabBook; added: number; skipped: number; withoutMeaning: number }> {
+  async importList(
+    name: string,
+    text: string,
+    now = Date.now(),
+  ): Promise<{ book: VocabBook; added: number; skipped: number; withoutMeaning: number }> {
     const { words, skipped } = parseWordList(text)
     if (words.length === 0) throw new ValidationError(t('vocab.importEmpty'))
     const { byWord, lemmas } = await vocabIndex()
@@ -403,7 +456,9 @@ export class VocabService {
     let views: WordView[]
     let label: string
     if (target === 'learned' || target === 'mistakes') {
-      const cards = (await this.repo.listCards()).filter((card) => target === 'learned' || card.mistakes > 0)
+      const cards = (await this.repo.listCards()).filter(
+        (card) => target === 'learned' || card.mistakes > 0,
+      )
       cards.sort((a, b) => a.addedAt - b.addedAt)
       views = await Promise.all(cards.map((card) => this.view(card.word)))
       label = target === 'learned' ? 'learned' : 'mistakes'

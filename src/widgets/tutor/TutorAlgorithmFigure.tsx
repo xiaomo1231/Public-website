@@ -34,9 +34,26 @@ const ACTION_KEYS = {
   done: 'viz.sortActionDone',
 } as const
 
-function StepButton({ label, onClick, disabled, children }: { label: string; onClick: () => void; disabled?: boolean; children: ReactNode }): JSX.Element {
+function StepButton({
+  label,
+  onClick,
+  disabled,
+  children,
+}: {
+  label: string
+  onClick: () => void
+  disabled?: boolean
+  children: ReactNode
+}): JSX.Element {
   return (
-    <button type="button" aria-label={label} title={label} onClick={onClick} disabled={disabled} className="focus-ring grid h-8 w-8 place-items-center rounded-md border border-border/80 transition-[color,background-color,border-color,transform] duration-press ease-out motion-safe:active:scale-[0.97] hover:bg-accent disabled:opacity-40">
+    <button
+      type="button"
+      aria-label={label}
+      title={label}
+      onClick={onClick}
+      disabled={disabled}
+      className="focus-ring grid h-8 w-8 place-items-center rounded-md border border-border/80 transition-[color,background-color,border-color,transform] duration-press ease-out hover:bg-accent disabled:opacity-40 motion-safe:active:scale-[0.97]"
+    >
       {children}
     </button>
   )
@@ -44,8 +61,19 @@ function StepButton({ label, onClick, disabled, children }: { label: string; onC
 
 // --- sorting --------------------------------------------------------------------------
 
-export function TutorSortingFigure({ visualization, layout, t }: { visualization: SortingVisualization; layout: PlotLayout; t: T }): JSX.Element {
-  const frames = useMemo(() => sortFrames(visualization.algorithm, visualization.values), [visualization.algorithm, visualization.values])
+export function TutorSortingFigure({
+  visualization,
+  layout,
+  t,
+}: {
+  visualization: SortingVisualization
+  layout: PlotLayout
+  t: T
+}): JSX.Element {
+  const frames = useMemo(
+    () => sortFrames(visualization.algorithm, visualization.values),
+    [visualization.algorithm, visualization.values],
+  )
   const [step, setStep] = useState(0)
   const [playing, setPlaying] = useState(false)
   useEffect(() => {
@@ -69,22 +97,45 @@ export function TutorSortingFigure({ visualization, layout, t }: { visualization
 
   return (
     <div className="space-y-2 px-1 py-2">
-      <svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label={label} className="block h-auto w-full max-w-full">
+      <svg
+        viewBox={`0 0 ${width} ${height}`}
+        role="img"
+        aria-label={label}
+        className="block h-auto w-full max-w-full"
+      >
         <title>{label}</title>
         <g aria-hidden="true">
           {frame.values.map((value, i) => {
             const h = (Math.abs(value) / max) * (baseline - 24)
             const active = frame.active.includes(i)
             const done = frame.sorted.includes(i)
-            const fill = active ? (frame.action === 'swap' || frame.action === 'write' ? SERIES[1] : SERIES[2]) : done ? SERIES[0] : 'hsl(var(--muted-foreground) / 0.35)'
+            const fill = active
+              ? frame.action === 'swap' || frame.action === 'write'
+                ? SERIES[1]
+                : SERIES[2]
+              : done
+                ? SERIES[0]
+                : 'hsl(var(--muted-foreground) / 0.35)'
             const x = 12 + slot * i + (slot - barW) / 2
             return (
               <g key={i}>
                 <rect x={x} y={baseline - h} width={barW} height={h} rx="3" fill={fill} />
-                <text x={x + barW / 2} y={baseline - h - 6} textAnchor="middle" fontSize="12" fill={FOREGROUND}>
+                <text
+                  x={x + barW / 2}
+                  y={baseline - h - 6}
+                  textAnchor="middle"
+                  fontSize="12"
+                  fill={FOREGROUND}
+                >
                   {value}
                 </text>
-                <text x={x + barW / 2} y={baseline + 16} textAnchor="middle" fontSize="10" fill={LABEL}>
+                <text
+                  x={x + barW / 2}
+                  y={baseline + 16}
+                  textAnchor="middle"
+                  fontSize="10"
+                  fill={LABEL}
+                >
                   {i}
                 </text>
               </g>
@@ -93,18 +144,47 @@ export function TutorSortingFigure({ visualization, layout, t }: { visualization
         </g>
       </svg>
       <div className="flex flex-wrap items-center justify-center gap-2">
-        <StepButton label={t('viz.stepReset')} onClick={() => { setPlaying(false); setStep(0) }}><RotateCcw className="h-4 w-4" /></StepButton>
-        <StepButton label={t('viz.stepPrevious')} onClick={() => setStep((s) => Math.max(0, s - 1))} disabled={step === 0}><ChevronLeft className="h-4 w-4" /></StepButton>
-        <StepButton label={playing ? t('viz.stepPause') : t('viz.stepPlay')} onClick={() => setPlaying((p) => !p)} disabled={step >= frames.length - 1 && !playing}>
+        <StepButton
+          label={t('viz.stepReset')}
+          onClick={() => {
+            setPlaying(false)
+            setStep(0)
+          }}
+        >
+          <RotateCcw className="h-4 w-4" />
+        </StepButton>
+        <StepButton
+          label={t('viz.stepPrevious')}
+          onClick={() => setStep((s) => Math.max(0, s - 1))}
+          disabled={step === 0}
+        >
+          <ChevronLeft className="h-4 w-4" />
+        </StepButton>
+        <StepButton
+          label={playing ? t('viz.stepPause') : t('viz.stepPlay')}
+          onClick={() => setPlaying((p) => !p)}
+          disabled={step >= frames.length - 1 && !playing}
+        >
           {playing ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
         </StepButton>
-        <StepButton label={t('viz.stepNext')} onClick={() => setStep((s) => Math.min(frames.length - 1, s + 1))} disabled={step >= frames.length - 1}><ChevronRight className="h-4 w-4" /></StepButton>
+        <StepButton
+          label={t('viz.stepNext')}
+          onClick={() => setStep((s) => Math.min(frames.length - 1, s + 1))}
+          disabled={step >= frames.length - 1}
+        >
+          <ChevronRight className="h-4 w-4" />
+        </StepButton>
         <span className="data-num text-xs text-muted-foreground">
           {step + 1} / {frames.length}
         </span>
       </div>
       <p className="data-num flex flex-wrap justify-center gap-x-4 gap-y-1 text-[13px] text-muted-foreground">
-        <span className="font-medium text-foreground">{t(ACTION_KEYS[frame.action], { i: frame.active[0] ?? '', j: frame.active[1] ?? frame.active.at(-1) ?? '' })}</span>
+        <span className="font-medium text-foreground">
+          {t(ACTION_KEYS[frame.action], {
+            i: frame.active[0] ?? '',
+            j: frame.active[1] ?? frame.active.at(-1) ?? '',
+          })}
+        </span>
         <span>{t('viz.sortComparisons', { value: frame.comparisons })}</span>
         <span>{t('viz.sortWrites', { value: frame.writes })}</span>
         <span>
@@ -117,7 +197,15 @@ export function TutorSortingFigure({ visualization, layout, t }: { visualization
 
 // --- binary search tree -----------------------------------------------------------------
 
-export function TutorBstFigure({ visualization, layout, t }: { visualization: BstVisualization; layout: PlotLayout; t: T }): JSX.Element {
+export function TutorBstFigure({
+  visualization,
+  layout,
+  t,
+}: {
+  visualization: BstVisualization
+  layout: PlotLayout
+  t: T
+}): JSX.Element {
   const { keys } = visualization
   const [count, setCount] = useState(keys.length)
   const tree = useMemo(() => buildBst(keys.slice(0, count)), [keys, count])
@@ -126,13 +214,20 @@ export function TutorBstFigure({ visualization, layout, t }: { visualization: Bs
   const depth = Math.max(0, ...nodes.map((node) => node.depth))
   const height = 40 + (depth + 1) * 62
   const slot = (width - 40) / Math.max(nodes.length, 1)
-  const pos = new Map(nodes.map((node) => [node.key, { x: 20 + slot * (node.x + 0.5), y: 28 + node.depth * 62 }]))
+  const pos = new Map(
+    nodes.map((node) => [node.key, { x: 20 + slot * (node.x + 0.5), y: 28 + node.depth * 62 }]),
+  )
   const path = new Set(tree.lastPath)
   const label = t('viz.bstAria', { count: nodes.length, height: tree.height })
 
   return (
     <div className="space-y-2 px-1 py-2">
-      <svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label={label} className="block h-auto w-full max-w-full">
+      <svg
+        viewBox={`0 0 ${width} ${height}`}
+        role="img"
+        aria-label={label}
+        className="block h-auto w-full max-w-full"
+      >
         <title>{label}</title>
         <g aria-hidden="true">
           {nodes.map((node) =>
@@ -153,8 +248,21 @@ export function TutorBstFigure({ visualization, layout, t }: { visualization: Bs
             const last = node.key === tree.lastPath.at(-1)
             return (
               <g key={node.key}>
-                <circle cx={p.x} cy={p.y} r="16" fill={last ? SERIES[1] : 'hsl(var(--card))'} stroke={path.has(node.key) ? SERIES[1] : FOREGROUND} strokeWidth="1.8" />
-                <text x={p.x} y={p.y + 4} textAnchor="middle" fontSize="12" fill={last ? 'hsl(var(--card))' : FOREGROUND}>
+                <circle
+                  cx={p.x}
+                  cy={p.y}
+                  r="16"
+                  fill={last ? SERIES[1] : 'hsl(var(--card))'}
+                  stroke={path.has(node.key) ? SERIES[1] : FOREGROUND}
+                  strokeWidth="1.8"
+                />
+                <text
+                  x={p.x}
+                  y={p.y + 4}
+                  textAnchor="middle"
+                  fontSize="12"
+                  fill={last ? 'hsl(var(--card))' : FOREGROUND}
+                >
                   {node.key}
                 </text>
               </g>
@@ -163,9 +271,27 @@ export function TutorBstFigure({ visualization, layout, t }: { visualization: Bs
         </g>
       </svg>
       <div className="rounded-md border border-border/70 px-3 py-2">
-        <ParamSlider label={t('viz.bstInserted')} value={count} min={1} max={keys.length} step={1} onChange={(value) => setCount(Math.round(value))} />
+        <ParamSlider
+          label={t('viz.bstInserted')}
+          value={count}
+          min={1}
+          max={keys.length}
+          step={1}
+          onChange={(value) => setCount(Math.round(value))}
+        />
         <p className="data-num pt-1 text-center text-xs text-muted-foreground">
-          {t('viz.bstOrder')} {keys.map((key, i) => (i < count ? key : <span key={i} className="opacity-40">{key}</span>)).reduce<ReactNode[]>((acc, item, i) => (i ? [...acc, ', ', item] : [item]), [])}
+          {t('viz.bstOrder')}{' '}
+          {keys
+            .map((key, i) =>
+              i < count ? (
+                key
+              ) : (
+                <span key={i} className="opacity-40">
+                  {key}
+                </span>
+              ),
+            )
+            .reduce<ReactNode[]>((acc, item, i) => (i ? [...acc, ', ', item] : [item]), [])}
         </p>
       </div>
       <dl className="data-num grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 text-[13px]">
@@ -180,7 +306,11 @@ export function TutorBstFigure({ visualization, layout, t }: { visualization: Bs
         <dt className="text-muted-foreground">{t('viz.bstHeight')}</dt>
         <dd>
           {tree.height}
-          {tree.duplicates.length > 0 && <span className="ml-2 text-muted-foreground">{t('viz.bstDuplicates', { keys: tree.duplicates.join(', ') })}</span>}
+          {tree.duplicates.length > 0 && (
+            <span className="ml-2 text-muted-foreground">
+              {t('viz.bstDuplicates', { keys: tree.duplicates.join(', ') })}
+            </span>
+          )}
         </dd>
       </dl>
     </div>

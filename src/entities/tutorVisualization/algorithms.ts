@@ -8,7 +8,13 @@
  */
 
 export type SortAlgorithm = 'bubble' | 'insertion' | 'selection' | 'merge' | 'quick'
-export const SORT_ALGORITHMS: readonly SortAlgorithm[] = ['bubble', 'insertion', 'selection', 'merge', 'quick']
+export const SORT_ALGORITHMS: readonly SortAlgorithm[] = [
+  'bubble',
+  'insertion',
+  'selection',
+  'merge',
+  'quick',
+]
 export const MAX_SORT_VALUES = 12
 
 export type SortAction = 'start' | 'compare' | 'swap' | 'write' | 'pivot' | 'done'
@@ -32,7 +38,14 @@ export function sortFrames(algorithm: SortAlgorithm, input: number[]): SortFrame
   let comparisons = 0
   let writes = 0
   const push = (action: SortAction, active: number[]) =>
-    frames.push({ values: [...a], action, active, sorted: [...sorted].sort((x, y) => x - y), comparisons, writes })
+    frames.push({
+      values: [...a],
+      action,
+      active,
+      sorted: [...sorted].sort((x, y) => x - y),
+      comparisons,
+      writes,
+    })
   const less = (i: number, j: number) => {
     comparisons++
     push('compare', [i, j])
@@ -91,7 +104,10 @@ export function sortFrames(algorithm: SortAlgorithm, input: number[]): SortFrame
           a[lo + k] = merged[k]!
           writes++
         }
-        push('write', Array.from({ length: hi - lo + 1 }, (_, k) => lo + k))
+        push(
+          'write',
+          Array.from({ length: hi - lo + 1 }, (_, k) => lo + k),
+        )
       }
       mergeSort(0, n - 1)
       break
@@ -198,12 +214,24 @@ export function buildBst(keys: number[]): BstResult {
     if (node.left) queue.push(node.left)
     if (node.right) queue.push(node.right)
   }
-  const height = (node?: BstNode): number => (node ? 1 + Math.max(height(node.left), height(node.right)) : 0)
-  return { ...(root ? { root } : {}), duplicates, height: Math.max(0, height(root) - 1), inorder, preorder, postorder, levelOrder, lastPath }
+  const height = (node?: BstNode): number =>
+    node ? 1 + Math.max(height(node.left), height(node.right)) : 0
+  return {
+    ...(root ? { root } : {}),
+    duplicates,
+    height: Math.max(0, height(root) - 1),
+    inorder,
+    preorder,
+    postorder,
+    levelOrder,
+    lastPath,
+  }
 }
 
 /** Node positions: x by in-order rank, y by depth. */
-export function bstLayout(root?: BstNode): Array<{ key: number; x: number; depth: number; parent?: number }> {
+export function bstLayout(
+  root?: BstNode,
+): Array<{ key: number; x: number; depth: number; parent?: number }> {
   const out: Array<{ key: number; x: number; depth: number; parent?: number }> = []
   let rank = 0
   const walk = (node: BstNode | undefined, depth: number, parent?: number) => {

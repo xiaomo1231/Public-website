@@ -106,9 +106,7 @@ export function splitInline(text: string): InlineSpan[] {
 
 /** Flatten inline spans back to plain text (used for heading classification). */
 export function inlineText(spans: InlineSpan[]): string {
-  return spans
-    .map((span) => (span.kind === 'math' ? span.value : span.value))
-    .join('')
+  return spans.map((span) => (span.kind === 'math' ? span.value : span.value)).join('')
 }
 
 const HEADING = /^(#{1,6})\s+(.*)$/

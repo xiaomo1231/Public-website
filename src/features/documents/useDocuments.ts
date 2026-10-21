@@ -26,7 +26,7 @@ export function useDocuments(projectId: string | undefined): {
     documents: docs,
     loading: Boolean(projectId && store.loading[projectId]),
     loaded: Boolean(projectId && store.loaded[projectId]),
-    error: projectId ? store.error[projectId] ?? null : null,
+    error: projectId ? (store.error[projectId] ?? null) : null,
     refresh: async () => {
       if (projectId) await store.refresh(projectId)
     },
@@ -62,16 +62,10 @@ export function useDocument(
 ): UseDocumentResult {
   const byId = useDocumentsStore((s) => (documentId ? s.byId[documentId] : undefined))
   const fromList = useDocumentsStore((s) =>
-    projectId && documentId
-      ? s.byProject[projectId]?.find((d) => d.id === documentId)
-      : undefined,
+    projectId && documentId ? s.byProject[projectId]?.find((d) => d.id === documentId) : undefined,
   )
-  const status = useDocumentsStore((s) =>
-    documentId ? s.singleStatus[documentId] : undefined,
-  )
-  const error = useDocumentsStore((s) =>
-    documentId ? s.singleError[documentId] ?? null : null,
-  )
+  const status = useDocumentsStore((s) => (documentId ? s.singleStatus[documentId] : undefined))
+  const error = useDocumentsStore((s) => (documentId ? (s.singleError[documentId] ?? null) : null))
   const loadOne = useDocumentsStore((s) => s.loadOne)
 
   useEffect(() => {
@@ -88,9 +82,7 @@ export function useDocument(
   const cached = byId && byId.projectId === projectId ? byId : null
   const document = fromList ?? cached
 
-  const resolvedStatus: DocumentLoadStatus = document
-    ? 'found'
-    : status ?? 'loading'
+  const resolvedStatus: DocumentLoadStatus = document ? 'found' : (status ?? 'loading')
 
   return { document, status: resolvedStatus, error, refresh }
 }

@@ -30,7 +30,9 @@ export function useWalkthrough(setId: string): UseWalkthrough {
   const [service, setService] = useState<HomeworkWalkthroughService | null>(null)
   const [state, setState] = useState<WalkthroughState | null>(null)
   const [notes, setNotes] = useState<WalkthroughNote[]>([])
-  const [progress, setProgress] = useState<WalkthroughProgress | undefined>(() => walkthroughRunProgress(setId))
+  const [progress, setProgress] = useState<WalkthroughProgress | undefined>(() =>
+    walkthroughRunProgress(setId),
+  )
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 

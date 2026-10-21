@@ -109,7 +109,8 @@ export interface FigureFamilies {
 
 export function scienceFiguresFor(subject: Subject | undefined): FigureFamilies {
   const open = subject === undefined || subject === 'other'
-  const is = (...subjects: Subject[]) => open || (subject !== undefined && subjects.includes(subject))
+  const is = (...subjects: Subject[]) =>
+    open || (subject !== undefined && subjects.includes(subject))
   return {
     chemistry: is('chemistry'),
     biology: is('biology', 'medicine'),
@@ -141,7 +142,7 @@ const CALCULUS_RULES = [
   'CALCULUS FIGURES:',
   '  - `tangent_2d`: the tangent (and a shrinking secant) to f at a point the lesson discusses. Provide `expression` (f in plain syntax), `variable`?: "x", `domain`: { "min", "max" }, `point` (x₀), `showSecant`?: true.',
   '  - `riemann_2d`: Riemann sums for ∫ₐᵇ f. Provide `expression`, `variable`?, `a`, `b`, `n` (1–200, the lesson\'s value or 8), `method`: "left" | "right" | "midpoint" | "trapezoid".',
-  '  - `taylor_2d`: Taylor / Maclaurin polynomials. Provide `expression`, `variable`?, `center`, `order` (1–10, the lesson\'s order), `domain`.',
+  "  - `taylor_2d`: Taylor / Maclaurin polynomials. Provide `expression`, `variable`?, `center`, `order` (1–10, the lesson's order), `domain`.",
   '      NEVER provide derivatives, sums, integrals or coefficients — the app computes them (derivatives symbolically).',
 ]
 
@@ -239,7 +240,7 @@ const PHYSIOLOGY_RULES = [
   '      `substances`: 1–4 items { "name": "<e.g. 菊粉 / PAH / 葡萄糖>", "urine": <U>, "plasma": <P> } with the SAME unit, plus `urineFlow` (mL/min). NEVER provide the net filtration pressure, GFR or clearances.',
   '  - `acid_base_2d`: one blood gas. `ph`, `paco2` (mmHg), `hco3` (mmol/L), optional `chronicity`: "acute" | "chronic" for a respiratory disorder.',
   '      NEVER provide the diagnosis or the expected compensation — the app classifies the disorder with the textbook compensation formulas.',
-  '  - Physiology figures are teaching models. Use them only for the lesson\'s textbook example, never for a real patient.',
+  "  - Physiology figures are teaching models. Use them only for the lesson's textbook example, never for a real patient.",
 ]
 
 const BIOCHEMISTRY_RULES = [
@@ -255,9 +256,9 @@ const BIOCHEMISTRY_RULES = [
 
 const PHARMACOKINETICS_RULES = [
   'PHARMACOKINETICS FIGURE:',
-  '  - `pharmacokinetics_2d`: a one-compartment concentration–time curve from the lesson\'s worked example.',
+  "  - `pharmacokinetics_2d`: a one-compartment concentration–time curve from the lesson's worked example.",
   '      `route`: "iv_bolus" | "oral", `dose` (mg), `vd` (L), `halfLife` (h); for oral also `bioavailability` (0–1) and `ka` (absorption rate constant, 1/h).',
-  '      Optional `doses` (number of doses, default 1) and `interval` (h) for repeated dosing, `drug`, and the lesson\'s `mec` / `mtc` (mg/L).',
+  "      Optional `doses` (number of doses, default 1) and `interval` (h) for repeated dosing, `drug`, and the lesson's `mec` / `mtc` (mg/L).",
   '      NEVER provide concentrations, Cmax, the elimination constant or the time to steady state. Never invent a dose for a real patient.',
 ]
 
@@ -275,7 +276,7 @@ const MORPHOLOGY_RULES = [
   '      Example: lateral corticospinal tract — neuron 1 cortex (decussates, crossesAt "medulla"), neuron 2 anterior horn at "spinal_cord".',
   '  - `anatomy_table_2d`: a relation table the lesson presents (muscles: origin / insertion / action / innervation; nerves and their branches; foramina and their contents).',
   '      `title`?, `columns`: 1–6 headings, and `rows`: 1–12 items { "name", "cells": [one string per column] } copied from the lesson.',
-  '  - Not supported (omit): drawings of organs, bones, cells, tissue sections or radiographs — the course\'s own figures and the reference-image panel cover those.',
+  "  - Not supported (omit): drawings of organs, bones, cells, tissue sections or radiographs — the course's own figures and the reference-image panel cover those.",
 ]
 
 const TEST_RULES = [
@@ -301,11 +302,21 @@ export function buildSystemPrompt(options: VisualizationPromptOptions = {}): str
     ...(science.population ? ['population_2d'] : []),
     ...(science.algorithms ? ['sorting_2d', 'bst_2d'] : []),
     ...(science.physiology
-      ? ['membrane_potential_2d', 'action_potential_2d', 'oxygen_2d', 'cardiac_2d', 'lung_volumes_2d', 'renal_2d', 'acid_base_2d']
+      ? [
+          'membrane_potential_2d',
+          'action_potential_2d',
+          'oxygen_2d',
+          'cardiac_2d',
+          'lung_volumes_2d',
+          'renal_2d',
+          'acid_base_2d',
+        ]
       : []),
     ...(science.biochemistry ? ['amino_acid_2d', 'metabolism_2d'] : []),
     ...(science.pharmacokinetics ? ['pharmacokinetics_2d'] : []),
-    ...(science.morphology ? ['dental_chart_2d', 'timeline_2d', 'neural_pathway_2d', 'anatomy_table_2d'] : []),
+    ...(science.morphology
+      ? ['dental_chart_2d', 'timeline_2d', 'neural_pathway_2d', 'anatomy_table_2d']
+      : []),
   ]
   return [
     'You choose which 2D diagrams from a finished lesson are worth drawing, and you describe them as STRUCTURED DATA. You never rewrite the lesson and you never invent a new example.',
@@ -419,7 +430,10 @@ export function buildSystemPrompt(options: VisualizationPromptOptions = {}): str
       {
         visualizations: [
           {
-            type: ['function_2d | equation_2d | inequality_2d | points_2d | table_2d | vectors_2d | graph_2d | transform_2d | venn_2d | eigen_2d | hasse_2d | distribution_2d', ...scienceTypes].join(' | '),
+            type: [
+              'function_2d | equation_2d | inequality_2d | points_2d | table_2d | vectors_2d | graph_2d | transform_2d | venn_2d | eigen_2d | hasse_2d | distribution_2d',
+              ...scienceTypes,
+            ].join(' | '),
             caption: 'string (optional)',
             placement: { scope: 'lesson | section', block: 'example', index: 0 },
             viewport: { xMin: -10, xMax: 10, yMin: -10, yMax: 10 },
@@ -447,7 +461,10 @@ export function buildSystemPrompt(options: VisualizationPromptOptions = {}): str
             sets: [{ id: 'a', label: 'A', elements: ['1', '2', '3'] }],
             universe: ['1', '2', '3', '4', '5'],
             operands: ['a', 'b'],
-            elements: [{ id: 'a', label: 'a' }, { id: 'b', label: 'b' }],
+            elements: [
+              { id: 'a', label: 'a' },
+              { id: 'b', label: 'b' },
+            ],
             relations: [{ lower: 'a', upper: 'b' }],
             family: 'normal | binomial | poisson | uniform | exponential',
             params: { mu: 0, sigma: 1 },
@@ -483,7 +500,13 @@ export function buildSystemPrompt(options: VisualizationPromptOptions = {}): str
                     { gene: 'i', alleles: [{ allele: 'I^A', name: 'A' }] },
                   ],
                   members: [
-                    { id: 'string', sex: 'male | female | unknown', affected: false, father: 'id (optional)', mother: 'id (optional)' },
+                    {
+                      id: 'string',
+                      sex: 'male | female | unknown',
+                      affected: false,
+                      father: 'id (optional)',
+                      mother: 'id (optional)',
+                    },
                   ],
                   dna: 'ATGGCC',
                   strand: 'coding | template',
@@ -518,7 +541,9 @@ export function buildSystemPrompt(options: VisualizationPromptOptions = {}): str
                   name: 'string',
                   groups: [{ pka: 2.34, kind: 'acid | base', label: 'string (optional)' }],
                   pathway: 'string',
-                  steps: [{ label: 'string', nadh: 1, compartment: 'cytosol | mitochondria', times: 2 }],
+                  steps: [
+                    { label: 'string', nadh: 1, compartment: 'cytosol | mitochondria', times: 2 },
+                  ],
                   convention: 'modern | classic',
                   shuttle: 'malate_aspartate | glycerol_phosphate',
                 }
@@ -541,7 +566,14 @@ export function buildSystemPrompt(options: VisualizationPromptOptions = {}): str
                   events: [{ label: 'string', start: 3, end: 8, group: 'string (optional)' }],
                   kind: 'sensory | motor',
                   side: 'left | right',
-                  neurons: [{ cellBody: 'string', level: 'periphery | spinal_cord | medulla | pons | midbrain | thalamus | cortex', decussates: true }],
+                  neurons: [
+                    {
+                      cellBody: 'string',
+                      level:
+                        'periphery | spinal_cord | medulla | pons | midbrain | thalamus | cortex',
+                      decussates: true,
+                    },
+                  ],
                   columns: ['string'],
                   rows: [{ name: 'string', cells: ['string'] }],
                 }

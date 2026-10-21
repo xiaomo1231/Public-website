@@ -302,7 +302,12 @@ export function compareMath(userAnswer: string, expectedAnswer: string): MathCom
   const rawUser = userAnswer.trim()
   const rawExpected = expectedAnswer.trim()
   if (!rawUser) {
-    return { equivalent: false, normalizedUser: '', normalizedExpected: normalizeExpression(rawExpected), note: t('errors.emptyAnswer') }
+    return {
+      equivalent: false,
+      normalizedUser: '',
+      normalizedExpected: normalizeExpression(rawExpected),
+      note: t('errors.emptyAnswer'),
+    }
   }
 
   const userNorm = normalizeExpression(rawUser)
@@ -333,12 +338,20 @@ export function compareMath(userAnswer: string, expectedAnswer: string): MathCom
       const sameOrder = diffL === true && diffR === true
       const swapped = swappedL === true && swappedR === true
       if (sameOrder || swapped) {
-        return { equivalent: true, normalizedUser: userNorm, normalizedExpected: expectedNorm, ...(constantNote ? { note: constantNote } : {}) }
+        return {
+          equivalent: true,
+          normalizedUser: userNorm,
+          normalizedExpected: expectedNorm,
+          ...(constantNote ? { note: constantNote } : {}),
+        }
       }
       // One side matches but the other clearly does not → definitely different.
       const leftMatches = diffL === true || swappedL === true
       const rightMatches = diffR === true || swappedR === true
-      if ((leftMatches && diffR === false && swappedR === false) || (rightMatches && diffL === false && swappedL === false)) {
+      if (
+        (leftMatches && diffR === false && swappedR === false) ||
+        (rightMatches && diffL === false && swappedL === false)
+      ) {
         return { equivalent: false, normalizedUser: userNorm, normalizedExpected: expectedNorm }
       }
       // Otherwise the equations may be rearrangements of each other. We cannot
@@ -350,7 +363,12 @@ export function compareMath(userAnswer: string, expectedAnswer: string): MathCom
         note: t('evalNote.equationRearranged'),
       }
     } catch {
-      return { equivalent: null, normalizedUser: userNorm, normalizedExpected: expectedNorm, note: t('evalNote.couldNotParse') }
+      return {
+        equivalent: null,
+        normalizedUser: userNorm,
+        normalizedExpected: expectedNorm,
+        note: t('evalNote.couldNotParse'),
+      }
     }
   }
 
@@ -366,7 +384,11 @@ export function compareMath(userAnswer: string, expectedAnswer: string): MathCom
       equivalent =
         shifted === true ? true : equivalent === false && shifted === false ? false : null
     }
-    const out: MathComparison = { equivalent, normalizedUser: userNorm, normalizedExpected: expectedNorm }
+    const out: MathComparison = {
+      equivalent,
+      normalizedUser: userNorm,
+      normalizedExpected: expectedNorm,
+    }
     if (constantNote) out.note = constantNote
     if (equivalent === null) out.note = t('evalNote.unverified')
     return out
@@ -402,7 +424,11 @@ export function parseNumeric(input: string): number | null {
  * Relative tolerance numeric comparison. Default 1% — forgiving enough for
  * sensible rounding in physics/chemistry, tight enough to catch real errors.
  */
-export function numericEquivalent(userAnswer: string, expectedAnswer: string, relTol = 1e-2): boolean | null {
+export function numericEquivalent(
+  userAnswer: string,
+  expectedAnswer: string,
+  relTol = 1e-2,
+): boolean | null {
   const u = parseNumeric(userAnswer)
   const e = parseNumeric(expectedAnswer)
   if (u === null || e === null) return null
@@ -417,9 +443,7 @@ export function numericEquivalent(userAnswer: string, expectedAnswer: string, re
 
 /** How a typed expression will be read, for a live preview under the field. */
 export type ExpressionPreview =
-  | { status: 'empty' }
-  | { status: 'ok'; latex: string }
-  | { status: 'error' }
+  { status: 'empty' } | { status: 'ok'; latex: string } | { status: 'error' }
 
 /**
  * Parse exactly as `compareMath` does and render the result as LaTeX, so the

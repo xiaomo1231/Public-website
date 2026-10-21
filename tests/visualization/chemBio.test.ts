@@ -64,7 +64,8 @@ describe('titration', () => {
 
   it('rises monotonically', () => {
     const curve = titrationCurve(weak, 60)
-    for (let i = 1; i < curve.length; i++) expect(curve[i]!.pH).toBeGreaterThanOrEqual(curve[i - 1]!.pH - 1e-9)
+    for (let i = 1; i < curve.length; i++)
+      expect(curve[i]!.pH).toBeGreaterThanOrEqual(curve[i - 1]!.pH - 1e-9)
   })
 })
 
@@ -103,7 +104,12 @@ describe('pedigrees', () => {
   })
 
   it('rejects impossible families', () => {
-    expect(pedigreeGenerations([{ id: 'a', sex: 'female', affected: false }, { id: 'b', sex: 'male', affected: false, father: 'a' }])).toBeNull()
+    expect(
+      pedigreeGenerations([
+        { id: 'a', sex: 'female', affected: false },
+        { id: 'b', sex: 'male', affected: false, father: 'a' },
+      ]),
+    ).toBeNull()
     expect(pedigreeGenerations([{ id: 'a', sex: 'male', affected: false, father: 'x' }])).toBeNull()
     expect(
       pedigreeGenerations([

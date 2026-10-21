@@ -57,7 +57,9 @@ export function buildQuestionSystemPrompt(options: { linearSystems: boolean }): 
     'If a necessary figure, symbol or value is unreadable and the result cannot be derived reliably from the text, return status insufficient with a concrete reason instead of a guessed walkthrough.',
     'Do not grade the student. No prose outside JSON and no Markdown fence around the JSON.',
     securityFooter(),
-  ].filter(Boolean).join('\n')
+  ]
+    .filter(Boolean)
+    .join('\n')
 }
 
 export function buildQuestionUserPrompt(input: WalkthroughQuestionInput): string {
@@ -69,13 +71,18 @@ export function buildQuestionUserPrompt(input: WalkthroughQuestionInput): string
       ? untrustedContentWrapper('QUESTION SOURCE PASSAGES', input.sourceText)
       : '',
     input.professorAnswer?.trim()
-      ? untrustedContentWrapper('CONFIRMED PROFESSOR ANSWER FOR THIS QUESTION', input.professorAnswer)
+      ? untrustedContentWrapper(
+          'CONFIRMED PROFESSOR ANSWER FOR THIS QUESTION',
+          input.professorAnswer,
+        )
       : '',
     input.previousSolution?.trim()
       ? untrustedContentWrapper('PREVIOUS AI WORKED SOLUTION (UNVERIFIED)', input.previousSolution)
       : '',
     'Return JSON only.',
-  ].filter(Boolean).join('\n')
+  ]
+    .filter(Boolean)
+    .join('\n')
 }
 
 export interface RawLinearSystem {
@@ -116,7 +123,9 @@ export function normalizeQuestionSection(raw: unknown): NormalizedQuestionSectio
         label: text(system.label, 40) || `#${linearSystems.length + 1}`,
         augmented: system.augmented,
         rref: system.rref,
-        ...(solution === 'none' || solution === 'unique' || solution === 'infinite' ? { solution } : {}),
+        ...(solution === 'none' || solution === 'unique' || solution === 'infinite'
+          ? { solution }
+          : {}),
       })
     }
   }
@@ -156,12 +165,18 @@ export function buildFrameSystemPrompt(): string {
 
 export function buildFrameUserPrompt(input: WalkthroughFrameInput): string {
   const questions = input.questions
-    .map((question) => [
-      `Question ${question.label}`,
-      untrustedContentWrapper(`QUESTION ${question.label}`, question.question),
-      untrustedContentWrapper(`CONCLUSION ${question.label}`, question.conclusion),
-      question.excerpt ? untrustedContentWrapper(`SECTION START ${question.label}`, question.excerpt) : '',
-    ].filter(Boolean).join('\n'))
+    .map((question) =>
+      [
+        `Question ${question.label}`,
+        untrustedContentWrapper(`QUESTION ${question.label}`, question.question),
+        untrustedContentWrapper(`CONCLUSION ${question.label}`, question.conclusion),
+        question.excerpt
+          ? untrustedContentWrapper(`SECTION START ${question.label}`, question.excerpt)
+          : '',
+      ]
+        .filter(Boolean)
+        .join('\n'),
+    )
     .join('\n\n')
   return [
     languageRule(input.language),
@@ -184,7 +199,10 @@ export function normalizeFrame(raw: unknown): NormalizedFrame | null {
   const overview = text(row.overview)
   const summary = text(row.summary)
   const suggestions = Array.isArray(row.suggestions)
-    ? row.suggestions.map((item) => text(item, 600)).filter(Boolean).slice(0, 6)
+    ? row.suggestions
+        .map((item) => text(item, 600))
+        .filter(Boolean)
+        .slice(0, 6)
     : []
   if (!overview || !summary) return null
   return { overview, summary, suggestions }

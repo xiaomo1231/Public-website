@@ -7,14 +7,7 @@
  */
 
 export type DistributionFamily =
-  | 'normal'
-  | 'binomial'
-  | 'poisson'
-  | 'uniform'
-  | 'exponential'
-  | 't'
-  | 'chisquare'
-  | 'f'
+  'normal' | 'binomial' | 'poisson' | 'uniform' | 'exponential' | 't' | 'chisquare' | 'f'
 
 export const DISTRIBUTION_FAMILIES: readonly DistributionFamily[] = [
   'normal',
@@ -61,7 +54,8 @@ export function validateParams(
 ): DistributionParams | null {
   const num = (key: string): number | null => {
     const value = raw[key]
-    return typeof value === 'number' && Number.isFinite(value) &&
+    return typeof value === 'number' &&
+      Number.isFinite(value) &&
       Math.abs(value) <= DISTRIBUTION_LIMITS.maxMagnitude
       ? value
       : null
@@ -75,8 +69,13 @@ export function validateParams(
     case 'binomial': {
       const n = num('n')
       const p = num('p')
-      return n !== null && p !== null && Number.isInteger(n) && n >= 1 &&
-        n <= DISTRIBUTION_LIMITS.maxBinomialN && p >= 0 && p <= 1
+      return n !== null &&
+        p !== null &&
+        Number.isInteger(n) &&
+        n >= 1 &&
+        n <= DISTRIBUTION_LIMITS.maxBinomialN &&
+        p >= 0 &&
+        p <= 1
         ? { family, n, p }
         : null
     }
@@ -110,7 +109,9 @@ export function validateParams(
 
 /** Degrees of freedom: positive (Welch's t may be fractional), bounded. */
 function degreesOfFreedom(value: number | null): number | null {
-  return value !== null && value > 0 && value <= DISTRIBUTION_LIMITS.maxDegreesOfFreedom ? value : null
+  return value !== null && value > 0 && value <= DISTRIBUTION_LIMITS.maxDegreesOfFreedom
+    ? value
+    : null
 }
 
 // --- special functions -------------------------------------------------------
@@ -261,7 +262,10 @@ export function density(params: DistributionParams, x: number): number {
     case 't': {
       const v = params.df
       return Math.exp(
-        logGamma((v + 1) / 2) - logGamma(v / 2) - 0.5 * Math.log(v * Math.PI) - ((v + 1) / 2) * Math.log(1 + (x * x) / v),
+        logGamma((v + 1) / 2) -
+          logGamma(v / 2) -
+          0.5 * Math.log(v * Math.PI) -
+          ((v + 1) / 2) * Math.log(1 + (x * x) / v),
       )
     }
     case 'chisquare': {
@@ -273,7 +277,9 @@ export function density(params: DistributionParams, x: number): number {
       if (x <= 0) return 0
       const { df1: a, df2: b } = params
       return Math.exp(
-        0.5 * (a * Math.log(a * x) + b * Math.log(b) - (a + b) * Math.log(a * x + b)) - Math.log(x) - logBeta(a / 2, b / 2),
+        0.5 * (a * Math.log(a * x) + b * Math.log(b) - (a + b) * Math.log(a * x + b)) -
+          Math.log(x) -
+          logBeta(a / 2, b / 2),
       )
     }
   }
@@ -295,7 +301,9 @@ export function cdf(params: DistributionParams, x: number): number {
     case 'chisquare':
       return gammaP(params.df / 2, Math.max(0, x) / 2)
     case 'f':
-      return x <= 0 ? 0 : betaI(params.df1 / 2, params.df2 / 2, (params.df1 * x) / (params.df1 * x + params.df2))
+      return x <= 0
+        ? 0
+        : betaI(params.df1 / 2, params.df2 / 2, (params.df1 * x) / (params.df1 * x + params.df2))
     case 'binomial':
     case 'poisson': {
       if (x < 0) return 0
@@ -311,7 +319,10 @@ export function cdf(params: DistributionParams, x: number): number {
  * P(from ≤ X ≤ to), both ends inclusive (which matters only for discrete
  * distributions). A missing end is unbounded.
  */
-export function intervalProbability(params: DistributionParams, interval: ProbabilityInterval): number {
+export function intervalProbability(
+  params: DistributionParams,
+  interval: ProbabilityInterval,
+): number {
   const from = interval.from ?? -Infinity
   const to = interval.to ?? Infinity
   if (from > to) return 0
@@ -335,7 +346,10 @@ function clamp01(value: number): number {
  */
 export function quantile(params: DistributionParams, p: number): number {
   const range = plotRange(params)
-  let lo = params.family === 'chisquare' || params.family === 'f' || params.family === 'exponential' ? 0 : range.min
+  let lo =
+    params.family === 'chisquare' || params.family === 'f' || params.family === 'exponential'
+      ? 0
+      : range.min
   let hi = range.max
   while (cdf(params, lo) > p && lo > -1e6) lo = lo * 2 - 1
   while (cdf(params, hi) < p && hi < 1e6) hi = hi * 2 + 1
@@ -373,7 +387,8 @@ export function moments(params: DistributionParams): { mean: number; variance: n
       const { df1: a, df2: b } = params
       return {
         mean: b > 2 ? b / (b - 2) : NaN,
-        variance: b > 4 ? (2 * b * b * (a + b - 2)) / (a * (b - 2) ** 2 * (b - 4)) : b > 2 ? Infinity : NaN,
+        variance:
+          b > 4 ? (2 * b * b * (a + b - 2)) / (a * (b - 2) ** 2 * (b - 4)) : b > 2 ? Infinity : NaN,
       }
     }
   }
@@ -436,7 +451,9 @@ export function describeParams(params: DistributionParams): string {
 
 /** Densities that are unbounded at 0 (χ² with k < 2, F with d₁ < 2). */
 export function unboundedAtZero(params: DistributionParams): boolean {
-  return (params.family === 'chisquare' && params.df < 2) || (params.family === 'f' && params.df1 < 2)
+  return (
+    (params.family === 'chisquare' && params.df < 2) || (params.family === 'f' && params.df1 < 2)
+  )
 }
 
 export function formatNumber(value: number, digits = 4): string {

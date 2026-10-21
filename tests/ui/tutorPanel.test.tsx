@@ -152,9 +152,7 @@ describe('TutorPanel', () => {
     vi.mocked(buildAIServices).mockResolvedValue({
       tutor: {
         findOrStartSession: vi.fn().mockResolvedValue({ session: sessionWith(''), resumed: false }),
-        beginTopic: vi
-          .fn()
-          .mockRejectedValue(new AppError('empty', 'EMPTY_TUTOR_RESPONSE')),
+        beginTopic: vi.fn().mockRejectedValue(new AppError('empty', 'EMPTY_TUTOR_RESPONSE')),
       },
     } as never)
 
@@ -169,16 +167,16 @@ describe('TutorPanel', () => {
     vi.mocked(buildAIServices).mockResolvedValue({
       tutor: {
         findOrStartSession: vi.fn().mockResolvedValue({ session: sessionWith(''), resumed: false }),
-        beginTopic: vi
-          .fn()
-          .mockRejectedValue(new AIProviderError('down', 'PROVIDER_UNAVAILABLE')),
+        beginTopic: vi.fn().mockRejectedValue(new AIProviderError('down', 'PROVIDER_UNAVAILABLE')),
       },
     } as never)
 
     renderPanel()
 
     expect(await screen.findByText('Tutor unavailable')).toBeInTheDocument()
-    expect(screen.getByText('The AI tutor cannot reach the AI service right now.')).toBeInTheDocument()
+    expect(
+      screen.getByText('The AI tutor cannot reach the AI service right now.'),
+    ).toBeInTheDocument()
   })
 
   it('reports a timeout with its own message', async () => {
@@ -193,7 +191,9 @@ describe('TutorPanel', () => {
     renderPanel()
 
     expect(await screen.findByText('Tutor unavailable')).toBeInTheDocument()
-    expect(screen.getByText('The AI tutor timed out. Please try again in a moment.')).toBeInTheDocument()
+    expect(
+      screen.getByText('The AI tutor timed out. Please try again in a moment.'),
+    ).toBeInTheDocument()
   })
 
   it('reports a topic with no course content without blaming the AI', async () => {
@@ -233,7 +233,9 @@ describe('TutorPanel', () => {
             new Promise((_resolve, reject) => {
               seen = opts.signal
               started()
-              opts.signal?.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')))
+              opts.signal?.addEventListener('abort', () =>
+                reject(new DOMException('Aborted', 'AbortError')),
+              )
             }),
         ),
       },

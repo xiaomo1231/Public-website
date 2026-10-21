@@ -29,7 +29,10 @@ export async function* parseSSE(stream: ReadableStream<Uint8Array>): AsyncGenera
 
       // SSE events are separated by double newlines.
       let boundary: number
-      while ((boundary = buffer.indexOf('\n\n')) !== -1 || (boundary = buffer.indexOf('\r\n\r\n')) !== -1) {
+      while (
+        (boundary = buffer.indexOf('\n\n')) !== -1 ||
+        (boundary = buffer.indexOf('\r\n\r\n')) !== -1
+      ) {
         const chunk = buffer.slice(0, boundary)
         buffer = buffer.slice(boundary + (buffer.startsWith('\r', boundary) ? 4 : 2))
         const ev = parseEventBlock(chunk)

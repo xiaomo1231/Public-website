@@ -15,7 +15,12 @@ export class TutorSessionRepository {
   }
 
   async listByProject(projectId: string): Promise<TutorSession[]> {
-    return this.db.table<TutorSession, string>('tutorSessions').where('projectId').equals(projectId).reverse().sortBy('updatedAt')
+    return this.db
+      .table<TutorSession, string>('tutorSessions')
+      .where('projectId')
+      .equals(projectId)
+      .reverse()
+      .sortBy('updatedAt')
   }
 
   async upsert(session: TutorSession): Promise<TutorSession> {
@@ -44,6 +49,10 @@ export class TutorSessionRepository {
   }
 
   async deleteByProject(projectId: string): Promise<number> {
-    return this.db.table<TutorSession, string>('tutorSessions').where('projectId').equals(projectId).delete()
+    return this.db
+      .table<TutorSession, string>('tutorSessions')
+      .where('projectId')
+      .equals(projectId)
+      .delete()
   }
 }

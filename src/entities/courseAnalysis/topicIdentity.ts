@@ -25,11 +25,7 @@
  */
 
 export type TopicMatchReason =
-  | 'section-name'
-  | 'chapter-name'
-  | 'source-overlap'
-  | 'ambiguous'
-  | 'new'
+  'section-name' | 'chapter-name' | 'source-overlap' | 'ambiguous' | 'new'
 
 export interface TopicIdentityCandidate {
   name: string
@@ -116,8 +112,7 @@ export function matchTopicIdentities(
     const name = normalizeTopicName(topic.name)
     if (!name) return
     const match = takeFirst(
-      (prev) =>
-        prev.sectionId === topic.sectionId && normalizeTopicName(prev.name) === name,
+      (prev) => prev.sectionId === topic.sectionId && normalizeTopicName(prev.name) === name,
     )
     if (!match) return
     consumed.add(match.id)
@@ -136,8 +131,7 @@ export function matchTopicIdentities(
     const name = normalizeTopicName(topic.name)
     if (!name) return
     const match = takeFirst(
-      (prev) =>
-        prev.chapterId === topic.chapterId && normalizeTopicName(prev.name) === name,
+      (prev) => prev.chapterId === topic.chapterId && normalizeTopicName(prev.name) === name,
     )
     if (!match) return
     consumed.add(match.id)

@@ -21,9 +21,9 @@ function jsonResponse(status: number, body: unknown): Response {
 
 describe('AIService', () => {
   it('returns raw content via chat()', async () => {
-    const fetchMock = vi.fn().mockResolvedValueOnce(
-      jsonResponse(200, { choices: [{ message: { content: 'hi' } }] }),
-    )
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse(200, { choices: [{ message: { content: 'hi' } }] }))
     globalThis.fetch = fetchMock as unknown as typeof fetch
     try {
       const ai = new AIService({ config })
@@ -56,11 +56,15 @@ describe('AIService', () => {
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce(jsonResponse(200, { choices: [{ message: { content: 'nope' } }] }))
-      .mockResolvedValueOnce(jsonResponse(200, { choices: [{ message: { content: 'still nope' } }] }))
+      .mockResolvedValueOnce(
+        jsonResponse(200, { choices: [{ message: { content: 'still nope' } }] }),
+      )
     globalThis.fetch = fetchMock as unknown as typeof fetch
     try {
       const ai = new AIService({ config })
-      await expect(ai.chatJSON([{ role: 'user', content: 'q' }])).rejects.toBeInstanceOf(InvalidJSONError)
+      await expect(ai.chatJSON([{ role: 'user', content: 'q' }])).rejects.toBeInstanceOf(
+        InvalidJSONError,
+      )
     } finally {
       vi.restoreAllMocks()
     }

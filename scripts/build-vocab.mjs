@@ -71,20 +71,26 @@ function parseCsv(text) {
 
 /** ECDICT stores line breaks inside a field as the two characters `\n`. */
 function meanings(translation) {
-  return translation
-    .split(/\\r\\n|\\n|\r?\n/)
-    .map((line) => line.trim())
-    // Web-sourced and computing-only senses distract from the core meaning.
-    // ECDICT writes them both as "[计] …" and "art. [计] …".
-    .filter((line) => line && !/^([a-z]+\.\s*)*\[(网络|计)\]/i.test(line))
-    .slice(0, MAX_MEANINGS)
-    .map((line) => (line.length > MAX_MEANING_CHARS ? `${line.slice(0, MAX_MEANING_CHARS)}…` : line))
+  return (
+    translation
+      .split(/\\r\\n|\\n|\r?\n/)
+      .map((line) => line.trim())
+      // Web-sourced and computing-only senses distract from the core meaning.
+      // ECDICT writes them both as "[计] …" and "art. [计] …".
+      .filter((line) => line && !/^([a-z]+\.\s*)*\[(网络|计)\]/i.test(line))
+      .slice(0, MAX_MEANINGS)
+      .map((line) =>
+        line.length > MAX_MEANING_CHARS ? `${line.slice(0, MAX_MEANING_CHARS)}…` : line,
+      )
+  )
 }
 
 const csv = parseCsv(await fetchOnce('ecdict.csv'))
 const header = csv[0]
 const col = (name) => header.indexOf(name)
-const [W, PH, TR, TAG, FRQ, EX] = ['word', 'phonetic', 'translation', 'tag', 'frq', 'exchange'].map(col)
+const [W, PH, TR, TAG, FRQ, EX] = ['word', 'phonetic', 'translation', 'tag', 'frq', 'exchange'].map(
+  col,
+)
 
 const words = []
 const common = new Set()
@@ -113,7 +119,12 @@ words.sort((a, b) => (a[4] || 1e9) - (b[4] || 1e9) || a[0].localeCompare(b[0]))
 const roots = []
 for (const [key, entry] of Object.entries(JSON.parse(await fetchOnce('wordroot.txt')))) {
   if (!entry?.meaning || key.length < 2) continue
-  roots.push([key, entry.class ?? '', String(entry.meaning).slice(0, 80), (entry.example ?? []).slice(0, 3)])
+  roots.push([
+    key,
+    entry.class ?? '',
+    String(entry.meaning).slice(0, 80),
+    (entry.example ?? []).slice(0, 3),
+  ])
 }
 
 mkdirSync(OUT, { recursive: true })

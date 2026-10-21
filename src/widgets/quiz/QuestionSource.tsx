@@ -16,10 +16,7 @@ export interface QuestionSourceProps {
 }
 
 /** Build the human-readable location line for a citation. */
-function locationOf(
-  reference: SourceReference,
-  t: ReturnType<typeof useTranslation>['t'],
-): string {
+function locationOf(reference: SourceReference, t: ReturnType<typeof useTranslation>['t']): string {
   return [
     reference.page !== undefined ? t('questionSource.page', { page: reference.page }) : '',
     reference.slideNumber !== undefined

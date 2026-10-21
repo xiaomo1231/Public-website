@@ -22,11 +22,7 @@ import type {
   SourceReference,
   TutorEvaluation,
 } from '@/infrastructure/ai/prompts/types'
-import type {
-  TutorQuestion,
-  TutorSession,
-  TutorTurn,
-} from '@/entities/tutorSession/types'
+import type { TutorQuestion, TutorSession, TutorTurn } from '@/entities/tutorSession/types'
 import { AppError } from '@/infrastructure/errors/AppError'
 import { logger } from '@/infrastructure/logger/logger'
 import { normalizeMathNotation } from '@/infrastructure/files/mathNotation'
@@ -84,9 +80,13 @@ function isAbort(err: unknown): boolean {
   return err instanceof Error && err.name === 'AbortError'
 }
 
-
-
-const DIFFICULTY_ORDER: DifficultyLevel[] = ['beginner', 'basic', 'intermediate', 'advanced', 'challenge']
+const DIFFICULTY_ORDER: DifficultyLevel[] = [
+  'beginner',
+  'basic',
+  'intermediate',
+  'advanced',
+  'challenge',
+]
 
 function adjustDifficulty(
   current: DifficultyLevel,
@@ -94,7 +94,12 @@ function adjustDifficulty(
   streakCorrect: number,
   streakWrong: number,
   wasSupplementary: boolean,
-): { difficulty: DifficultyLevel; streakCorrect: number; streakWrong: number; masteryDelta: number } {
+): {
+  difficulty: DifficultyLevel
+  streakCorrect: number
+  streakWrong: number
+  masteryDelta: number
+} {
   let nextDifficulty = current
   let nextStreakCorrect = streakCorrect
   let nextStreakWrong = streakWrong
@@ -408,7 +413,16 @@ export class TutorService {
     }
     session.hintsRevealed = 0
     session.messages.push(
-      { role: 'user', content: prompts.tutorQuestion.buildUserPrompt({ topicName: session.topicName, topicDescription: session.topicDescription ?? '', difficulty: session.currentDifficulty, language: session.language, sourceSnippets: sources }) },
+      {
+        role: 'user',
+        content: prompts.tutorQuestion.buildUserPrompt({
+          topicName: session.topicName,
+          topicDescription: session.topicDescription ?? '',
+          difficulty: session.currentDifficulty,
+          language: session.language,
+          sourceSnippets: sources,
+        }),
+      },
       { role: 'assistant', content: JSON.stringify(question) },
     )
     session.updatedAt = Date.now()
@@ -423,8 +437,14 @@ export class TutorService {
       throw new AppError(t('errors.noActiveQuestion'), 'NO_ACTIVE_QUESTION')
     }
     const idx = Math.min(session.hintsRevealed, session.pendingQuestion.hints.length - 1)
-    const hint = session.pendingQuestion.hints[idx] ?? session.pendingQuestion.hints[session.pendingQuestion.hints.length - 1] ?? t('errors.hintUnavailable')
-    session.hintsRevealed = Math.min(session.hintsRevealed + 1, session.pendingQuestion.hints.length)
+    const hint =
+      session.pendingQuestion.hints[idx] ??
+      session.pendingQuestion.hints[session.pendingQuestion.hints.length - 1] ??
+      t('errors.hintUnavailable')
+    session.hintsRevealed = Math.min(
+      session.hintsRevealed + 1,
+      session.pendingQuestion.hints.length,
+    )
     const turn: TutorTurn = {
       role: 'tutor',
       kind: 'hint',
@@ -511,8 +531,11 @@ export class TutorService {
 
     // A short answer counts as right when every point is covered and as wrong
     // below 60%; in between it moves neither the streak nor the difficulty.
-    const ratio = scored?.score && scored.score.total > 0 ? scored.score.earned / scored.score.total : null
-    const neutral = scored !== null && (scored.isCorrect === null || (ratio !== null && ratio >= 0.6 && ratio < 1))
+    const ratio =
+      scored?.score && scored.score.total > 0 ? scored.score.earned / scored.score.total : null
+    const neutral =
+      scored !== null &&
+      (scored.isCorrect === null || (ratio !== null && ratio >= 0.6 && ratio < 1))
     if (!neutral) {
       const adj = adjustDifficulty(
         session.currentDifficulty,
@@ -528,17 +551,28 @@ export class TutorService {
     }
     session.pendingQuestion = undefined
     session.hintsRevealed = 0
-    session.messages.push({ role: 'user', content: studentAnswer }, { role: 'assistant', content: JSON.stringify(evaluationTyped) })
+    session.messages.push(
+      { role: 'user', content: studentAnswer },
+      { role: 'assistant', content: JSON.stringify(evaluationTyped) },
+    )
     session.updatedAt = Date.now()
     await this.sessions.upsert(session)
 
     // Wrong tutor answers go to the mistake book through the same service the
     // quiz uses — one persistence path, one deduplication strategy.
-    if (evaluationTyped.isCorrect === false && (scored === null || scored.isCorrect === false) && this.mistakes) {
+    if (
+      evaluationTyped.isCorrect === false &&
+      (scored === null || scored.isCorrect === false) &&
+      this.mistakes
+    ) {
       await this.recordMistake(session, question, studentAnswer, evaluationTyped, scored)
     }
 
-    return { session, turn: feedbackTurn, finished: session.mastery >= 0.8 && evaluationTyped.isCorrect }
+    return {
+      session,
+      turn: feedbackTurn,
+      finished: session.mastery >= 0.8 && evaluationTyped.isCorrect,
+    }
   }
 
   /**
@@ -655,16 +689,17 @@ function tutorQuestionAsQuiz(
 }
 
 /** The scoring-point result in the tutor's feedback shape. */
-function tutorEvaluationFromScore(scored: QuestionEvaluation, expectedAnswer: string): TutorEvaluation {
+function tutorEvaluationFromScore(
+  scored: QuestionEvaluation,
+  expectedAnswer: string,
+): TutorEvaluation {
   const score = scored.score
   const feedback = scored.explanation ?? scored.note ?? ''
   return {
     isCorrect: scored.isCorrect === true,
     ...(score ? { partialCredit: `${score.earned}/${score.total}` } : {}),
     feedback,
-    breakdown: (scored.rubric ?? []).map(
-      (point) => `${point.covered ? '✓' : '✗'} ${point.text}`,
-    ),
+    breakdown: (scored.rubric ?? []).map((point) => `${point.covered ? '✓' : '✗'} ${point.text}`),
     nextSteps: '',
     groundedExplanation: expectedAnswer,
     isSupplementary: false,

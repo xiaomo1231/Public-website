@@ -147,7 +147,9 @@ describe('MasteryService review fixes', () => {
   it('keeps every observation when answers are recorded at the same time', async () => {
     const p = await new ProjectService(db).create({ name: 'P', subject: 'cs' })
     const svc = new MasteryService(db)
-    await Promise.all(Array.from({ length: 6 }, (_, i) => svc.record(attempt(p.id, 'Series', i % 2 === 0))))
+    await Promise.all(
+      Array.from({ length: 6 }, (_, i) => svc.record(attempt(p.id, 'Series', i % 2 === 0))),
+    )
     const row = await svc.get(p.id, 'Series')
     expect(row!.observations).toHaveLength(6)
   })

@@ -14,9 +14,7 @@ describe('translate', () => {
   })
 
   it('interpolates named parameters', () => {
-    expect(translate('en', 'projects.deleteBody', { name: 'Physics 101' })).toContain(
-      'Physics 101',
-    )
+    expect(translate('en', 'projects.deleteBody', { name: 'Physics 101' })).toContain('Physics 101')
     expect(translate('zh-CN', 'projects.deleteBody', { name: 'Physics 101' })).toContain(
       'Physics 101',
     )

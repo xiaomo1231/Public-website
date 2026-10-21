@@ -63,7 +63,10 @@ describe('TutorLessonView — visual sources', () => {
   it('renders a figures section when the lesson has visuals', () => {
     render(
       <MemoryRouter>
-        <TutorLessonView topicName="Symmetric Difference" state={state({ lesson: lesson({ visuals: [VISUAL] }) })} />
+        <TutorLessonView
+          topicName="Symmetric Difference"
+          state={state({ lesson: lesson({ visuals: [VISUAL] }) })}
+        />
       </MemoryRouter>,
     )
 
@@ -77,6 +80,8 @@ describe('TutorLessonView — visual sources', () => {
         <TutorLessonView topicName="Sets" state={state()} />
       </MemoryRouter>,
     )
-    expect(screen.queryByRole('heading', { name: 'Figures from the source' })).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('heading', { name: 'Figures from the source' }),
+    ).not.toBeInTheDocument()
   })
 })

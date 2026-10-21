@@ -1,7 +1,8 @@
 function hasInlineMathClose(text: string, start: number): boolean {
   const end = text.indexOf('$', start + 1)
-  return end > start + 1 && !text.slice(start + 1, end).includes('\n') &&
-    !/\d/.test(text[end + 1] ?? '')
+  return (
+    end > start + 1 && !text.slice(start + 1, end).includes('\n') && !/\d/.test(text[end + 1] ?? '')
+  )
 }
 
 const SPACE_ENTITY = /^(?:&#x0*20;|&#0*32;|&#x0*a0;|&#0*160;|&nbsp;)/i
@@ -10,7 +11,8 @@ const SPACE_ENTITY = /^(?:&#x0*20;|&#0*32;|&#x0*a0;|&#0*160;|&nbsp;)/i
 export function formatHomeworkReviewText(text: string): string {
   const source = text.replace(/\r\n?/g, '\n')
   let result = ''
-  let mode: 'prose' | 'code' | 'fence' | 'math' | 'displayMath' | 'parenMath' | 'bracketMath' = 'prose'
+  let mode: 'prose' | 'code' | 'fence' | 'math' | 'displayMath' | 'parenMath' | 'bracketMath' =
+    'prose'
 
   for (let i = 0; i < source.length;) {
     const rest = source.slice(i)
@@ -23,12 +25,18 @@ export function formatHomeworkReviewText(text: string): string {
         i += encodedSpace[0].length
         continue
       }
-      const opening = rest.startsWith('```') ? ['```', 'fence'] as const
-        : rest.startsWith('`') ? ['`', 'code'] as const
-          : rest.startsWith('$$') ? ['$$', 'displayMath'] as const
-            : rest.startsWith('$') && hasInlineMathClose(source, i) ? ['$', 'math'] as const
-              : rest.startsWith('\\(') ? ['\\(', 'parenMath'] as const
-                : rest.startsWith('\\[') ? ['\\[', 'bracketMath'] as const
+      const opening = rest.startsWith('```')
+        ? (['```', 'fence'] as const)
+        : rest.startsWith('`')
+          ? (['`', 'code'] as const)
+          : rest.startsWith('$$')
+            ? (['$$', 'displayMath'] as const)
+            : rest.startsWith('$') && hasInlineMathClose(source, i)
+              ? (['$', 'math'] as const)
+              : rest.startsWith('\\(')
+                ? (['\\(', 'parenMath'] as const)
+                : rest.startsWith('\\[')
+                  ? (['\\[', 'bracketMath'] as const)
                   : null
       if (opening) {
         result += opening[0]
@@ -49,7 +57,9 @@ export function formatHomeworkReviewText(text: string): string {
       }
       if (rest.startsWith('\\n')) {
         // Undelimited LaTeX is uncommon, but preserve known commands.
-        if (/^\\(?:neq|ne|nabla|notin|neg|nu|natural|newcommand|nRightarrow|nLeftarrow)\b/.test(rest)) {
+        if (
+          /^\\(?:neq|ne|nabla|notin|neg|nu|natural|newcommand|nRightarrow|nLeftarrow)\b/.test(rest)
+        ) {
           result += '\\n'
         } else {
           result += '\n'
@@ -58,12 +68,18 @@ export function formatHomeworkReviewText(text: string): string {
         continue
       }
     } else {
-      const closing = mode === 'fence' ? '```'
-        : mode === 'code' ? '`'
-          : mode === 'displayMath' ? '$$'
-            : mode === 'math' ? '$'
-              : mode === 'parenMath' ? '\\)'
-                : '\\]'
+      const closing =
+        mode === 'fence'
+          ? '```'
+          : mode === 'code'
+            ? '`'
+            : mode === 'displayMath'
+              ? '$$'
+              : mode === 'math'
+                ? '$'
+                : mode === 'parenMath'
+                  ? '\\)'
+                  : '\\]'
       if (rest.startsWith(closing)) {
         result += closing
         i += closing.length

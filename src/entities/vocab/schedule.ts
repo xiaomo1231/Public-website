@@ -6,7 +6,9 @@ import type { VocabCard, VocabRating } from './types'
  * little fuzz so words learned together do not all fall due on the same day,
  * and intervals capped at five years.
  */
-const scheduler = fsrs(generatorParameters({ request_retention: 0.9, enable_fuzz: true, maximum_interval: 1825 }))
+const scheduler = fsrs(
+  generatorParameters({ request_retention: 0.9, enable_fuzz: true, maximum_interval: 1825 }),
+)
 
 function toFsrs(card: VocabCard): Card {
   return {

@@ -56,10 +56,30 @@ export type ParseResult =
   | { ok: false; reason: 'no-arrow' | 'empty-side' | 'bad-species'; detail?: string }
 
 const SUBSCRIPTS: Record<string, string> = {
-  '₀': '0', '₁': '1', '₂': '2', '₃': '3', '₄': '4', '₅': '5', '₆': '6', '₇': '7', '₈': '8', '₉': '9',
+  '₀': '0',
+  '₁': '1',
+  '₂': '2',
+  '₃': '3',
+  '₄': '4',
+  '₅': '5',
+  '₆': '6',
+  '₇': '7',
+  '₈': '8',
+  '₉': '9',
 }
 const SUPERSCRIPTS: Record<string, string> = {
-  '⁰': '0', '¹': '1', '²': '2', '³': '3', '⁴': '4', '⁵': '5', '⁶': '6', '⁷': '7', '⁸': '8', '⁹': '9', '⁺': '+', '⁻': '-',
+  '⁰': '0',
+  '¹': '1',
+  '²': '2',
+  '³': '3',
+  '⁴': '4',
+  '⁵': '5',
+  '⁶': '6',
+  '⁷': '7',
+  '⁸': '8',
+  '⁹': '9',
+  '⁺': '+',
+  '⁻': '-',
 }
 
 /** Known element symbols (the periodic table up to oganesson). */
@@ -166,7 +186,8 @@ function parseAtoms(text: string): Record<string, number> | null {
       i += digits.length
       const group = stack.pop()!
       const multiplier = digits ? Number(digits) : 1
-      for (const [element, count] of Object.entries(group)) add(stack[stack.length - 1]!, element, count * multiplier)
+      for (const [element, count] of Object.entries(group))
+        add(stack[stack.length - 1]!, element, count * multiplier)
     } else if (/[A-Z]/.test(ch)) {
       const two = text.slice(i, i + 2)
       const element = /^[A-Z][a-z]$/.test(two) && ELEMENTS.has(two) ? two : ch
@@ -187,7 +208,11 @@ function parseAtoms(text: string): Record<string, number> | null {
 export function hillFormula(atoms: Record<string, number>): string {
   const elements = Object.keys(atoms).filter((e) => atoms[e]! > 0)
   const ordered = elements.includes('C')
-    ? ['C', ...(elements.includes('H') ? ['H'] : []), ...elements.filter((e) => e !== 'C' && e !== 'H').sort()]
+    ? [
+        'C',
+        ...(elements.includes('H') ? ['H'] : []),
+        ...elements.filter((e) => e !== 'C' && e !== 'H').sort(),
+      ]
     : elements.sort()
   return ordered.map((e) => `${e}${atoms[e] === 1 ? '' : atoms[e]}`).join('')
 }
@@ -227,7 +252,13 @@ export function parseSpecies(raw: string): Species | null {
   }
   const key = `${hillFormula(atoms)}${charge === 0 ? '' : `${Math.abs(charge)}${charge > 0 ? '+' : '-'}`}`
   const structure = text.includes('·') ? undefined : writtenStructure(text, drawnBond)
-  return { text: raw.replace(STATE, '').trim(), atoms, charge, key, ...(structure ? { structure } : {}) }
+  return {
+    text: raw.replace(STATE, '').trim(),
+    atoms,
+    charge,
+    key,
+    ...(structure ? { structure } : {}),
+  }
 }
 
 /**
@@ -238,9 +269,11 @@ export function parseSpecies(raw: string): Species | null {
 function writtenStructure(text: string, drawnBond: boolean): string | undefined {
   let expanded = text
   for (let i = 0; i < 10; i++) {
-    const next = expanded.replace(/[([]([^()[\]]+)[)\]](\d+)/g, (_, group: string, times: string) =>
-      group.repeat(Math.min(Number(times), 20)),
-    ).replace(/[([]([^()[\]]+)[)\]]/g, '$1')
+    const next = expanded
+      .replace(/[([]([^()[\]]+)[)\]](\d+)/g, (_, group: string, times: string) =>
+        group.repeat(Math.min(Number(times), 20)),
+      )
+      .replace(/[([]([^()[\]]+)[)\]]/g, '$1')
     if (next === expanded) break
     expanded = next
   }
@@ -309,7 +342,11 @@ function parseSides(left: string, right: string, arrow: string): ParseResult {
   }
   return {
     ok: true,
-    equation: { reactants: sides[0]!, products: sides[1]!, written: { left: left.trim(), arrow: arrow.trim(), right: right.trim() } },
+    equation: {
+      reactants: sides[0]!,
+      products: sides[1]!,
+      written: { left: left.trim(), arrow: arrow.trim(), right: right.trim() },
+    },
   }
 }
 
@@ -322,7 +359,13 @@ function arrowSplits(text: string): Array<{ left: string; arrow: string; right: 
   if (arrows.length > 1) return []
   if (arrows.length === 1) {
     const match = arrows[0]!
-    return [{ left: text.slice(0, match.index), arrow: match[0], right: text.slice(match.index! + match[0].length) }]
+    return [
+      {
+        left: text.slice(0, match.index),
+        arrow: match[0],
+        right: text.slice(match.index! + match[0].length),
+      },
+    ]
   }
   const candidates = [...text.matchAll(EQUALS_ARROW)].map((match) => ({
     left: text.slice(0, match.index),
@@ -423,7 +466,8 @@ function coefficientsByKey(terms: Term[]): Map<string, { n: number; d: number; t
  */
 export function compareEquations(answer: string, reference: ParsedEquation): EquationComparison {
   const parsed = parseEquation(answer)
-  if (!parsed.ok) return { verdict: 'unreadable', ...(parsed.detail ? { detail: parsed.detail } : {}) }
+  if (!parsed.ok)
+    return { verdict: 'unreadable', ...(parsed.detail ? { detail: parsed.detail } : {}) }
   const student = parsed.equation
 
   const missing: string[] = []
@@ -450,7 +494,7 @@ export function compareEquations(answer: string, reference: ParsedEquation): Equ
     const theirMap = coefficientsByKey(theirs)
     for (const [key, value] of coefficientsByKey(mine)) {
       const reference = theirMap.get(key)!
-      const r = (value.n / value.d) / (reference.n / reference.d)
+      const r = value.n / value.d / (reference.n / reference.d)
       if (ratio === null) ratio = r
       else if (Math.abs(r - ratio) > 1e-9) return { verdict: 'coefficients' }
     }

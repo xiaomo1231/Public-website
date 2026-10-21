@@ -1,12 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import {
-  AlertTriangle,
-  Database,
-  Download,
-  Loader2,
-  Trash2,
-} from 'lucide-react'
+import { AlertTriangle, Database, Download, Loader2, Trash2 } from 'lucide-react'
 import { Button } from '@/shared/ui/Button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/shared/ui/Card'
 import { Badge } from '@/shared/ui/Badge'
@@ -44,7 +38,9 @@ interface DataManagementPanelProps {
   onSettingsCleared?: () => void
 }
 
-export function DataManagementPanel({ onSettingsCleared }: DataManagementPanelProps = {}): JSX.Element {
+export function DataManagementPanel({
+  onSettingsCleared,
+}: DataManagementPanelProps = {}): JSX.Element {
   const { t } = useTranslation()
   const navigate = useNavigate()
   const [inventory, setInventory] = useState<DataInventory | null>(null)
@@ -80,9 +76,17 @@ export function DataManagementPanel({ onSettingsCleared }: DataManagementPanelPr
       a.click()
       a.remove()
       URL.revokeObjectURL(url)
-      toast({ variant: 'success', title: t('data.exportReady'), description: t('data.exportReadyBody') })
+      toast({
+        variant: 'success',
+        title: t('data.exportReady'),
+        description: t('data.exportReadyBody'),
+      })
     } catch (err) {
-      toast({ variant: 'error', title: t('data.exportFailed'), description: (err as Error).message })
+      toast({
+        variant: 'error',
+        title: t('data.exportFailed'),
+        description: (err as Error).message,
+      })
     } finally {
       setExporting(false)
     }
@@ -103,7 +107,11 @@ export function DataManagementPanel({ onSettingsCleared }: DataManagementPanelPr
       await refreshInventory()
       await useAuthStore.getState().load()
     } catch (err) {
-      toast({ variant: 'error', title: t('data.deleteFailed'), description: isAppError(err) ? err.message : (err as Error).message })
+      toast({
+        variant: 'error',
+        title: t('data.deleteFailed'),
+        description: isAppError(err) ? err.message : (err as Error).message,
+      })
     } finally {
       setBusy(false)
     }
@@ -119,7 +127,11 @@ export function DataManagementPanel({ onSettingsCleared }: DataManagementPanelPr
       setConfirm(null)
       await refreshInventory()
     } catch (err) {
-      toast({ variant: 'error', title: t('data.clearFailed'), description: isAppError(err) ? err.message : (err as Error).message })
+      toast({
+        variant: 'error',
+        title: t('data.clearFailed'),
+        description: isAppError(err) ? err.message : (err as Error).message,
+      })
     } finally {
       setBusy(false)
     }
@@ -132,9 +144,7 @@ export function DataManagementPanel({ onSettingsCleared }: DataManagementPanelPr
           <Database className="h-4 w-4" />
           {t('data.title')}
         </CardTitle>
-        <CardDescription>
-          {t('data.description')}
-        </CardDescription>
+        <CardDescription>{t('data.description')}</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
         {loading ? (
@@ -149,14 +159,25 @@ export function DataManagementPanel({ onSettingsCleared }: DataManagementPanelPr
             <InventoryLine label={t('data.mistakes')} value={inventory.mistakes} />
             <InventoryLine label={t('data.translations')} value={inventory.translations} />
             <InventoryLine label={t('data.courseAnalyses')} value={inventory.courseAnalyses} />
-            <InventoryLine label={t('data.documentBlobs')} value={formatBytes(inventory.estimatedTotalBytes)} />
-            <InventoryLine label={t('data.aiKeyConfigured')} value={inventory.hasApiKey ? t('data.yes') : t('data.no')} badge={inventory.hasApiKey ? 'default' : 'secondary'} />
+            <InventoryLine
+              label={t('data.documentBlobs')}
+              value={formatBytes(inventory.estimatedTotalBytes)}
+            />
+            <InventoryLine
+              label={t('data.aiKeyConfigured')}
+              value={inventory.hasApiKey ? t('data.yes') : t('data.no')}
+              badge={inventory.hasApiKey ? 'default' : 'secondary'}
+            />
           </div>
         ) : null}
 
         <div className="flex flex-wrap gap-2 border-t pt-4">
           <Button onClick={handleExport} disabled={exporting}>
-            {exporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+            {exporting ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Download className="h-4 w-4" />
+            )}
             {exporting ? t('data.exporting') : t('data.export')}
           </Button>
           <Button variant="outline" onClick={() => setDeleteProjectOpen(true)}>
@@ -183,11 +204,7 @@ export function DataManagementPanel({ onSettingsCleared }: DataManagementPanelPr
         open={confirm !== null}
         onOpenChange={(open) => setConfirm(open ? confirm : null)}
         title={confirm === 'delete-all' ? t('data.deleteAllTitle') : t('data.clearTitle')}
-        description={
-          confirm === 'delete-all'
-            ? t('data.deleteAllBody')
-            : t('data.clearBody')
-        }
+        description={confirm === 'delete-all' ? t('data.deleteAllBody') : t('data.clearBody')}
         requireText={confirm === 'delete-all' ? t('data.deleteAllConfirm') : t('data.clearConfirm')}
         confirmLabel={confirm === 'delete-all' ? t('data.deleteAllAction') : t('data.clearAction')}
         variant={confirm === 'delete-all' ? 'destructive' : 'default'}
@@ -207,11 +224,23 @@ export function DataManagementPanel({ onSettingsCleared }: DataManagementPanelPr
   )
 }
 
-function InventoryLine({ label, value, badge }: { label: string; value: number | string; badge?: 'default' | 'secondary' }) {
+function InventoryLine({
+  label,
+  value,
+  badge,
+}: {
+  label: string
+  value: number | string
+  badge?: 'default' | 'secondary'
+}) {
   return (
     <div className="flex items-center justify-between rounded-lg border bg-muted/30 px-3 py-2 text-sm">
       <span className="text-muted-foreground">{label}</span>
-      {badge ? <Badge variant={badge}>{value}</Badge> : <span className="font-mono tabular-nums">{value}</span>}
+      {badge ? (
+        <Badge variant={badge}>{value}</Badge>
+      ) : (
+        <span className="font-mono tabular-nums">{value}</span>
+      )}
     </div>
   )
 }

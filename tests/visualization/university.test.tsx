@@ -1,7 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import { compareQuantity, isValidUnit } from '@/infrastructure/math/quantityAnswer'
-import { compareEquations, parseEquation, previewEquation } from '@/infrastructure/chemistry/equation'
+import {
+  compareEquations,
+  parseEquation,
+  previewEquation,
+} from '@/infrastructure/chemistry/equation'
 import { evaluateDeterministic } from '@/services/answerEvaluationService'
 import { cdf, moments, quantile } from '@/entities/tutorVisualization/distribution'
 import { chiSquareTest, expectedFromRatio } from '@/entities/tutorVisualization/chiSquare'
@@ -16,10 +20,20 @@ import {
   unrankedGenes,
   type PedigreeMember,
 } from '@/entities/tutorVisualization/biology'
-import { bufferPoints, equivalenceVolumes, titrationPH } from '@/entities/tutorVisualization/chemistry'
+import {
+  bufferPoints,
+  equivalenceVolumes,
+  titrationPH,
+} from '@/entities/tutorVisualization/chemistry'
 import { normalizeVisualizations } from '@/entities/tutorVisualization/normalize'
-import { hasGraphableMath, looksLikeBiologyFigureText } from '@/entities/tutorVisualization/graphable'
-import { TUTOR_VISUALIZATION_SCHEMA_VERSION, type TutorVisualization } from '@/entities/tutorVisualization/types'
+import {
+  hasGraphableMath,
+  looksLikeBiologyFigureText,
+} from '@/entities/tutorVisualization/graphable'
+import {
+  TUTOR_VISUALIZATION_SCHEMA_VERSION,
+  type TutorVisualization,
+} from '@/entities/tutorVisualization/types'
 import type { Question } from '@/entities/question/types'
 import { prompts } from '@/infrastructure/ai/prompts'
 import { TutorVisualizationFigure } from '@/widgets/tutor/TutorVisualizationFigure'
@@ -31,11 +45,15 @@ function one(draft: Record<string, unknown>): TutorVisualization | string {
   return result.visualizations[0] ?? result.rejected[0]!.reason
 }
 
-const base = { schemaVersion: TUTOR_VISUALIZATION_SCHEMA_VERSION, placement: { scope: 'lesson' as const } }
+const base = {
+  schemaVersion: TUTOR_VISUALIZATION_SCHEMA_VERSION,
+  placement: { scope: 'lesson' as const },
+}
 
 describe('university units', () => {
   it('reads molarity, daltons, calories and ppm', () => {
-    for (const unit of ['M', 'mM', 'uM', 'µM', 'kDa', 'kcal/mol', 'ppm', 'Å']) expect(isValidUnit(unit)).toBe(true)
+    for (const unit of ['M', 'mM', 'uM', 'µM', 'kDa', 'kcal/mol', 'ppm', 'Å'])
+      expect(isValidUnit(unit)).toBe(true)
     expect(compareQuantity('100 mM', '0.1', 'mol/L').isCorrect).toBe(true)
     expect(compareQuantity('0.1 M', '100', 'mM').isCorrect).toBe(true)
     expect(compareQuantity('10 kcal/mol', '41.84', 'kJ/mol').isCorrect).toBe(true)
@@ -46,28 +64,60 @@ describe('university units', () => {
 
 describe('organic and redox equations', () => {
   it('reads double and triple bonds and finds the real arrow', () => {
-    for (const eq of ['CH2=CH2 + H2 -> CH3CH3', 'CH2=CH2 + H2 = CH3CH3', 'CH2=CH2+H2=CH3CH3', 'HC≡CH + 2H2 -> CH3-CH3']) {
+    for (const eq of [
+      'CH2=CH2 + H2 -> CH3CH3',
+      'CH2=CH2 + H2 = CH3CH3',
+      'CH2=CH2+H2=CH3CH3',
+      'HC≡CH + 2H2 -> CH3-CH3',
+    ]) {
       const parsed = parseEquation(eq)
       expect(parsed.ok, eq).toBe(true)
     }
-    expect(previewEquation('CH2=CH2 + H2 = CH3CH3')).toEqual({ status: 'ok', latex: '\\ce{CH2=CH2 + H2 -> CH3CH3}' })
+    expect(previewEquation('CH2=CH2 + H2 = CH3CH3')).toEqual({
+      status: 'ok',
+      latex: '\\ce{CH2=CH2 + H2 -> CH3CH3}',
+    })
     expect(parseEquation('MnO4- + 8H+ + 5e- -> Mn^2+ + 4H2O').ok).toBe(true)
   })
 
   it('does not confirm a different structure with the same formula', () => {
     const reference = parseEquation('CH3CH2OH -> CH2=CH2 + H2O')
     if (!reference.ok) throw new Error('reference')
-    expect(compareEquations('CH3CH2OH -> CH2=CH2 + H2O', reference.equation)).toEqual({ verdict: 'correct' })
-    expect(compareEquations('CH3-CH2-OH -> CH2=CH2 + H2O', reference.equation)).toEqual({ verdict: 'correct' })
-    expect(compareEquations('CH3OCH3 -> CH2=CH2 + H2O', reference.equation)).toMatchObject({ verdict: 'isomers', species: ['CH3OCH3'] })
+    expect(compareEquations('CH3CH2OH -> CH2=CH2 + H2O', reference.equation)).toEqual({
+      verdict: 'correct',
+    })
+    expect(compareEquations('CH3-CH2-OH -> CH2=CH2 + H2O', reference.equation)).toEqual({
+      verdict: 'correct',
+    })
+    expect(compareEquations('CH3OCH3 -> CH2=CH2 + H2O', reference.equation)).toMatchObject({
+      verdict: 'isomers',
+      species: ['CH3OCH3'],
+    })
     const plain = parseEquation('C2H6O -> C2H4 + H2O')
     if (!plain.ok) throw new Error('plain')
-    expect(compareEquations('CH3CH2OH -> CH2=CH2 + H2O', plain.equation)).toEqual({ verdict: 'correct' })
+    expect(compareEquations('CH3CH2OH -> CH2=CH2 + H2O', plain.equation)).toEqual({
+      verdict: 'correct',
+    })
   })
 
   it('leaves a possible isomer ungraded with an explanation', () => {
-    const q = { id: 'q', projectId: 'p', knowledgePoint: 'K', type: 'chem_equation', difficulty: 'basic', prompt: '', correctAnswer: 'CH3CH2OH -> CH2=CH2 + H2O', hints: [], sourceRefs: [], promptVersion: 'v4', createdAt: 1 } as Question
-    expect(evaluateDeterministic(q, 'CH3OCH3 -> CH2=CH2 + H2O')).toMatchObject({ isCorrect: null, method: 'unverified' })
+    const q = {
+      id: 'q',
+      projectId: 'p',
+      knowledgePoint: 'K',
+      type: 'chem_equation',
+      difficulty: 'basic',
+      prompt: '',
+      correctAnswer: 'CH3CH2OH -> CH2=CH2 + H2O',
+      hints: [],
+      sourceRefs: [],
+      promptVersion: 'v4',
+      createdAt: 1,
+    } as Question
+    expect(evaluateDeterministic(q, 'CH3OCH3 -> CH2=CH2 + H2O')).toMatchObject({
+      isCorrect: null,
+      method: 'unverified',
+    })
     expect(evaluateDeterministic(q, 'CH3CH2OH -> CH2=CH2 + H2O').isCorrect).toBe(true)
   })
 })
@@ -89,8 +139,12 @@ describe('t, χ² and F distributions', () => {
   })
 
   it('normalises the new families', () => {
-    expect(one({ type: 'distribution_2d', family: 't', params: { df: 8 }, interval: { from: 2 } })).toMatchObject({ params: { family: 't', df: 8 } })
-    expect(one({ type: 'distribution_2d', family: 'f', params: { df1: 3, df2: 0 } })).toBe('invalid-distribution-params')
+    expect(
+      one({ type: 'distribution_2d', family: 't', params: { df: 8 }, interval: { from: 2 } }),
+    ).toMatchObject({ params: { family: 't', df: 8 } })
+    expect(one({ type: 'distribution_2d', family: 'f', params: { df1: 3, df2: 0 } })).toBe(
+      'invalid-distribution-params',
+    )
   })
 })
 
@@ -120,8 +174,24 @@ describe('chi-square goodness of fit', () => {
       ],
     })
     expect(value).toMatchObject({ type: 'chisquare_test_2d', df: 3, alpha: 0.05 })
-    expect(one({ type: 'chisquare_test_2d', categories: [{ label: 'a', observed: 10, expected: 30 }, { label: 'b', observed: 10, expected: 30 }] })).toBe('chisquare-expected-total')
-    expect(one({ type: 'chisquare_test_2d', categories: [{ label: 'a', observed: 10 }, { label: 'b', observed: 10 }] })).toBe('chisquare-missing-expected')
+    expect(
+      one({
+        type: 'chisquare_test_2d',
+        categories: [
+          { label: 'a', observed: 10, expected: 30 },
+          { label: 'b', observed: 10, expected: 30 },
+        ],
+      }),
+    ).toBe('chisquare-expected-total')
+    expect(
+      one({
+        type: 'chisquare_test_2d',
+        categories: [
+          { label: 'a', observed: 10 },
+          { label: 'b', observed: 10 },
+        ],
+      }),
+    ).toBe('chisquare-missing-expected')
   })
 })
 
@@ -134,7 +204,12 @@ describe('university genetics', () => {
 
   it('handles ABO multiple alleles with codominance', () => {
     const result = punnettSquare(genotypePairs('I^Ai')!, genotypePairs('I^Bi')!, 'complete')
-    expect(result.phenotypes.map((p) => p.key).sort()).toEqual(['i:I^A', 'i:I^A+I^B', 'i:I^B', 'i:i'])
+    expect(result.phenotypes.map((p) => p.key).sort()).toEqual([
+      'i:I^A',
+      'i:I^A+I^B',
+      'i:I^B',
+      'i:i',
+    ])
     expect(ratioText(result.phenotypes.map((p) => p.count))).toBe('1 : 1 : 1 : 1')
   })
 
@@ -143,24 +218,39 @@ describe('university genetics', () => {
     const mother = genotypePairs('c^{ch}c')!
     const father = genotypePairs('c^hc')!
     expect(unrankedGenes(mother, father, 'complete')).toEqual(['c'])
-    const order = dominanceOrderOf([{ gene: 'c', alleles: [{ allele: 'c^{ch}' }, { allele: 'c^h' }, { allele: 'c' }] }])
+    const order = dominanceOrderOf([
+      { gene: 'c', alleles: [{ allele: 'c^{ch}' }, { allele: 'c^h' }, { allele: 'c' }] },
+    ])
     expect(unrankedGenes(mother, father, 'complete', order)).toEqual([])
     const result = punnettSquare(mother, father, 'complete', order)
     expect(result.phenotypes.map((p) => p.key).sort()).toEqual(['c:c', 'c:c^h', 'c:c^{ch}'])
     expect(result.phenotypes.find((p) => p.key === 'c:c^{ch}')!.count).toBe(2)
     expect(result.phenotypes.some((p) => p.key.includes('+'))).toBe(false)
 
-    expect(one({ type: 'punnett_2d', mother: 'c^{ch}c', father: 'c^hc' })).toBe('genotype-dominance-unknown')
+    expect(one({ type: 'punnett_2d', mother: 'c^{ch}c', father: 'c^hc' })).toBe(
+      'genotype-dominance-unknown',
+    )
     expect(
       one({
         type: 'punnett_2d',
         mother: 'c^{ch}c',
         father: 'c^hc',
-        traits: [{ gene: 'c', alleles: [{ allele: 'c^{ch}', name: 'chinchilla' }, { allele: 'c^h', name: 'Himalayan' }, { allele: 'c', name: 'albino' }] }],
+        traits: [
+          {
+            gene: 'c',
+            alleles: [
+              { allele: 'c^{ch}', name: 'chinchilla' },
+              { allele: 'c^h', name: 'Himalayan' },
+              { allele: 'c', name: 'albino' },
+            ],
+          },
+        ],
       }),
     ).toMatchObject({ type: 'punnett_2d' })
     // ABO still works without any order: I^A and I^B are codominant, i recessive.
-    expect(one({ type: 'punnett_2d', mother: 'I^Ai', father: 'I^Bi' })).toMatchObject({ type: 'punnett_2d' })
+    expect(one({ type: 'punnett_2d', mother: 'I^Ai', father: 'I^Bi' })).toMatchObject({
+      type: 'punnett_2d',
+    })
   })
 
   it('keeps Mendel letters (Y/y for seed colour) autosomal', () => {
@@ -182,15 +272,37 @@ describe('university genetics', () => {
   })
 
   it('normalises X-linked and ABO crosses with allele names', () => {
-    expect(one({ type: 'punnett_2d', mother: 'X^AY', father: 'X^AY' })).toBe('genotype-sex-mismatch')
+    expect(one({ type: 'punnett_2d', mother: 'X^AY', father: 'X^AY' })).toBe(
+      'genotype-sex-mismatch',
+    )
     expect(
       one({
         type: 'punnett_2d',
         mother: 'I^Ai',
         father: 'I^Bi',
-        traits: [{ gene: 'i', alleles: [{ allele: 'I^A', name: 'A' }, { allele: 'I^B', name: 'B' }, { allele: 'i', name: 'O' }] }],
+        traits: [
+          {
+            gene: 'i',
+            alleles: [
+              { allele: 'I^A', name: 'A' },
+              { allele: 'I^B', name: 'B' },
+              { allele: 'i', name: 'O' },
+            ],
+          },
+        ],
       }),
-    ).toMatchObject({ traits: [{ gene: 'i', alleles: [{ allele: 'I^A', name: 'A' }, { allele: 'I^B', name: 'B' }, { allele: 'i', name: 'O' }] }] })
+    ).toMatchObject({
+      traits: [
+        {
+          gene: 'i',
+          alleles: [
+            { allele: 'I^A', name: 'A' },
+            { allele: 'I^B', name: 'B' },
+            { allele: 'i', name: 'O' },
+          ],
+        },
+      ],
+    })
   })
 })
 
@@ -209,8 +321,14 @@ describe('inheritance-mode analysis', () => {
     )!
     const byMode = Object.fromEntries(verdicts.map((v) => [v.mode, v]))
     expect(byMode.AR!.possible).toBe(true)
-    expect(byMode.AD).toMatchObject({ possible: false, reason: { kind: 'unaffected-parents-affected-child' } })
-    expect(byMode.XR).toMatchObject({ possible: false, reason: { kind: 'affected-daughter-unaffected-father' } })
+    expect(byMode.AD).toMatchObject({
+      possible: false,
+      reason: { kind: 'unaffected-parents-affected-child' },
+    })
+    expect(byMode.XR).toMatchObject({
+      possible: false,
+      reason: { kind: 'affected-daughter-unaffected-father' },
+    })
     expect(byMode.YL).toMatchObject({ possible: false })
   })
 
@@ -234,7 +352,10 @@ describe('inheritance-mode analysis', () => {
         { id: 'c', sex: 'female', father: 'f', mother: 'm' },
       ]),
     )!
-    expect(verdicts.find((v) => v.mode === 'AR')).toMatchObject({ possible: false, reason: { kind: 'affected-parents-unaffected-child' } })
+    expect(verdicts.find((v) => v.mode === 'AR')).toMatchObject({
+      possible: false,
+      reason: { kind: 'affected-parents-unaffected-child' },
+    })
     expect(verdicts.find((v) => v.mode === 'AD')!.possible).toBe(true)
   })
 })
@@ -256,14 +377,30 @@ describe('transcription with strand direction and start codon', () => {
   })
 
   it('reads the direction from 5′/3′ labels and defaults to 5′→3′', () => {
-    expect(one({ type: 'translation_2d', dna: "3'-TACCGGATT-5'", strand: 'template' })).toMatchObject({ dna: 'TACCGGATT', direction: '3to5', start: 'aug' })
-    expect(one({ type: 'translation_2d', dna: 'TTAGGCCAT', strand: 'template' })).toMatchObject({ direction: '5to3' })
+    expect(
+      one({ type: 'translation_2d', dna: "3'-TACCGGATT-5'", strand: 'template' }),
+    ).toMatchObject({ dna: 'TACCGGATT', direction: '3to5', start: 'aug' })
+    expect(one({ type: 'translation_2d', dna: 'TTAGGCCAT', strand: 'template' })).toMatchObject({
+      direction: '5to3',
+    })
   })
 })
 
 describe('polyprotic and weak-base titrations', () => {
-  const phosphoric = { analyte: 'acid' as const, concentration: 0.1, volume: 25, titrantConcentration: 0.1, ka: [7.5e-3, 6.2e-8, 4.8e-13] }
-  const ammonia = { analyte: 'base' as const, concentration: 0.1, volume: 25, titrantConcentration: 0.1, kb: 1.8e-5 }
+  const phosphoric = {
+    analyte: 'acid' as const,
+    concentration: 0.1,
+    volume: 25,
+    titrantConcentration: 0.1,
+    ka: [7.5e-3, 6.2e-8, 4.8e-13],
+  }
+  const ammonia = {
+    analyte: 'base' as const,
+    concentration: 0.1,
+    volume: 25,
+    titrantConcentration: 0.1,
+    kb: 1.8e-5,
+  }
 
   it('finds one equivalence point per proton', () => {
     expect(equivalenceVolumes(phosphoric)).toEqual([25, 50, 75])
@@ -279,10 +416,27 @@ describe('polyprotic and weak-base titrations', () => {
   })
 
   it('normalises analytes and rejects disordered constants', () => {
-    expect(one({ type: 'titration_2d', analyte: 'base', concentration: 0.1, volume: 25, titrantConcentration: 0.1, kb: 1.8e-5 })).toMatchObject({
+    expect(
+      one({
+        type: 'titration_2d',
+        analyte: 'base',
+        concentration: 0.1,
+        volume: 25,
+        titrantConcentration: 0.1,
+        kb: 1.8e-5,
+      }),
+    ).toMatchObject({
       setup: { analyte: 'base', kb: 1.8e-5 },
     })
-    expect(one({ type: 'titration_2d', concentration: 0.1, volume: 25, titrantConcentration: 0.1, ka: [1e-7, 1e-3] })).toBe('invalid-titration-ka')
+    expect(
+      one({
+        type: 'titration_2d',
+        concentration: 0.1,
+        volume: 25,
+        titrantConcentration: 0.1,
+        ka: [1e-7, 1e-3],
+      }),
+    ).toBe('invalid-titration-ka')
   })
 })
 
@@ -316,11 +470,21 @@ describe('university figures render', () => {
           mother: 'I^Ai',
           father: 'I^Bi',
           dominance: 'complete',
-          traits: [{ gene: 'i', alleles: [{ allele: 'I^A', name: 'A' }, { allele: 'I^B', name: 'B' }, { allele: 'i', name: 'O' }] }],
+          traits: [
+            {
+              gene: 'i',
+              alleles: [
+                { allele: 'I^A', name: 'A' },
+                { allele: 'I^B', name: 'B' },
+                { allele: 'i', name: 'O' },
+              ],
+            },
+          ],
         }}
       />,
     )
-    for (const name of ['A', 'B', 'AB', 'O']) expect(screen.getAllByText(name).length).toBeGreaterThan(0)
+    for (const name of ['A', 'B', 'AB', 'O'])
+      expect(screen.getAllByText(name).length).toBeGreaterThan(0)
   })
 
   it('lists the possible modes of inheritance under a pedigree', () => {
@@ -340,16 +504,26 @@ describe('university figures render', () => {
     )
     expect(screen.getByText('Possible modes of inheritance')).toBeInTheDocument()
     // Excludes both dominant modes for the same reason.
-    expect(screen.getAllByText(/unaffected parents with an affected child \(I-1, I-2, II-1\)/)).toHaveLength(2)
+    expect(
+      screen.getAllByText(/unaffected parents with an affected child \(I-1, I-2, II-1\)/),
+    ).toHaveLength(2)
   })
 })
 
 describe('prompts and gates', () => {
   it('offers the χ² test to statistics and biology but not calculus', () => {
-    expect(prompts.visualizationGenerator.buildSystemPrompt({ subject: 'stats' })).toContain('chisquare_test_2d')
-    expect(prompts.visualizationGenerator.buildSystemPrompt({ subject: 'biology' })).toContain('X^AX^a')
-    expect(prompts.visualizationGenerator.buildSystemPrompt({ subject: 'calculus' })).not.toContain('chisquare_test_2d')
-    expect(prompts.visualizationGenerator.buildSystemPrompt({ subject: 'chemistry' })).toContain('polyprotic')
+    expect(prompts.visualizationGenerator.buildSystemPrompt({ subject: 'stats' })).toContain(
+      'chisquare_test_2d',
+    )
+    expect(prompts.visualizationGenerator.buildSystemPrompt({ subject: 'biology' })).toContain(
+      'X^AX^a',
+    )
+    expect(prompts.visualizationGenerator.buildSystemPrompt({ subject: 'calculus' })).not.toContain(
+      'chisquare_test_2d',
+    )
+    expect(prompts.visualizationGenerator.buildSystemPrompt({ subject: 'chemistry' })).toContain(
+      'polyprotic',
+    )
   })
 
   it('recognises the new topics', () => {

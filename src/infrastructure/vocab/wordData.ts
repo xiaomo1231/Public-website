@@ -26,7 +26,14 @@ export function setVocabDataLoaderForTesting(next: Loader | null): void {
   dictionary = common = roots = null
 }
 
-type RawWord = [word: string, phonetic: string, meanings: string[], mask: number, rank: number, exchange: string]
+type RawWord = [
+  word: string,
+  phonetic: string,
+  meanings: string[],
+  mask: number,
+  rank: number,
+  exchange: string,
+]
 
 function decode([word, phonetic, meanings, mask, rank, exchange]: RawWord): DictEntry {
   return {
@@ -46,14 +53,18 @@ function decode([word, phonetic, meanings, mask, rank, exchange]: RawWord): Dict
 
 /** Every exam-tagged word, most frequent first. */
 export function loadDictionary(): Promise<DictEntry[]> {
-  dictionary ??= loader('dictionary.json').then((data) => ((data as { words: RawWord[] }).words ?? []).map(decode))
+  dictionary ??= loader('dictionary.json').then((data) =>
+    ((data as { words: RawWord[] }).words ?? []).map(decode),
+  )
   dictionary.catch(() => (dictionary = null))
   return dictionary
 }
 
 /** The most frequent words and their forms (course vocabulary skips them). */
 export function loadCommonWords(): Promise<Set<string>> {
-  common ??= loader('common.json').then((data) => new Set((data as { words: string[] }).words ?? []))
+  common ??= loader('common.json').then(
+    (data) => new Set((data as { words: string[] }).words ?? []),
+  )
   common.catch(() => (common = null))
   return common
 }

@@ -74,7 +74,12 @@ async function seedProject(db: AppDatabase) {
   return { project, doc, stored }
 }
 
-function chapter(id: string, projectId: string, sourceChunkIds: string[], order: number): CourseStructureNode {
+function chapter(
+  id: string,
+  projectId: string,
+  sourceChunkIds: string[],
+  order: number,
+): CourseStructureNode {
   return {
     id,
     structureId: 'structure-1',
@@ -88,10 +93,7 @@ function chapter(id: string, projectId: string, sourceChunkIds: string[], order:
   }
 }
 
-function fakeAnalysisAI(
-  topics: Array<Record<string, unknown>>,
-  onCall?: () => Promise<void>,
-) {
+function fakeAnalysisAI(topics: Array<Record<string, unknown>>, onCall?: () => Promise<void>) {
   const streamJSON = vi.fn(async () => {
     await onCall?.()
     return {
@@ -108,7 +110,11 @@ function fakeAnalysisAI(
       raw: { content: '{}', model: 'test' },
     }
   })
-  return { streamJSON, maxOutputTokens: 2048, currentProvider: { id: 'custom' } } as unknown as AIService
+  return {
+    streamJSON,
+    maxOutputTokens: 2048,
+    currentProvider: { id: 'custom' },
+  } as unknown as AIService
 }
 
 function analyzer(db: AppDatabase, ai: AIService) {
@@ -205,7 +211,9 @@ describe('incremental scope commits', () => {
       project.id,
       {
         topics: [
-          ...Array.from({ length: topicsInCh1 }, (_, i) => row(`Chapter One Topic ${i + 1}`, 'ch1', dep1)),
+          ...Array.from({ length: topicsInCh1 }, (_, i) =>
+            row(`Chapter One Topic ${i + 1}`, 'ch1', dep1),
+          ),
           row('Chapter Two Topic', 'ch2', dep2),
         ],
         concepts: [],
@@ -277,7 +285,11 @@ describe('incremental scope commits', () => {
     mocks.chatJSON.mockRejectedValue(abort)
 
     await expect(
-      service().executeIncrementalScope({ type: 'chapter', projectId: project.id, chapterId: 'ch1' }),
+      service().executeIncrementalScope({
+        type: 'chapter',
+        projectId: project.id,
+        chapterId: 'ch1',
+      }),
     ).rejects.toBe(abort)
     expect(await analyses.listTopics(project.id)).toEqual(before)
     expect((await analyses.getByProject(project.id))!.sourceHash).toBe('seed')
@@ -327,11 +339,7 @@ describe('incremental scope commits', () => {
 
   it('topicScopeFilter includes descendants of the target node', () => {
     const inScope = topicScopeFilter(
-      [
-        { id: 'ch1' },
-        { id: 's1', parentId: 'ch1' },
-        { id: 'ch2' },
-      ],
+      [{ id: 'ch1' }, { id: 's1', parentId: 'ch1' }, { id: 'ch2' }],
       'ch1',
       [
         { id: 'a', sourceSectionIds: ['s1'] },
@@ -375,9 +383,30 @@ describe('full analysis integrity', () => {
 
   it('collapses a topic reported twice in the same chapter, unioning its sources', () => {
     const { drafts, aliases } = collapseSameNameTopics([
-      { name: 'Limits', description: 'a', order: 0, sourceRefs: [], rawSourceChunkIds: ['c1'], chapterId: 'ch1' },
-      { name: 'limits', description: 'b', order: 1, sourceRefs: [], rawSourceChunkIds: ['c2'], chapterId: 'ch1' },
-      { name: 'Series', description: 'c', order: 2, sourceRefs: [], rawSourceChunkIds: ['c3'], chapterId: 'ch1' },
+      {
+        name: 'Limits',
+        description: 'a',
+        order: 0,
+        sourceRefs: [],
+        rawSourceChunkIds: ['c1'],
+        chapterId: 'ch1',
+      },
+      {
+        name: 'limits',
+        description: 'b',
+        order: 1,
+        sourceRefs: [],
+        rawSourceChunkIds: ['c2'],
+        chapterId: 'ch1',
+      },
+      {
+        name: 'Series',
+        description: 'c',
+        order: 2,
+        sourceRefs: [],
+        rawSourceChunkIds: ['c3'],
+        chapterId: 'ch1',
+      },
     ])
     expect(drafts.map((draft) => draft.name)).toEqual(['Limits', 'Series'])
     expect(drafts[0]!.rawSourceChunkIds).toEqual(['c1', 'c2'])
@@ -390,14 +419,21 @@ describe('full analysis integrity', () => {
     const analyses = new CourseAnalysisRepository(db)
     await analyzer(
       db,
-      fakeAnalysisAI([{ name: 'Derivatives', description: '', sourceChunkIds: [stored[0]!.id], sourceRefs: [] }]),
+      fakeAnalysisAI([
+        { name: 'Derivatives', description: '', sourceChunkIds: [stored[0]!.id], sourceRefs: [] },
+      ]),
     ).analyzeProject(project.id)
     const id = (await analyses.listTopics(project.id))[0]!.id
 
     await analyzer(
       db,
       fakeAnalysisAI([
-        { name: 'Rates of Change', description: '', sourceChunkIds: [stored[0]!.id], sourceRefs: [] },
+        {
+          name: 'Rates of Change',
+          description: '',
+          sourceChunkIds: [stored[0]!.id],
+          sourceRefs: [],
+        },
       ]),
     ).analyzeProject(project.id)
     const after = await analyses.listTopics(project.id)
@@ -411,7 +447,9 @@ describe('full analysis integrity', () => {
     const analyses = new CourseAnalysisRepository(db)
     await analyzer(
       db,
-      fakeAnalysisAI([{ name: 'Derivatives', description: '', sourceChunkIds: [stored[0]!.id], sourceRefs: [] }]),
+      fakeAnalysisAI([
+        { name: 'Derivatives', description: '', sourceChunkIds: [stored[0]!.id], sourceRefs: [] },
+      ]),
     ).analyzeProject(project.id)
     const ready = (await analyses.getByProject(project.id))!
     expect(ready.status).toBe('ready')
@@ -450,7 +488,10 @@ describe('forced ensureAnalyzed', () => {
   it('re-analyses a fresh project when forced, with practice relinks in the same commit', async () => {
     mocks.analyzeProject.mockResolvedValue(undefined)
     const planned = [{ id: 'pq1' }]
-    expect(await stubbedService(planned).ensureAnalyzed('p1')).toEqual({ analyzed: false, reason: 'fresh' })
+    expect(await stubbedService(planned).ensureAnalyzed('p1')).toEqual({
+      analyzed: false,
+      reason: 'fresh',
+    })
     expect(mocks.analyzeProject).not.toHaveBeenCalled()
 
     const result = await stubbedService(planned).ensureAnalyzed('p1', { force: true })
@@ -492,7 +533,9 @@ describe('processing quota', () => {
     const documents = new DocumentRepository(db)
     class FullChunks extends ChunkRepository {
       override async addPrepared(): Promise<never> {
-        throw Object.assign(new Error('The quota has been exceeded.'), { name: 'QuotaExceededError' })
+        throw Object.assign(new Error('The quota has been exceeded.'), {
+          name: 'QuotaExceededError',
+        })
       }
     }
     const processing = new ProcessingService({

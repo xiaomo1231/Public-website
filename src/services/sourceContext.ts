@@ -160,7 +160,10 @@ export async function loadQuizCandidates(options: QuizCandidateOptions): Promise
  * pages: preferred chunks first, then one passage per keyword, then (unless
  * `fill` is off) passages spaced evenly through the material.
  */
-export function pickQuizSnippets(candidates: SourceSnippet[], options: QuizPickOptions): SourceSnippet[] {
+export function pickQuizSnippets(
+  candidates: SourceSnippet[],
+  options: QuizPickOptions,
+): SourceSnippet[] {
   const { limit } = options
   const picked = new Set<number>()
   const take = (index: number) => {
@@ -171,13 +174,18 @@ export function pickQuizSnippets(candidates: SourceSnippet[], options: QuizPickO
   for (const keyword of options.keywords ?? []) {
     const needle = keyword.trim().toLowerCase()
     if (!needle) continue
-    take(candidates.findIndex((snippet, index) => !picked.has(index) && snippet.text.toLowerCase().includes(needle)))
+    take(
+      candidates.findIndex(
+        (snippet, index) => !picked.has(index) && snippet.text.toLowerCase().includes(needle),
+      ),
+    )
   }
   if (options.fill !== false) {
     // Fill the rest evenly across the material, not from its first pages.
     const free = candidates.map((_, index) => index).filter((index) => !picked.has(index))
     const room = limit - picked.size
-    for (let i = 0; i < room && i < free.length; i++) take(free[Math.floor((i * free.length) / room)]!)
+    for (let i = 0; i < room && i < free.length; i++)
+      take(free[Math.floor((i * free.length) / room)]!)
   }
   return [...picked].sort((a, b) => a - b).map((index) => candidates[index]!)
 }

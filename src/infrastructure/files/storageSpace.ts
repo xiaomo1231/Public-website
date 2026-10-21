@@ -30,11 +30,15 @@ export async function freeStorageBytes(): Promise<number | null> {
 export async function ensureStorageFor(bytes: number): Promise<void> {
   const free = await freeStorageBytes()
   if (free === null || bytes * HEADROOM <= free) return
-  throw new ValidationError(t('errors.storageInsufficient', { size: sizeLabel(bytes), free: sizeLabel(free) }))
+  throw new ValidationError(
+    t('errors.storageInsufficient', { size: sizeLabel(bytes), free: sizeLabel(free) }),
+  )
 }
 
 /** IndexedDB ran out of quota (Dexie wraps the DOMException, keeping its name). */
 export function isQuotaError(err: unknown): boolean {
-  const names = [err, (err as { inner?: unknown } | null)?.inner].map((e) => (e as { name?: unknown } | null)?.name)
+  const names = [err, (err as { inner?: unknown } | null)?.inner].map(
+    (e) => (e as { name?: unknown } | null)?.name,
+  )
   return names.includes('QuotaExceededError')
 }

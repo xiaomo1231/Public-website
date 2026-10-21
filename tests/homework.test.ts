@@ -42,7 +42,12 @@ function analyzer(ids: string[], prompts: string[]): unknown {
 }
 
 describe('homework normalization', () => {
-  const chunkA = { id: 'c1', text: 'first passage', order: 0, pageNumber: 1 } as unknown as DocumentChunk
+  const chunkA = {
+    id: 'c1',
+    text: 'first passage',
+    order: 0,
+    pageNumber: 1,
+  } as unknown as DocumentChunk
   const chunkB = { id: 'c2', text: 'second passage', order: 1 } as unknown as DocumentChunk
   const document = { id: 'doc1', name: 'hw.txt' } as unknown as Document
 
@@ -90,7 +95,9 @@ describe('homework normalization', () => {
       pageNumber: 3,
     } as unknown as DocumentChunk
     const out = normalizeQuestions(
-      { questions: [{ prompt: 'Problem 5. Find the limit of x² at 3.', sourceChunkIds: ['c:c3'] }] },
+      {
+        questions: [{ prompt: 'Problem 5. Find the limit of x² at 3.', sourceChunkIds: ['c:c3'] }],
+      },
       [shared],
       document,
     )
@@ -568,7 +575,8 @@ describe('HomeworkService', () => {
       ai: stubAI((system) => {
         if (system.includes('extract the individual questions')) {
           calls += 1
-          if (calls === 1) return analyzer([chunks[0]!.id, chunks[1]!.id], ['Prompt one.', 'Prompt two.'])
+          if (calls === 1)
+            return analyzer([chunks[0]!.id, chunks[1]!.id], ['Prompt one.', 'Prompt two.'])
           if (calls === 2) return analyzer([chunks[0]!.id], ['Prompt one.'])
           return analyzer([chunks[1]!.id, chunks[0]!.id], ['Prompt two.', 'Prompt one.'])
         }
@@ -599,10 +607,16 @@ describe('HomeworkService', () => {
         if (system.includes('extract the individual questions')) {
           calls += 1
           if (calls === 1) {
-            return analyzer([chunks[0]!.id, chunks[0]!.id], ['Alpha beta gamma.', 'Alpha beta gamma gamma.'])
+            return analyzer(
+              [chunks[0]!.id, chunks[0]!.id],
+              ['Alpha beta gamma.', 'Alpha beta gamma gamma.'],
+            )
           }
           if (calls === 2) return analyzer([chunks[1]!.id], ['Completely different.'])
-          return analyzer([chunks[1]!.id, chunks[0]!.id], ['Completely different.', 'Alpha beta gamma.'])
+          return analyzer(
+            [chunks[1]!.id, chunks[0]!.id],
+            ['Completely different.', 'Alpha beta gamma.'],
+          )
         }
         return { hints: ['h'], solution: 's' }
       }),
@@ -711,7 +725,10 @@ describe('HomeworkService', () => {
           calls += 1
           if (calls === 1) return analyzer([chunks[0]!.id], ['Original wording here.'])
           if (calls === 2) return analyzer([chunks[1]!.id], ['Filler question.'])
-          return analyzer([chunks[1]!.id, chunks[0]!.id], ['Filler question.', 'Original wording here too.'])
+          return analyzer(
+            [chunks[1]!.id, chunks[0]!.id],
+            ['Filler question.', 'Original wording here too.'],
+          )
         }
         if (user.includes('too')) throw new Error('model exploded')
         return { hints: ['old hint'], solution: 'old solution' }
@@ -757,7 +774,14 @@ describe('HomeworkService', () => {
 
     const set = await service.createFromDocument(documentId)
     const [original] = await service.listQuestions(set.id)
-    const blank: HomeworkQuestion = { ...original!, id: 'blank-active', draftText: '', messages: [], revealedHints: 0, solutionRevealed: false }
+    const blank: HomeworkQuestion = {
+      ...original!,
+      id: 'blank-active',
+      draftText: '',
+      messages: [],
+      revealedHints: 0,
+      solutionRevealed: false,
+    }
     const worked: HomeworkQuestion = {
       ...original!,
       id: 'retired-worked',

@@ -35,7 +35,8 @@ import {
 } from './sourceHash'
 import { legacyInputWasTruncated, type AnalysisInputDocument } from './analysisInput'
 
-export interface CourseContentRepositoryDeps {  db?: AppDatabase
+export interface CourseContentRepositoryDeps {
+  db?: AppDatabase
   analyses?: CourseAnalysisRepository
   structures?: CourseStructureRepository
   documents?: DocumentRepository
@@ -47,10 +48,7 @@ export interface CourseContentRepositoryDeps {  db?: AppDatabase
 }
 
 /** Map a stored analysis + its derived freshness onto the public status. */
-function resolveStatus(
-  analysis: CourseAnalysis | undefined,
-  fresh: boolean,
-): CourseContentStatus {
+function resolveStatus(analysis: CourseAnalysis | undefined, fresh: boolean): CourseContentStatus {
   if (!analysis) return 'missing'
   if (analysis.status === 'analyzing' || analysis.status === 'pending') return 'processing'
   if (analysis.status === 'failed') return 'error'

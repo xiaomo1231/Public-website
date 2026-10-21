@@ -27,7 +27,15 @@ import {
 } from '@/entities/tutorVisualization/graphable'
 
 /** Subjects whose lessons may offer any stated formula to the formula explorer. */
-const FORMULA_SUBJECTS = new Set<Subject>(['physics', 'chemistry', 'biology', 'stats', 'calculus', 'cs', 'medicine'])
+const FORMULA_SUBJECTS = new Set<Subject>([
+  'physics',
+  'chemistry',
+  'biology',
+  'stats',
+  'calculus',
+  'cs',
+  'medicine',
+])
 import type { TutorVisualization } from '@/entities/tutorVisualization/types'
 import { VisualSourceRepository } from '@/entities/visualSource/repository'
 import { TutorVisualizationService } from './tutorVisualizationService'
@@ -314,9 +322,13 @@ export class TutorLessonService {
     const messages: ChatMessage[] = [
       {
         role: 'system',
-        content: prompts.subjectProfile.withSubject(prompts.tutorLesson.buildSystemPrompt(), subject, {
-          forLesson: true,
-        }),
+        content: prompts.subjectProfile.withSubject(
+          prompts.tutorLesson.buildSystemPrompt(),
+          subject,
+          {
+            forLesson: true,
+          },
+        ),
       },
       {
         role: 'user',
@@ -331,10 +343,14 @@ export class TutorLessonService {
           ...(notesSnippets.length > 0 ? { notesSnippets } : {}),
           ...(transcriptSnippets.length > 0 ? { transcriptSnippets } : {}),
           ...(topic.chapterNumber || topic.chapterTitle
-            ? { chapterLabel: [topic.chapterNumber, topic.chapterTitle].filter(Boolean).join(' — ') }
+            ? {
+                chapterLabel: [topic.chapterNumber, topic.chapterTitle].filter(Boolean).join(' — '),
+              }
             : {}),
           ...(topic.sectionNumber || topic.sectionTitle
-            ? { sectionLabel: [topic.sectionNumber, topic.sectionTitle].filter(Boolean).join(' — ') }
+            ? {
+                sectionLabel: [topic.sectionNumber, topic.sectionTitle].filter(Boolean).join(' — '),
+              }
             : {}),
         }),
       },

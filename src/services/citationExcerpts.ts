@@ -26,7 +26,11 @@ export async function fillMissingExcerpts(
   const chunks = new ChunkRepository(db)
   const byDocument = new Map<string, Promise<DocumentChunk[]>>()
   const documentChunks = (id: string) => {
-    if (!byDocument.has(id)) byDocument.set(id, chunks.listByDocument(id).catch(() => []))
+    if (!byDocument.has(id))
+      byDocument.set(
+        id,
+        chunks.listByDocument(id).catch(() => []),
+      )
     return byDocument.get(id)!
   }
 
@@ -38,7 +42,9 @@ export async function fillMissingExcerpts(
         if (chunk && collapse(chunk.text)) return { ...ref, quote: collapse(chunk.text) }
       }
       if (ref.documentId && ref.page !== undefined) {
-        const onPage = (await documentChunks(ref.documentId)).filter((chunk) => chunk.pageNumber === ref.page)
+        const onPage = (await documentChunks(ref.documentId)).filter(
+          (chunk) => chunk.pageNumber === ref.page,
+        )
         const text = collapse(onPage.map((chunk) => chunk.text).join(' '))
         if (text) return { ...ref, quote: text, pageExcerpt: true }
       }

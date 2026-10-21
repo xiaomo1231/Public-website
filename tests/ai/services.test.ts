@@ -15,12 +15,14 @@ import { TranslationService } from '@/services/translationService'
 import { AppError } from '@/infrastructure/errors/AppError'
 import type { AIService } from '@/services/aiService'
 
-function fakeAI(handlers: {
-  chat?: ReturnType<typeof vi.fn>
-  chatJSON?: ReturnType<typeof vi.fn>
-  streamChat?: ReturnType<typeof vi.fn>
-  streamJSON?: ReturnType<typeof vi.fn>
-} = {}): AIService {
+function fakeAI(
+  handlers: {
+    chat?: ReturnType<typeof vi.fn>
+    chatJSON?: ReturnType<typeof vi.fn>
+    streamChat?: ReturnType<typeof vi.fn>
+    streamJSON?: ReturnType<typeof vi.fn>
+  } = {},
+): AIService {
   const chatJSON = handlers.chatJSON ?? vi.fn()
   return {
     chat: handlers.chat ?? vi.fn(),
@@ -101,10 +103,38 @@ describe('DocumentAnalysisService', () => {
       chatJSON: vi.fn().mockResolvedValue({
         data: {
           language: 'en',
-          topics: [{ name: 'Derivatives', description: 'rate of change', sourceRefs: [{ documentId: doc.id, documentName: 'intro.txt' }] }],
-          concepts: [{ name: 'Derivative', definition: 'limit of difference quotient', topicNames: ['Derivatives'], sourceRefs: [{ documentId: doc.id, documentName: 'intro.txt' }] }],
-          formulas: [{ name: 'Leibniz', latex: '\\frac{df}{dx}', description: 'derivative notation', variables: [{ symbol: 'f', meaning: 'function' }], sourceRefs: [{ documentId: doc.id, documentName: 'intro.txt' }] }],
-          symbols: [{ symbol: 'd', meaning: 'differential operator', context: 'calculus', sourceRefs: [{ documentId: doc.id, documentName: 'intro.txt' }] }],
+          topics: [
+            {
+              name: 'Derivatives',
+              description: 'rate of change',
+              sourceRefs: [{ documentId: doc.id, documentName: 'intro.txt' }],
+            },
+          ],
+          concepts: [
+            {
+              name: 'Derivative',
+              definition: 'limit of difference quotient',
+              topicNames: ['Derivatives'],
+              sourceRefs: [{ documentId: doc.id, documentName: 'intro.txt' }],
+            },
+          ],
+          formulas: [
+            {
+              name: 'Leibniz',
+              latex: '\\frac{df}{dx}',
+              description: 'derivative notation',
+              variables: [{ symbol: 'f', meaning: 'function' }],
+              sourceRefs: [{ documentId: doc.id, documentName: 'intro.txt' }],
+            },
+          ],
+          symbols: [
+            {
+              symbol: 'd',
+              meaning: 'differential operator',
+              context: 'calculus',
+              sourceRefs: [{ documentId: doc.id, documentName: 'intro.txt' }],
+            },
+          ],
           examples: [],
           exercises: [],
           prerequisites: [],
@@ -419,7 +449,12 @@ describe('TutorService', () => {
     const docsRepo = new DocumentRepository(db)
     const chunksRepo = new ChunkRepository(db)
     const p = await projects.create({ name: 'Course', subject: 'calculus' })
-    const doc = await docsRepo.create({ projectId: p.id, type: 'text', name: 'l.txt', sizeBytes: 0 })
+    const doc = await docsRepo.create({
+      projectId: p.id,
+      type: 'text',
+      name: 'l.txt',
+      sizeBytes: 0,
+    })
     await docsRepo.update(doc.id, { status: 'ready' })
     await chunksRepo.addMany([
       {
@@ -435,7 +470,13 @@ describe('TutorService', () => {
     await analysesRepo.reseedProject(
       p.id,
       {
-        topics: [{ name: 'Derivatives', description: '', sourceRefs: [{ documentId: doc.id, documentName: 'l.txt' }] }],
+        topics: [
+          {
+            name: 'Derivatives',
+            description: '',
+            sourceRefs: [{ documentId: doc.id, documentName: 'l.txt' }],
+          },
+        ],
         concepts: [],
         formulas: [],
         symbols: [],
@@ -607,14 +648,16 @@ describe('TranslationService', () => {
   })
 
   it('retries a truncated homework translation and keeps only the complete translation', async () => {
-    const chatJSON = vi.fn()
+    const chatJSON = vi
+      .fn()
       .mockResolvedValueOnce({
         data: { translation: '第6题：', contextNote: '这是一道向量空间题。', alternatives: [] },
         raw: { content: '', model: 'gpt-test' },
       })
       .mockResolvedValueOnce({
         data: {
-          translation: '第6题：考虑实向量空间 R²，它采用标准的加法与标量乘法。判断以下各集合是否构成 R² 的子空间。',
+          translation:
+            '第6题：考虑实向量空间 R²，它采用标准的加法与标量乘法。判断以下各集合是否构成 R² 的子空间。',
           contextNote: '这是一道向量空间题。',
           alternatives: ['线性空间'],
         },
@@ -623,7 +666,8 @@ describe('TranslationService', () => {
     const svc = new TranslationService({ ai: fakeAI({ chatJSON }), repo: undefined as never })
     const entry = await svc.translate({
       projectId: 'p',
-      selectedText: 'Problem 6: Consider the real vector space R² defined with the standard operations of addition and scalar multiplication. Determine whether the following sets are subspaces.',
+      selectedText:
+        'Problem 6: Consider the real vector space R² defined with the standard operations of addition and scalar multiplication. Determine whether the following sets are subspaces.',
       surroundingContext: 'Linear algebra homework',
       sourceLanguage: 'en',
       targetLanguage: 'zh',
@@ -642,13 +686,16 @@ describe('TranslationService', () => {
     })
     const svc = new TranslationService({ ai: fakeAI({ chatJSON }), repo: undefined as never })
 
-    await expect(svc.translate({
-      projectId: 'p',
-      selectedText: 'Problem 6: Consider the real vector space R² defined with the standard operations of addition and scalar multiplication.',
-      surroundingContext: '',
-      sourceLanguage: 'en',
-      targetLanguage: 'zh',
-    })).rejects.toMatchObject({ code: 'MALFORMED_TRANSLATION' })
+    await expect(
+      svc.translate({
+        projectId: 'p',
+        selectedText:
+          'Problem 6: Consider the real vector space R² defined with the standard operations of addition and scalar multiplication.',
+        surroundingContext: '',
+        sourceLanguage: 'en',
+        targetLanguage: 'zh',
+      }),
+    ).rejects.toMatchObject({ code: 'MALFORMED_TRANSLATION' })
     expect(chatJSON).toHaveBeenCalledTimes(2)
   })
 })

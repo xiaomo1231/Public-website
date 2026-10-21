@@ -1,14 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
-import {
-  AlertTriangle,
-  CheckCircle2,
-  FileText,
-  Loader2,
-  Upload,
-  X,
-  XCircle,
-} from 'lucide-react'
+import { AlertTriangle, CheckCircle2, FileText, Loader2, Upload, X, XCircle } from 'lucide-react'
 import { Button } from '@/shared/ui/Button'
 import {
   Dialog,
@@ -306,7 +298,12 @@ export function DocumentUploadDialog({
                   {t('upload.charLimit', { count: text.length.toLocaleString() })}
                 </p>
               </div>
-              <Button type="button" variant="outline" onClick={handleUploadText} disabled={!text.trim()}>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={handleUploadText}
+                disabled={!text.trim()}
+              >
                 <Upload className="h-4 w-4" />
                 {t('batch.addText')}
               </Button>
@@ -344,7 +341,10 @@ export function DocumentUploadDialog({
               {items.map((item) => (
                 <li key={item.id} className="flex items-center gap-2 rounded px-1.5 py-1 text-sm">
                   <ItemIcon item={item} />
-                  <span className="min-w-0 flex-1 truncate" title={item.name || t('upload.tab.text')}>
+                  <span
+                    className="min-w-0 flex-1 truncate"
+                    title={item.name || t('upload.tab.text')}
+                  >
                     {item.name || t('upload.tab.text')}
                   </span>
                   <span className="shrink-0 text-xs text-muted-foreground">
@@ -434,10 +434,7 @@ export function DocumentUploadDialog({
               <Button variant="outline" onClick={() => handleOpenChange(false)}>
                 {t('common.cancel')}
               </Button>
-              <Button
-                onClick={() => void batch.start()}
-                disabled={summary.queued === 0}
-              >
+              <Button onClick={() => void batch.start()} disabled={summary.queued === 0}>
                 {t('batch.uploadCount', { count: summary.queued })}
               </Button>
             </>

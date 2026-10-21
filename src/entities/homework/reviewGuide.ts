@@ -25,18 +25,20 @@ export function homeworkReviewInputHash(
   language: 'zh' | 'en',
   promptVersion: string,
 ): string {
-  return fnv1a(JSON.stringify({
-    promptVersion,
-    language,
-    prompt: question.prompt,
-    contentFingerprint: question.contentFingerprint,
-    sourceRefs: question.sourceRefs,
-    answerStatus: question.answerStatus,
-    answerText: question.answerStatus === 'matched' ? question.answerText : undefined,
-    answerChunkIds: question.answerStatus === 'matched' ? question.answerChunkIds : undefined,
-    answerBased: question.answerBased,
-    solution: question.solution,
-  }))
+  return fnv1a(
+    JSON.stringify({
+      promptVersion,
+      language,
+      prompt: question.prompt,
+      contentFingerprint: question.contentFingerprint,
+      sourceRefs: question.sourceRefs,
+      answerStatus: question.answerStatus,
+      answerText: question.answerStatus === 'matched' ? question.answerText : undefined,
+      answerChunkIds: question.answerStatus === 'matched' ? question.answerChunkIds : undefined,
+      answerBased: question.answerBased,
+      solution: question.solution,
+    }),
+  )
 }
 
 export function currentHomeworkReview(
@@ -45,7 +47,10 @@ export function currentHomeworkReview(
   promptVersion: string,
 ): HomeworkReviewGuide | null {
   const guide = question.reviewGuide
-  return guide && guide.language === language && guide.promptVersion === promptVersion &&
+  return guide &&
+    guide.language === language &&
+    guide.promptVersion === promptVersion &&
     guide.inputHash === homeworkReviewInputHash(question, language, promptVersion)
-    ? guide : null
+    ? guide
+    : null
 }

@@ -36,7 +36,12 @@ export class MasteryService {
 
   /** Record an attempt and update the estimate. Returns the new row. */
   async record(attempt: QuestionAttempt): Promise<KnowledgeMastery> {
-    return this.recordObservation(attempt.projectId, attempt.knowledgePoint, attempt.topicId, observationFromAttempt(attempt))
+    return this.recordObservation(
+      attempt.projectId,
+      attempt.knowledgePoint,
+      attempt.topicId,
+      observationFromAttempt(attempt),
+    )
   }
 
   /**
@@ -110,7 +115,9 @@ export class MasteryService {
     for (const [kp, list] of byKp) {
       const sorted = list.slice().sort((a, b) => a.createdAt - b.createdAt)
       const existing = await this.repo.get(projectId, kp)
-      const reviews = (existing?.observations ?? []).filter((o) => o.questionType === FLASHCARD_TYPE)
+      const reviews = (existing?.observations ?? []).filter(
+        (o) => o.questionType === FLASHCARD_TYPE,
+      )
       const observations: MasteryObservation[] = [
         ...sorted.filter((a) => a.evaluation.disputed !== true).map(observationFromAttempt),
         ...reviews,
@@ -123,7 +130,9 @@ export class MasteryService {
         id: masteryId(projectId, kp),
         projectId,
         knowledgePoint: kp,
-        ...(sorted[sorted.length - 1]?.topicId ? { topicId: sorted[sorted.length - 1]!.topicId } : {}),
+        ...(sorted[sorted.length - 1]?.topicId
+          ? { topicId: sorted[sorted.length - 1]!.topicId }
+          : {}),
         mastery: computeMastery(observations),
         attempts: graded.length,
         correct: graded.filter((o) => o.isCorrect).length,
@@ -140,7 +149,11 @@ export class MasteryService {
   }
 
   /** Knowledge points whose estimate is below the threshold. */
-  async weakKnowledgePoints(projectId: string, threshold = 0.6, limit = 5): Promise<KnowledgeMastery[]> {
+  async weakKnowledgePoints(
+    projectId: string,
+    threshold = 0.6,
+    limit = 5,
+  ): Promise<KnowledgeMastery[]> {
     const rows = await this.repo.listByProject(projectId)
     return rows
       .filter((r) => r.attempts > 0 && r.mastery < threshold)

@@ -3,7 +3,11 @@
  * nothing fetched. Unavailable in some browsers and in tests.
  */
 export function canSpeak(): boolean {
-  return typeof window !== 'undefined' && 'speechSynthesis' in window && typeof SpeechSynthesisUtterance !== 'undefined'
+  return (
+    typeof window !== 'undefined' &&
+    'speechSynthesis' in window &&
+    typeof SpeechSynthesisUtterance !== 'undefined'
+  )
 }
 
 export function speak(text: string, lang: 'en-US' | 'en-GB' = 'en-US'): void {

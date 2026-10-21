@@ -57,7 +57,13 @@ describe('ProjectFilesPage', () => {
       </MemoryRouter>,
     )
 
-    for (const name of ['textbook.pdf', 'my-notes.txt', 'lecture.docx', 'practice.pdf', 'homework.pdf']) {
+    for (const name of [
+      'textbook.pdf',
+      'my-notes.txt',
+      'lecture.docx',
+      'practice.pdf',
+      'homework.pdf',
+    ]) {
       expect(screen.getByText(name)).toBeInTheDocument()
     }
     // The role is shown on each row, so a file can be identified at a glance.

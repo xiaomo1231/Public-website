@@ -56,7 +56,11 @@ interface Area {
   height: number
 }
 
-function adjacency(nodes: GraphNode[], edges: GraphEdge[], directed: boolean): Map<string, string[]> {
+function adjacency(
+  nodes: GraphNode[],
+  edges: GraphEdge[],
+  directed: boolean,
+): Map<string, string[]> {
   const map = new Map<string, string[]>()
   for (const node of nodes) map.set(node.id, [])
   for (const edge of edges) {
@@ -282,11 +286,7 @@ export function layoutGraph(input: GraphLayoutInput): GraphLayout {
       })
       continue
     }
-    const trimmed = trimToBorder(
-      { x: source.x, y: source.y },
-      { x: target.x, y: target.y },
-      radius,
-    )
+    const trimmed = trimToBorder({ x: source.x, y: source.y }, { x: target.x, y: target.y }, radius)
     placedEdges.push({
       source: edge.source,
       target: edge.target,

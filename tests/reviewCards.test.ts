@@ -18,7 +18,16 @@ import type { Concept } from '@/entities/courseAnalysis/types'
 const NOW = Date.UTC(2026, 9, 1)
 
 function card(overrides: Partial<ReviewCard> = {}): ReviewCard {
-  return { ...newCard({ projectId: 'p1', front: '三角肌 — 神经支配', back: '腋神经', source: 'manual', now: NOW }), ...overrides }
+  return {
+    ...newCard({
+      projectId: 'p1',
+      front: '三角肌 — 神经支配',
+      back: '腋神经',
+      source: 'manual',
+      now: NOW,
+    }),
+    ...overrides,
+  }
 }
 
 describe('spaced-repetition schedule', () => {
@@ -63,7 +72,12 @@ describe('spaced-repetition schedule', () => {
     while (state.queue.length) {
       const head = state.queue[0]!
       ids.push(head.id)
-      state = advanceSessionQueue(state.queue, head, head.id === 'a' ? 'again' : 'good', state.repeats)
+      state = advanceSessionQueue(
+        state.queue,
+        head,
+        head.id === 'a' ? 'again' : 'good',
+        state.repeats,
+      )
     }
     expect(ids).toEqual(['a', 'b', 'a', 'a'])
     expect(MAX_SESSION_REPEATS).toBe(2)
@@ -120,17 +134,27 @@ describe('ReviewCardService', () => {
       sourceRefs: [],
       createdAt: NOW,
     })
-    await db.table('concepts').bulkAdd([concept('阈电位', '能触发动作电位的临界膜电位'), concept('空概念', ' ')])
+    await db
+      .table('concepts')
+      .bulkAdd([concept('阈电位', '能触发动作电位的临界膜电位'), concept('空概念', ' ')])
     expect(await service.generateFromConcepts('p1')).toBe(1)
     expect(await service.generateFromConcepts('p1')).toBe(0)
     const [only] = await service.list('p1')
-    expect(only).toMatchObject({ front: '阈电位', source: 'concept', knowledgePoint: '阈电位', topicId: 't1' })
+    expect(only).toMatchObject({
+      front: '阈电位',
+      source: 'concept',
+      knowledgePoint: '阈电位',
+      topicId: 't1',
+    })
   })
 
   it('turns a relation table into row — column cards', async () => {
     const added = await service.addFromTable('p1', {
       columns: ['神经支配', '作用'],
-      rows: [{ name: '三角肌', cells: ['腋神经', '肩关节外展'] }, { name: '肱二头肌', cells: ['肌皮神经', ''] }],
+      rows: [
+        { name: '三角肌', cells: ['腋神经', '肩关节外展'] },
+        { name: '肱二头肌', cells: ['肌皮神经', ''] },
+      ],
       topicId: 't1',
     })
     // The empty cell is skipped.
@@ -149,7 +173,9 @@ describe('ReviewCardService', () => {
   })
 
   it('feeds concept reviews into mastery at half weight', async () => {
-    await service.addMany('p1', [{ front: '阈电位', back: '临界膜电位', source: 'concept', knowledgePoint: '阈电位' }])
+    await service.addMany('p1', [
+      { front: '阈电位', back: '临界膜电位', source: 'concept', knowledgePoint: '阈电位' },
+    ])
     const [c] = await service.list('p1')
     await service.review(c!.id, 'good')
     const mastery = await new MasteryService(db).listByProject('p1')

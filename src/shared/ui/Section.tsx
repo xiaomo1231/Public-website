@@ -33,14 +33,10 @@ export function SectionHeading({
       )}
     >
       <div className="min-w-0 space-y-1">
-        {eyebrow && (
-          <p className="text-sm text-muted-foreground">
-            {eyebrow}
-          </p>
-        )}
+        {eyebrow && <p className="text-sm text-muted-foreground">{eyebrow}</p>}
         <h2 className="text-lg font-semibold tracking-tight text-foreground">{title}</h2>
         {description && (
-          <p className="max-w-2xl text-sm text-muted-foreground text-balance">{description}</p>
+          <p className="max-w-2xl text-balance text-sm text-muted-foreground">{description}</p>
         )}
       </div>
       {action && <div className="flex shrink-0 flex-wrap items-center gap-2">{action}</div>}

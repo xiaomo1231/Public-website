@@ -13,7 +13,11 @@ import { PRACTICE_STYLE_PROMPT_VERSION, styleConfidenceFor } from '@/entities/pr
 import { DocumentRepository } from '@/entities/document/repository'
 import { ChunkRepository } from '@/entities/chunk/repository'
 import type { DocumentChunk } from '@/entities/chunk/types'
-import { buildChunkRelinkIndex, chunkContentFingerprint, relinkChunkReference } from '@/entities/chunk/relink'
+import {
+  buildChunkRelinkIndex,
+  chunkContentFingerprint,
+  relinkChunkReference,
+} from '@/entities/chunk/relink'
 import { CourseAnalysisRepository } from '@/entities/courseAnalysis/repository'
 import { CourseContextRepository } from '@/entities/courseContext/repository'
 import type { CourseContext } from '@/entities/courseContext/types'
@@ -291,7 +295,10 @@ export class PracticeService {
     return this.practice.listAttemptsBySet(setId)
   }
 
-  async updateQuestion(id: string, patch: Partial<PracticeQuestion>): Promise<PracticeQuestion | undefined> {
+  async updateQuestion(
+    id: string,
+    patch: Partial<PracticeQuestion>,
+  ): Promise<PracticeQuestion | undefined> {
     return this.practice.updateQuestion(id, patch)
   }
 
@@ -392,7 +399,11 @@ export class PracticeService {
     if (!question) throw new AppError(t('errors.practiceQuestionNotFound'), 'NOT_FOUND')
 
     const previous = await this.practice.listAttemptsByQuestion(questionId)
-    const graded: { isCorrect?: boolean; method: PracticeAttempt['method']; evaluation?: QuestionEvaluation } =
+    const graded: {
+      isCorrect?: boolean
+      method: PracticeAttempt['method']
+      evaluation?: QuestionEvaluation
+    } =
       question.type === 'short_answer'
         ? await this.gradeShortAnswer(question, userAnswer)
         : this.grade(question, userAnswer)
@@ -442,7 +453,10 @@ export class PracticeService {
         // Quiz work on the same point counts too; a rebuild replaces the row.
         const history = [
           ...(await this.practiceHistory(question.projectId, knowledgePoint)),
-          ...(await new QuestionAttemptRepository(this.db).listByKnowledgePoint(question.projectId, knowledgePoint)),
+          ...(await new QuestionAttemptRepository(this.db).listByKnowledgePoint(
+            question.projectId,
+            knowledgePoint,
+          )),
         ]
         await this.mastery.rebuild(question.projectId, history)
       }
@@ -458,7 +472,11 @@ export class PracticeService {
   private async gradeShortAnswer(
     question: PracticeQuestion,
     userAnswer: string,
-  ): Promise<{ isCorrect?: boolean; method: PracticeAttempt['method']; evaluation?: QuestionEvaluation }> {
+  ): Promise<{
+    isCorrect?: boolean
+    method: PracticeAttempt['method']
+    evaluation?: QuestionEvaluation
+  }> {
     if (!question.expectedAnswer?.trim()) return { method: 'none' }
     if (!this.ai) {
       return {
@@ -555,7 +573,10 @@ export class PracticeService {
    * covered) answer goes to the mistake book, and every graded answer
    * updates mastery. Ungraded answers change neither.
    */
-  private async recordLearning(question: PracticeQuestion, attempt: PracticeAttempt): Promise<void> {
+  private async recordLearning(
+    question: PracticeQuestion,
+    attempt: PracticeAttempt,
+  ): Promise<void> {
     if (attempt.isCorrect === undefined || (!this.mistakes && !this.mastery)) return
     const knowledgePoint = await this.knowledgePointFor(question)
     const quizQuestion = { ...this.asQuizQuestion(question, question.rubric), knowledgePoint }
@@ -637,10 +658,14 @@ export class PracticeService {
       }
       if (question.visualSourceId) visualQuestionCount++
       if (question.type === 'numeric' || question.type === 'math_expr') calculation++
-      else if (question.type === 'true_false' || /\bexplain\b|\bwhy\b|concept/i.test(question.prompt)) {
+      else if (
+        question.type === 'true_false' ||
+        /\bexplain\b|\bwhy\b|concept/i.test(question.prompt)
+      ) {
         conceptual++
       }
-      if (question.topicId) topicCounts.set(question.topicId, (topicCounts.get(question.topicId) ?? 0) + 1)
+      if (question.topicId)
+        topicCounts.set(question.topicId, (topicCounts.get(question.topicId) ?? 0) + 1)
 
       totalLength += question.prompt.length
       const lower = question.prompt.toLowerCase()
@@ -697,7 +722,8 @@ export class PracticeService {
   }
 
   private toOptions(labels: string[], answer: string | undefined): PracticeQuestionOption[] {
-    const answerLetter = answer && /^[A-Ea-e]$/.test(answer.trim()) ? answer.trim().toUpperCase() : undefined
+    const answerLetter =
+      answer && /^[A-Ea-e]$/.test(answer.trim()) ? answer.trim().toUpperCase() : undefined
     return labels.map((label, index) => {
       const letter = String.fromCharCode(65 + index)
       return {
@@ -789,7 +815,12 @@ const PRACTICE_TO_QUIZ_TYPE: Partial<Record<PracticeQuestion['type'], QuestionTy
 function practiceToQuizAttempt(attempt: PracticeAttempt, question: Question): QuestionAttempt {
   const evaluation: QuestionEvaluation = attempt.evaluation ?? {
     isCorrect: attempt.isCorrect ?? null,
-    method: attempt.method === 'numeric' ? 'numeric' : attempt.method === 'symbolic' ? 'math_equivalent' : 'exact',
+    method:
+      attempt.method === 'numeric'
+        ? 'numeric'
+        : attempt.method === 'symbolic'
+          ? 'math_equivalent'
+          : 'exact',
     confidence: 1,
     ...(question.correctAnswer ? { expected: question.correctAnswer } : {}),
   }

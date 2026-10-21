@@ -65,7 +65,12 @@ function scriptedAI(): AIService {
             },
           ],
           symbols: [
-            { symbol: 'd/dx', meaning: 'derivative operator', context: 'calculus', sourceRefs: [{ documentName: 'notes.txt', page: 1 }] },
+            {
+              symbol: 'd/dx',
+              meaning: 'derivative operator',
+              context: 'calculus',
+              sourceRefs: [{ documentName: 'notes.txt', page: 1 }],
+            },
           ],
           examples: [],
           exercises: [],
@@ -86,7 +91,12 @@ function scriptedAI(): AIService {
             type,
             correctAnswer: type === 'math_expr' ? `${i + 2}x^${i + 1}` : `${i + 2}`,
             ...(type === 'multiple_choice'
-              ? { options: [`${i + 2}`, `${i + 3}`, `${i + 4}`, '0'].map((label, k) => ({ label, isCorrect: k === 0 })) }
+              ? {
+                  options: [`${i + 2}`, `${i + 3}`, `${i + 4}`, '0'].map((label, k) => ({
+                    label,
+                    isCorrect: k === 0,
+                  })),
+                }
               : {}),
             solution: 'Apply the power rule.',
             knowledgePoint: 'Power Rule',
@@ -326,7 +336,9 @@ describe('End-to-end user flow', () => {
     expect(evaluated.turn.evaluation?.isCorrect).toBe(false)
 
     // 13. Everything stayed local: verify counts
-    const inv = await new (await import('@/services/dataManagementService')).DataManagementService(db).inventory()
+    const inv = await new (await import('@/services/dataManagementService')).DataManagementService(
+      db,
+    ).inventory()
     expect(inv.projects).toBe(1)
     expect(inv.documents).toBe(1)
     expect(inv.mistakes).toBeGreaterThanOrEqual(1)
@@ -342,8 +354,20 @@ describe('End-to-end user flow', () => {
     const a = await projects.create({ name: 'A', subject: 'calculus' })
     const b = await projects.create({ name: 'B', subject: 'physics' })
 
-    await mistakes.addManual({ projectId: a.id, question: 'QA', studentAnswer: 'x', correctAnswer: 'y', knowledgePoint: 'KP-A' })
-    await mistakes.addManual({ projectId: b.id, question: 'QB', studentAnswer: 'x', correctAnswer: 'y', knowledgePoint: 'KP-B' })
+    await mistakes.addManual({
+      projectId: a.id,
+      question: 'QA',
+      studentAnswer: 'x',
+      correctAnswer: 'y',
+      knowledgePoint: 'KP-A',
+    })
+    await mistakes.addManual({
+      projectId: b.id,
+      question: 'QB',
+      studentAnswer: 'x',
+      correctAnswer: 'y',
+      knowledgePoint: 'KP-B',
+    })
 
     const listA = await mistakes.list(a.id)
     const listB = await mistakes.list(b.id)

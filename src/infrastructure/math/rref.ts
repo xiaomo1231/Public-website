@@ -47,7 +47,10 @@ export function parseRational(raw: unknown): Rational | null {
     return parseRational(String(raw))
   }
   if (typeof raw !== 'string') return null
-  let text = raw.replace(/[−‒–]/g, '-').replace(/\s+/g, '').replace(/^\$|\$$/g, '')
+  let text = raw
+    .replace(/[−‒–]/g, '-')
+    .replace(/\s+/g, '')
+    .replace(/^\$|\$$/g, '')
   if (!text) return null
   let sign = 1n
   while (text.startsWith('+') || text.startsWith('-')) {
@@ -61,7 +64,10 @@ export function parseRational(raw: unknown): Rational | null {
     return den === '0' ? null : make(sign * BigInt(num), BigInt(den))
   }
   const slash = /^(\d{1,30})\/(\d{1,30})$/.exec(text)
-  if (slash) return slash[2] === '0' || /^0+$/.test(slash[2]!) ? null : make(sign * BigInt(slash[1]!), BigInt(slash[2]!))
+  if (slash)
+    return slash[2] === '0' || /^0+$/.test(slash[2]!)
+      ? null
+      : make(sign * BigInt(slash[1]!), BigInt(slash[2]!))
   const decimal = /^(\d{1,30})(?:\.(\d{1,12}))?$/.exec(text)
   if (decimal) {
     const whole = decimal[1]!
@@ -151,7 +157,10 @@ export function sameReducedMatrix(
   const left = nonZeroRows(a)
   const right = nonZeroRows(b)
   if (left.length !== right.length) return false
-  return left.every((row, r) => row.length === right[r]!.length && row.every((entry, c) => equal(entry, right[r]![c]!)))
+  return left.every(
+    (row, r) =>
+      row.length === right[r]!.length && row.every((entry, c) => equal(entry, right[r]![c]!)),
+  )
 }
 
 export function matrixToLatex(matrix: readonly (readonly Rational[])[], augmented = true): string {

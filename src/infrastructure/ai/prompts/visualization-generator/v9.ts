@@ -88,7 +88,8 @@ export interface FigureFamilies {
 
 export function scienceFiguresFor(subject: Subject | undefined): FigureFamilies {
   const open = subject === undefined || subject === 'other'
-  const is = (...subjects: Subject[]) => open || (subject !== undefined && subjects.includes(subject))
+  const is = (...subjects: Subject[]) =>
+    open || (subject !== undefined && subjects.includes(subject))
   return {
     chemistry: is('chemistry'),
     biology: is('biology'),
@@ -116,7 +117,7 @@ const CALCULUS_RULES = [
   'CALCULUS FIGURES:',
   '  - `tangent_2d`: the tangent (and a shrinking secant) to f at a point the lesson discusses. Provide `expression` (f in plain syntax), `variable`?: "x", `domain`: { "min", "max" }, `point` (x₀), `showSecant`?: true.',
   '  - `riemann_2d`: Riemann sums for ∫ₐᵇ f. Provide `expression`, `variable`?, `a`, `b`, `n` (1–200, the lesson\'s value or 8), `method`: "left" | "right" | "midpoint" | "trapezoid".',
-  '  - `taylor_2d`: Taylor / Maclaurin polynomials. Provide `expression`, `variable`?, `center`, `order` (1–10, the lesson\'s order), `domain`.',
+  "  - `taylor_2d`: Taylor / Maclaurin polynomials. Provide `expression`, `variable`?, `center`, `order` (1–10, the lesson's order), `domain`.",
   '      NEVER provide derivatives, sums, integrals or coefficients — the app computes them (derivatives symbolically).',
 ]
 
@@ -329,7 +330,10 @@ export function buildSystemPrompt(options: VisualizationPromptOptions = {}): str
       {
         visualizations: [
           {
-            type: ['function_2d | equation_2d | inequality_2d | points_2d | table_2d | vectors_2d | graph_2d | transform_2d | venn_2d | eigen_2d | hasse_2d | distribution_2d', ...scienceTypes].join(' | '),
+            type: [
+              'function_2d | equation_2d | inequality_2d | points_2d | table_2d | vectors_2d | graph_2d | transform_2d | venn_2d | eigen_2d | hasse_2d | distribution_2d',
+              ...scienceTypes,
+            ].join(' | '),
             caption: 'string (optional)',
             placement: { scope: 'lesson | section', block: 'example', index: 0 },
             viewport: { xMin: -10, xMax: 10, yMin: -10, yMax: 10 },
@@ -357,7 +361,10 @@ export function buildSystemPrompt(options: VisualizationPromptOptions = {}): str
             sets: [{ id: 'a', label: 'A', elements: ['1', '2', '3'] }],
             universe: ['1', '2', '3', '4', '5'],
             operands: ['a', 'b'],
-            elements: [{ id: 'a', label: 'a' }, { id: 'b', label: 'b' }],
+            elements: [
+              { id: 'a', label: 'a' },
+              { id: 'b', label: 'b' },
+            ],
             relations: [{ lower: 'a', upper: 'b' }],
             family: 'normal | binomial | poisson | uniform | exponential',
             params: { mu: 0, sigma: 1 },
@@ -393,7 +400,13 @@ export function buildSystemPrompt(options: VisualizationPromptOptions = {}): str
                     { gene: 'i', alleles: [{ allele: 'I^A', name: 'A' }] },
                   ],
                   members: [
-                    { id: 'string', sex: 'male | female | unknown', affected: false, father: 'id (optional)', mother: 'id (optional)' },
+                    {
+                      id: 'string',
+                      sex: 'male | female | unknown',
+                      affected: false,
+                      father: 'id (optional)',
+                      mother: 'id (optional)',
+                    },
                   ],
                   dna: 'ATGGCC',
                   strand: 'coding | template',

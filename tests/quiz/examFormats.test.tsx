@@ -30,17 +30,31 @@ const option = (id: string, label: string, isCorrect = false) => ({ id, label, i
 describe('X-type (multiple select) grading', () => {
   // 属于胆碱能纤维的是：A 交感节前 B 副交感节后 C 支配汗腺的交感节后 D 支配心脏的交感节后
   const q = question({
-    options: [option('a', '交感神经节前纤维', true), option('b', '副交感神经节后纤维', true), option('c', '支配汗腺的交感节后纤维', true), option('d', '支配心脏的交感节后纤维')],
+    options: [
+      option('a', '交感神经节前纤维', true),
+      option('b', '副交感神经节后纤维', true),
+      option('c', '支配汗腺的交感节后纤维', true),
+      option('d', '支配心脏的交感节后纤维'),
+    ],
     correctAnswer: '交感神经节前纤维 | 副交感神经节后纤维 | 支配汗腺的交感节后纤维',
   })
 
   it('needs every correct option and nothing else for full marks', () => {
-    expect(evaluateDeterministic(q, 'a,b,c')).toMatchObject({ isCorrect: true, method: 'multi_select', score: { earned: 3, total: 3 } })
+    expect(evaluateDeterministic(q, 'a,b,c')).toMatchObject({
+      isCorrect: true,
+      method: 'multi_select',
+      score: { earned: 3, total: 3 },
+    })
     expect(evaluateDeterministic(q, 'c,a,b').isCorrect).toBe(true)
   })
 
   it('gives partial credit, with each wrong choice cancelling a right one', () => {
-    expect(evaluateDeterministic(q, 'a,b')).toMatchObject({ isCorrect: false, score: { earned: 2, total: 3 }, normalizedUser: 'AB', normalizedExpected: 'ABC' })
+    expect(evaluateDeterministic(q, 'a,b')).toMatchObject({
+      isCorrect: false,
+      score: { earned: 2, total: 3 },
+      normalizedUser: 'AB',
+      normalizedExpected: 'ABC',
+    })
     expect(evaluateDeterministic(q, 'a,b,d').score).toEqual({ earned: 1, total: 3 })
     expect(evaluateDeterministic(q, 'd').score).toEqual({ earned: 0, total: 3 })
     expect(evaluateDeterministic(q, '').score).toEqual({ earned: 0, total: 3 })
@@ -65,15 +79,29 @@ describe('X-type (multiple select) grading', () => {
 describe('B-type (matching) grading', () => {
   const q = question({
     type: 'matching',
-    options: [option('a', '腋神经'), option('b', '肌皮神经'), option('c', '桡神经'), option('d', '正中神经')],
+    options: [
+      option('a', '腋神经'),
+      option('b', '肌皮神经'),
+      option('c', '桡神经'),
+      option('d', '正中神经'),
+    ],
     matchItems: ['三角肌', '肱二头肌', '肱三头肌'],
     correctAnswer: '腋神经 | 肌皮神经 | 桡神经',
   })
 
   it('scores each stem on its own', () => {
-    expect(evaluateDeterministic(q, 'a,b,c')).toMatchObject({ isCorrect: true, method: 'match_items', score: { earned: 3, total: 3 } })
+    expect(evaluateDeterministic(q, 'a,b,c')).toMatchObject({
+      isCorrect: true,
+      method: 'match_items',
+      score: { earned: 3, total: 3 },
+    })
     const partial = evaluateDeterministic(q, 'a,d,c')
-    expect(partial).toMatchObject({ isCorrect: false, score: { earned: 2, total: 3 }, normalizedUser: '1A 2D 3C', normalizedExpected: '1A 2B 3C' })
+    expect(partial).toMatchObject({
+      isCorrect: false,
+      score: { earned: 2, total: 3 },
+      normalizedUser: '1A 2D 3C',
+      normalizedExpected: '1A 2B 3C',
+    })
     expect(evaluateDeterministic(q, 'a,,').score).toEqual({ earned: 1, total: 3 })
   })
 
@@ -99,12 +127,19 @@ describe('fill-in-the-blank grading', () => {
   const q = question({
     type: 'fill_blank',
     prompt: '神经肌接头处释放的递质是 ____，其受体是 ____ 受体。',
-    blanks: [['乙酰胆碱', 'ACh'], ['N2', 'N₂型胆碱', 'N2型胆碱']],
+    blanks: [
+      ['乙酰胆碱', 'ACh'],
+      ['N2', 'N₂型胆碱', 'N2型胆碱'],
+    ],
     correctAnswer: '乙酰胆碱 | N2',
   })
 
   it('accepts listed answers, ignoring spacing, case, width and punctuation', () => {
-    expect(evaluateDeterministic(q, '乙酰胆碱\nN2')).toMatchObject({ isCorrect: true, method: 'blank_match', score: { earned: 2, total: 2 } })
+    expect(evaluateDeterministic(q, '乙酰胆碱\nN2')).toMatchObject({
+      isCorrect: true,
+      method: 'blank_match',
+      score: { earned: 2, total: 2 },
+    })
     expect(evaluateDeterministic(q, 'ach\nＮ２').isCorrect).toBe(true)
     expect(evaluateDeterministic(q, ' 乙酰胆碱。\n n2型胆碱 ').isCorrect).toBe(true)
   })
@@ -125,7 +160,14 @@ describe('fill-in-the-blank grading', () => {
   })
 
   it('asks the AI only about unmatched blanks and rescoring stays local', async () => {
-    const chatJSON = vi.fn().mockResolvedValue({ data: { blanks: [{ index: 2, equivalent: true }, { index: 1, equivalent: true }] } })
+    const chatJSON = vi.fn().mockResolvedValue({
+      data: {
+        blanks: [
+          { index: 2, equivalent: true },
+          { index: 1, equivalent: true },
+        ],
+      },
+    })
     const ai = { chatJSON } as unknown as AIService
     const local = evaluateDeterministic(q, '乙酰胆碱\n烟碱型')
     const checked = await checkBlanksWithAi(ai, q, local)
@@ -139,7 +181,9 @@ describe('fill-in-the-blank grading', () => {
   })
 
   it('keeps the local result when the AI fails or there is nothing to ask', async () => {
-    const failing = { chatJSON: vi.fn().mockRejectedValue(new Error('offline')) } as unknown as AIService
+    const failing = {
+      chatJSON: vi.fn().mockRejectedValue(new Error('offline')),
+    } as unknown as AIService
     const local = evaluateDeterministic(q, '乙酰胆碱\n烟碱型')
     expect(await checkBlanksWithAi(failing, q, local)).toBe(local)
     const unused = { chatJSON: vi.fn() } as unknown as AIService
@@ -151,7 +195,9 @@ describe('fill-in-the-blank grading', () => {
   it('renders one input per blank and joins them by line', () => {
     const onChange = vi.fn()
     const onSubmit = vi.fn()
-    render(<FillBlankInput question={q} value={'乙酰胆碱\n'} onChange={onChange} onSubmit={onSubmit} />)
+    render(
+      <FillBlankInput question={q} value={'乙酰胆碱\n'} onChange={onChange} onSubmit={onSubmit} />,
+    )
     const inputs = screen.getAllByRole('textbox')
     expect(inputs).toHaveLength(2)
     fireEvent.change(inputs[1]!, { target: { value: 'N2' } })
@@ -164,14 +210,34 @@ describe('fill-in-the-blank grading', () => {
 describe('quiz validation for the exam formats', () => {
   const service = new QuizService({ ai: {} as AIService })
   const base = { solution: '', knowledgePoint: 'K', difficulty: 'basic' as const, hints: [] }
-  const validate = (questions: unknown[]) => service.validateGenerated({ questions } as unknown as QuizGenerationOutput, questions.length)
-  const options = (correct: boolean[]) => correct.map((isCorrect, i) => ({ label: `选项${i + 1}`, isCorrect }))
+  const validate = (questions: unknown[]) =>
+    service.validateGenerated({ questions } as unknown as QuizGenerationOutput, questions.length)
+  const options = (correct: boolean[]) =>
+    correct.map((isCorrect, i) => ({ label: `选项${i + 1}`, isCorrect }))
 
   it('keeps X-type questions with at least two correct options out of four or more', () => {
     const valid = validate([
-      { ...base, prompt: 'X ok', type: 'multiple_select', correctAnswer: '', options: options([true, true, false, false, false]) },
-      { ...base, prompt: 'X one correct', type: 'multiple_select', correctAnswer: '', options: options([true, false, false, false]) },
-      { ...base, prompt: 'X three options', type: 'multiple_select', correctAnswer: '', options: options([true, true, false]) },
+      {
+        ...base,
+        prompt: 'X ok',
+        type: 'multiple_select',
+        correctAnswer: '',
+        options: options([true, true, false, false, false]),
+      },
+      {
+        ...base,
+        prompt: 'X one correct',
+        type: 'multiple_select',
+        correctAnswer: '',
+        options: options([true, false, false, false]),
+      },
+      {
+        ...base,
+        prompt: 'X three options',
+        type: 'multiple_select',
+        correctAnswer: '',
+        options: options([true, true, false]),
+      },
     ])
     expect(valid.map((q) => q.prompt)).toEqual(['X ok'])
     expect(valid[0]!.correctAnswer).toBe('选项1 | 选项2')
@@ -179,9 +245,33 @@ describe('quiz validation for the exam formats', () => {
 
   it('keeps B-type questions whose answers index the shared options', () => {
     const valid = validate([
-      { ...base, prompt: 'B ok', type: 'matching', correctAnswer: '', options: options([false, false, false, false]), matchItems: ['甲', '乙'], matchAnswers: [2, 0] },
-      { ...base, prompt: 'B bad index', type: 'matching', correctAnswer: '', options: options([false, false, false]), matchItems: ['甲', '乙'], matchAnswers: [3, 0] },
-      { ...base, prompt: 'B count mismatch', type: 'matching', correctAnswer: '', options: options([false, false, false]), matchItems: ['甲', '乙'], matchAnswers: [1] },
+      {
+        ...base,
+        prompt: 'B ok',
+        type: 'matching',
+        correctAnswer: '',
+        options: options([false, false, false, false]),
+        matchItems: ['甲', '乙'],
+        matchAnswers: [2, 0],
+      },
+      {
+        ...base,
+        prompt: 'B bad index',
+        type: 'matching',
+        correctAnswer: '',
+        options: options([false, false, false]),
+        matchItems: ['甲', '乙'],
+        matchAnswers: [3, 0],
+      },
+      {
+        ...base,
+        prompt: 'B count mismatch',
+        type: 'matching',
+        correctAnswer: '',
+        options: options([false, false, false]),
+        matchItems: ['甲', '乙'],
+        matchAnswers: [1],
+      },
     ])
     expect(valid.map((q) => q.prompt)).toEqual(['B ok'])
     expect(valid[0]).toMatchObject({ correctAnswer: '选项3 | 选项1', matchItems: ['甲', '乙'] })
@@ -190,8 +280,20 @@ describe('quiz validation for the exam formats', () => {
 
   it('keeps fill-blank questions with one answer list per blank', () => {
     const valid = validate([
-      { ...base, prompt: '____ 是 ____ 的递质', type: 'fill_blank', correctAnswer: '', blanks: [['ACh', '乙酰胆碱'], ['神经肌接头']] },
-      { ...base, prompt: '只有一个 ____', type: 'fill_blank', correctAnswer: '', blanks: [['a'], ['b']] },
+      {
+        ...base,
+        prompt: '____ 是 ____ 的递质',
+        type: 'fill_blank',
+        correctAnswer: '',
+        blanks: [['ACh', '乙酰胆碱'], ['神经肌接头']],
+      },
+      {
+        ...base,
+        prompt: '只有一个 ____',
+        type: 'fill_blank',
+        correctAnswer: '',
+        blanks: [['a'], ['b']],
+      },
       { ...base, prompt: '没有空', type: 'fill_blank', correctAnswer: '', blanks: [['a']] },
     ])
     expect(valid.map((q) => q.prompt)).toEqual(['____ 是 ____ 的递质'])

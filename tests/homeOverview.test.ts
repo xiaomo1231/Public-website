@@ -123,7 +123,12 @@ describe('HomeOverviewService', () => {
     const overview = await service.load([project('p1')])
     const course = overview.courses[0]!
     expect(course.homework).toEqual({ questions: 3, worked: 1 })
-    expect(course.nextStep).toEqual({ kind: 'homework', setId: 's1', title: 'Sheet s1', remaining: 2 })
+    expect(course.nextStep).toEqual({
+      kind: 'homework',
+      setId: 's1',
+      title: 'Sheet s1',
+      remaining: 2,
+    })
     expect(overview.resume).toMatchObject({ kind: 'homework', setId: 's1', remaining: 2, at: 50 })
   })
 
@@ -131,8 +136,20 @@ describe('HomeOverviewService', () => {
     await addMaterial('p1')
     await markAnalysed('p1')
     await db.table('mistakes').bulkPut([
-      { id: 'm1', projectId: 'p1', status: 'active', mistakeType: 'sign', knowledgePoint: 'limits' },
-      { id: 'm2', projectId: 'p1', status: 'understood', mistakeType: 'sign', knowledgePoint: 'limits' },
+      {
+        id: 'm1',
+        projectId: 'p1',
+        status: 'active',
+        mistakeType: 'sign',
+        knowledgePoint: 'limits',
+      },
+      {
+        id: 'm2',
+        projectId: 'p1',
+        status: 'understood',
+        mistakeType: 'sign',
+        knowledgePoint: 'limits',
+      },
     ])
     const overview = await service.load([project('p1')])
     expect(overview.courses[0]!.nextStep).toEqual({ kind: 'mistakes', count: 1 })
@@ -145,8 +162,22 @@ describe('HomeOverviewService', () => {
       await markAnalysed(id)
     }
     await db.table('tutorSessions').bulkPut([
-      { id: 't1', projectId: 'p1', topicId: 'topic-a', topicName: 'Limits', status: 'active', updatedAt: 100 },
-      { id: 't2', projectId: 'p2', topicId: 'topic-b', topicName: 'Vectors', status: 'active', updatedAt: 300 },
+      {
+        id: 't1',
+        projectId: 'p1',
+        topicId: 'topic-a',
+        topicName: 'Limits',
+        status: 'active',
+        updatedAt: 100,
+      },
+      {
+        id: 't2',
+        projectId: 'p2',
+        topicId: 'topic-b',
+        topicName: 'Vectors',
+        status: 'active',
+        updatedAt: 300,
+      },
     ])
     const overview = await service.load([project('p1', 5), project('p2', 5)])
     expect(overview.resume).toMatchObject({ kind: 'tutor', projectId: 'p2', topicName: 'Vectors' })
@@ -160,11 +191,47 @@ describe('HomeOverviewService', () => {
 
   it('lists only practised, low-mastery knowledge points, weakest first', async () => {
     await db.table('knowledgeMastery').bulkPut([
-      { id: 'k1', projectId: 'p1', knowledgePoint: 'chain rule', mastery: 0.5, attempts: 3, correct: 1, observations: [], lastUpdated: 1 },
-      { id: 'k2', projectId: 'p1', knowledgePoint: 'limits', mastery: 0.2, attempts: 4, correct: 1, observations: [], lastUpdated: 1 },
+      {
+        id: 'k1',
+        projectId: 'p1',
+        knowledgePoint: 'chain rule',
+        mastery: 0.5,
+        attempts: 3,
+        correct: 1,
+        observations: [],
+        lastUpdated: 1,
+      },
+      {
+        id: 'k2',
+        projectId: 'p1',
+        knowledgePoint: 'limits',
+        mastery: 0.2,
+        attempts: 4,
+        correct: 1,
+        observations: [],
+        lastUpdated: 1,
+      },
       // One attempt is not enough evidence.
-      { id: 'k3', projectId: 'p1', knowledgePoint: 'series', mastery: 0.1, attempts: 1, correct: 0, observations: [], lastUpdated: 1 },
-      { id: 'k4', projectId: 'p1', knowledgePoint: 'derivatives', mastery: 0.9, attempts: 5, correct: 5, observations: [], lastUpdated: 1 },
+      {
+        id: 'k3',
+        projectId: 'p1',
+        knowledgePoint: 'series',
+        mastery: 0.1,
+        attempts: 1,
+        correct: 0,
+        observations: [],
+        lastUpdated: 1,
+      },
+      {
+        id: 'k4',
+        projectId: 'p1',
+        knowledgePoint: 'derivatives',
+        mastery: 0.9,
+        attempts: 5,
+        correct: 5,
+        observations: [],
+        lastUpdated: 1,
+      },
     ])
     const overview = await service.load([project('p1')])
     expect(overview.courses[0]!.weakPoints.map((w) => w.knowledgePoint)).toEqual([

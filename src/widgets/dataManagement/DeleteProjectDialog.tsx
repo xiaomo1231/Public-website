@@ -117,9 +117,7 @@ export function DeleteProjectDialog({
             <AlertTriangle className="h-4 w-4 text-destructive" />
             {t('deleteProject.title')}
           </DialogTitle>
-          <DialogDescription>
-            {t('deleteProject.description')}
-          </DialogDescription>
+          <DialogDescription>{t('deleteProject.description')}</DialogDescription>
         </DialogHeader>
 
         {loading ? (
@@ -165,10 +163,7 @@ export function DeleteProjectDialog({
                           )}
                           aria-hidden
                         />
-                        <TruncatedText
-                          text={project.name}
-                          className="min-w-0 flex-1 font-medium"
-                        />
+                        <TruncatedText text={project.name} className="min-w-0 flex-1 font-medium" />
                         <Badge variant="outline" className="ml-auto shrink-0">
                           {t(SUBJECT_LABEL_KEYS[project.subject])}
                         </Badge>

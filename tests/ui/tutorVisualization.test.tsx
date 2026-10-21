@@ -370,7 +370,9 @@ function graphVisualization(overrides: Partial<GraphVisualization> = {}): GraphV
 
 describe('TutorVisualizationFigure — vectors_2d (Phase 3.0)', () => {
   it('renders one arrow per vector with an accessible label and summary', () => {
-    const { container } = render(<TutorVisualizationFigure visualization={vectorsVisualization()} />)
+    const { container } = render(
+      <TutorVisualizationFigure visualization={vectorsVisualization()} />,
+    )
     expect(container.querySelectorAll('line[marker-end]')).toHaveLength(3)
     expect(screen.getByRole('img', { name: 'Vector diagram with 3 vectors' })).toBeInTheDocument()
     expect(screen.getByText(/Vectors:/)).toBeInTheDocument()
@@ -378,7 +380,9 @@ describe('TutorVisualizationFigure — vectors_2d (Phase 3.0)', () => {
   })
 
   it('uses the same colour slot for a vector line and its arrowhead (regression)', () => {
-    const { container } = render(<TutorVisualizationFigure visualization={vectorsVisualization()} />)
+    const { container } = render(
+      <TutorVisualizationFigure visualization={vectorsVisualization()} />,
+    )
     for (const line of container.querySelectorAll('line[marker-end]')) {
       const strokeSlot = /viz-series-(\d)/.exec(line.getAttribute('stroke') ?? '')?.[1]
       const markerSlot = /viz-varrow-(\d)/.exec(line.getAttribute('marker-end') ?? '')?.[1]
@@ -442,7 +446,9 @@ describe('TutorVisualizationFigure — graph_2d (Phase 3.0)', () => {
     )
     expect(container.querySelectorAll('line')).toHaveLength(1)
     expect(container.querySelector('line')?.getAttribute('marker-end')).toBeNull()
-    expect(screen.getByRole('img', { name: 'Undirected graph with 3 nodes and 1 edges' })).toBeInTheDocument()
+    expect(
+      screen.getByRole('img', { name: 'Undirected graph with 3 nodes and 1 edges' }),
+    ).toBeInTheDocument()
   })
 
   it('renders a bipartite layout in two columns', () => {
@@ -613,9 +619,7 @@ describe('TutorVisualizationFigure — venn_2d (Phase 3.1)', () => {
   })
 })
 
-function eigenVisualization(
-  overrides: Partial<Eigen2DVisualization> = {},
-): Eigen2DVisualization {
+function eigenVisualization(overrides: Partial<Eigen2DVisualization> = {}): Eigen2DVisualization {
   return {
     ...base,
     id: 'eigen_2d-0',
@@ -708,15 +712,9 @@ describe('TutorLessonView — visualization placement', () => {
       projectId: 'p1',
       topicId: 't1',
       language: 'en',
-      content: [
-        '## Example',
-        '',
-        'A = [[2, 0], [0, 1]].',
-        '',
-        '## Summary',
-        '',
-        'Done.',
-      ].join('\n'),
+      content: ['## Example', '', 'A = [[2, 0], [0, 1]].', '', '## Summary', '', 'Done.'].join(
+        '\n',
+      ),
       symbols: [],
       sourceChunkIds: [],
       contentHash: 'hash',
@@ -747,7 +745,9 @@ describe('TutorLessonView — visualization placement', () => {
           state={state(
             lesson({
               visualizations: [
-                transformVisualization({ placement: { scope: 'section', block: 'example', index: 0 } }),
+                transformVisualization({
+                  placement: { scope: 'section', block: 'example', index: 0 },
+                }),
               ],
             }),
           )}
@@ -804,7 +804,9 @@ describe('TutorLessonView — visualization placement', () => {
                 'Done.',
               ].join('\n'),
               visualizations: [
-                transformVisualization({ placement: { scope: 'section', block: 'example', index: 0 } }),
+                transformVisualization({
+                  placement: { scope: 'section', block: 'example', index: 0 },
+                }),
               ],
             }),
           )}

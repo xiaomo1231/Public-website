@@ -130,8 +130,8 @@ describe('chatJSON truncation handling', () => {
     replyWith('I am sorry, I cannot do that.', 'stop')
     const ai = new AIService({ config })
 
-    await expect(
-      ai.chatJSON([{ role: 'user', content: 'hi' }]),
-    ).rejects.toBeInstanceOf(InvalidJSONError)
+    await expect(ai.chatJSON([{ role: 'user', content: 'hi' }])).rejects.toBeInstanceOf(
+      InvalidJSONError,
+    )
   })
 })

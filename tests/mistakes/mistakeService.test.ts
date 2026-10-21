@@ -9,7 +9,12 @@ import { QuestionAttemptRepository } from '@/entities/questionAttempt/repository
 import type { Question } from '@/entities/question/types'
 import type { QuestionAttempt } from '@/entities/questionAttempt/types'
 
-function makeAttempt(projectId: string, questionId: string, isCorrect: boolean, opts: { quizId?: string; userAnswer?: string } = {}): QuestionAttempt {
+function makeAttempt(
+  projectId: string,
+  questionId: string,
+  isCorrect: boolean,
+  opts: { quizId?: string; userAnswer?: string } = {},
+): QuestionAttempt {
   return {
     id: crypto.randomUUID(),
     projectId,
@@ -81,7 +86,10 @@ describe('MistakeService', () => {
     const p = await projects.create({ name: 'P', subject: 'calculus' })
     const q = await seedQuestion(p.id)
     const first = await service.recordFromAttempt(makeAttempt(p.id, q.id, false), q)
-    const second = await service.recordFromAttempt(makeAttempt(p.id, q.id, false, { userAnswer: 'again wrong' }), q)
+    const second = await service.recordFromAttempt(
+      makeAttempt(p.id, q.id, false, { userAnswer: 'again wrong' }),
+      q,
+    )
     expect(second!.id).toBe(first!.id)
     expect(second!.attemptCount).toBe(2)
     expect(second!.attemptIds).toHaveLength(2)
@@ -116,19 +124,43 @@ describe('MistakeService', () => {
   it('rejects manual mistakes with missing required fields', async () => {
     const p = await projects.create({ name: 'P', subject: 'calculus' })
     await expect(
-      service.addManual({ projectId: p.id, question: '', studentAnswer: 'a', correctAnswer: 'b', knowledgePoint: 'KP' }),
+      service.addManual({
+        projectId: p.id,
+        question: '',
+        studentAnswer: 'a',
+        correctAnswer: 'b',
+        knowledgePoint: 'KP',
+      }),
     ).rejects.toThrow(/question/i)
     await expect(
-      service.addManual({ projectId: p.id, question: 'Q', studentAnswer: 'a', correctAnswer: '', knowledgePoint: 'KP' }),
+      service.addManual({
+        projectId: p.id,
+        question: 'Q',
+        studentAnswer: 'a',
+        correctAnswer: '',
+        knowledgePoint: 'KP',
+      }),
     ).rejects.toThrow(/correct answer/i)
     await expect(
-      service.addManual({ projectId: p.id, question: 'Q', studentAnswer: 'a', correctAnswer: 'b', knowledgePoint: '' }),
+      service.addManual({
+        projectId: p.id,
+        question: 'Q',
+        studentAnswer: 'a',
+        correctAnswer: 'b',
+        knowledgePoint: '',
+      }),
     ).rejects.toThrow(/knowledge point/i)
   })
 
   it('removes a mistake', async () => {
     const p = await projects.create({ name: 'P', subject: 'calculus' })
-    const m = await service.addManual({ projectId: p.id, question: 'Q', studentAnswer: 'a', correctAnswer: 'b', knowledgePoint: 'KP' })
+    const m = await service.addManual({
+      projectId: p.id,
+      question: 'Q',
+      studentAnswer: 'a',
+      correctAnswer: 'b',
+      knowledgePoint: 'KP',
+    })
     await service.remove(m.id)
     expect(await service.get(m.id)).toBeUndefined()
     expect(await service.list(p.id)).toHaveLength(0)
@@ -136,7 +168,13 @@ describe('MistakeService', () => {
 
   it('archives and restores a mistake', async () => {
     const p = await projects.create({ name: 'P', subject: 'calculus' })
-    const m = await service.addManual({ projectId: p.id, question: 'Q', studentAnswer: 'a', correctAnswer: 'b', knowledgePoint: 'KP' })
+    const m = await service.addManual({
+      projectId: p.id,
+      question: 'Q',
+      studentAnswer: 'a',
+      correctAnswer: 'b',
+      knowledgePoint: 'KP',
+    })
     const archived = await service.archive(m.id)
     expect(archived.status).toBe('archived')
     expect(archived.archivedAt).toBeGreaterThan(0)
@@ -146,7 +184,13 @@ describe('MistakeService', () => {
 
   it('marks a mistake as understood', async () => {
     const p = await projects.create({ name: 'P', subject: 'calculus' })
-    const m = await service.addManual({ projectId: p.id, question: 'Q', studentAnswer: 'a', correctAnswer: 'b', knowledgePoint: 'KP' })
+    const m = await service.addManual({
+      projectId: p.id,
+      question: 'Q',
+      studentAnswer: 'a',
+      correctAnswer: 'b',
+      knowledgePoint: 'KP',
+    })
     const understood = await service.markUnderstood(m.id)
     expect(understood.status).toBe('understood')
     expect(understood.resolvedAt).toBeGreaterThan(0)
@@ -154,8 +198,20 @@ describe('MistakeService', () => {
 
   it('filters by status, knowledge point, type, and query', async () => {
     const p = await projects.create({ name: 'P', subject: 'calculus' })
-    const a = await service.addManual({ projectId: p.id, question: 'Chain rule question', studentAnswer: 'x', correctAnswer: 'y', knowledgePoint: 'Chain Rule' })
-    await service.addManual({ projectId: p.id, question: 'Integral question', studentAnswer: 'x', correctAnswer: 'y', knowledgePoint: 'Integrals' })
+    const a = await service.addManual({
+      projectId: p.id,
+      question: 'Chain rule question',
+      studentAnswer: 'x',
+      correctAnswer: 'y',
+      knowledgePoint: 'Chain Rule',
+    })
+    await service.addManual({
+      projectId: p.id,
+      question: 'Integral question',
+      studentAnswer: 'x',
+      correctAnswer: 'y',
+      knowledgePoint: 'Integrals',
+    })
     await service.markUnderstood(a.id)
 
     expect(await service.list(p.id, { status: 'active' })).toHaveLength(1)
@@ -167,9 +223,30 @@ describe('MistakeService', () => {
 
   it('computes stats', async () => {
     const p = await projects.create({ name: 'P', subject: 'calculus' })
-    await service.addManual({ projectId: p.id, question: 'Q1', studentAnswer: 'a', correctAnswer: 'b', knowledgePoint: 'Chain Rule', mistakeType: 'conceptual' })
-    await service.addManual({ projectId: p.id, question: 'Q2', studentAnswer: 'a', correctAnswer: 'b', knowledgePoint: 'Chain Rule', mistakeType: 'sign' })
-    await service.addManual({ projectId: p.id, question: 'Q3', studentAnswer: 'a', correctAnswer: 'b', knowledgePoint: 'Integrals', mistakeType: 'conceptual' })
+    await service.addManual({
+      projectId: p.id,
+      question: 'Q1',
+      studentAnswer: 'a',
+      correctAnswer: 'b',
+      knowledgePoint: 'Chain Rule',
+      mistakeType: 'conceptual',
+    })
+    await service.addManual({
+      projectId: p.id,
+      question: 'Q2',
+      studentAnswer: 'a',
+      correctAnswer: 'b',
+      knowledgePoint: 'Chain Rule',
+      mistakeType: 'sign',
+    })
+    await service.addManual({
+      projectId: p.id,
+      question: 'Q3',
+      studentAnswer: 'a',
+      correctAnswer: 'b',
+      knowledgePoint: 'Integrals',
+      mistakeType: 'conceptual',
+    })
     const stats = await service.stats(p.id)
     expect(stats.total).toBe(3)
     expect(stats.active).toBe(3)
@@ -181,14 +258,26 @@ describe('MistakeService', () => {
   it('isolates mistakes between projects', async () => {
     const p1 = await projects.create({ name: 'P1', subject: 'calculus' })
     const p2 = await projects.create({ name: 'P2', subject: 'physics' })
-    await service.addManual({ projectId: p1.id, question: 'Q', studentAnswer: 'a', correctAnswer: 'b', knowledgePoint: 'KP' })
+    await service.addManual({
+      projectId: p1.id,
+      question: 'Q',
+      studentAnswer: 'a',
+      correctAnswer: 'b',
+      knowledgePoint: 'KP',
+    })
     expect(await service.list(p1.id)).toHaveLength(1)
     expect(await service.list(p2.id)).toHaveLength(0)
   })
 
   it('persists analysis results', async () => {
     const p = await projects.create({ name: 'P', subject: 'calculus' })
-    const m = await service.addManual({ projectId: p.id, question: 'Q', studentAnswer: 'a', correctAnswer: 'b', knowledgePoint: 'KP' })
+    const m = await service.addManual({
+      projectId: p.id,
+      question: 'Q',
+      studentAnswer: 'a',
+      correctAnswer: 'b',
+      knowledgePoint: 'KP',
+    })
     const saved = await service.saveAnalysis(m.id, {
       whereWrong: 'w',
       firstError: 'f',
@@ -209,7 +298,13 @@ describe('MistakeService', () => {
 
   it('tracks analysis failure state', async () => {
     const p = await projects.create({ name: 'P', subject: 'calculus' })
-    const m = await service.addManual({ projectId: p.id, question: 'Q', studentAnswer: 'a', correctAnswer: 'b', knowledgePoint: 'KP' })
+    const m = await service.addManual({
+      projectId: p.id,
+      question: 'Q',
+      studentAnswer: 'a',
+      correctAnswer: 'b',
+      knowledgePoint: 'KP',
+    })
     const failed = await service.markAnalysisFailed(m.id, 'network error')
     expect(failed.analysisStatus).toBe('failed')
     expect(failed.analysisError).toBe('network error')
@@ -217,16 +312,40 @@ describe('MistakeService', () => {
 
   it('finds recent mistakes for a knowledge point', async () => {
     const p = await projects.create({ name: 'P', subject: 'calculus' })
-    await service.addManual({ projectId: p.id, question: 'Q1', studentAnswer: 'a', correctAnswer: 'b', knowledgePoint: 'Chain Rule' })
-    await service.addManual({ projectId: p.id, question: 'Q2', studentAnswer: 'a', correctAnswer: 'b', knowledgePoint: 'Chain Rule' })
-    await service.addManual({ projectId: p.id, question: 'Q3', studentAnswer: 'a', correctAnswer: 'b', knowledgePoint: 'Other' })
+    await service.addManual({
+      projectId: p.id,
+      question: 'Q1',
+      studentAnswer: 'a',
+      correctAnswer: 'b',
+      knowledgePoint: 'Chain Rule',
+    })
+    await service.addManual({
+      projectId: p.id,
+      question: 'Q2',
+      studentAnswer: 'a',
+      correctAnswer: 'b',
+      knowledgePoint: 'Chain Rule',
+    })
+    await service.addManual({
+      projectId: p.id,
+      question: 'Q3',
+      studentAnswer: 'a',
+      correctAnswer: 'b',
+      knowledgePoint: 'Other',
+    })
     const recent = await service.recentForKnowledgePoint(p.id, 'Chain Rule')
     expect(recent).toHaveLength(2)
   })
 
   it('deletes all mistakes for a project', async () => {
     const p = await projects.create({ name: 'P', subject: 'calculus' })
-    await service.addManual({ projectId: p.id, question: 'Q', studentAnswer: 'a', correctAnswer: 'b', knowledgePoint: 'KP' })
+    await service.addManual({
+      projectId: p.id,
+      question: 'Q',
+      studentAnswer: 'a',
+      correctAnswer: 'b',
+      knowledgePoint: 'KP',
+    })
     const repo = new MistakeRepository(db)
     const deleted = await repo.deleteByProject(p.id)
     expect(deleted).toBe(1)
@@ -280,7 +399,9 @@ describe('MistakeService + QuizService integration', () => {
       questions: questionRepo,
       attempts: attemptRepo,
       quizzes: quizRepo,
-      analyses: new (await import('@/entities/courseAnalysis/repository')).CourseAnalysisRepository(db),
+      analyses: new (await import('@/entities/courseAnalysis/repository')).CourseAnalysisRepository(
+        db,
+      ),
       chunks: new (await import('@/entities/chunk/repository')).ChunkRepository(db),
       mastery: new (await import('@/services/masteryService')).MasteryService(db),
       mistakes,
@@ -297,10 +418,24 @@ describe('MistakeService + QuizService integration', () => {
     const service = new MistakeService(db)
     const p = await new ProjectService(db).create({ name: 'P', subject: 'calculus' })
     const [q] = await new QuestionRepository(db).addMany([
-      { projectId: p.id, knowledgePoint: 'Chain Rule', type: 'numeric', difficulty: 'basic', prompt: 'Q', correctAnswer: '1', hints: [] },
+      {
+        projectId: p.id,
+        knowledgePoint: 'Chain Rule',
+        type: 'numeric',
+        difficulty: 'basic',
+        prompt: 'Q',
+        correctAnswer: '1',
+        hints: [],
+      },
     ])
-    const first = { ...makeAttempt(p.id, q!.id, false, { userAnswer: 'first wrong' }), createdAt: 1000 }
-    const second = { ...makeAttempt(p.id, q!.id, false, { userAnswer: 'disputed answer' }), createdAt: 2000 }
+    const first = {
+      ...makeAttempt(p.id, q!.id, false, { userAnswer: 'first wrong' }),
+      createdAt: 1000,
+    }
+    const second = {
+      ...makeAttempt(p.id, q!.id, false, { userAnswer: 'disputed answer' }),
+      createdAt: 2000,
+    }
     await db.questionAttempts.bulkAdd([first, second])
     await service.recordFromAttempt(first, q!)
     await service.recordFromAttempt(second, q!)

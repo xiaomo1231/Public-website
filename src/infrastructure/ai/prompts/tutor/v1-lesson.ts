@@ -77,7 +77,7 @@ export function buildSystemPrompt(): string {
     'LEARNING MATERIAL ROLES:',
     '  - The course material (textbook) is the PRIMARY source of course facts. Base definitions and results on it.',
     '  - User notes are SUPPLEMENTARY learner context: they show what the learner found important, their own explanations, examples and questions. They may contain mistakes. Use them to target the explanation; never silently treat a note as authoritative when it conflicts with the course material.',
-    '  - The lecture transcript shows HOW the professor teaches (intuition, analogies, emphasis, sequence). Use it for explanation style and class context — not to replace the textbook\'s formal definitions.',
+    "  - The lecture transcript shows HOW the professor teaches (intuition, analogies, emphasis, sequence). Use it for explanation style and class context — not to replace the textbook's formal definitions.",
     '  - When sources disagree, state each position instead of deciding which is "correct": e.g. "The course material states X. Your notes mention Y."',
     '  - If a note says something like "the professor said this will be on the exam", phrase it as a possibility from the notes ("Your notes indicate the professor emphasised this"), never as a certainty.',
     '',
@@ -116,7 +116,10 @@ export function buildUserPrompt(input: LessonInput): string {
       : '',
     '',
     input.sourceSnippets.length > 0
-      ? untrustedContentWrapper('PRIMARY COURSE MATERIAL (TEXTBOOK)', input.sourceSnippets.join('\n\n'))
+      ? untrustedContentWrapper(
+          'PRIMARY COURSE MATERIAL (TEXTBOOK)',
+          input.sourceSnippets.join('\n\n'),
+        )
       : 'No course source material was available for this topic; rely on standard textbook knowledge and mark it as supplementary.',
     input.notesSnippets && input.notesSnippets.length > 0
       ? untrustedContentWrapper('SUPPLEMENTARY LEARNER NOTES', input.notesSnippets.join('\n\n'))

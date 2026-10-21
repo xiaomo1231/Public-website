@@ -18,7 +18,12 @@ export interface StudyModeTabsProps {
  */
 export function StudyModeTabs({ projectId, active, className }: StudyModeTabsProps): JSX.Element {
   const { t } = useTranslation()
-  const items: Array<{ key: StudyMode; labelKey: 'studyMode.knowledge' | 'studyMode.slides'; to: string; Icon: typeof BookOpen }> = [
+  const items: Array<{
+    key: StudyMode
+    labelKey: 'studyMode.knowledge' | 'studyMode.slides'
+    to: string
+    Icon: typeof BookOpen
+  }> = [
     {
       key: 'knowledge',
       labelKey: 'studyMode.knowledge',

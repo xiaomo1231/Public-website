@@ -173,8 +173,7 @@ export const PLACEMENT_BLOCKS = [
 export type PlacementBlock = (typeof PLACEMENT_BLOCKS)[number]
 
 export type VisualizationPlacement =
-  | { scope: 'lesson' }
-  | { scope: 'section'; block: PlacementBlock; index: number }
+  { scope: 'lesson' } | { scope: 'section'; block: PlacementBlock; index: number }
 
 interface TutorVisualizationBase {
   /** Stable within a lesson; generated locally, never from the model. */
@@ -211,11 +210,7 @@ export interface TableVisualization extends TutorVisualizationBase {
 export type VectorRole = 'vector' | 'basis' | 'component' | 'result'
 
 export type VectorOperation =
-  | 'display'
-  | 'addition'
-  | 'scalar_multiplication'
-  | 'linear_combination'
-  | 'basis'
+  'display' | 'addition' | 'scalar_multiplication' | 'linear_combination' | 'basis'
 
 /**
  * One arrow. `x`/`y` are components; the endpoint is always computed locally as
@@ -340,12 +335,7 @@ export interface VennSet {
 }
 
 export type VennOperation =
-  | 'union'
-  | 'intersection'
-  | 'difference'
-  | 'symmetric_difference'
-  | 'complement'
-  | 'display'
+  'union' | 'intersection' | 'difference' | 'symmetric_difference' | 'complement' | 'display'
 
 /**
  * A 2–3 set Venn diagram. The model supplies the sets, the operation and the
@@ -719,7 +709,8 @@ export interface TimelineVisualization extends TutorVisualizationBase {
   events: Array<{ label: string; start: number; end?: number; group?: string }>
 }
 
-export type NervousLevel = 'periphery' | 'spinal_cord' | 'medulla' | 'pons' | 'midbrain' | 'thalamus' | 'cortex'
+export type NervousLevel =
+  'periphery' | 'spinal_cord' | 'medulla' | 'pons' | 'midbrain' | 'thalamus' | 'cortex'
 
 /** A sensory or motor pathway traced neuron by neuron, with its decussation. */
 export interface NeuralPathwayVisualization extends TutorVisualizationBase {
@@ -729,7 +720,13 @@ export interface NeuralPathwayVisualization extends TutorVisualizationBase {
   /** The body side of the stimulus (sensory) or of the cortex of origin (motor). */
   side: 'left' | 'right'
   /** `crossesAt`: where a decussating axon crosses, when not at its cell body (corticospinal: cortex → medulla). */
-  neurons: Array<{ cellBody: string; level: NervousLevel; tract?: string; decussates?: boolean; crossesAt?: NervousLevel }>
+  neurons: Array<{
+    cellBody: string
+    level: NervousLevel
+    tract?: string
+    decussates?: boolean
+    crossesAt?: NervousLevel
+  }>
 }
 
 /** A relation table (e.g. muscles: origin, insertion, action, innervation, blood supply). */

@@ -50,7 +50,12 @@ function collectParagraphText(p: Element): string {
   return out
 }
 
-function parseSlide(slideXml: string): { title?: string; body: string; tables: string[][][]; imageCount: number } {
+function parseSlide(slideXml: string): {
+  title?: string
+  body: string
+  tables: string[][][]
+  imageCount: number
+} {
   const parser = new DOMParser()
   const xmlDoc = parser.parseFromString(slideXml, 'application/xml')
   if (xmlDoc.getElementsByTagName('parsererror').length > 0) {

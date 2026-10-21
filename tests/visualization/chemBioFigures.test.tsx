@@ -18,7 +18,10 @@ function one(draft: Record<string, unknown>): TutorVisualization | string {
 
 describe('chemistry normalisation', () => {
   it('keeps a molecule whose structure matches the stated formula', () => {
-    const value = one({ type: 'molecule_2d', molecules: [{ smiles: 'CCO', formula: 'C2H5OH', name: 'ethanol' }] })
+    const value = one({
+      type: 'molecule_2d',
+      molecules: [{ smiles: 'CCO', formula: 'C2H5OH', name: 'ethanol' }],
+    })
     expect(value).toMatchObject({
       type: 'molecule_2d',
       schemaVersion: TUTOR_VISUALIZATION_SCHEMA_VERSION,
@@ -27,9 +30,15 @@ describe('chemistry normalisation', () => {
   })
 
   it('rejects a structure that is not the molecule the lesson names', () => {
-    expect(one({ type: 'molecule_2d', molecules: [{ smiles: 'CC(=O)O', formula: 'C2H6O' }] })).toBe('molecule-formula-mismatch')
-    expect(one({ type: 'molecule_2d', molecules: [{ smiles: 'CCO' }] })).toBe('missing-molecule-data')
-    expect(one({ type: 'molecule_2d', molecules: [{ smiles: '<svg>', formula: 'C' }] })).toBe('invalid-smiles')
+    expect(one({ type: 'molecule_2d', molecules: [{ smiles: 'CC(=O)O', formula: 'C2H6O' }] })).toBe(
+      'molecule-formula-mismatch',
+    )
+    expect(one({ type: 'molecule_2d', molecules: [{ smiles: 'CCO' }] })).toBe(
+      'missing-molecule-data',
+    )
+    expect(one({ type: 'molecule_2d', molecules: [{ smiles: '<svg>', formula: 'C' }] })).toBe(
+      'invalid-smiles',
+    )
   })
 
   it('validates an energy profile', () => {
@@ -39,16 +48,44 @@ describe('chemistry normalisation', () => {
       { label: 'C', energy: -40 },
     ]
     expect(one({ type: 'energy_2d', states })).toMatchObject({ type: 'energy_2d', unit: 'kJ/mol' })
-    expect(one({ type: 'energy_2d', states: [{ ...states[0], transition: true }, states[2]] })).toBe('energy-endpoint-transition')
-    expect(one({ type: 'energy_2d', states: [states[0], { ...states[1], energy: -100 }, states[2]] })).toBe('energy-transition-not-peak')
+    expect(
+      one({ type: 'energy_2d', states: [{ ...states[0], transition: true }, states[2]] }),
+    ).toBe('energy-endpoint-transition')
+    expect(
+      one({ type: 'energy_2d', states: [states[0], { ...states[1], energy: -100 }, states[2]] }),
+    ).toBe('energy-transition-not-peak')
   })
 
   it('validates a titration set-up', () => {
     expect(
-      one({ type: 'titration_2d', acidConcentration: 0.1, acidVolume: 25, baseConcentration: 0.1, ka: 1.8e-5 }),
-    ).toMatchObject({ setup: { analyte: 'acid', concentration: 0.1, volume: 25, titrantConcentration: 0.1, ka: [1.8e-5] } })
-    expect(one({ type: 'titration_2d', acidConcentration: 0, acidVolume: 25, baseConcentration: 0.1 })).toBe('invalid-titration-setup')
-    expect(one({ type: 'titration_2d', acidConcentration: 0.1, acidVolume: 25, baseConcentration: 0.1, ka: -1 })).toBe('invalid-titration-ka')
+      one({
+        type: 'titration_2d',
+        acidConcentration: 0.1,
+        acidVolume: 25,
+        baseConcentration: 0.1,
+        ka: 1.8e-5,
+      }),
+    ).toMatchObject({
+      setup: {
+        analyte: 'acid',
+        concentration: 0.1,
+        volume: 25,
+        titrantConcentration: 0.1,
+        ka: [1.8e-5],
+      },
+    })
+    expect(
+      one({ type: 'titration_2d', acidConcentration: 0, acidVolume: 25, baseConcentration: 0.1 }),
+    ).toBe('invalid-titration-setup')
+    expect(
+      one({
+        type: 'titration_2d',
+        acidConcentration: 0.1,
+        acidVolume: 25,
+        baseConcentration: 0.1,
+        ka: -1,
+      }),
+    ).toBe('invalid-titration-ka')
   })
 })
 
@@ -59,9 +96,17 @@ describe('biology normalisation', () => {
         type: 'punnett_2d',
         mother: 'aA',
         father: 'Aa',
-        traits: [{ gene: 'A', dominant: 'Tall', recessive: 'Short' }, { gene: 'z', dominant: 'x', recessive: 'y' }],
+        traits: [
+          { gene: 'A', dominant: 'Tall', recessive: 'Short' },
+          { gene: 'z', dominant: 'x', recessive: 'y' },
+        ],
       }),
-    ).toMatchObject({ mother: 'Aa', father: 'Aa', dominance: 'complete', traits: [{ gene: 'a', dominant: 'Tall', recessive: 'Short' }] })
+    ).toMatchObject({
+      mother: 'Aa',
+      father: 'Aa',
+      dominance: 'complete',
+      traits: [{ gene: 'a', dominant: 'Tall', recessive: 'Short' }],
+    })
     expect(one({ type: 'punnett_2d', mother: 'Aa', father: 'Bb' })).toBe('genotype-genes-differ')
     expect(one({ type: 'punnett_2d', mother: 'Ab', father: 'Aa' })).toBe('invalid-genotype')
   })
@@ -73,12 +118,18 @@ describe('biology normalisation', () => {
       { id: 'c', sex: 'male', affected: true, father: 'f', mother: 'm' },
     ]
     expect(one({ type: 'pedigree_2d', members })).toMatchObject({ type: 'pedigree_2d' })
-    expect(one({ type: 'pedigree_2d', members: [members[0], { ...members[2], father: 'm' }] })).toBe('invalid-pedigree-structure')
-    expect(one({ type: 'pedigree_2d', members: members.slice(0, 2) })).toBe('pedigree-without-children')
+    expect(
+      one({ type: 'pedigree_2d', members: [members[0], { ...members[2], father: 'm' }] }),
+    ).toBe('invalid-pedigree-structure')
+    expect(one({ type: 'pedigree_2d', members: members.slice(0, 2) })).toBe(
+      'pedigree-without-children',
+    )
   })
 
   it('validates a DNA strand', () => {
-    expect(one({ type: 'translation_2d', dna: 'atg ttt gga taa', strand: 'coding' })).toMatchObject({ dna: 'ATGTTTGGATAA', strand: 'coding' })
+    expect(one({ type: 'translation_2d', dna: 'atg ttt gga taa', strand: 'coding' })).toMatchObject(
+      { dna: 'ATGTTTGGATAA', strand: 'coding' },
+    )
     expect(one({ type: 'translation_2d', dna: 'AUGUUU' })).toBe('invalid-dna')
   })
 })
@@ -104,7 +155,9 @@ describe('science lessons reach the visualization step', () => {
     expect(looksLikeChemistryFigureText('用 NaOH 滴定醋酸')).toBe(true)
     expect(looksLikeBiologyFigureText('亲本基因型为 Aa × Aa')).toBe(true)
     expect(looksLikeBiologyFigureText('The coding strand reads ATGGCCTTTAAA.')).toBe(true)
-    expect(looksLikeChemistryFigureText('A group homomorphism preserves the operation.')).toBe(false)
+    expect(looksLikeChemistryFigureText('A group homomorphism preserves the operation.')).toBe(
+      false,
+    )
     expect(looksLikeBiologyFigureText('A group homomorphism preserves the operation.')).toBe(false)
   })
 
@@ -130,7 +183,10 @@ describe('science lessons reach the visualization step', () => {
 })
 
 describe('science figures', () => {
-  const base = { schemaVersion: TUTOR_VISUALIZATION_SCHEMA_VERSION, placement: { scope: 'lesson' as const } }
+  const base = {
+    schemaVersion: TUTOR_VISUALIZATION_SCHEMA_VERSION,
+    placement: { scope: 'lesson' as const },
+  }
 
   it('renders an energy profile with computed ΔH and Eₐ', () => {
     render(
@@ -204,7 +260,13 @@ describe('science figures', () => {
 
     render(
       <TutorVisualizationFigure
-        visualization={{ ...base, id: 'd', type: 'translation_2d', dna: 'ATGTTTTAA', strand: 'coding' }}
+        visualization={{
+          ...base,
+          id: 'd',
+          type: 'translation_2d',
+          dna: 'ATGTTTTAA',
+          strand: 'coding',
+        }}
       />,
     )
     expect(screen.getByText('N–Met–Phe–C')).toBeInTheDocument()
@@ -213,7 +275,12 @@ describe('science figures', () => {
   it('renders a molecule caption with its formula', () => {
     render(
       <TutorVisualizationFigure
-        visualization={{ ...base, id: 'm', type: 'molecule_2d', molecules: [{ smiles: 'CCO', formula: 'C2H6O', name: 'ethanol' }] }}
+        visualization={{
+          ...base,
+          id: 'm',
+          type: 'molecule_2d',
+          molecules: [{ smiles: 'CCO', formula: 'C2H6O', name: 'ethanol' }],
+        }}
       />,
     )
     expect(screen.getByText('ethanol')).toBeInTheDocument()

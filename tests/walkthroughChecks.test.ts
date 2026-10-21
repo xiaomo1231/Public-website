@@ -22,17 +22,36 @@ const show = (matrix: ReturnType<typeof rref>) => matrix.map((row) => row.map(fo
 
 describe('exact row reduction', () => {
   it('reads integers, decimals, fractions and LaTeX fractions', () => {
-    expect(['3', '-2', '0.5', '19/5', '-22/5', '\\frac{19}{5}', '-\\tfrac{1}{10}', '\\tfrac12', '−4', 7].map((raw) => {
-      const value = parseRational(raw)
-      return value ? formatRational(value) : null
-    })).toEqual(['3', '-2', '1/2', '19/5', '-22/5', '19/5', '-1/10', '1/2', '-4', '7'])
+    expect(
+      [
+        '3',
+        '-2',
+        '0.5',
+        '19/5',
+        '-22/5',
+        '\\frac{19}{5}',
+        '-\\tfrac{1}{10}',
+        '\\tfrac12',
+        '−4',
+        7,
+      ].map((raw) => {
+        const value = parseRational(raw)
+        return value ? formatRational(value) : null
+      }),
+    ).toEqual(['3', '-2', '1/2', '19/5', '-22/5', '19/5', '-1/10', '1/2', '-4', '7'])
     expect(parseRational('x')).toBeNull()
     expect(parseRational('1/0')).toBeNull()
     expect(parseMatrix([['1', '2'], ['3']])).toBeNull()
   })
 
   it('reduces HW3 problem 1 to the RREF in the handout, with a free variable', () => {
-    const reduced = rref(parseMatrix([[1, 2, 3, 4, 10], [2, 3, 5, 6, 14], [3, 4, 6, 8, 18]])!)
+    const reduced = rref(
+      parseMatrix([
+        [1, 2, 3, 4, 10],
+        [2, 3, 5, 6, 14],
+        [3, 4, 6, 8, 18],
+      ])!,
+    )
     expect(show(reduced)).toEqual([
       ['1', '0', '0', '0', '-2'],
       ['0', '1', '0', '2', '6'],
@@ -42,31 +61,95 @@ describe('exact row reduction', () => {
   })
 
   it('keeps fractions exact and spots inconsistent systems', () => {
-    const c = rref(parseMatrix([[1, 0, 2, 3, 4], [0, 1, 0, 4, 5], [3, 2, 1, 0, 1]])!)
+    const c = rref(
+      parseMatrix([
+        [1, 0, 2, 3, 4],
+        [0, 1, 0, 4, 5],
+        [3, 2, 1, 0, 1],
+      ])!,
+    )
     expect(show(c)).toEqual([
       ['1', '0', '0', '-19/5', '-22/5'],
       ['0', '1', '0', '4', '5'],
       ['0', '0', '1', '17/5', '21/5'],
     ])
-    const a = rref(parseMatrix([[1, 2, 0, 3], [0, 1, 3, 4], [4, 0, 2, 1], [0, 1, 1, 2]])!)
+    const a = rref(
+      parseMatrix([
+        [1, 2, 0, 3],
+        [0, 1, 3, 4],
+        [4, 0, 2, 1],
+        [0, 1, 1, 2],
+      ])!,
+    )
     expect(solutionKind(a)).toBe('none')
-    expect(solutionKind(rref(parseMatrix([[0, 1, 2], [2, 0, 1]])!))).toBe('unique')
+    expect(
+      solutionKind(
+        rref(
+          parseMatrix([
+            [0, 1, 2],
+            [2, 0, 1],
+          ])!,
+        ),
+      ),
+    ).toBe('unique')
   })
 
   it('compares RREFs ignoring zero rows and writes LaTeX', () => {
-    const left = parseMatrix([[1, 0, 2], [0, 0, 0]])!
+    const left = parseMatrix([
+      [1, 0, 2],
+      [0, 0, 0],
+    ])!
     expect(sameReducedMatrix(left, parseMatrix([[1, 0, 2]])!)).toBe(true)
     expect(sameReducedMatrix(left, parseMatrix([[1, 0, 3]])!)).toBe(false)
-    expect(matrixToLatex(parseMatrix([['1', '-19/5']])!)).toBe('\\left[\\begin{array}{c|c} 1&-\\tfrac{19}{5} \\end{array}\\right]')
+    expect(matrixToLatex(parseMatrix([['1', '-19/5']])!)).toBe(
+      '\\left[\\begin{array}{c|c} 1&-\\tfrac{19}{5} \\end{array}\\right]',
+    )
   })
 })
 
 describe('checking the walkthrough arithmetic', () => {
   it('confirms a right RREF, flags a wrong one, and skips what it cannot read', () => {
     const checks = checkLinearSystems([
-      { label: '1', augmented: [['1', '2', '3', '4', '10'], ['2', '3', '5', '6', '14'], ['3', '4', '6', '8', '18']], rref: [['1', '0', '0', '0', '-2'], ['0', '1', '0', '2', '6'], ['0', '0', '1', '0', '0']], solution: 'infinite' },
-      { label: '2(c)', augmented: [[1, 0, 2, 3, 4], [0, 1, 0, 4, 5], [3, 2, 1, 0, 1]], rref: [['1', '0', '0', '-19/5', '-22/5'], ['0', '1', '0', '4', '5'], ['0', '0', '1', '17/5', '22/5']], solution: 'infinite' },
-      { label: '2(e)', augmented: [[0, 1, 2], [2, 0, 1]], rref: [[1, 0, '1/2'], [0, 1, 2]], solution: 'infinite' },
+      {
+        label: '1',
+        augmented: [
+          ['1', '2', '3', '4', '10'],
+          ['2', '3', '5', '6', '14'],
+          ['3', '4', '6', '8', '18'],
+        ],
+        rref: [
+          ['1', '0', '0', '0', '-2'],
+          ['0', '1', '0', '2', '6'],
+          ['0', '0', '1', '0', '0'],
+        ],
+        solution: 'infinite',
+      },
+      {
+        label: '2(c)',
+        augmented: [
+          [1, 0, 2, 3, 4],
+          [0, 1, 0, 4, 5],
+          [3, 2, 1, 0, 1],
+        ],
+        rref: [
+          ['1', '0', '0', '-19/5', '-22/5'],
+          ['0', '1', '0', '4', '5'],
+          ['0', '0', '1', '17/5', '22/5'],
+        ],
+        solution: 'infinite',
+      },
+      {
+        label: '2(e)',
+        augmented: [
+          [0, 1, 2],
+          [2, 0, 1],
+        ],
+        rref: [
+          [1, 0, '1/2'],
+          [0, 1, 2],
+        ],
+        solution: 'infinite',
+      },
       { label: 'bad', augmented: [['a', 'b']], rref: [['1', '0']] },
     ])
     expect(checks.map((check) => [check.label, check.rrefMatches, check.kindMatches])).toEqual([
@@ -79,7 +162,11 @@ describe('checking the walkthrough arithmetic', () => {
   })
 
   it('recognises questions that involve row reduction', () => {
-    expect(involvesRowReduction('By forming the augmented matrix and using the Reduced Row Echelon Form (RREF), solve')).toBe(true)
+    expect(
+      involvesRowReduction(
+        'By forming the augmented matrix and using the Reduced Row Echelon Form (RREF), solve',
+      ),
+    ).toBe(true)
     expect(involvesRowReduction('用初等行变换解线性方程组')).toBe(true)
     expect(involvesRowReduction('Find the derivative of x^2.')).toBe(false)
   })
@@ -116,7 +203,13 @@ describe('finding a passage again', () => {
 
 describe('walkthrough plan', () => {
   const question = (id: string, prompt: string): HomeworkQuestion =>
-    ({ id, prompt, number: id, sourceRefs: [], answerStatus: undefined } as unknown as HomeworkQuestion)
+    ({
+      id,
+      prompt,
+      number: id,
+      sourceRefs: [],
+      answerStatus: undefined,
+    }) as unknown as HomeworkQuestion
 
   it('follows the question-language preference', () => {
     expect(walkthroughLanguage(undefined, 'en')).toBe('zh_terms')
@@ -141,12 +234,33 @@ describe('walkthrough plan', () => {
       language: 'zh_terms',
       createdAt: 1,
       updatedAt: 1,
-      sections: empty.map((entry) => ({ id: entry.id, kind: entry.kind, title: '', body: 'x', status: 'ready' as const, inputHash: entry.inputHash, generatedAt: 1 })),
+      sections: empty.map((entry) => ({
+        id: entry.id,
+        kind: entry.kind,
+        title: '',
+        body: 'x',
+        status: 'ready' as const,
+        inputHash: entry.inputHash,
+        generatedAt: 1,
+      })),
     }
-    expect(planWalkthrough(questions, stored, 'zh_terms', 'v').every((entry) => !entry.needsWork)).toBe(true)
-    const changed = planWalkthrough([questions[0]!, question('2', 'Solve B again.')], stored, 'zh_terms', 'v')
-    expect(changed.filter((entry) => entry.needsWork).map((entry) => entry.id)).toEqual(['overview', 'q:2', 'summary'])
+    expect(
+      planWalkthrough(questions, stored, 'zh_terms', 'v').every((entry) => !entry.needsWork),
+    ).toBe(true)
+    const changed = planWalkthrough(
+      [questions[0]!, question('2', 'Solve B again.')],
+      stored,
+      'zh_terms',
+      'v',
+    )
+    expect(changed.filter((entry) => entry.needsWork).map((entry) => entry.id)).toEqual([
+      'overview',
+      'q:2',
+      'summary',
+    ])
     expect(changed.find((entry) => entry.id === 'q:2')!.outdated).toBe(true)
-    expect(questionSectionHash(questions[0]!, 'zh_terms', 'v')).not.toBe(questionSectionHash(questions[0]!, 'en', 'v'))
+    expect(questionSectionHash(questions[0]!, 'zh_terms', 'v')).not.toBe(
+      questionSectionHash(questions[0]!, 'en', 'v'),
+    )
   })
 })

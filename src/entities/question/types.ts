@@ -137,7 +137,8 @@ export function normalizeQuestionOptions(
 }
 /** The canonical answer as shown to the student, with its unit when it has one. */
 export function expectedAnswerText(
-  question: Pick<Question, 'correctAnswer' | 'unit' | 'type'> & Partial<Pick<Question, 'options' | 'matchItems' | 'blanks'>>,
+  question: Pick<Question, 'correctAnswer' | 'unit' | 'type'> &
+    Partial<Pick<Question, 'options' | 'matchItems' | 'blanks'>>,
 ): string {
   if (question.type === 'ordering') return question.correctAnswer.split('\n').join(' → ')
   if (question.type === 'multiple_select' && question.options) {
@@ -151,7 +152,7 @@ export function expectedAnswerText(
     return question.matchItems
       .map((item, i) => {
         const index = question.options?.findIndex((option) => option.label === labels[i]) ?? -1
-        return `${i + 1}. ${item} → ${index >= 0 ? optionLetter(index) : labels[i] ?? ''}`
+        return `${i + 1}. ${item} → ${index >= 0 ? optionLetter(index) : (labels[i] ?? '')}`
       })
       .join('；')
   }
@@ -181,7 +182,8 @@ export function displayAnswer(
   }
   if (!userAnswer.trim()) return ''
   if (question.type === 'multiple_choice') return describe(userAnswer)
-  if (question.type === 'multiple_select') return userAnswer.split(',').filter(Boolean).map(describe).join('；')
+  if (question.type === 'multiple_select')
+    return userAnswer.split(',').filter(Boolean).map(describe).join('；')
   if (question.type === 'matching') {
     return userAnswer
       .split(',')
@@ -191,7 +193,11 @@ export function displayAnswer(
       })
       .join('  ')
   }
-  if (question.type === 'fill_blank') return userAnswer.split('\n').map((answer, i) => `(${i + 1}) ${answer || '—'}`).join('  ')
+  if (question.type === 'fill_blank')
+    return userAnswer
+      .split('\n')
+      .map((answer, i) => `(${i + 1}) ${answer || '—'}`)
+      .join('  ')
   return userAnswer
 }
 

@@ -48,10 +48,16 @@ export class TranslationService {
     // Validate + sanitise before persisting.
     let output = normalizeTranslation(data)
     if (isIncompleteTranslation(input.selectedText, output.translation)) {
-      const retry = await this.ai.chatJSON<unknown>([
-        { role: 'system', content: prompts.translator.buildSystemPrompt() },
-        { role: 'user', content: `${messages[1]!.content}\nThe previous response omitted most of the selected text. Translate every sentence in full.` },
-      ], { ...(input.signal ? { signal: input.signal } : {}) })
+      const retry = await this.ai.chatJSON<unknown>(
+        [
+          { role: 'system', content: prompts.translator.buildSystemPrompt() },
+          {
+            role: 'user',
+            content: `${messages[1]!.content}\nThe previous response omitted most of the selected text. Translate every sentence in full.`,
+          },
+        ],
+        { ...(input.signal ? { signal: input.signal } : {}) },
+      )
       data = retry.data
       raw = retry.raw
       output = normalizeTranslation(data)

@@ -26,7 +26,11 @@ const validOutput = {
   mistakeType: 'formula' as const,
   reviewKnowledgePoints: ['Chain Rule'],
   shouldPracticeMore: true,
-  similarExample: { prompt: 'Differentiate cos(3x)', answer: '-3sin(3x)', explanation: 'Same pattern.' },
+  similarExample: {
+    prompt: 'Differentiate cos(3x)',
+    answer: '-3sin(3x)',
+    explanation: 'Same pattern.',
+  },
   continuePrompt: 'Would you like to try a similar question?',
 }
 
@@ -68,10 +72,22 @@ describe('normalizeAnalysis', () => {
       firstError: 'The student was just lazy here. The factor 2 is missing.',
       correctApproach: '不认真审题，应先求内层导数。',
       continuePrompt: '下次别再不仔细了！',
-      similarExample: { prompt: 'Differentiate cos(3x)', answer: '-3sin(3x)', explanation: '懒得写中间步骤会出错。' },
+      similarExample: {
+        prompt: 'Differentiate cos(3x)',
+        answer: '-3sin(3x)',
+        explanation: '懒得写中间步骤会出错。',
+      },
       reviewKnowledgePoints: ['Chain Rule', '粗心'],
     })
-    const text = [a.possibleCause, a.whyWrong, a.firstError, a.correctApproach, a.continuePrompt, a.similarExample?.explanation ?? '', ...a.reviewKnowledgePoints].join(' ')
+    const text = [
+      a.possibleCause,
+      a.whyWrong,
+      a.firstError,
+      a.correctApproach,
+      a.continuePrompt,
+      a.similarExample?.explanation ?? '',
+      ...a.reviewKnowledgePoints,
+    ].join(' ')
     expect(text).not.toMatch(/粗心|马虎|不认真|不仔细|懒|lazy|careless/i)
     // Unrelated sentences survive; nothing English-only like "unclear" is spliced in.
     expect(a.whyWrong).toContain('链式法则需要乘以内层导数。')
@@ -81,7 +97,10 @@ describe('normalizeAnalysis', () => {
   })
 
   it('keeps technical terms such as lazy evaluation', () => {
-    const a = normalizeAnalysis({ ...validOutput, whyWrong: 'Lazy evaluation delays the call. x = 3.14 here.' })
+    const a = normalizeAnalysis({
+      ...validOutput,
+      whyWrong: 'Lazy evaluation delays the call. x = 3.14 here.',
+    })
     expect(a.whyWrong).toBe('Lazy evaluation delays the call. x = 3.14 here.')
   })
 
@@ -117,7 +136,9 @@ describe('MistakeAnalysisService', () => {
 
   it('analyses a mistake and persists the result', async () => {
     const { mistake } = await seedMistake()
-    const chatJSON = vi.fn().mockResolvedValue({ data: validOutput, raw: { content: '{}', model: 'm' } })
+    const chatJSON = vi
+      .fn()
+      .mockResolvedValue({ data: validOutput, raw: { content: '{}', model: 'm' } })
     const svc = new MistakeAnalysisService({ ai: fakeAI(chatJSON), mistakes })
     const updated = await svc.analyze(mistake.id)
     expect(updated.analysisStatus).toBe('ready')
@@ -137,7 +158,9 @@ describe('MistakeAnalysisService', () => {
 
   it('explains without persisting', async () => {
     const { mistake } = await seedMistake()
-    const chatJSON = vi.fn().mockResolvedValue({ data: validOutput, raw: { content: '{}', model: 'm' } })
+    const chatJSON = vi
+      .fn()
+      .mockResolvedValue({ data: validOutput, raw: { content: '{}', model: 'm' } })
     const svc = new MistakeAnalysisService({ ai: fakeAI(chatJSON), mistakes })
     const analysis = await svc.explain(mistake)
     expect(analysis.firstError).toBeTruthy()
@@ -152,7 +175,9 @@ describe('MistakeAnalysisService', () => {
 
   it('handles malformed AI output without crashing', async () => {
     const { mistake } = await seedMistake()
-    const chatJSON = vi.fn().mockResolvedValue({ data: { junk: true }, raw: { content: '{}', model: 'm' } })
+    const chatJSON = vi
+      .fn()
+      .mockResolvedValue({ data: { junk: true }, raw: { content: '{}', model: 'm' } })
     const svc = new MistakeAnalysisService({ ai: fakeAI(chatJSON), mistakes })
     const updated = await svc.analyze(mistake.id)
     expect(updated.analysisStatus).toBe('ready')

@@ -56,7 +56,9 @@ export function ProgressiveList<T>({
           >
             <ChevronDown className={cn('h-4 w-4')} />
             {t('progressiveList.showMore', { count: Math.min(pageSize, remaining) })}
-            <span className="text-muted-foreground">{t('progressiveList.remaining', { count: remaining })}</span>
+            <span className="text-muted-foreground">
+              {t('progressiveList.remaining', { count: remaining })}
+            </span>
           </Button>
         </div>
       )}

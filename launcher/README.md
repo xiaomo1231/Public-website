@@ -15,11 +15,11 @@
 
 ## 文件
 
-| 文件 | 平台 | 说明 |
-| --- | --- | --- |
-| `windows.ps1` | Windows | PowerShell 启动器，由项目根目录的 `Start.bat` 调用 |
-| `unix.sh` | macOS / Linux | Bash 启动器 |
-| `launcher.log` | — | 运行日志（已被 `.gitignore` 忽略，不会提交） |
+| 文件           | 平台          | 说明                                               |
+| -------------- | ------------- | -------------------------------------------------- |
+| `windows.ps1`  | Windows       | PowerShell 启动器，由项目根目录的 `Start.bat` 调用 |
+| `unix.sh`      | macOS / Linux | Bash 启动器                                        |
+| `launcher.log` | —             | 运行日志（已被 `.gitignore` 忽略，不会提交）       |
 
 ## 使用方式
 
@@ -69,11 +69,11 @@ chmod +x launcher/unix.sh
 
 **只有在你明确确认后**才会执行安装。
 
-| 平台 | 方式 |
-| --- | --- |
-| Windows | `winget install --id OpenJS.NodeJS.LTS --exact` |
-| macOS | 检测到 Homebrew 时：`brew install node` |
-| Linux | 按发行版选择 `apt-get` / `dnf` / `pacman` / `zypper` |
+| 平台    | 方式                                                 |
+| ------- | ---------------------------------------------------- |
+| Windows | `winget install --id OpenJS.NodeJS.LTS --exact`      |
+| macOS   | 检测到 Homebrew 时：`brew install node`              |
+| Linux   | 按发行版选择 `apt-get` / `dnf` / `pacman` / `zypper` |
 
 如果缺少上述工具，启动器**不会**擅自安装它们（例如不会为了装 Node.js 而先装 Homebrew），
 而是给出官方下载地址，由你手动安装。

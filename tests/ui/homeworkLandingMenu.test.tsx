@@ -41,8 +41,17 @@ const DOC: Document = {
 
 function readySet(): HomeworkSet {
   return {
-    id: 's1', projectId: 'p1', documentId: 'd1', documentName: 'HW.pdf', title: 'HW.pdf',
-    status: 'ready', language: 'en', questionCount: 3, promptVersion: 'v1', createdAt: 1, updatedAt: 1,
+    id: 's1',
+    projectId: 'p1',
+    documentId: 'd1',
+    documentName: 'HW.pdf',
+    title: 'HW.pdf',
+    status: 'ready',
+    language: 'en',
+    questionCount: 3,
+    promptVersion: 'v1',
+    createdAt: 1,
+    updatedAt: 1,
   }
 }
 
@@ -152,9 +161,7 @@ describe('HomeworkLandingPage card menu', () => {
   })
 
   it('offers a retry instead of a spinner when an analysis looks interrupted', async () => {
-    holder.sets = [
-      { ...readySet(), status: 'analyzing', updatedAt: Date.now() - 10 * 60 * 1000 },
-    ]
+    holder.sets = [{ ...readySet(), status: 'analyzing', updatedAt: Date.now() - 10 * 60 * 1000 }]
     renderPage()
 
     expect(await screen.findByText(/interrupted/i)).toBeInTheDocument()

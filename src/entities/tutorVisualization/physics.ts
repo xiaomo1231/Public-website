@@ -33,7 +33,10 @@ const rad = (deg: number) => (deg * Math.PI) / 180
 export function forceComponents(force: Force): { x: number; y: number } {
   // cos 90° is 6e-17, not 0: round away floating-point noise.
   const clean = (v: number) => (Math.abs(v) < Math.abs(force.magnitude) * 1e-12 ? 0 : v)
-  return { x: clean(force.magnitude * Math.cos(rad(force.angle))), y: clean(force.magnitude * Math.sin(rad(force.angle))) }
+  return {
+    x: clean(force.magnitude * Math.cos(rad(force.angle))),
+    y: clean(force.magnitude * Math.sin(rad(force.angle))),
+  }
 }
 
 export function forceFacts(forces: Force[], mass?: number, incline?: number): ForceFacts {
@@ -43,7 +46,12 @@ export function forceFacts(forces: Force[], mass?: number, incline?: number): Fo
   const scale = forces.reduce((sum, f) => sum + Math.abs(f.magnitude), 0)
   const clean = (v: number) => (Math.abs(v) < scale * 1e-9 ? 0 : v)
   const facts: ForceFacts = {
-    net: { x: clean(x), y: clean(y), magnitude: clean(magnitude), angle: (Math.atan2(y, x) * 180) / Math.PI },
+    net: {
+      x: clean(x),
+      y: clean(y),
+      magnitude: clean(magnitude),
+      angle: (Math.atan2(y, x) * 180) / Math.PI,
+    },
     // Balanced within 0.5 % of the forces involved (lesson values are rounded).
     balanced: magnitude <= scale * 0.005,
   }
@@ -73,7 +81,12 @@ export interface MotionState {
 }
 
 /** Position, velocity and acceleration sampled across all segments. */
-export function motionSamples(x0: number, v0: number, segments: MotionSegment[], perSegment = 60): MotionState[] {
+export function motionSamples(
+  x0: number,
+  v0: number,
+  segments: MotionSegment[],
+  perSegment = 60,
+): MotionState[] {
   const out: MotionState[] = []
   let t0 = 0
   let x = x0
@@ -81,7 +94,12 @@ export function motionSamples(x0: number, v0: number, segments: MotionSegment[],
   for (const segment of segments) {
     for (let i = 0; i <= perSegment; i++) {
       const dt = (segment.duration * i) / perSegment
-      out.push({ t: t0 + dt, x: x + v * dt + 0.5 * segment.acceleration * dt * dt, v: v + segment.acceleration * dt, a: segment.acceleration })
+      out.push({
+        t: t0 + dt,
+        x: x + v * dt + 0.5 * segment.acceleration * dt * dt,
+        v: v + segment.acceleration * dt,
+        a: segment.acceleration,
+      })
     }
     x += v * segment.duration + 0.5 * segment.acceleration * segment.duration ** 2
     v += segment.acceleration * segment.duration
@@ -121,12 +139,20 @@ export function motionFacts(x0: number, v0: number, segments: MotionSegment[]): 
     t += duration
     boundaries.push(t)
   }
-  return { duration: t, displacement: x - x0, distance, finalVelocity: v, averageVelocity: t > 0 ? (x - x0) / t : 0, boundaries }
+  return {
+    duration: t,
+    displacement: x - x0,
+    distance,
+    finalVelocity: v,
+    averageVelocity: t > 0 ? (x - x0) / t : 0,
+    boundaries,
+  }
 }
 
 // --- optics ------------------------------------------------------------------
 
-export type OpticalElement = 'converging_lens' | 'diverging_lens' | 'concave_mirror' | 'convex_mirror'
+export type OpticalElement =
+  'converging_lens' | 'diverging_lens' | 'concave_mirror' | 'convex_mirror'
 
 export interface OpticsFacts {
   /** Signed focal length: positive for converging lenses and concave mirrors. */
@@ -142,8 +168,16 @@ export interface OpticsFacts {
 }
 
 /** 1/f = 1/d_o + 1/d_i with the real-is-positive convention (lenses and mirrors). */
-export function opticsFacts(element: OpticalElement, focalLength: number, objectDistance: number, objectHeight: number): OpticsFacts {
-  const f = element === 'converging_lens' || element === 'concave_mirror' ? Math.abs(focalLength) : -Math.abs(focalLength)
+export function opticsFacts(
+  element: OpticalElement,
+  focalLength: number,
+  objectDistance: number,
+  objectHeight: number,
+): OpticsFacts {
+  const f =
+    element === 'converging_lens' || element === 'concave_mirror'
+      ? Math.abs(focalLength)
+      : -Math.abs(focalLength)
   const atInfinity = Math.abs(objectDistance - f) < 1e-9 * Math.max(1, Math.abs(f))
   const imageDistance = atInfinity ? Infinity : 1 / (1 / f - 1 / objectDistance)
   const magnification = atInfinity ? Infinity : -imageDistance / objectDistance
@@ -170,7 +204,9 @@ export const MAX_RESISTORS = 8
 export function equivalentResistance(node: CircuitNode): number {
   if (node.kind === 'resistor') return node.resistance
   const values = node.items.map(equivalentResistance)
-  return node.kind === 'series' ? values.reduce((a, b) => a + b, 0) : 1 / values.reduce((a, r) => a + 1 / r, 0)
+  return node.kind === 'series'
+    ? values.reduce((a, b) => a + b, 0)
+    : 1 / values.reduce((a, r) => a + 1 / r, 0)
 }
 
 export interface ResistorReading {
@@ -187,7 +223,13 @@ export function solveCircuit(node: CircuitNode, voltage: number): ResistorReadin
   const walk = (current: CircuitNode, v: number) => {
     if (current.kind === 'resistor') {
       const i = v / current.resistance
-      out.push({ label: current.label, resistance: current.resistance, voltage: v, current: i, power: v * i })
+      out.push({
+        label: current.label,
+        resistance: current.resistance,
+        voltage: v,
+        current: i,
+        power: v * i,
+      })
       return
     }
     if (current.kind === 'parallel') {
@@ -202,5 +244,7 @@ export function solveCircuit(node: CircuitNode, voltage: number): ResistorReadin
 }
 
 export function countResistors(node: CircuitNode): number {
-  return node.kind === 'resistor' ? 1 : node.items.reduce((sum, item) => sum + countResistors(item), 0)
+  return node.kind === 'resistor'
+    ? 1
+    : node.items.reduce((sum, item) => sum + countResistors(item), 0)
 }

@@ -59,17 +59,30 @@ export function WalkthroughPrint({
           {section.conclusion && (
             <div className="border-l-4 pl-3">
               <strong>{t('homework.walkthrough.conclusion')}</strong>
-              <RichText text={section.conclusion} format="markdown" paragraphClassName="text-[14px] leading-relaxed" />
+              <RichText
+                text={section.conclusion}
+                format="markdown"
+                paragraphClassName="text-[14px] leading-relaxed"
+              />
             </div>
           )}
-          <RichText text={section.body} format="markdown" className="space-y-2" paragraphClassName="text-[14px] leading-[1.7]" />
+          <RichText
+            text={section.body}
+            format="markdown"
+            className="space-y-2"
+            paragraphClassName="text-[14px] leading-[1.7]"
+          />
           {section.suggestions && section.suggestions.length > 0 && (
             <>
               <h3 className="text-base font-semibold">{t('homework.walkthrough.suggestions')}</h3>
               <ul className="list-disc space-y-1 pl-5">
                 {section.suggestions.map((item, index) => (
                   <li key={index}>
-                    <RichText text={item} format="markdown" paragraphClassName="text-[14px] leading-relaxed" />
+                    <RichText
+                      text={item}
+                      format="markdown"
+                      paragraphClassName="text-[14px] leading-relaxed"
+                    />
                   </li>
                 ))}
               </ul>

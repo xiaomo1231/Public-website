@@ -72,11 +72,13 @@ function renderDialog(mapping: StubMapping, questions = [question()]) {
   const confirmAnswerMapping = vi.fn(async (_setId: string, _selections: unknown[]) => 1)
   const saveAnswerEntries = vi.fn(async (_setId: string, _entries: AnswerEntry[]) => 1)
   const clearAnswerEntries = vi.fn(async (_setId: string) => undefined)
-  const generateAnswerContent = vi.fn(async (
-    _setId: string,
-    _questionIds?: readonly string[],
-    _onProgress?: (progress: AnswerGenerationProgress) => void,
-  ) => ({ generated: 1, failed: 0, skipped: 0 }))
+  const generateAnswerContent = vi.fn(
+    async (
+      _setId: string,
+      _questionIds?: readonly string[],
+      _onProgress?: (progress: AnswerGenerationProgress) => void,
+    ) => ({ generated: 1, failed: 0, skipped: 0 }),
+  )
   const onChanged = vi.fn()
   const onOpenChange = vi.fn()
   const service = {
@@ -105,7 +107,14 @@ function renderDialog(mapping: StubMapping, questions = [question()]) {
       />
     </MemoryRouter>,
   )
-  return { confirmAnswerMapping, saveAnswerEntries, clearAnswerEntries, generateAnswerContent, onChanged, onOpenChange }
+  return {
+    confirmAnswerMapping,
+    saveAnswerEntries,
+    clearAnswerEntries,
+    generateAnswerContent,
+    onChanged,
+    onOpenChange,
+  }
 }
 
 const UNSPLIT: StubMapping = makeMapping({
@@ -124,8 +133,12 @@ const UNSPLIT: StubMapping = makeMapping({
 describe('HomeworkAnswerDialog — answer matching', () => {
   it('explains a single un-split fragment and offers manual division', async () => {
     renderDialog(UNSPLIT)
-    expect(await screen.findByText(/Only one un-split text block was recognized/)).toBeInTheDocument()
-    expect(screen.getAllByRole('button', { name: /Divide answers manually/ }).length).toBeGreaterThan(0)
+    expect(
+      await screen.findByText(/Only one un-split text block was recognized/),
+    ).toBeInTheDocument()
+    expect(
+      screen.getAllByRole('button', { name: /Divide answers manually/ }).length,
+    ).toBeGreaterThan(0)
     expect(screen.getAllByRole('link', { name: /Open answer file/ }).length).toBeGreaterThan(0)
   })
 
@@ -135,7 +148,9 @@ describe('HomeworkAnswerDialog — answer matching', () => {
         entries: [{ number: '1', text: 'The answer is 9.', chunkIds: ['c1'], pageNumbers: [2] }],
         summary: { total: 1, numbered: 1, unnumbered: 0, unsplit: false },
         result: {
-          assignments: [{ questionId: 'q1', status: 'matched', reason: 'number-unique', answerIndex: 0 }],
+          assignments: [
+            { questionId: 'q1', status: 'matched', reason: 'number-unique', answerIndex: 0 },
+          ],
           unmatchedAnswers: [],
         },
       }),
@@ -145,12 +160,29 @@ describe('HomeworkAnswerDialog — answer matching', () => {
   })
 
   it('explains when the selected entry leaves the problem to the student', async () => {
-    renderDialog(makeMapping({
-      entries: [{ number: '3', text: 'Solution: This is similar to the last problem and is left to you.', chunkIds: ['c3'], pageNumbers: [3] }],
-      summary: { total: 1, numbered: 1, unnumbered: 0, unsplit: false },
-      result: { assignments: [{ questionId: 'q1', status: 'matched', reason: 'number-unique', answerIndex: 0 }], unmatchedAnswers: [] },
-    }), [question({ generationStatus: 'failed', generationError: 'Old timeout' })])
-    expect(await screen.findByText(/professor leaves this problem to the student/i)).toBeInTheDocument()
+    renderDialog(
+      makeMapping({
+        entries: [
+          {
+            number: '3',
+            text: 'Solution: This is similar to the last problem and is left to you.',
+            chunkIds: ['c3'],
+            pageNumbers: [3],
+          },
+        ],
+        summary: { total: 1, numbered: 1, unnumbered: 0, unsplit: false },
+        result: {
+          assignments: [
+            { questionId: 'q1', status: 'matched', reason: 'number-unique', answerIndex: 0 },
+          ],
+          unmatchedAnswers: [],
+        },
+      }),
+      [question({ generationStatus: 'failed', generationError: 'Old timeout' })],
+    )
+    expect(
+      await screen.findByText(/professor leaves this problem to the student/i),
+    ).toBeInTheDocument()
     expect(screen.queryByText(/Old timeout/)).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /Retry this question/ })).not.toBeInTheDocument()
   })
@@ -181,14 +213,18 @@ describe('HomeworkAnswerDialog — answer matching', () => {
         entries: [{ number: '1', text: 'nine', chunkIds: ['c1'], pageNumbers: [1] }],
         summary: { total: 1, numbered: 1, unnumbered: 0, unsplit: false },
         result: {
-          assignments: [{ questionId: 'q1', status: 'matched', reason: 'number-unique', answerIndex: 0 }],
+          assignments: [
+            { questionId: 'q1', status: 'matched', reason: 'number-unique', answerIndex: 0 },
+          ],
           unmatchedAnswers: [],
         },
       }),
     )
     await user.click(await screen.findByRole('button', { name: /Save mapping/ }))
     await waitFor(() =>
-      expect(confirmAnswerMapping).toHaveBeenCalledWith('s1', [{ questionId: 'q1', answerIndex: 0 }]),
+      expect(confirmAnswerMapping).toHaveBeenCalledWith('s1', [
+        { questionId: 'q1', answerIndex: 0 },
+      ]),
     )
     expect(onChanged).toHaveBeenCalled()
   })
@@ -196,15 +232,21 @@ describe('HomeworkAnswerDialog — answer matching', () => {
   it('shows per-question generation progress and keeps the dialog closable', async () => {
     const user = userEvent.setup()
     let release!: () => void
-    const gate = new Promise<void>((resolve) => { release = resolve })
-    const { generateAnswerContent, onOpenChange } = renderDialog(makeMapping({
-      entries: [{ number: '1', text: 'nine', chunkIds: ['c1'], pageNumbers: [1] }],
-      summary: { total: 1, numbered: 1, unnumbered: 0, unsplit: false },
-      result: {
-        assignments: [{ questionId: 'q1', status: 'matched', reason: 'number-unique', answerIndex: 0 }],
-        unmatchedAnswers: [],
-      },
-    }))
+    const gate = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    const { generateAnswerContent, onOpenChange } = renderDialog(
+      makeMapping({
+        entries: [{ number: '1', text: 'nine', chunkIds: ['c1'], pageNumbers: [1] }],
+        summary: { total: 1, numbered: 1, unnumbered: 0, unsplit: false },
+        result: {
+          assignments: [
+            { questionId: 'q1', status: 'matched', reason: 'number-unique', answerIndex: 0 },
+          ],
+          unmatchedAnswers: [],
+        },
+      }),
+    )
     generateAnswerContent.mockImplementation(async (_setId, _ids, onProgress) => {
       onProgress?.({ completed: 0, total: 1, generated: 0, failed: 0, skipped: 0 })
       await gate
@@ -212,7 +254,9 @@ describe('HomeworkAnswerDialog — answer matching', () => {
       return { generated: 1, failed: 0, skipped: 0 }
     })
     await user.click(await screen.findByRole('button', { name: /Save & generate help/ }))
-    expect(await screen.findByText(/Generating explanations · 0\/1 questions finished/)).toBeInTheDocument()
+    expect(
+      await screen.findByText(/Generating explanations · 0\/1 questions finished/),
+    ).toBeInTheDocument()
     expect(screen.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '0')
     const close = screen.getAllByRole('button', { name: 'Close' }).at(-1)!
     expect(close).not.toBeDisabled()
@@ -224,18 +268,29 @@ describe('HomeworkAnswerDialog — answer matching', () => {
 
   it('shows a failed question reason and retries only that question', async () => {
     const user = userEvent.setup()
-    const { generateAnswerContent } = renderDialog(makeMapping({
-      entries: [{ number: '1', text: 'nine', chunkIds: ['c1'] }],
-      result: {
-        assignments: [{ questionId: 'q1', status: 'matched', reason: 'number-unique', answerIndex: 0 }],
-        unmatchedAnswers: [],
-      },
-    }), [question({
-      answerStatus: 'matched', answerText: 'nine',
-      generationStatus: 'failed', generationError: 'The model response was cut off.',
-    })])
+    const { generateAnswerContent } = renderDialog(
+      makeMapping({
+        entries: [{ number: '1', text: 'nine', chunkIds: ['c1'] }],
+        result: {
+          assignments: [
+            { questionId: 'q1', status: 'matched', reason: 'number-unique', answerIndex: 0 },
+          ],
+          unmatchedAnswers: [],
+        },
+      }),
+      [
+        question({
+          answerStatus: 'matched',
+          answerText: 'nine',
+          generationStatus: 'failed',
+          generationError: 'The model response was cut off.',
+        }),
+      ],
+    )
     expect(await screen.findByText(/The model response was cut off/)).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Retry this question' }))
-    await waitFor(() => expect(generateAnswerContent).toHaveBeenCalledWith('s1', ['q1'], expect.any(Function)))
+    await waitFor(() =>
+      expect(generateAnswerContent).toHaveBeenCalledWith('s1', ['q1'], expect.any(Function)),
+    )
   })
 })

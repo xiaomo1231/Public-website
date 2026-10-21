@@ -16,7 +16,9 @@ export function normalizeWord(text: string): string {
 }
 
 /** Every inflected form → its headword, from the dictionary's word forms. */
-export function buildLemmaIndex(entries: Iterable<Pick<DictEntry, 'word' | 'forms'>>): Map<string, string> {
+export function buildLemmaIndex(
+  entries: Iterable<Pick<DictEntry, 'word' | 'forms'>>,
+): Map<string, string> {
   const index = new Map<string, string>()
   for (const entry of entries) {
     const lemma = normalizeWord(entry.word)
@@ -32,7 +34,11 @@ export function buildLemmaIndex(entries: Iterable<Pick<DictEntry, 'word' | 'form
  * Headword of a token: the dictionary's own form table first, then the
  * regular English endings, accepted only when they lead to a known word.
  */
-export function lemmaOf(token: string, index: Map<string, string>, known: (word: string) => boolean): string {
+export function lemmaOf(
+  token: string,
+  index: Map<string, string>,
+  known: (word: string) => boolean,
+): string {
   const word = normalizeWord(token)
   if (known(word)) return word
   const listed = index.get(word)
@@ -43,7 +49,8 @@ export function lemmaOf(token: string, index: Map<string, string>, known: (word:
   if (word.endsWith('s') && !word.endsWith('ss')) tries.push(word.slice(0, -1))
   if (word.endsWith('ied')) tries.push(`${word.slice(0, -3)}y`)
   if (word.endsWith('ed')) tries.push(word.slice(0, -2), word.slice(0, -1), word.slice(0, -3))
-  if (word.endsWith('ing')) tries.push(word.slice(0, -3), `${word.slice(0, -3)}e`, word.slice(0, -4))
+  if (word.endsWith('ing'))
+    tries.push(word.slice(0, -3), `${word.slice(0, -3)}e`, word.slice(0, -4))
   return tries.find((candidate) => candidate.length > 2 && known(candidate)) ?? word
 }
 
@@ -97,7 +104,13 @@ export function extractCourseTerms(
         const token = normalizeWord(raw).replace(/'s$/, '')
         if (!WORD.test(token) || STOPWORDS.has(token)) continue
         const word = options.lemma(token)
-        if (word.length < 4 || STOPWORDS.has(word) || options.isCommon(word) || options.isCommon(token)) continue
+        if (
+          word.length < 4 ||
+          STOPWORDS.has(word) ||
+          options.isCommon(word) ||
+          options.isCommon(token)
+        )
+          continue
         const existing = found.get(word)
         if (existing) {
           existing.occurrences++
@@ -147,7 +160,10 @@ function editDistance(a: string, b: string): number {
 }
 
 /** A typed spelling: right, or wrong but off by one letter (a slip worth pointing out). */
-export function checkSpelling(input: string, word: string): { correct: boolean; nearMiss: boolean } {
+export function checkSpelling(
+  input: string,
+  word: string,
+): { correct: boolean; nearMiss: boolean } {
   const given = normalizeWord(input)
   const target = normalizeWord(word)
   if (given === target) return { correct: true, nearMiss: false }
@@ -159,7 +175,11 @@ export function checkSpelling(input: string, word: string): { correct: boolean; 
  * blanked (the sentence may use a plural or a past tense). Null when the word
  * does not appear in the sentence.
  */
-export function clozeOf(sentence: string, word: string, forms: string[] = []): { text: string; answer: string } | null {
+export function clozeOf(
+  sentence: string,
+  word: string,
+  forms: string[] = [],
+): { text: string; answer: string } | null {
   const regular = [
     `${word}s`,
     `${word}es`,
@@ -169,7 +189,9 @@ export function clozeOf(sentence: string, word: string, forms: string[] = []): {
     ...(word.endsWith('e') ? [`${word.slice(0, -1)}ing`] : []),
     ...(word.endsWith('y') ? [`${word.slice(0, -1)}ies`, `${word.slice(0, -1)}ied`] : []),
   ]
-  const variants = [...new Set([word, ...forms, ...regular].filter(Boolean))].sort((a, b) => b.length - a.length)
+  const variants = [...new Set([word, ...forms, ...regular].filter(Boolean))].sort(
+    (a, b) => b.length - a.length,
+  )
   for (const variant of variants) {
     const pattern = new RegExp(`\\b${variant.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i')
     const found = pattern.exec(sentence)
@@ -183,7 +205,10 @@ export function clozeOf(sentence: string, word: string, forms: string[] = []): {
  * by its meaning after a tab, a comma, a colon or a space before non-Latin
  * text. A header line ("word,…") is skipped.
  */
-export function parseWordList(text: string): { words: Array<{ word: string; meaning?: string }>; skipped: number } {
+export function parseWordList(text: string): {
+  words: Array<{ word: string; meaning?: string }>
+  skipped: number
+} {
   const words: Array<{ word: string; meaning?: string }> = []
   const seen = new Set<string>()
   let skipped = 0
@@ -205,8 +230,10 @@ export function parseWordList(text: string): { words: Array<{ word: string; mean
   const acceptLine = (rawLine: string) => {
     const line = rawLine.trim()
     if (!line) return
-    const match = /^([A-Za-z][A-Za-z' -]*?[A-Za-z]|[A-Za-z])\s*(?:[\t,:：]\s*|\s+(?=[^\x20-\x7e]))(.*)$/.exec(line) ??
-      /^([A-Za-z][A-Za-z' -]*[A-Za-z]|[A-Za-z])$/.exec(line)
+    const match =
+      /^([A-Za-z][A-Za-z' -]*?[A-Za-z]|[A-Za-z])\s*(?:[\t,:：]\s*|\s+(?=[^\x20-\x7e]))(.*)$/.exec(
+        line,
+      ) ?? /^([A-Za-z][A-Za-z' -]*[A-Za-z]|[A-Za-z])$/.exec(line)
     if (!match) {
       skipped++
       return
@@ -261,7 +288,16 @@ export function parseWordList(text: string): { words: Array<{ word: string; mean
 }
 
 const WORD_HEADERS = new Set(['word', 'words', 'term', 'headword', '单词', '词'])
-const MEANING_HEADERS = new Set(['meaning', 'meanings', 'definition', 'translation', 'gloss', '释义', '意思', '词义'])
+const MEANING_HEADERS = new Set([
+  'meaning',
+  'meanings',
+  'definition',
+  'translation',
+  'gloss',
+  '释义',
+  '意思',
+  '词义',
+])
 
 /** RFC 4180 CSV: quoted fields may hold commas, doubled quotes and line breaks. */
 export function parseCsv(text: string): string[][] {
@@ -309,8 +345,18 @@ export function parseCsv(text: string): string[][] {
 
 function ankiSeparator(headers: string[]): string | RegExp {
   const line = headers.find((header) => /^#separator:/i.test(header))
-  const value = line?.replace(/^#separator:/i, '').trim().toLowerCase() ?? 'tab'
-  const named: Record<string, string> = { tab: '\t', comma: ',', semicolon: ';', pipe: '|', colon: ':' }
+  const value =
+    line
+      ?.replace(/^#separator:/i, '')
+      .trim()
+      .toLowerCase() ?? 'tab'
+  const named: Record<string, string> = {
+    tab: '\t',
+    comma: ',',
+    semicolon: ';',
+    pipe: '|',
+    colon: ':',
+  }
   if (value === 'space') return / +/
   return named[value] ?? (value.length === 1 ? value : '\t')
 }
@@ -348,9 +394,11 @@ export interface ExportRow {
   tags: string[]
 }
 
-const csvField = (value: string) => (/[",\r\n]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value)
+const csvField = (value: string) =>
+  /[",\r\n]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value
 const ankiField = (value: string) => value.replace(/[\t\r\n]+/g, ' ')
-const escapeHtml = (value: string) => value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+const escapeHtml = (value: string) =>
+  value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
 
 /**
  * A word list in a format other apps import:
@@ -363,8 +411,16 @@ export function formatExport(rows: ExportRow[], format: ExportFormat): string {
   if (format === 'csv') {
     const lines = [['word', 'phonetic', 'meaning', 'example', 'source'].join(',')]
     for (const row of rows) {
-      const source = row.context ? [row.context.documentName, row.context.page !== undefined ? `p${row.context.page}` : ''].filter(Boolean).join(' ') : ''
-      lines.push([row.word, row.phonetic, row.meanings.join('；'), row.context?.text ?? '', source].map(csvField).join(','))
+      const source = row.context
+        ? [row.context.documentName, row.context.page !== undefined ? `p${row.context.page}` : '']
+            .filter(Boolean)
+            .join(' ')
+        : ''
+      lines.push(
+        [row.word, row.phonetic, row.meanings.join('；'), row.context?.text ?? '', source]
+          .map(csvField)
+          .join(','),
+      )
     }
     return `${BOM}${lines.join('\r\n')}\r\n`
   }
@@ -404,6 +460,9 @@ export function rootHints(word: string, roots: RootEntry[]): RootEntry[] {
       inner.push(entry)
     }
   }
-  const longest = (list: RootEntry[]) => [...list].sort((a, b) => clean(b[0]).length - clean(a[0]).length)[0]
-  return [longest(prefixes), longest(inner), longest(suffixes)].filter((entry): entry is RootEntry => Boolean(entry))
+  const longest = (list: RootEntry[]) =>
+    [...list].sort((a, b) => clean(b[0]).length - clean(a[0]).length)[0]
+  return [longest(prefixes), longest(inner), longest(suffixes)].filter(
+    (entry): entry is RootEntry => Boolean(entry),
+  )
 }

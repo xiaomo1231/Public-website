@@ -112,9 +112,7 @@ export function computeSelectionPopupPosition(input: PopupPositionInput): PopupP
   const height = Math.min(popupHeight, available)
 
   const rawTop =
-    side === 'top'
-      ? input.anchor.top - gap - height
-      : input.anchor.top + input.anchor.height + gap
+    side === 'top' ? input.anchor.top - gap - height : input.anchor.top + input.anchor.height + gap
   const top = clamp(rawTop, viewTop, Math.max(viewTop, viewBottom - height))
 
   const left = clamp(

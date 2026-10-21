@@ -15,8 +15,12 @@ const REVIEW: HomeworkReviewGuide = {
   explanation: 'The result is 9 because five more than four is nine.',
   interpretation: 'The sum is 9.',
   check: 'Subtract 5 from 9 to get 4.',
-  language: 'en', promptVersion: 'v1', inputHash: 'test',
-  questionSourceRefs: [], answerChunkIds: [], createdAt: 1,
+  language: 'en',
+  promptVersion: 'v1',
+  inputHash: 'test',
+  questionSourceRefs: [],
+  answerChunkIds: [],
+  createdAt: 1,
 }
 
 const ANSWERED: HomeworkQuestion = {
@@ -94,7 +98,9 @@ describe('HomeworkQuestionView professor answer', () => {
     expect(screen.getByText('The sum is 9.')).toBeInTheDocument()
     expect(service.getOrGenerateReviewGuide).toHaveBeenCalledWith('q1', 'en')
     expect(screen.getByText(/Professor answer \(verbatim\)/)).toBeInTheDocument()
-    expect(screen.getByText(/Professor answer \(verbatim\)/).closest('details')).not.toHaveAttribute('open')
+    expect(
+      screen.getByText(/Professor answer \(verbatim\)/).closest('details'),
+    ).not.toHaveAttribute('open')
     expect(screen.getByText(/AI explanation based on the professor answer/)).toBeInTheDocument()
     await user.click(screen.getByText(/Professor answer \(verbatim\)/))
     expect(screen.getByRole('link', { name: /Open answer file/ })).toBeInTheDocument()
@@ -107,7 +113,11 @@ describe('HomeworkQuestionView professor answer', () => {
       steps: ['步骤 4：代入 $P(x)=ax^2+bx+c$：\\n$$P(x)=\\frac32x^2+5$$\\n即得到完整函数。'],
       check: '正确性核对\\n- $P(0)=5$\\n- $P(1)=8$\\n\\n三个点均符合。',
     })
-    render(<MemoryRouter><HomeworkQuestionView question={ANSWERED} service={service} mode="review" /></MemoryRouter>)
+    render(
+      <MemoryRouter>
+        <HomeworkQuestionView question={ANSWERED} service={service} mode="review" />
+      </MemoryRouter>,
+    )
     const heading = await screen.findByText('Final check')
     const section = heading.closest('section')
     expect(section?.querySelectorAll('li')).toHaveLength(2)
@@ -122,7 +132,11 @@ describe('HomeworkQuestionView professor answer', () => {
       ...REVIEW,
       method: '**$a$&#x20;**&#x20;与 **$b$** 比较。',
     })
-    render(<MemoryRouter><HomeworkQuestionView question={ANSWERED} service={service} mode="review" /></MemoryRouter>)
+    render(
+      <MemoryRouter>
+        <HomeworkQuestionView question={ANSWERED} service={service} mode="review" />
+      </MemoryRouter>,
+    )
     const heading = await screen.findByText('Method and why it fits')
     const section = heading.closest('section')
     expect(section?.textContent).not.toContain('&#x20;')

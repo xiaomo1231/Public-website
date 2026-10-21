@@ -89,7 +89,12 @@ describe('live previews', () => {
   })
 })
 
-function Harness(props: { mode: MathInputMode; onSubmit?: () => void; multiline?: boolean; initial?: string }) {
+function Harness(props: {
+  mode: MathInputMode
+  onSubmit?: () => void
+  multiline?: boolean
+  initial?: string
+}) {
   const [value, setValue] = useState(props.initial ?? '')
   return (
     <MathField

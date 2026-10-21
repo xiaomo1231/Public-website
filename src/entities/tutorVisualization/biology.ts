@@ -107,7 +107,10 @@ export function pedigreeLayout(members: PedigreeMember[]): PedigreeLayout | null
     couple.children.push(member.id)
     couples.set(key, couple)
     if (member.father && member.mother) {
-      for (const [a, b] of [[member.father, member.mother], [member.mother, member.father]] as const) {
+      for (const [a, b] of [
+        [member.father, member.mother],
+        [member.mother, member.father],
+      ] as const) {
         const set = partners.get(a) ?? new Set<string>()
         set.add(b)
         partners.set(a, set)
@@ -125,7 +128,9 @@ export function pedigreeLayout(members: PedigreeMember[]): PedigreeLayout | null
       const slots = [member.father, member.mother]
         .map((id) => (id ? positions.get(id)?.slot : undefined))
         .filter((slot): slot is number => slot !== undefined)
-      return slots.length ? slots.reduce((a, b) => a + b, 0) / slots.length : Number.POSITIVE_INFINITY
+      return slots.length
+        ? slots.reduce((a, b) => a + b, 0) / slots.length
+        : Number.POSITIVE_INFINITY
     }
     const marriedIn = (id: string): string[] =>
       [...(partners.get(id) ?? [])].filter((partner) => {
@@ -162,7 +167,9 @@ export function pedigreeLayout(members: PedigreeMember[]): PedigreeLayout | null
         for (const sibling of [...single, ...married]) placeWithPartners(sibling.id, false)
       }
     }
-    row.forEach((id, index) => positions.set(id, { generation, slot: index - (row.length - 1) / 2 }))
+    row.forEach((id, index) =>
+      positions.set(id, { generation, slot: index - (row.length - 1) / 2 }),
+    )
     rows.push(row)
   }
   return { generationCount, positions, couples: [...couples.values()], rows }
@@ -170,7 +177,13 @@ export function pedigreeLayout(members: PedigreeMember[]): PedigreeLayout | null
 
 /** I, II, III … for generation labels. */
 export function romanNumeral(n: number): string {
-  const table: Array<[number, string]> = [[10, 'X'], [9, 'IX'], [5, 'V'], [4, 'IV'], [1, 'I']]
+  const table: Array<[number, string]> = [
+    [10, 'X'],
+    [9, 'IX'],
+    [5, 'V'],
+    [4, 'IV'],
+    [1, 'I'],
+  ]
   let out = ''
   let rest = n
   for (const [value, symbol] of table) {
@@ -218,21 +231,40 @@ interface Assignment {
 }
 
 function options(member: PedigreeMember, mode: InheritanceMode): Assignment[] {
-  const sexes: Array<'female' | 'male'> = member.sex === 'unknown' ? ['female', 'male'] : [member.sex]
+  const sexes: Array<'female' | 'male'> =
+    member.sex === 'unknown' ? ['female', 'male'] : [member.sex]
   const out: Assignment[] = []
   for (const sex of sexes) {
     const autosomal = mode === 'AD' || mode === 'AR'
-    const counts = autosomal ? [0, 1, 2] : mode === 'YL' ? (sex === 'male' ? [0, 1] : [0]) : sex === 'male' ? [0, 1] : [0, 1, 2]
+    const counts = autosomal
+      ? [0, 1, 2]
+      : mode === 'YL'
+        ? sex === 'male'
+          ? [0, 1]
+          : [0]
+        : sex === 'male'
+          ? [0, 1]
+          : [0, 1, 2]
     for (const count of counts) {
       const affected =
-        mode === 'AR' ? count === 2
-        : mode === 'AD' ? count >= 1
-        : mode === 'XR' ? (sex === 'male' ? count === 1 : count === 2)
-        : mode === 'XD' ? count >= 1
-        : count === 1
+        mode === 'AR'
+          ? count === 2
+          : mode === 'AD'
+            ? count >= 1
+            : mode === 'XR'
+              ? sex === 'male'
+                ? count === 1
+                : count === 2
+              : mode === 'XD'
+                ? count >= 1
+                : count === 1
       if (affected !== member.affected) continue
       // A marked carrier is a heterozygote for a recessive trait.
-      if (member.carrier && !((mode === 'AR' || (mode === 'XR' && sex === 'female')) && count === 1)) continue
+      if (
+        member.carrier &&
+        !((mode === 'AR' || (mode === 'XR' && sex === 'female')) && count === 1)
+      )
+        continue
       out.push({ sex, count })
     }
   }
@@ -240,8 +272,14 @@ function options(member: PedigreeMember, mode: InheritanceMode): Assignment[] {
 }
 
 /** Disease alleles a parent can pass on, for the child's sex. */
-function transmitted(parent: Assignment, mode: InheritanceMode, childSex: 'female' | 'male', role: 'father' | 'mother'): number[] {
-  if (mode === 'AD' || mode === 'AR') return parent.count === 0 ? [0] : parent.count === 2 ? [1] : [0, 1]
+function transmitted(
+  parent: Assignment,
+  mode: InheritanceMode,
+  childSex: 'female' | 'male',
+  role: 'father' | 'mother',
+): number[] {
+  if (mode === 'AD' || mode === 'AR')
+    return parent.count === 0 ? [0] : parent.count === 2 ? [1] : [0, 1]
   if (mode === 'YL') return role === 'father' && childSex === 'male' ? [parent.count] : [0]
   // X-linked: a father gives his X to daughters only; a mother gives an X to everyone.
   if (role === 'father') return childSex === 'female' ? [parent.count] : [0]
@@ -257,13 +295,18 @@ function consistentWithParents(
   const fromFather = father ? transmitted(father, mode, child.sex, 'father') : null
   const fromMother = mother ? transmitted(mother, mode, child.sex, 'mother') : null
   const maleOnX = (mode === 'XD' || mode === 'XR') && child.sex === 'male'
-  const fatherOptions = fromFather ?? (maleOnX ? [0] : mode === 'YL' && child.sex === 'male' ? [0, 1] : [0, 1])
+  const fatherOptions =
+    fromFather ?? (maleOnX ? [0] : mode === 'YL' && child.sex === 'male' ? [0, 1] : [0, 1])
   const motherOptions = fromMother ?? (mode === 'YL' ? [0] : [0, 1])
-  for (const f of fatherOptions) for (const m of motherOptions) if (f + m === child.count) return true
+  for (const f of fatherOptions)
+    for (const m of motherOptions) if (f + m === child.count) return true
   return false
 }
 
-function witnessFor(members: PedigreeMember[], mode: InheritanceMode): InheritanceVerdict['reason'] | undefined {
+function witnessFor(
+  members: PedigreeMember[],
+  mode: InheritanceMode,
+): InheritanceVerdict['reason'] | undefined {
   const byId = new Map(members.map((member) => [member.id, member]))
   if (mode !== 'AR' && mode !== 'XR') {
     const carrier = members.find((member) => member.carrier)
@@ -276,11 +319,26 @@ function witnessFor(members: PedigreeMember[], mode: InheritanceMode): Inheritan
   for (const child of members) {
     const father = child.father ? byId.get(child.father) : undefined
     const mother = child.mother ? byId.get(child.mother) : undefined
-    const ids = (...list: Array<PedigreeMember | undefined>) => list.filter(Boolean).map((m) => m!.id)
-    if ((mode === 'AD' || mode === 'XD') && father && mother && !father.affected && !mother.affected && child.affected) {
+    const ids = (...list: Array<PedigreeMember | undefined>) =>
+      list.filter(Boolean).map((m) => m!.id)
+    if (
+      (mode === 'AD' || mode === 'XD') &&
+      father &&
+      mother &&
+      !father.affected &&
+      !mother.affected &&
+      child.affected
+    ) {
       return { kind: 'unaffected-parents-affected-child', ids: ids(father, mother, child) }
     }
-    if (mode === 'AR' && father && mother && father.affected && mother.affected && !child.affected) {
+    if (
+      mode === 'AR' &&
+      father &&
+      mother &&
+      father.affected &&
+      mother.affected &&
+      !child.affected
+    ) {
       return { kind: 'affected-parents-unaffected-child', ids: ids(father, mother, child) }
     }
     if (mode === 'XR') {
@@ -300,7 +358,8 @@ function witnessFor(members: PedigreeMember[], mode: InheritanceMode): Inheritan
       }
     }
     if (mode === 'YL') {
-      if (child.sex === 'female' && child.affected) return { kind: 'affected-female', ids: [child.id] }
+      if (child.sex === 'female' && child.affected)
+        return { kind: 'affected-female', ids: [child.id] }
       if (father && child.sex === 'male' && father.affected !== child.affected) {
         return { kind: 'father-son-differ', ids: ids(father, child) }
       }
@@ -335,7 +394,11 @@ export function inheritanceAnalysis(members: PedigreeMember[]): InheritanceVerdi
         const mother = member.mother ? assigned[index.get(member.mother)!] : undefined
         if (father && father.sex !== 'male') continue
         if (mother && mother.sex !== 'female') continue
-        if ((member.father || member.mother) && !consistentWithParents(choice, father, mother, mode)) continue
+        if (
+          (member.father || member.mother) &&
+          !consistentWithParents(choice, father, mother, mode)
+        )
+          continue
         assigned[i] = choice
         if (search(i + 1)) return true
       }
@@ -345,12 +408,18 @@ export function inheritanceAnalysis(members: PedigreeMember[]): InheritanceVerdi
     // Parents must be the right sex in every assignment.
     for (let i = 0; i < ordered.length; i++) {
       const member = ordered[i]!
-      if (members.some((child) => child.father === member.id)) choices[i] = choices[i]!.filter((c) => c.sex === 'male')
-      if (members.some((child) => child.mother === member.id)) choices[i] = choices[i]!.filter((c) => c.sex === 'female')
+      if (members.some((child) => child.father === member.id))
+        choices[i] = choices[i]!.filter((c) => c.sex === 'male')
+      if (members.some((child) => child.mother === member.id))
+        choices[i] = choices[i]!.filter((c) => c.sex === 'female')
     }
     const possible = choices.every((list) => list.length > 0) && search(0)
     if (possible) return { mode, possible }
-    return { mode, possible, reason: witnessFor(members, mode) ?? { kind: 'no-assignment', ids: [] } }
+    return {
+      mode,
+      possible,
+      reason: witnessFor(members, mode) ?? { kind: 'no-assignment', ids: [] },
+    }
   })
 }
 
@@ -360,14 +429,30 @@ export const MAX_DNA_LENGTH = 90
 
 const CODONS: Record<string, string> = {}
 const TABLE: Array<[string, string]> = [
-  ['Phe', 'UUU UUC'], ['Leu', 'UUA UUG CUU CUC CUA CUG'], ['Ile', 'AUU AUC AUA'], ['Met', 'AUG'],
-  ['Val', 'GUU GUC GUA GUG'], ['Ser', 'UCU UCC UCA UCG AGU AGC'], ['Pro', 'CCU CCC CCA CCG'],
-  ['Thr', 'ACU ACC ACA ACG'], ['Ala', 'GCU GCC GCA GCG'], ['Tyr', 'UAU UAC'], ['Stop', 'UAA UAG UGA'],
-  ['His', 'CAU CAC'], ['Gln', 'CAA CAG'], ['Asn', 'AAU AAC'], ['Lys', 'AAA AAG'], ['Asp', 'GAU GAC'],
-  ['Glu', 'GAA GAG'], ['Cys', 'UGU UGC'], ['Trp', 'UGG'], ['Arg', 'CGU CGC CGA CGG AGA AGG'],
+  ['Phe', 'UUU UUC'],
+  ['Leu', 'UUA UUG CUU CUC CUA CUG'],
+  ['Ile', 'AUU AUC AUA'],
+  ['Met', 'AUG'],
+  ['Val', 'GUU GUC GUA GUG'],
+  ['Ser', 'UCU UCC UCA UCG AGU AGC'],
+  ['Pro', 'CCU CCC CCA CCG'],
+  ['Thr', 'ACU ACC ACA ACG'],
+  ['Ala', 'GCU GCC GCA GCG'],
+  ['Tyr', 'UAU UAC'],
+  ['Stop', 'UAA UAG UGA'],
+  ['His', 'CAU CAC'],
+  ['Gln', 'CAA CAG'],
+  ['Asn', 'AAU AAC'],
+  ['Lys', 'AAA AAG'],
+  ['Asp', 'GAU GAC'],
+  ['Glu', 'GAA GAG'],
+  ['Cys', 'UGU UGC'],
+  ['Trp', 'UGG'],
+  ['Arg', 'CGU CGC CGA CGG AGA AGG'],
   ['Gly', 'GGU GGC GGA GGG'],
 ]
-for (const [aminoAcid, codons] of TABLE) for (const codon of codons.split(' ')) CODONS[codon] = aminoAcid
+for (const [aminoAcid, codons] of TABLE)
+  for (const codon of codons.split(' ')) CODONS[codon] = aminoAcid
 
 const COMPLEMENT: Record<string, string> = { A: 'U', T: 'A', C: 'G', G: 'C' }
 const DNA_COMPLEMENT: Record<string, string> = { A: 'T', T: 'A', C: 'G', G: 'C' }
@@ -411,13 +496,19 @@ export function translateDna(
   strand: 'coding' | 'template',
   options: TranslationOptions = {},
 ): TranslationResult | null {
-  const bases = dna.toUpperCase().replace(/[\s-]/g, '').replace(/^5'|3'$|^3'|5'$/g, '')
+  const bases = dna
+    .toUpperCase()
+    .replace(/[\s-]/g, '')
+    .replace(/^5'|3'$|^3'|5'$/g, '')
   if (!/^[ACGT]+$/.test(bases) || bases.length < 3 || bases.length > MAX_DNA_LENGTH) return null
   const direction = options.direction ?? (strand === 'coding' ? '5to3' : '3to5')
   // Coding strand lines up 5′→3′; template strand lines up 3′→5′.
   const reversed = strand === 'coding' ? direction === '3to5' : direction === '5to3'
   const alignedDna = reversed ? [...bases].reverse().join('') : bases
-  const mrna = strand === 'coding' ? alignedDna.replace(/T/g, 'U') : [...alignedDna].map((b) => COMPLEMENT[b]).join('')
+  const mrna =
+    strand === 'coding'
+      ? alignedDna.replace(/T/g, 'U')
+      : [...alignedDna].map((b) => COMPLEMENT[b]).join('')
   const startIndex = options.start === 'aug' ? mrna.indexOf('AUG') : 0
   const codons: TranslationResult['codons'] = []
   let stopped = false

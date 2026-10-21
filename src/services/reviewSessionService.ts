@@ -88,7 +88,11 @@ export class ReviewSessionService {
   }
 
   /** Generate practice focused on a single mistake. */
-  async practiceMistake(mistakeId: string, mode: PracticeMistakeMode, options: ReviewSessionOptions = {}): Promise<Quiz> {
+  async practiceMistake(
+    mistakeId: string,
+    mode: PracticeMistakeMode,
+    options: ReviewSessionOptions = {},
+  ): Promise<Quiz> {
     const mistake = await this.mistakes.get(mistakeId)
     if (!mistake) throw new AppError(t('errors.mistakeNotFound'), 'NOT_FOUND')
 
@@ -99,7 +103,7 @@ export class ReviewSessionService {
 
     const focus =
       mode === 'weakness'
-        ? (await this.weakness.weakKnowledgePoints(mistake.projectId, 4))
+        ? await this.weakness.weakKnowledgePoints(mistake.projectId, 4)
         : [mistake.knowledgePoint]
 
     const difficulty: QuizDifficulty =
@@ -107,7 +111,7 @@ export class ReviewSessionService {
         ? stepDifficulty(baseDifficulty, +1)
         : mode === 'easier'
           ? stepDifficulty(baseDifficulty, -1)
-          : options.difficulty ?? 'adaptive'
+          : (options.difficulty ?? 'adaptive')
 
     const config: QuizConfig = {
       mode: mode === 'weakness' ? 'weakness' : 'review',

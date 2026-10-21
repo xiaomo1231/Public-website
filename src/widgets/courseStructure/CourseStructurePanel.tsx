@@ -2,10 +2,7 @@ import { useEffect, useState } from 'react'
 import { ListTree } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/ui/Card'
 import { CourseStructureService } from '@/services/courseStructureService'
-import type {
-  CourseStructureNode,
-  StructureConfidence,
-} from '@/entities/courseStructure/types'
+import type { CourseStructureNode, StructureConfidence } from '@/entities/courseStructure/types'
 import { cn } from '@/shared/lib/utils'
 import { useTranslation } from '@/i18n'
 
@@ -82,7 +79,10 @@ export function CourseStructurePanel({
                   : undefined
               const selectable = Boolean(onSelect) && node.type !== 'subsection'
               return (
-                <li key={node.id} className={cn(node.depth > 0 && 'pl-4', node.depth > 1 && 'pl-8')}>
+                <li
+                  key={node.id}
+                  className={cn(node.depth > 0 && 'pl-4', node.depth > 1 && 'pl-8')}
+                >
                   {selectable ? (
                     <button
                       type="button"
@@ -91,7 +91,9 @@ export function CourseStructurePanel({
                       className={cn(
                         'flex w-full min-w-0 flex-wrap items-baseline gap-x-1 rounded px-1 py-0.5 text-left text-sm transition-colors',
                         node.depth > 0 && 'text-muted-foreground',
-                        selectedId === node.id ? 'bg-accent text-accent-foreground' : 'hover:bg-accent/50',
+                        selectedId === node.id
+                          ? 'bg-accent text-accent-foreground'
+                          : 'hover:bg-accent/50',
                       )}
                     >
                       <span className="min-w-0 break-words">{label}</span>

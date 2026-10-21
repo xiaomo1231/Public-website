@@ -74,7 +74,11 @@ describe('TutorLessonService — cache-first', () => {
             name: 'Set Operations',
             description: 'Union and intersection.',
             sourceRefs: [
-              { documentId: doc.id, documentName: 'sets.txt', quote: 'The intersection of two sets' },
+              {
+                documentId: doc.id,
+                documentName: 'sets.txt',
+                quote: 'The intersection of two sets',
+              },
             ],
           },
         ],
@@ -153,7 +157,11 @@ describe('TutorLessonService — cache-first', () => {
       },
     ])
 
-    const second = await tutor.getOrGenerate({ ...input(), topicId: secondTopicId, topicName: 'Logic' })
+    const second = await tutor.getOrGenerate({
+      ...input(),
+      topicId: secondTopicId,
+      topicName: 'Logic',
+    })
 
     expect(chat).toHaveBeenCalledTimes(2)
     expect(second.fromCache).toBe(false)
@@ -202,7 +210,10 @@ describe('TutorLessonService — cache-first', () => {
       },
     ])
 
-    const after = await tutor.getOrGenerate({ ...input(), topicDescription: 'Rewritten description.' })
+    const after = await tutor.getOrGenerate({
+      ...input(),
+      topicDescription: 'Rewritten description.',
+    })
 
     expect(chat).toHaveBeenCalledTimes(2)
     expect(after.fromCache).toBe(false)
@@ -368,7 +379,10 @@ describe('TutorLessonService — cache-first', () => {
       currentProvider: { id: 'fake' },
     } as unknown as AIService
 
-    const result = await service(failing).getOrGenerate({ ...input(), topicDescription: 'Rewritten.' })
+    const result = await service(failing).getOrGenerate({
+      ...input(),
+      topicDescription: 'Rewritten.',
+    })
 
     expect(result.fromCache).toBe(true)
     expect(result.refreshError).toBeTruthy()
@@ -419,7 +433,14 @@ describe('computeLessonContentHash', () => {
     name: 'Sets',
     description: 'd',
     sourceRefs: [
-      { documentId: 'doc-1', documentName: 'sets.txt', page: 3, section: 's', quote: 'q', chunkId: 'c1' },
+      {
+        documentId: 'doc-1',
+        documentName: 'sets.txt',
+        page: 3,
+        section: 's',
+        quote: 'q',
+        chunkId: 'c1',
+      },
     ],
   }
 

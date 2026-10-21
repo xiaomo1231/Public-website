@@ -35,7 +35,9 @@ describe('study session', () => {
     expect(await screen.findByText('8 d')).toBeInTheDocument()
     expect(screen.getByText('sub-')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: /Good/ }))
-    await waitFor(() => expect(grade).toHaveBeenCalledWith('bursa', 3, 'learn', { bookId: 'exam:cet4' }))
+    await waitFor(() =>
+      expect(grade).toHaveBeenCalledWith('bursa', 3, 'learn', { bookId: 'exam:cet4' }),
+    )
     expect(await screen.findByText('Session finished')).toBeInTheDocument()
   })
 
@@ -55,12 +57,16 @@ describe('study session', () => {
     fireEvent.keyDown(window, { key: 'Enter' })
     await waitFor(() => expect(grade).toHaveBeenCalledWith('tendon', 3, 'spell', { correct: true }))
 
-    fireEvent.change(await screen.findByLabelText('Type the English word'), { target: { value: 'ligamant' } })
+    fireEvent.change(await screen.findByLabelText('Type the English word'), {
+      target: { value: 'ligamant' },
+    })
     fireEvent.click(screen.getByRole('button', { name: 'Check' }))
     expect(await screen.findByText('One letter off')).toBeInTheDocument()
     expect(screen.getByText('ligament')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Next' }))
-    await waitFor(() => expect(grade).toHaveBeenCalledWith('ligament', 2, 'spell', { correct: false }))
+    await waitFor(() =>
+      expect(grade).toHaveBeenCalledWith('ligament', 2, 'spell', { correct: false }),
+    )
 
     // A near miss is rated Hard, not forgotten, so it does not come back today.
     expect(await screen.findByText('Session finished')).toBeInTheDocument()
@@ -70,7 +76,13 @@ describe('study session', () => {
     const { service, grade } = fakeService()
     render(
       <StudySession
-        items={[{ view: view('labrum', 'n. 唇', 'The glenoid labrum deepens the cavity.'), kind: 'review', mode: 'cloze' }]}
+        items={[
+          {
+            view: view('labrum', 'n. 唇', 'The glenoid labrum deepens the cavity.'),
+            kind: 'review',
+            mode: 'cloze',
+          },
+        ]}
         bookId={null}
         service={service}
         onExit={() => undefined}
@@ -79,7 +91,9 @@ describe('study session', () => {
     expect(screen.getByText('The glenoid _____ deepens the cavity.')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: "Don't know" }))
     fireEvent.click(screen.getByRole('button', { name: 'Next' }))
-    await waitFor(() => expect(grade).toHaveBeenCalledWith('labrum', 1, 'cloze', { correct: false }))
+    await waitFor(() =>
+      expect(grade).toHaveBeenCalledWith('labrum', 1, 'cloze', { correct: false }),
+    )
     // Back as recognition: the word is shown, the meaning hidden.
     expect(await screen.findByText('labrum')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Show meaning' })).toBeInTheDocument()

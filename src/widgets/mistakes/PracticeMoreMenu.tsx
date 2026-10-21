@@ -4,7 +4,11 @@ import { useTranslation, type TranslationKey } from '@/i18n'
 export type PracticeMode = 'same_concept' | 'similar' | 'easier' | 'harder' | 'weakness'
 
 const OPTIONS: Array<{ mode: PracticeMode; labelKey: TranslationKey; hintKey: TranslationKey }> = [
-  { mode: 'same_concept', labelKey: 'practiceMore.sameConcept', hintKey: 'practiceMore.sameConceptHint' },
+  {
+    mode: 'same_concept',
+    labelKey: 'practiceMore.sameConcept',
+    hintKey: 'practiceMore.sameConceptHint',
+  },
   { mode: 'similar', labelKey: 'practiceMore.similar', hintKey: 'practiceMore.similarHint' },
   { mode: 'easier', labelKey: 'practiceMore.easier', hintKey: 'practiceMore.easierHint' },
   { mode: 'harder', labelKey: 'practiceMore.harder', hintKey: 'practiceMore.harderHint' },
@@ -34,7 +38,11 @@ export function PracticeMoreMenu({ onSelect, busy }: PracticeMoreMenuProps): JSX
               <span className="block font-medium">{t(opt.labelKey)}</span>
               <span className="block text-xs text-muted-foreground">{t(opt.hintKey)}</span>
             </span>
-            {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <ChevronRight className="h-4 w-4 text-muted-foreground" />}
+            {busy ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <ChevronRight className="h-4 w-4 text-muted-foreground" />
+            )}
           </button>
         ))}
       </div>

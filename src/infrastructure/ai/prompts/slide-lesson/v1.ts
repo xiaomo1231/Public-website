@@ -142,7 +142,7 @@ export function buildQaSystemPrompt(): string {
     'The extracted slide text and a short explanation are provided as context.',
     '',
     'RULES:',
-    '  - Answer the student\'s question, staying grounded in the supplied slide material.',
+    "  - Answer the student's question, staying grounded in the supplied slide material.",
     '  - You may use standard background knowledge, but say so when the slide itself does not contain the answer.',
     '  - If the question is about a figure whose content is not in the extracted text, say plainly that it can only be read from the image; NEVER invent values, labels or arrows.',
     '  - Be concise and concrete. Prefer guiding the student to the next step over dumping the full answer.',

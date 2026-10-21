@@ -14,7 +14,10 @@ import {
   searchCommons,
   type FetchLike,
 } from '@/infrastructure/referenceImages/sources'
-import { buildSystemPrompt as buildReferenceQueryPrompt, normalizeReferenceQueries } from '@/infrastructure/ai/prompts/reference-image-query/v2'
+import {
+  buildSystemPrompt as buildReferenceQueryPrompt,
+  normalizeReferenceQueries,
+} from '@/infrastructure/ai/prompts/reference-image-query/v2'
 import { OpenAICompatibleProvider } from '@/infrastructure/ai/openaiCompatible'
 import type { AIService } from '@/services/aiService'
 import type { ChatMessage } from '@/infrastructure/ai/types'
@@ -23,7 +26,10 @@ import { AbortedError } from '@/infrastructure/ai/errors'
 const PNG = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10, 0, 0])
 
 function json(body: unknown): Response {
-  return new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } })
+  return new Response(JSON.stringify(body), {
+    status: 200,
+    headers: { 'content-type': 'application/json' },
+  })
 }
 
 function png(type = 'image/png'): Response {
@@ -80,7 +86,9 @@ function fakeNetwork(overrides: Partial<Record<'pubchemFormula', string>> = {}) 
     if (url.includes('/rest/pug/compound/name/')) {
       return json({
         PropertyTable: {
-          Properties: [{ CID: 702, MolecularFormula: overrides.pubchemFormula ?? 'C2H6O', Title: 'Ethanol' }],
+          Properties: [
+            { CID: 702, MolecularFormula: overrides.pubchemFormula ?? 'C2H6O', Title: 'Ethanol' },
+          ],
         },
       })
     }
@@ -108,7 +116,10 @@ describe('open image sources', () => {
   })
 
   it('finds a PubChem structure and checks its formula', async () => {
-    const found = await findPubChemCompound('ethanol', { fetch: fakeNetwork(), expectedFormula: 'C2H5OH' })
+    const found = await findPubChemCompound('ethanol', {
+      fetch: fakeNetwork(),
+      expectedFormula: 'C2H5OH',
+    })
     expect(found).toMatchObject({
       source: 'pubchem',
       imageUrl: 'https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/cid/702/PNG?image_size=large',
@@ -124,15 +135,23 @@ describe('open image sources', () => {
   it('keeps only reusable Commons images from allowed hosts, in search order', async () => {
     const results = await searchCommons('mitochondrion diagram', { fetch: fakeNetwork() })
     expect(results).toHaveLength(1)
-    expect(results[0]).toMatchObject({ license: 'CC BY-SA 4.0', author: 'Jane Doe', title: 'Mitochondrion structure' })
+    expect(results[0]).toMatchObject({
+      license: 'CC BY-SA 4.0',
+      author: 'Jane Doe',
+      title: 'Mitochondrion structure',
+    })
   })
 
   it('downloads only safe image types from allowed hosts', async () => {
     const network = fakeNetwork()
-    expect(await downloadImage('https://upload.wikimedia.org/a.png', { fetch: network })).toMatchObject({ mimeType: 'image/jpeg' })
+    expect(
+      await downloadImage('https://upload.wikimedia.org/a.png', { fetch: network }),
+    ).toMatchObject({ mimeType: 'image/jpeg' })
     expect(await downloadImage('https://evil.example.com/a.png', { fetch: network })).toBeNull()
     expect(await downloadImage('http://upload.wikimedia.org/a.png', { fetch: network })).toBeNull()
-    const svg = vi.fn<FetchLike>(async () => new Response('<svg/>', { headers: { 'content-type': 'image/svg+xml' } }))
+    const svg = vi.fn<FetchLike>(
+      async () => new Response('<svg/>', { headers: { 'content-type': 'image/svg+xml' } }),
+    )
     expect(await downloadImage('https://upload.wikimedia.org/a.svg', { fetch: svg })).toBeNull()
   })
 
@@ -143,13 +162,17 @@ describe('open image sources', () => {
       Object.defineProperty(response, 'redirected', { value: true })
       return response
     })
-    expect(await downloadImage('https://upload.wikimedia.org/a.png', { fetch: redirected })).toBeNull()
+    expect(
+      await downloadImage('https://upload.wikimedia.org/a.png', { fetch: redirected }),
+    ).toBeNull()
     const sameHost = vi.fn<FetchLike>(async () => {
       const response = png()
       Object.defineProperty(response, 'url', { value: 'https://upload.wikimedia.org/b.png' })
       return response
     })
-    expect(await downloadImage('https://upload.wikimedia.org/a.png', { fetch: sameHost })).not.toBeNull()
+    expect(
+      await downloadImage('https://upload.wikimedia.org/a.png', { fetch: sameHost }),
+    ).not.toBeNull()
   })
 
   it('stops reading a body without content-length once it passes 3 MB', async () => {
@@ -161,7 +184,9 @@ describe('open image sources', () => {
         controller.enqueue(chunk)
       },
     })
-    const big = vi.fn<FetchLike>(async () => new Response(endless, { headers: { 'content-type': 'image/png' } }))
+    const big = vi.fn<FetchLike>(
+      async () => new Response(endless, { headers: { 'content-type': 'image/png' } }),
+    )
     expect(await downloadImage('https://upload.wikimedia.org/big.png', { fetch: big })).toBeNull()
     expect(pulled).toBeLessThan(10)
   })
@@ -182,17 +207,25 @@ describe('reference image queries', () => {
       { allowPubChem: true },
     )
     expect(queries.map((query) => query.term)).toEqual(['ethanol', 'mitochondrion diagram'])
-    expect(normalizeReferenceQueries({ queries: [{ source: 'pubchem', term: 'ethanol', formula: 'C2H6O', purpose: 'x' }] }, { allowPubChem: false })).toEqual([])
+    expect(
+      normalizeReferenceQueries(
+        { queries: [{ source: 'pubchem', term: 'ethanol', formula: 'C2H6O', purpose: 'x' }] },
+        { allowPubChem: false },
+      ),
+    ).toEqual([])
   })
 })
 
 describe('vision messages', () => {
   it('sends images as an OpenAI content array', async () => {
     const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
-      new Response(JSON.stringify({ choices: [{ message: { content: '{"relevant":true}' } }], model: 'm' }), {
-        status: 200,
-        headers: { 'content-type': 'application/json' },
-      }),
+      new Response(
+        JSON.stringify({ choices: [{ message: { content: '{"relevant":true}' } }], model: 'm' }),
+        {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        },
+      ),
     )
     const provider = new OpenAICompatibleProvider(
       'openai',
@@ -207,7 +240,11 @@ describe('vision messages', () => {
       },
       { defaultModel: 'm', supportsJsonMode: false },
     )
-    await provider.chat({ messages: [{ role: 'user', content: 'Is it relevant?', images: ['data:image/png;base64,AAAA'] }] })
+    await provider.chat({
+      messages: [
+        { role: 'user', content: 'Is it relevant?', images: ['data:image/png;base64,AAAA'] },
+      ],
+    })
     const body = JSON.parse(String((fetchSpy.mock.calls[0]![1] as RequestInit).body))
     expect(body.messages[0].content).toEqual([
       { type: 'text', text: 'Is it relevant?' },
@@ -262,14 +299,26 @@ describe('reference image service', () => {
 
   it('refuses to search while the setting is off', async () => {
     const projectId = await project('chemistry')
-    const service = new ReferenceImageService({ db, ai: fakeAI(true).ai, fetch: fakeNetwork(), options: { enabled: false, visionCheck: false } })
-    await expect(service.search(input(projectId))).rejects.toMatchObject({ code: 'WEB_IMAGES_DISABLED' })
+    const service = new ReferenceImageService({
+      db,
+      ai: fakeAI(true).ai,
+      fetch: fakeNetwork(),
+      options: { enabled: false, visionCheck: false },
+    })
+    await expect(service.search(input(projectId))).rejects.toMatchObject({
+      code: 'WEB_IMAGES_DISABLED',
+    })
   })
 
   it('caches unverified pictures with their source and licence', async () => {
     const projectId = await project('chemistry')
     const network = fakeNetwork()
-    const service = new ReferenceImageService({ db, ai: fakeAI(true).ai, fetch: network, options: { enabled: true, visionCheck: false } })
+    const service = new ReferenceImageService({
+      db,
+      ai: fakeAI(true).ai,
+      fetch: network,
+      options: { enabled: true, visionCheck: false },
+    })
     const images = await service.search(input(projectId))
     expect(images.map((image) => [image.source, image.relevance])).toEqual([
       ['pubchem', 'unverified'],
@@ -279,16 +328,28 @@ describe('reference image service', () => {
     expect(await service.getImage(images[0]!.id)).toBeInstanceOf(Blob)
     // Every request went to one of the two open sources.
     for (const [url] of network.mock.calls) {
-      expect(String(url)).toMatch(/^https:\/\/(pubchem\.ncbi\.nlm\.nih\.gov|commons\.wikimedia\.org|upload\.wikimedia\.org)\//)
+      expect(String(url)).toMatch(
+        /^https:\/\/(pubchem\.ncbi\.nlm\.nih\.gov|commons\.wikimedia\.org|upload\.wikimedia\.org)\//,
+      )
     }
   })
 
   it('drops pictures the vision model rejects and marks confirmed ones', async () => {
     const projectId = await project('chemistry')
-    const rejected = new ReferenceImageService({ db, ai: fakeAI(false).ai, fetch: fakeNetwork(), options: { enabled: true, visionCheck: true } })
+    const rejected = new ReferenceImageService({
+      db,
+      ai: fakeAI(false).ai,
+      fetch: fakeNetwork(),
+      options: { enabled: true, visionCheck: true },
+    })
     expect(await rejected.search(input(projectId))).toEqual([])
 
-    const verified = new ReferenceImageService({ db, ai: fakeAI(true).ai, fetch: fakeNetwork(), options: { enabled: true, visionCheck: true } })
+    const verified = new ReferenceImageService({
+      db,
+      ai: fakeAI(true).ai,
+      fetch: fakeNetwork(),
+      options: { enabled: true, visionCheck: true },
+    })
     const images = await verified.search(input(projectId))
     expect(images.every((image) => image.relevance === 'verified')).toBe(true)
   })
@@ -299,7 +360,9 @@ describe('reference image service', () => {
     const chatJSON = vi.fn(async (messages: ChatMessage[]) => {
       if (messages[0]!.content.includes('suggest search terms')) {
         return {
-          data: { queries: [{ source: 'wikimedia', term: 'ethanol molecule model', purpose: 'model' }] },
+          data: {
+            queries: [{ source: 'wikimedia', term: 'ethanol molecule model', purpose: 'model' }],
+          },
           raw: { content: '{}', model: 'fake' },
         }
       }
@@ -313,14 +376,21 @@ describe('reference image service', () => {
       fetch: fakeNetwork(),
       options: { enabled: true, visionCheck: true },
     })
-    await expect(service.search({ ...input(projectId), signal: controller.signal })).rejects.toMatchObject({ code: 'ABORTED' })
+    await expect(
+      service.search({ ...input(projectId), signal: controller.signal }),
+    ).rejects.toMatchObject({ code: 'ABORTED' })
     expect(await service.list(projectId, 'topic-1')).toEqual([])
   })
 
   it('falls back to unverified when the model cannot look at images', async () => {
     const projectId = await project('chemistry')
     const { ai, chatJSON } = fakeAI('error')
-    const service = new ReferenceImageService({ db, ai, fetch: fakeNetwork(), options: { enabled: true, visionCheck: true } })
+    const service = new ReferenceImageService({
+      db,
+      ai,
+      fetch: fakeNetwork(),
+      options: { enabled: true, visionCheck: true },
+    })
     const images = await service.search(input(projectId))
     expect(images).toHaveLength(2)
     expect(images.every((image) => image.relevance === 'unverified')).toBe(true)
@@ -331,7 +401,12 @@ describe('reference image service', () => {
   it('does nothing for subjects without web images, and never uses PubChem for biology', async () => {
     const calculus = await project('calculus')
     const network = fakeNetwork()
-    const service = new ReferenceImageService({ db, ai: fakeAI(true).ai, fetch: network, options: { enabled: true, visionCheck: false } })
+    const service = new ReferenceImageService({
+      db,
+      ai: fakeAI(true).ai,
+      fetch: network,
+      options: { enabled: true, visionCheck: false },
+    })
     expect(await service.search(input(calculus))).toEqual([])
     expect(network).not.toHaveBeenCalled()
 
@@ -351,7 +426,12 @@ describe('reference image service', () => {
 
   it('is removed with its project and stays off by default in settings', async () => {
     const projectId = await project('chemistry')
-    const service = new ReferenceImageService({ db, ai: fakeAI(true).ai, fetch: fakeNetwork(), options: { enabled: true, visionCheck: false } })
+    const service = new ReferenceImageService({
+      db,
+      ai: fakeAI(true).ai,
+      fetch: fakeNetwork(),
+      options: { enabled: true, visionCheck: false },
+    })
     await service.search(input(projectId))
     await new DataManagementService(db).deleteProject(projectId)
     expect(await new ReferenceImageRepository(db).listByTopic(projectId, 'topic-1')).toEqual([])

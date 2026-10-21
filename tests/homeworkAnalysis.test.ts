@@ -7,7 +7,12 @@ import { ChunkRepository } from '@/entities/chunk/repository'
 import { HomeworkRepository } from '@/entities/homework/repository'
 import { HomeworkService } from '@/services/homeworkService'
 import { ANALYZER_OUTPUT_CEILING } from '@/entities/homework/tokenBudget'
-import { ContextTooLongError, OutputLimitError, QuotaExceededError, RateLimitedError } from '@/infrastructure/ai/errors'
+import {
+  ContextTooLongError,
+  OutputLimitError,
+  QuotaExceededError,
+  RateLimitedError,
+} from '@/infrastructure/ai/errors'
 import type { AIService } from '@/services/aiService'
 import type { DocumentChunk } from '@/entities/chunk/types'
 
@@ -135,7 +140,11 @@ describe('HomeworkService — analysis reliability', () => {
       ai: stubAI((system, user) => {
         if (system.includes('extract the individual questions')) {
           const ids = [...user.matchAll(/\[c:([^ ·\]]+)/g)].map((m) => m[1]!)
-          return ids.map((id, index) => ({ number: String(index + 1), prompt: `Q ${id}.`, sourceChunkIds: [id] }))
+          return ids.map((id, index) => ({
+            number: String(index + 1),
+            prompt: `Q ${id}.`,
+            sourceChunkIds: [id],
+          }))
         }
         return { hints: ['h'], solution: 's' }
       }),
@@ -152,7 +161,9 @@ describe('HomeworkService — analysis reliability', () => {
         if (system.includes('extract the individual questions')) {
           const ids = [...user.matchAll(/\[c:([^ ·\]]+)/g)].map((m) => m[1]!)
           // Every batch returns the same question text → one question total.
-          return { questions: [{ number: '1', prompt: 'The same question.', sourceChunkIds: [ids[0]!] }] }
+          return {
+            questions: [{ number: '1', prompt: 'The same question.', sourceChunkIds: [ids[0]!] }],
+          }
         }
         return { hints: ['h'], solution: 's' }
       }),

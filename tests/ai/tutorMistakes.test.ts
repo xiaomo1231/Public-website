@@ -34,7 +34,8 @@ function scriptedAI(isCorrectSequence: boolean[]): AIService {
         return { data: QUESTION, raw: { content: '{}', model: 'fake' } }
       }
       if (system.includes('evaluating a student answer')) {
-        const isCorrect = isCorrectSequence[evalIndex++] ?? isCorrectSequence[isCorrectSequence.length - 1]!
+        const isCorrect =
+          isCorrectSequence[evalIndex++] ?? isCorrectSequence[isCorrectSequence.length - 1]!
         return {
           data: {
             isCorrect,
@@ -70,7 +71,12 @@ describe('Tutor wrong answers → mistake book', () => {
     const docs = new DocumentRepository(db)
     const chunks = new ChunkRepository(db)
     const analyses = new CourseAnalysisRepository(db)
-    const doc = await docs.create({ projectId: project.id, type: 'text', name: 'c.txt', sizeBytes: 0 })
+    const doc = await docs.create({
+      projectId: project.id,
+      type: 'text',
+      name: 'c.txt',
+      sizeBytes: 0,
+    })
     await docs.update(doc.id, { status: 'ready' })
     await chunks.addMany([
       {
@@ -86,7 +92,13 @@ describe('Tutor wrong answers → mistake book', () => {
     await analyses.reseedProject(
       project.id,
       {
-        topics: [{ name: 'Derivatives', description: '', sourceRefs: [{ documentId: doc.id, documentName: 'c.txt' }] }],
+        topics: [
+          {
+            name: 'Derivatives',
+            description: '',
+            sourceRefs: [{ documentId: doc.id, documentName: 'c.txt' }],
+          },
+        ],
         concepts: [],
         formulas: [],
         symbols: [],

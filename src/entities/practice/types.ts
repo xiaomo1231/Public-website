@@ -9,12 +9,7 @@ import type { QuestionEvaluation } from '@/entities/questionAttempt/types'
  */
 
 export type PracticeQuestionType =
-  | 'single_choice'
-  | 'true_false'
-  | 'numeric'
-  | 'math_expr'
-  | 'short_answer'
-  | 'unknown'
+  'single_choice' | 'true_false' | 'numeric' | 'math_expr' | 'short_answer' | 'unknown'
 
 export type PracticeQuestionStatus = 'verified' | 'needs_review' | 'failed'
 

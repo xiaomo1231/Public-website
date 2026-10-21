@@ -58,7 +58,8 @@ const DANGEROUS_KEYS = new Set(['__proto__', 'constructor', 'prototype'])
 
 function normalizeMolecule(draft: VisualizationDraft, base: CommonBase): Normalized {
   const list = Array.isArray(draft.molecules) ? draft.molecules : []
-  if (list.length === 0 || list.length > MAX_MOLECULES) return { ok: false, reason: 'invalid-molecule-count' }
+  if (list.length === 0 || list.length > MAX_MOLECULES)
+    return { ok: false, reason: 'invalid-molecule-count' }
   const molecules: MoleculeEntry[] = []
   for (const raw of list) {
     const item = asRecord(raw)
@@ -80,7 +81,8 @@ function normalizeMolecule(draft: VisualizationDraft, base: CommonBase): Normali
 
 function normalizeEnergy(draft: VisualizationDraft, base: CommonBase): Normalized {
   const list = Array.isArray(draft.states) ? draft.states : []
-  if (list.length < 2 || list.length > MAX_ENERGY_STATES) return { ok: false, reason: 'invalid-energy-state-count' }
+  if (list.length < 2 || list.length > MAX_ENERGY_STATES)
+    return { ok: false, reason: 'invalid-energy-state-count' }
   const states: EnergyState[] = []
   for (const raw of list) {
     const item = asRecord(raw)
@@ -96,12 +98,16 @@ function normalizeEnergy(draft: VisualizationDraft, base: CommonBase): Normalize
   // A transition state is a peak: higher than both neighbours.
   for (let i = 1; i < states.length - 1; i++) {
     const state = states[i]!
-    if (state.transition && (state.energy <= states[i - 1]!.energy || state.energy <= states[i + 1]!.energy)) {
+    if (
+      state.transition &&
+      (state.energy <= states[i - 1]!.energy || state.energy <= states[i + 1]!.energy)
+    ) {
       return { ok: false, reason: 'energy-transition-not-peak' }
     }
   }
   const energies = states.map((state) => state.energy)
-  if (Math.max(...energies) === Math.min(...energies)) return { ok: false, reason: 'flat-energy-profile' }
+  if (Math.max(...energies) === Math.min(...energies))
+    return { ok: false, reason: 'flat-energy-profile' }
   const unit = sanitizeText(draft.unit, 16) ?? 'kJ/mol'
   const value: EnergyVisualization = { ...base, type: 'energy_2d', states, unit }
   return { ok: true, value }
@@ -113,8 +119,13 @@ function normalizeTitration(draft: VisualizationDraft, base: CommonBase): Normal
   const concentration = readNumber(draft.concentration ?? draft.acidConcentration)
   const volume = readNumber(draft.volume ?? draft.acidVolume)
   const titrantConcentration = readNumber(draft.titrantConcentration ?? draft.baseConcentration)
-  const inRange = (v: number | null, min: number, max: number): v is number => v !== null && v >= min && v <= max
-  if (!inRange(concentration, 1e-4, 10) || !inRange(volume, 1, 500) || !inRange(titrantConcentration, 1e-4, 10)) {
+  const inRange = (v: number | null, min: number, max: number): v is number =>
+    v !== null && v >= min && v <= max
+  if (
+    !inRange(concentration, 1e-4, 10) ||
+    !inRange(volume, 1, 500) ||
+    !inRange(titrantConcentration, 1e-4, 10)
+  ) {
     return { ok: false, reason: 'invalid-titration-setup' }
   }
   const constant = (value: unknown): number | null => {
@@ -130,7 +141,8 @@ function normalizeTitration(draft: VisualizationDraft, base: CommonBase): Normal
     if (values.length === 0 || values.length > 3 || values.some((v) => v === null)) {
       return { ok: false, reason: 'invalid-titration-ka' }
     }
-    if (values.some((v, i) => i > 0 && v! >= values[i - 1]!)) return { ok: false, reason: 'invalid-titration-ka' }
+    if (values.some((v, i) => i > 0 && v! >= values[i - 1]!))
+      return { ok: false, reason: 'invalid-titration-ka' }
     ka = values as number[]
   }
   if (analyte === 'base' && draft.kb !== undefined && draft.kb !== null) {
@@ -166,14 +178,23 @@ function normalizePunnett(draft: VisualizationDraft, base: CommonBase): Normaliz
   const problem = crossProblem(mother, father)
   if (problem === 'genes-differ') return { ok: false, reason: 'genotype-genes-differ' }
   if (problem === 'sex-mismatch') return { ok: false, reason: 'genotype-sex-mismatch' }
-  const dominance = draft.dominance === 'incomplete' || draft.dominance === 'codominant' ? draft.dominance : 'complete'
+  const dominance =
+    draft.dominance === 'incomplete' || draft.dominance === 'codominant'
+      ? draft.dominance
+      : 'complete'
   // Trait names attach to a gene by its letter (A/a → a, I^A/i → i, X^B/X^b → b).
   const letters = new Set(mother.map((pair) => geneOf(pair).replace(/^X:/, '')))
   const alleleSet = new Set([...mother, ...father].flat())
   const traits: PunnettTrait[] = []
   for (const raw of Array.isArray(draft.traits) ? draft.traits : []) {
     const item = asRecord(raw)
-    const gene = typeof item?.gene === 'string' ? item.gene.trim().toLowerCase().replace(/^x[:^](?=.)/, '')[0] ?? '' : ''
+    const gene =
+      typeof item?.gene === 'string'
+        ? (item.gene
+            .trim()
+            .toLowerCase()
+            .replace(/^x[:^](?=.)/, '')[0] ?? '')
+        : ''
     if (!letters.has(gene) || traits.some((trait) => trait.gene === gene)) continue
     const dominant = sanitizeText(item?.dominant, MAX_LABEL_LENGTH)
     const recessive = sanitizeText(item?.recessive, MAX_LABEL_LENGTH)
@@ -184,7 +205,8 @@ function normalizePunnett(draft: VisualizationDraft, base: CommonBase): Normaliz
       const tokens = typeof record?.allele === 'string' ? alleleTokens(record.allele) : null
       const name = sanitizeText(record?.name, MAX_LABEL_LENGTH)
       // Names only for alleles that are actually in the cross.
-      if (tokens?.length === 1 && name && alleleSet.has(tokens[0]!)) alleles.push({ allele: tokens[0]!, name })
+      if (tokens?.length === 1 && name && alleleSet.has(tokens[0]!))
+        alleles.push({ allele: tokens[0]!, name })
     }
     // Trait names are optional decoration; an unusable entry is dropped, not the figure.
     if (!(dominant && recessive) && alleles.length === 0) continue
@@ -214,13 +236,15 @@ function normalizePunnett(draft: VisualizationDraft, base: CommonBase): Normaliz
 
 function normalizePedigree(draft: VisualizationDraft, base: CommonBase): Normalized {
   const list = Array.isArray(draft.members) ? draft.members : []
-  if (list.length < 2 || list.length > MAX_PEDIGREE_MEMBERS) return { ok: false, reason: 'invalid-pedigree-size' }
+  if (list.length < 2 || list.length > MAX_PEDIGREE_MEMBERS)
+    return { ok: false, reason: 'invalid-pedigree-size' }
   const members: PedigreeMember[] = []
   const ids = new Set<string>()
   for (const raw of list) {
     const item = asRecord(raw)
     const id = sanitizeText(item?.id, MAX_ID_LENGTH)
-    if (!id || ids.has(id) || DANGEROUS_KEYS.has(id)) return { ok: false, reason: 'invalid-pedigree-member' }
+    if (!id || ids.has(id) || DANGEROUS_KEYS.has(id))
+      return { ok: false, reason: 'invalid-pedigree-member' }
     ids.add(id)
     const sex = item?.sex === 'male' || item?.sex === 'female' ? item.sex : 'unknown'
     const label = sanitizeText(item?.label, MAX_LABEL_LENGTH)
@@ -238,31 +262,44 @@ function normalizePedigree(draft: VisualizationDraft, base: CommonBase): Normali
   }
   if (!pedigreeGenerations(members)) return { ok: false, reason: 'invalid-pedigree-structure' }
   // A pedigree needs at least one parent–child link to be a family.
-  if (!members.some((member) => member.father || member.mother)) return { ok: false, reason: 'pedigree-without-children' }
+  if (!members.some((member) => member.father || member.mother))
+    return { ok: false, reason: 'pedigree-without-children' }
   const value: PedigreeVisualization = { ...base, type: 'pedigree_2d', members }
   return { ok: true, value }
 }
 
 function normalizeTranslation(draft: VisualizationDraft, base: CommonBase): Normalized {
-  const written = typeof draft.dna === 'string' ? draft.dna.replace(/[′’]/g, "'").replace(/\s+/g, '') : ''
+  const written =
+    typeof draft.dna === 'string' ? draft.dna.replace(/[′’]/g, "'").replace(/\s+/g, '') : ''
   // End labels written with the sequence ("3'-TAC…-5'") are the most
   // reliable statement of its direction; otherwise the stated direction, and
   // otherwise the university convention of writing every strand 5′→3′.
   const marked = /^3'/.test(written) ? '3to5' : /^5'/.test(written) ? '5to3' : null
   const stated = draft.direction === '3to5' || draft.direction === '5to3' ? draft.direction : null
   const direction = marked ?? stated ?? '5to3'
-  const dna = written.toUpperCase().replace(/^[35]'-?|-?[35]'$/g, '').replace(/-/g, '')
+  const dna = written
+    .toUpperCase()
+    .replace(/^[35]'-?|-?[35]'$/g, '')
+    .replace(/-/g, '')
   const strand = draft.strand === 'template' ? 'template' : 'coding'
   const start = draft.start === 'first' ? 'first' : 'aug'
   if (!dna || dna.length > MAX_DNA_LENGTH) return { ok: false, reason: 'invalid-dna' }
   if (!translateDna(dna, strand, { direction, start })) return { ok: false, reason: 'invalid-dna' }
-  const value: TranslationVisualization = { ...base, type: 'translation_2d', dna, strand, direction, start }
+  const value: TranslationVisualization = {
+    ...base,
+    type: 'translation_2d',
+    dna,
+    strand,
+    direction,
+    start,
+  }
   return { ok: true, value }
 }
 
 function normalizeChiSquare(draft: VisualizationDraft, base: CommonBase): Normalized {
   const list = Array.isArray(draft.categories) ? draft.categories : []
-  if (list.length < 2 || list.length > MAX_CHI_SQUARE_CATEGORIES) return { ok: false, reason: 'invalid-chisquare-categories' }
+  if (list.length < 2 || list.length > MAX_CHI_SQUARE_CATEGORIES)
+    return { ok: false, reason: 'invalid-chisquare-categories' }
   const labels: string[] = []
   const observed: number[] = []
   const expected: Array<number | null> = []
@@ -271,7 +308,8 @@ function normalizeChiSquare(draft: VisualizationDraft, base: CommonBase): Normal
     const item = asRecord(raw)
     const label = sanitizeText(item?.label, MAX_LABEL_LENGTH)
     const count = readNumber(item?.observed)
-    if (!label || count === null || count < 0) return { ok: false, reason: 'invalid-chisquare-category' }
+    if (!label || count === null || count < 0)
+      return { ok: false, reason: 'invalid-chisquare-category' }
     labels.push(label)
     observed.push(count)
     const e = readNumber(item?.expected)
@@ -286,18 +324,32 @@ function normalizeChiSquare(draft: VisualizationDraft, base: CommonBase): Normal
     expectedCounts = expected as number[]
     // Expected counts must describe the same sample as the observed ones.
     const sum = expectedCounts.reduce((a, b) => a + b, 0)
-    if (Math.abs(sum - total) > Math.max(0.5, total * 0.01)) return { ok: false, reason: 'chisquare-expected-total' }
+    if (Math.abs(sum - total) > Math.max(0.5, total * 0.01))
+      return { ok: false, reason: 'chisquare-expected-total' }
   } else if (ratio.every((r) => r !== null)) {
     expectedCounts = expectedFromRatio(observed, ratio as number[])
   } else {
     return { ok: false, reason: 'chisquare-missing-expected' }
   }
-  const categories = labels.map((label, i) => ({ label, observed: observed[i]!, expected: expectedCounts[i]! }))
+  const categories = labels.map((label, i) => ({
+    label,
+    observed: observed[i]!,
+    expected: expectedCounts[i]!,
+  }))
   const rawDf = readNumber(draft.df)
-  const df = rawDf !== null && Number.isInteger(rawDf) && rawDf >= 1 && rawDf <= categories.length - 1 ? rawDf : categories.length - 1
+  const df =
+    rawDf !== null && Number.isInteger(rawDf) && rawDf >= 1 && rawDf <= categories.length - 1
+      ? rawDf
+      : categories.length - 1
   const rawAlpha = readNumber(draft.alpha)
   const alpha = rawAlpha !== null && rawAlpha > 0 && rawAlpha < 0.5 ? rawAlpha : 0.05
-  const value: ChiSquareTestVisualization = { ...base, type: 'chisquare_test_2d', categories, df, alpha }
+  const value: ChiSquareTestVisualization = {
+    ...base,
+    type: 'chisquare_test_2d',
+    categories,
+    df,
+    alpha,
+  }
   return { ok: true, value }
 }
 

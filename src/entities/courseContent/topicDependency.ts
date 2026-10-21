@@ -35,7 +35,10 @@ export { toSourceChunkFingerprint }
  * identical) and the chunk content (so an edited passage differs even when the
  * ids survive).
  */
-export function computeTopicDependencyHash(chunkIds: readonly string[], chunks: DocumentChunk[]): string {
+export function computeTopicDependencyHash(
+  chunkIds: readonly string[],
+  chunks: DocumentChunk[],
+): string {
   const sorted = [...new Set(chunkIds)].sort()
   const byId = new Map(chunks.map((chunk) => [chunk.id, chunk]))
   const present = sorted.filter((id) => byId.has(id))
@@ -94,9 +97,7 @@ export function validateTopicSourceChunks(
 export { chunkContentFingerprint }
 
 /** Fingerprint per chunk id, as persisted on a topic. */
-export function chunkFingerprintMap(
-  chunks: readonly DocumentChunk[],
-): Record<string, string> {
+export function chunkFingerprintMap(chunks: readonly DocumentChunk[]): Record<string, string> {
   const map: Record<string, string> = {}
   for (const chunk of chunks) map[chunk.id] = chunkContentFingerprint(chunk)
   return map
@@ -170,7 +171,11 @@ export function hasTrustedDependency(topic: {
   sourceChunkIds?: string[]
   needsFullReanalysis?: boolean
 }): boolean {
-  return !topic.needsFullReanalysis && Array.isArray(topic.sourceChunkIds) && topic.sourceChunkIds.length > 0
+  return (
+    !topic.needsFullReanalysis &&
+    Array.isArray(topic.sourceChunkIds) &&
+    topic.sourceChunkIds.length > 0
+  )
 }
 
 /**

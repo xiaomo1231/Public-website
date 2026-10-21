@@ -90,10 +90,7 @@ export const prompts = {
   vocabGloss: VocabGlossV1,
 } as const
 
-export type {
-  DocumentAnalyzerInput,
-  DocumentAnalysisOutput,
-} from './document-analyzer/v2'
+export type { DocumentAnalyzerInput, DocumentAnalysisOutput } from './document-analyzer/v2'
 export type { LessonInput } from './tutor/v5-lesson'
 export type { IntroduceConceptInput } from './tutor/v1-introduce'
 export type { QuestionGeneratorInput } from './tutor/v2-question'
@@ -101,10 +98,7 @@ export type { GeneratedQuestion } from './types'
 export type { EvaluateAnswerInput } from './tutor/v1-evaluate'
 export type { TranslateInput } from './translator/v1'
 export type { ContextualTutorInput } from './contextual-tutor/v1'
-export type {
-  MistakeAnalyzerInput,
-  MistakeAnalyzerOutput,
-} from './mistake-analyzer/v2'
+export type { MistakeAnalyzerInput, MistakeAnalyzerOutput } from './mistake-analyzer/v2'
 export type {
   QuizGenerationInput,
   QuizGenerationOutput,
@@ -112,13 +106,7 @@ export type {
   QuizQuestionType,
 } from './quiz-generator/v6'
 export type { VisualizationInput, VisualizationOutput } from './visualization-generator/v10'
-export type {
-  HomeworkAnalyzerInput,
-  HomeworkAnalyzerOutput,
-} from './homework-analyzer/v1'
-export type {
-  HomeworkQuestionInput,
-  HomeworkQuestionOutput,
-} from './homework-question/v3'
+export type { HomeworkAnalyzerInput, HomeworkAnalyzerOutput } from './homework-analyzer/v1'
+export type { HomeworkQuestionInput, HomeworkQuestionOutput } from './homework-question/v3'
 export type { HomeworkQaInput, HomeworkQaHistoryItem } from './homework-qa/v1'
 export type { SlideLessonInput, SlideLessonOutput } from './slide-lesson/v1'

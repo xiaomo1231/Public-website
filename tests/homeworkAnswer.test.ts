@@ -12,7 +12,11 @@ import type { AIService } from '@/services/aiService'
 import type { HomeworkQuestion, HomeworkSet } from '@/entities/homework/types'
 import type { DocumentChunk } from '@/entities/chunk/types'
 import { OutputTruncatedError, RateLimitedError, TimeoutError } from '@/infrastructure/ai/errors'
-import { buildAnswerLines, isDeferredProfessorAnswer, segmentsToAnswerEntries } from '@/entities/homework/answerMatching'
+import {
+  buildAnswerLines,
+  isDeferredProfessorAnswer,
+  segmentsToAnswerEntries,
+} from '@/entities/homework/answerMatching'
 import { checkObjectiveAnswer } from '@/entities/homework/answerCheck'
 
 type StubCall = { system: string; user: string }
@@ -27,7 +31,12 @@ function stubAI(handler: (system: string, user: string) => unknown) {
   })
   return {
     calls,
-    ai: { streamJSON, chatJSON: streamJSON, chat: async () => ({ content: 'ok' }), maxOutputTokens: 2048 } as unknown as AIService,
+    ai: {
+      streamJSON,
+      chatJSON: streamJSON,
+      chat: async () => ({ content: 'ok' }),
+      maxOutputTokens: 2048,
+    } as unknown as AIService,
   }
 }
 
@@ -70,13 +79,37 @@ describe('HomeworkService — professor answer key', () => {
     projectId = project.id
 
     const documents = new DocumentRepository(db)
-    const doc = await documents.create({ projectId, type: 'text', materialType: 'homework', name: 'hw.txt', sizeBytes: 0 })
+    const doc = await documents.create({
+      projectId,
+      type: 'text',
+      materialType: 'homework',
+      name: 'hw.txt',
+      sizeBytes: 0,
+    })
     await documents.update(doc.id, { status: 'ready' })
     documentId = doc.id
 
     chunks = await new ChunkRepository(db).addMany([
-      { documentId, projectId, materialType: 'homework', pageNumber: 1, contentType: 'paragraph', text: 'Question 1. Add 4 and 5.', sourceReference: 'hw.txt · Page 1', order: 0 },
-      { documentId, projectId, materialType: 'homework', pageNumber: 1, contentType: 'paragraph', text: 'Question 2. Multiply 6 by 7.', sourceReference: 'hw.txt · Page 1', order: 1 },
+      {
+        documentId,
+        projectId,
+        materialType: 'homework',
+        pageNumber: 1,
+        contentType: 'paragraph',
+        text: 'Question 1. Add 4 and 5.',
+        sourceReference: 'hw.txt · Page 1',
+        order: 0,
+      },
+      {
+        documentId,
+        projectId,
+        materialType: 'homework',
+        pageNumber: 1,
+        contentType: 'paragraph',
+        text: 'Question 2. Multiply 6 by 7.',
+        sourceReference: 'hw.txt · Page 1',
+        order: 1,
+      },
     ])
 
     repo = new HomeworkRepository(db)
@@ -95,15 +128,55 @@ describe('HomeworkService — professor answer key', () => {
       updatedAt: 1,
     }
     await repo.upsertSet(set)
-    await repo.upsertQuestion(question({ id: 'q1', order: 0, number: '1', prompt: 'Add 4 and 5.', sourceRefs: [{ documentId, documentName: 'hw.txt', page: 1, chunkId: chunks[0]!.id }] }))
-    await repo.upsertQuestion(question({ id: 'q2', order: 1, number: '2', prompt: 'Multiply 6 by 7.', sourceRefs: [{ documentId, documentName: 'hw.txt', page: 1, chunkId: chunks[1]!.id }] }))
+    await repo.upsertQuestion(
+      question({
+        id: 'q1',
+        order: 0,
+        number: '1',
+        prompt: 'Add 4 and 5.',
+        sourceRefs: [{ documentId, documentName: 'hw.txt', page: 1, chunkId: chunks[0]!.id }],
+      }),
+    )
+    await repo.upsertQuestion(
+      question({
+        id: 'q2',
+        order: 1,
+        number: '2',
+        prompt: 'Multiply 6 by 7.',
+        sourceRefs: [{ documentId, documentName: 'hw.txt', page: 1, chunkId: chunks[1]!.id }],
+      }),
+    )
 
-    const answerDoc = await documents.create({ projectId, type: 'text', materialType: 'homework_answer', name: 'answers.txt', sizeBytes: 0 })
+    const answerDoc = await documents.create({
+      projectId,
+      type: 'text',
+      materialType: 'homework_answer',
+      name: 'answers.txt',
+      sizeBytes: 0,
+    })
     await documents.update(answerDoc.id, { status: 'ready' })
     answerDocumentId = answerDoc.id
     await new ChunkRepository(db).addMany([
-      { documentId: answerDocumentId, projectId, materialType: 'homework_answer', pageNumber: 1, contentType: 'paragraph', text: '1. 9', sourceReference: 'answers.txt', order: 0 },
-      { documentId: answerDocumentId, projectId, materialType: 'homework_answer', pageNumber: 1, contentType: 'paragraph', text: '2. 42', sourceReference: 'answers.txt', order: 1 },
+      {
+        documentId: answerDocumentId,
+        projectId,
+        materialType: 'homework_answer',
+        pageNumber: 1,
+        contentType: 'paragraph',
+        text: '1. 9',
+        sourceReference: 'answers.txt',
+        order: 0,
+      },
+      {
+        documentId: answerDocumentId,
+        projectId,
+        materialType: 'homework_answer',
+        pageNumber: 1,
+        contentType: 'paragraph',
+        text: '2. 42',
+        sourceReference: 'answers.txt',
+        order: 1,
+      },
     ])
   })
 
@@ -112,10 +185,19 @@ describe('HomeworkService — professor answer key', () => {
   }
 
   it('checks a clear numeric professor answer locally without an AI provider', async () => {
-    await repo.updateQuestion('q1', { answerStatus: 'matched', answerText: '1. 9', answerChunkIds: ['answer-chunk'] })
+    await repo.updateQuestion('q1', {
+      answerStatus: 'matched',
+      answerText: '1. 9',
+      answerChunkIds: ['answer-chunk'],
+    })
     const svc = service(null)
     const correct = await svc.checkAnswer('q1', '9', 'en')
-    expect(correct).toMatchObject({ method: 'local', verdict: 'correct', expectedAnswer: '9', referenceKind: 'professor' })
+    expect(correct).toMatchObject({
+      method: 'local',
+      verdict: 'correct',
+      expectedAnswer: '9',
+      referenceKind: 'professor',
+    })
     expect(correct.similarityPercent).toBeUndefined()
     expect((await repo.getQuestion('q1'))?.draftText).toBe('9')
     expect(await svc.checkAnswer('q1', '9', 'en')).toEqual(correct)
@@ -124,23 +206,44 @@ describe('HomeworkService — professor answer key', () => {
   })
 
   it('keeps multistep and proof questions out of direct answer matching', () => {
-    expect(checkObjectiveAnswer(question({ prompt: 'Set up the system, solve it by hand, and explain the result.' }), '9', '9')).toBeNull()
-    expect(checkObjectiveAnswer(question({ prompt: 'Prove that the span is a subspace.' }), 'True', 'True')).toBeNull()
+    expect(
+      checkObjectiveAnswer(
+        question({ prompt: 'Set up the system, solve it by hand, and explain the result.' }),
+        '9',
+        '9',
+      ),
+    ).toBeNull()
+    expect(
+      checkObjectiveAnswer(
+        question({ prompt: 'Prove that the span is a subspace.' }),
+        'True',
+        'True',
+      ),
+    ).toBeNull()
   })
 
   it('uses AI for a worked answer and saves its semantic estimate with provenance', async () => {
     await repo.updateQuestion('q1', {
-      prompt: 'Explain why 4 + 5 = 9.', answerStatus: 'matched',
+      prompt: 'Explain why 4 + 5 = 9.',
+      answerStatus: 'matched',
       answerText: 'Adding five to four gives nine because the total increases by five.',
       answerChunkIds: ['answer-chunk'],
     })
     const { ai, calls } = stubAI(() => ({
-      status: 'ready', similarityPercent: 75, verdict: 'partial',
+      status: 'ready',
+      similarityPercent: 75,
+      verdict: 'partial',
       feedback: 'The total is right, but explain the addition.',
-      matchedPoints: ['The total is 9.'], missingPoints: ['Explain the addition.'],
+      matchedPoints: ['The total is 9.'],
+      missingPoints: ['Explain the addition.'],
     }))
     const result = await service(ai).checkAnswer('q1', '4 + 5 = 9', 'en')
-    expect(result).toMatchObject({ method: 'ai', verdict: 'partial', similarityPercent: 75, referenceKind: 'professor' })
+    expect(result).toMatchObject({
+      method: 'ai',
+      verdict: 'partial',
+      similarityPercent: 75,
+      referenceKind: 'professor',
+    })
     expect(result.answerChunkIds).toEqual(['answer-chunk'])
     expect(calls).toHaveLength(1)
     expect(calls[0]!.user).toContain('STUDENT ANSWER')
@@ -148,14 +251,31 @@ describe('HomeworkService — professor answer key', () => {
   })
 
   it('rejects an unusable AI judgment without saving it', async () => {
-    await repo.updateQuestion('q1', { prompt: 'Explain why 4 + 5 = 9.', answerStatus: 'matched', answerText: 'Because addition combines quantities.' })
-    const { ai } = stubAI(() => ({ status: 'ready', similarityPercent: 130, verdict: 'correct', feedback: 'Fine', matchedPoints: [], missingPoints: [] }))
-    await expect(service(ai).checkAnswer('q1', 'It is 9.', 'en')).rejects.toMatchObject({ code: 'INVALID_RESPONSE' })
+    await repo.updateQuestion('q1', {
+      prompt: 'Explain why 4 + 5 = 9.',
+      answerStatus: 'matched',
+      answerText: 'Because addition combines quantities.',
+    })
+    const { ai } = stubAI(() => ({
+      status: 'ready',
+      similarityPercent: 130,
+      verdict: 'correct',
+      feedback: 'Fine',
+      matchedPoints: [],
+      missingPoints: [],
+    }))
+    await expect(service(ai).checkAnswer('q1', 'It is 9.', 'en')).rejects.toMatchObject({
+      code: 'INVALID_RESPONSE',
+    })
     expect((await repo.getQuestion('q1'))?.answerCheck).toBeUndefined()
   })
 
   it('does not commit a check after the student or professor answer changes', async () => {
-    await repo.updateQuestion('q1', { answerStatus: 'matched', answerText: '9', answerChunkIds: ['answer-chunk'] })
+    await repo.updateQuestion('q1', {
+      answerStatus: 'matched',
+      answerText: '9',
+      answerChunkIds: ['answer-chunk'],
+    })
     const result = await service(null).checkAnswer('q1', '9', 'en')
     await repo.updateQuestion('q1', { draftText: '8' })
     expect(await repo.applyAnswerCheck('q1', '9', result)).toBeUndefined()
@@ -165,10 +285,13 @@ describe('HomeworkService — professor answer key', () => {
 
   it('builds a complete review once, caches it, and refreshes when the answer changes', async () => {
     const { ai, calls } = stubAI(() => ({
-      status: 'ready', questionMeaning: 'Add two numbers.',
-      knowledgePoints: ['Addition'], method: 'Combine units.',
+      status: 'ready',
+      questionMeaning: 'Add two numbers.',
+      knowledgePoints: ['Addition'],
+      method: 'Combine units.',
       steps: ['Write $4+5$.', 'Compute $4+5=9$.'],
-      explanation: 'Five added to four gives nine.', interpretation: 'The total is nine.',
+      explanation: 'Five added to four gives nine.',
+      interpretation: 'The total is nine.',
       check: '$9-5=4$.',
     }))
     const svc = service(ai)
@@ -179,7 +302,11 @@ describe('HomeworkService — professor answer key', () => {
     expect(await svc.getOrGenerateReviewGuide('q1', 'en')).toEqual(first)
     expect(calls).toHaveLength(1)
 
-    await repo.updateQuestion('q1', { answerStatus: 'matched', answerText: 'Professor: $4+5=9$.', answerChunkIds: ['answer-1'] })
+    await repo.updateQuestion('q1', {
+      answerStatus: 'matched',
+      answerText: 'Professor: $4+5=9$.',
+      answerChunkIds: ['answer-1'],
+    })
     const refreshed = await svc.getOrGenerateReviewGuide('q1', 'en')
     expect(refreshed.inputHash).not.toBe(first.inputHash)
     expect(refreshed.answerChunkIds).toEqual(['answer-1'])
@@ -188,8 +315,14 @@ describe('HomeworkService — professor answer key', () => {
   })
 
   it('does not save partial review output', async () => {
-    const { ai } = stubAI(() => ({ status: 'ready', questionMeaning: 'Add two numbers.', steps: ['Add.'] }))
-    await expect(service(ai).getOrGenerateReviewGuide('q1', 'en')).rejects.toMatchObject({ code: 'INVALID_RESPONSE' })
+    const { ai } = stubAI(() => ({
+      status: 'ready',
+      questionMeaning: 'Add two numbers.',
+      steps: ['Add.'],
+    }))
+    await expect(service(ai).getOrGenerateReviewGuide('q1', 'en')).rejects.toMatchObject({
+      code: 'INVALID_RESPONSE',
+    })
     expect((await repo.getQuestion('q1'))?.reviewGuide).toBeUndefined()
   })
 
@@ -201,12 +334,22 @@ describe('HomeworkService — professor answer key', () => {
     expect((await svc.getAnswerDocument(setId))?.id).toBe(answerDocumentId)
 
     // An ordinary homework file is refused.
-    await expect(svc.attachAnswerDocument(setId, documentId)).rejects.toMatchObject({ code: 'INVALID_INPUT' })
+    await expect(svc.attachAnswerDocument(setId, documentId)).rejects.toMatchObject({
+      code: 'INVALID_INPUT',
+    })
 
     // A file from another project is refused.
     const other = await new ProjectService(db).create({ name: 'Other', subject: 'cs' })
-    const otherDoc = await new DocumentRepository(db).create({ projectId: other.id, type: 'text', materialType: 'homework_answer', name: 'a.txt', sizeBytes: 0 })
-    await expect(svc.attachAnswerDocument(setId, otherDoc.id)).rejects.toMatchObject({ code: 'NOT_FOUND' })
+    const otherDoc = await new DocumentRepository(db).create({
+      projectId: other.id,
+      type: 'text',
+      materialType: 'homework_answer',
+      name: 'a.txt',
+      sizeBytes: 0,
+    })
+    await expect(svc.attachAnswerDocument(setId, otherDoc.id)).rejects.toMatchObject({
+      code: 'NOT_FOUND',
+    })
   })
 
   it('re-reads a linked PDF while preserving student work and clearing stale answer links only on success', async () => {
@@ -342,9 +485,13 @@ describe('HomeworkService — professor answer key', () => {
   it('generates matched answers with bounded concurrency, reports progress, and skips completed work on repeat', async () => {
     await repo.updateQuestion('q1', { answerText: '9', answerStatus: 'matched' })
     await repo.updateQuestion('q2', { answerText: '42', answerStatus: 'matched' })
-    await repo.upsertQuestion(question({ id: 'q3', order: 2, number: '3', answerText: '7', answerStatus: 'matched' }))
+    await repo.upsertQuestion(
+      question({ id: 'q3', order: 2, number: '3', answerText: '7', answerStatus: 'matched' }),
+    )
     let release!: () => void
-    const gate = new Promise<void>((resolve) => { release = resolve })
+    const gate = new Promise<void>((resolve) => {
+      release = resolve
+    })
     let started = 0
     const streamJSON = vi.fn(async () => {
       started += 1
@@ -367,32 +514,48 @@ describe('HomeworkService — professor answer key', () => {
 
   it('prepares professor-grounded hints and solution in stages when combined output is truncated', async () => {
     await repo.updateQuestion('q1', { answerText: '9', answerStatus: 'matched' })
-    const streamJSON = vi.fn(async (
-      messages: Array<{ content: string }>,
-      _onDelta?: unknown,
-      _options?: { signal?: AbortSignal },
-    ) => {
-      const system = messages[0]?.content ?? ''
-      if (system.includes('exactly two fields')) throw new OutputTruncatedError(2048)
-      if (system.includes('one field: {"hints"')) return { data: { hints: ['Add the terms'] }, raw: {} }
-      return { data: { solution: '4 + 5 = 9' }, raw: {} }
-    })
+    const streamJSON = vi.fn(
+      async (
+        messages: Array<{ content: string }>,
+        _onDelta?: unknown,
+        _options?: { signal?: AbortSignal },
+      ) => {
+        const system = messages[0]?.content ?? ''
+        if (system.includes('exactly two fields')) throw new OutputTruncatedError(2048)
+        if (system.includes('one field: {"hints"'))
+          return { data: { hints: ['Add the terms'] }, raw: {} }
+        return { data: { solution: '4 + 5 = 9' }, raw: {} }
+      },
+    )
     const svc = service({ streamJSON, maxOutputTokens: 2048 } as unknown as AIService)
-    expect(await svc.generateAnswerContent(setId, ['q1'])).toMatchObject({ generated: 1, failed: 0 })
+    expect(await svc.generateAnswerContent(setId, ['q1'])).toMatchObject({
+      generated: 1,
+      failed: 0,
+    })
     const saved = (await repo.getQuestion('q1'))!
     expect(saved.answerBased).toBe(true)
     expect(saved.hints).toEqual(['Add the terms'])
     expect(saved.solution).toBe('4 + 5 = 9')
     expect(streamJSON).toHaveBeenCalledTimes(4)
-    expect(streamJSON.mock.calls.every(([messages]) => messages[1]?.content.includes('PROFESSOR ANSWER'))).toBe(true)
-    expect(streamJSON.mock.calls.every(([, , options]) => options?.signal instanceof AbortSignal)).toBe(true)
+    expect(
+      streamJSON.mock.calls.every(([messages]) =>
+        messages[1]?.content.includes('PROFESSOR ANSWER'),
+      ),
+    ).toBe(true)
+    expect(
+      streamJSON.mock.calls.every(([, , options]) => options?.signal instanceof AbortSignal),
+    ).toBe(true)
   })
 
   it('stops scheduling more answer generation after the provider rate-limits the batch', async () => {
     await repo.updateQuestion('q1', { answerText: '9', answerStatus: 'matched' })
     await repo.updateQuestion('q2', { answerText: '42', answerStatus: 'matched' })
-    await repo.upsertQuestion(question({ id: 'q3', order: 2, number: '3', answerText: '7', answerStatus: 'matched' }))
-    const streamJSON = vi.fn(async () => { throw new RateLimitedError() })
+    await repo.upsertQuestion(
+      question({ id: 'q3', order: 2, number: '3', answerText: '7', answerStatus: 'matched' }),
+    )
+    const streamJSON = vi.fn(async () => {
+      throw new RateLimitedError()
+    })
     const svc = service({ streamJSON, maxOutputTokens: 2048 } as unknown as AIService)
     expect(await svc.generateAnswerContent(setId)).toEqual({ generated: 0, failed: 3, skipped: 0 })
     expect(streamJSON).toHaveBeenCalledTimes(2)
@@ -402,8 +565,12 @@ describe('HomeworkService — professor answer key', () => {
   it('stops a batch after two timed-out questions instead of waiting through every question', async () => {
     await repo.updateQuestion('q1', { answerText: '9', answerStatus: 'matched' })
     await repo.updateQuestion('q2', { answerText: '42', answerStatus: 'matched' })
-    await repo.upsertQuestion(question({ id: 'q3', order: 2, number: '3', answerText: '7', answerStatus: 'matched' }))
-    const streamJSON = vi.fn(async () => { throw new TimeoutError(120_000) })
+    await repo.upsertQuestion(
+      question({ id: 'q3', order: 2, number: '3', answerText: '7', answerStatus: 'matched' }),
+    )
+    const streamJSON = vi.fn(async () => {
+      throw new TimeoutError(120_000)
+    })
     const svc = service({ streamJSON, maxOutputTokens: 2048 } as unknown as AIService)
     expect(await svc.generateAnswerContent(setId)).toEqual({ generated: 0, failed: 3, skipped: 0 })
     expect(streamJSON).toHaveBeenCalledTimes(2)
@@ -414,12 +581,23 @@ describe('HomeworkService — professor answer key', () => {
     const svc = service(null)
     await svc.attachAnswerDocument(setId, answerDocumentId)
     await svc.confirmAnswerMapping(setId, [{ questionId: 'q1', answerIndex: 0 }])
-    await repo.updateQuestion('q1', { answerBased: true, draftText: 'my attempt', hints: ['prior hint'] })
+    await repo.updateQuestion('q1', {
+      answerBased: true,
+      draftText: 'my attempt',
+      hints: ['prior hint'],
+    })
     await svc.confirmAnswerMapping(setId, [{ questionId: 'q1', answerIndex: 0 }])
     expect((await repo.getQuestion('q1'))?.answerBased).toBe(true)
-    await repo.setAnswerLinks(setId, [{ questionId: 'q1', answer: {
-      answerText: 'new official answer', answerNumber: '1', answerChunkIds: ['new-chunk'],
-    } }])
+    await repo.setAnswerLinks(setId, [
+      {
+        questionId: 'q1',
+        answer: {
+          answerText: 'new official answer',
+          answerNumber: '1',
+          answerChunkIds: ['new-chunk'],
+        },
+      },
+    ])
     const updated = (await repo.getQuestion('q1'))!
     expect(updated.answerBased).toBe(false)
     expect(updated.draftText).toBe('my attempt')
@@ -438,7 +616,13 @@ describe('HomeworkService — professor answer key', () => {
     })
 
     const documents = new DocumentRepository(db)
-    const replacement = await documents.create({ projectId, type: 'text', materialType: 'homework_answer', name: 'answers2.txt', sizeBytes: 0 })
+    const replacement = await documents.create({
+      projectId,
+      type: 'text',
+      materialType: 'homework_answer',
+      name: 'answers2.txt',
+      sizeBytes: 0,
+    })
     await documents.update(replacement.id, { status: 'ready' })
     await svc.attachAnswerDocument(setId, replacement.id)
 
@@ -472,7 +656,9 @@ describe('HomeworkService — professor answer key', () => {
     await repo.updateQuestion('q1', { answerText: '9', answerStatus: 'matched' })
 
     const documents = new DocumentRepository(db)
-    await new DocumentService({ documents, projects: new ProjectService(db), db }).delete(answerDocumentId)
+    await new DocumentService({ documents, projects: new ProjectService(db), db }).delete(
+      answerDocumentId,
+    )
 
     const set = await repo.getSet(setId)
     expect(set?.answerDocumentId).toBeUndefined()
@@ -542,7 +728,10 @@ describe('HomeworkService — professor answer key', () => {
     const { ai } = stubAI(() => ({}))
     const svc = service(ai)
     await svc.attachAnswerDocument(setId, answerDocumentId)
-    await svc.saveAnswerEntries(setId, segmentsToAnswerEntries(await answerLines(), [0], { 0: '1' }))
+    await svc.saveAnswerEntries(
+      setId,
+      segmentsToAnswerEntries(await answerLines(), [0], { 0: '1' }),
+    )
     await svc.clearAnswerEntries(setId)
     const mapping = await svc.buildAnswerMapping(setId)
     expect(mapping.manual).toBe(false)
@@ -615,9 +804,18 @@ describe('HomeworkService — professor answer key', () => {
     const svc = service(ai)
     const documents = new DocumentRepository(db)
     await svc.attachAnswerDocument(setId, answerDocumentId)
-    await svc.saveAnswerEntries(setId, segmentsToAnswerEntries(await answerLines(), [0], { 0: '1' }))
+    await svc.saveAnswerEntries(
+      setId,
+      segmentsToAnswerEntries(await answerLines(), [0], { 0: '1' }),
+    )
 
-    const replacement = await documents.create({ projectId, type: 'text', materialType: 'homework_answer', name: 'answers2.txt', sizeBytes: 0 })
+    const replacement = await documents.create({
+      projectId,
+      type: 'text',
+      materialType: 'homework_answer',
+      name: 'answers2.txt',
+      sizeBytes: 0,
+    })
     await documents.update(replacement.id, { status: 'ready' })
     await svc.attachAnswerDocument(setId, replacement.id)
 

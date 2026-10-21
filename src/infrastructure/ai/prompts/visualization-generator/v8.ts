@@ -63,9 +63,11 @@ export interface VisualizationPromptOptions {
  * specific subject ("other", or none recorded) is offered all of them; the
  * χ² test belongs to statistics and biology (genetics).
  */
-export function scienceFiguresFor(
-  subject: Subject | undefined,
-): { chemistry: boolean; biology: boolean; tests: boolean } {
+export function scienceFiguresFor(subject: Subject | undefined): {
+  chemistry: boolean
+  biology: boolean
+  tests: boolean
+} {
   const open = subject === undefined || subject === 'other'
   return {
     chemistry: open || subject === 'chemistry',
@@ -225,7 +227,10 @@ export function buildSystemPrompt(options: VisualizationPromptOptions = {}): str
       {
         visualizations: [
           {
-            type: ['function_2d | equation_2d | inequality_2d | points_2d | table_2d | vectors_2d | graph_2d | transform_2d | venn_2d | eigen_2d | hasse_2d | distribution_2d', ...scienceTypes].join(' | '),
+            type: [
+              'function_2d | equation_2d | inequality_2d | points_2d | table_2d | vectors_2d | graph_2d | transform_2d | venn_2d | eigen_2d | hasse_2d | distribution_2d',
+              ...scienceTypes,
+            ].join(' | '),
             caption: 'string (optional)',
             placement: { scope: 'lesson | section', block: 'example', index: 0 },
             viewport: { xMin: -10, xMax: 10, yMin: -10, yMax: 10 },
@@ -253,7 +258,10 @@ export function buildSystemPrompt(options: VisualizationPromptOptions = {}): str
             sets: [{ id: 'a', label: 'A', elements: ['1', '2', '3'] }],
             universe: ['1', '2', '3', '4', '5'],
             operands: ['a', 'b'],
-            elements: [{ id: 'a', label: 'a' }, { id: 'b', label: 'b' }],
+            elements: [
+              { id: 'a', label: 'a' },
+              { id: 'b', label: 'b' },
+            ],
             relations: [{ lower: 'a', upper: 'b' }],
             family: 'normal | binomial | poisson | uniform | exponential',
             params: { mu: 0, sigma: 1 },
@@ -289,7 +297,13 @@ export function buildSystemPrompt(options: VisualizationPromptOptions = {}): str
                     { gene: 'i', alleles: [{ allele: 'I^A', name: 'A' }] },
                   ],
                   members: [
-                    { id: 'string', sex: 'male | female | unknown', affected: false, father: 'id (optional)', mother: 'id (optional)' },
+                    {
+                      id: 'string',
+                      sex: 'male | female | unknown',
+                      affected: false,
+                      father: 'id (optional)',
+                      mother: 'id (optional)',
+                    },
                   ],
                   dna: 'ATGGCC',
                   strand: 'coding | template',

@@ -64,7 +64,11 @@ describe('resolveSourceReferences', () => {
   })
 
   it('rejects a paraphrase that is not in the chunk', () => {
-    const refs = resolveSourceReferences('chunk-1', 'Derivatives measure how fast things change.', only)
+    const refs = resolveSourceReferences(
+      'chunk-1',
+      'Derivatives measure how fast things change.',
+      only,
+    )
     // Not found verbatim -> the chunk's own wording is shown instead.
     expect(refs[0]!.quote).toBe(CHUNK_TEXT)
   })
@@ -110,7 +114,12 @@ describe('resolveSourceReferences', () => {
 
   it('resolves each question against its own snippet', () => {
     const a: SourceSnippet = { ...SNIPPET, chunkId: 'a', pageNumber: 3 }
-    const b: SourceSnippet = { ...SNIPPET, chunkId: 'b', documentName: 'Lecture 04.pdf', pageNumber: 9 }
+    const b: SourceSnippet = {
+      ...SNIPPET,
+      chunkId: 'b',
+      documentName: 'Lecture 04.pdf',
+      pageNumber: 9,
+    }
     const both = index([a, b])
 
     expect(resolveSourceReferences('a', CHUNK_TEXT, both)[0]).toMatchObject({

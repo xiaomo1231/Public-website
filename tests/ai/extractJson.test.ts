@@ -94,9 +94,10 @@ describe('extractJSON', () => {
     // unparseable and a nested topic could be mistaken for the document.
     const raw =
       '{"language":"en","topics":[{"name":"Derivatives","description":"Rates","sourceChunkIds":["c:1"],"sourceRefs":[]}],"formulas":[{"name":"Power","latex":"\\sqrt{x}"}]}'
-    const parsed = extractJSON<{ topics: Array<{ name: string }>; formulas: Array<{ latex: string }> }>(
-      raw,
-    )
+    const parsed = extractJSON<{
+      topics: Array<{ name: string }>
+      formulas: Array<{ latex: string }>
+    }>(raw)
     expect(parsed.topics[0]?.name).toBe('Derivatives')
     expect(parsed.formulas[0]?.latex).toBe('\\sqrt{x}')
   })

@@ -8,7 +8,10 @@ import {
 
 describe('compareQuantity', () => {
   it('accepts the expected value in the expected unit', () => {
-    expect(compareQuantity('9.8 m/s^2', '9.8', 'm/s^2')).toMatchObject({ outcome: 'correct', isCorrect: true })
+    expect(compareQuantity('9.8 m/s^2', '9.8', 'm/s^2')).toMatchObject({
+      outcome: 'correct',
+      isCorrect: true,
+    })
   })
 
   it('converts any compatible unit before comparing', () => {
@@ -27,19 +30,34 @@ describe('compareQuantity', () => {
 
   it('applies a relative tolerance, also to very small quantities', () => {
     expect(compareQuantity('9.85 m/s^2', '9.8', 'm/s^2').isCorrect).toBe(true)
-    expect(compareQuantity('10.5 m/s^2', '9.8', 'm/s^2')).toMatchObject({ outcome: 'wrong-value', isCorrect: false })
+    expect(compareQuantity('10.5 m/s^2', '9.8', 'm/s^2')).toMatchObject({
+      outcome: 'wrong-value',
+      isCorrect: false,
+    })
     // An absolute tolerance would wrongly accept this.
     expect(compareQuantity('1.5 uF', '1.2e-6', 'F').isCorrect).toBe(false)
   })
 
   it('says why an answer is wrong', () => {
-    expect(compareQuantity('9.8', '9.8', 'm/s^2')).toMatchObject({ outcome: 'missing-unit', isCorrect: false })
-    expect(compareQuantity('9.8 N', '9.8', 'm/s^2')).toMatchObject({ outcome: 'wrong-dimension', isCorrect: false })
+    expect(compareQuantity('9.8', '9.8', 'm/s^2')).toMatchObject({
+      outcome: 'missing-unit',
+      isCorrect: false,
+    })
+    expect(compareQuantity('9.8 N', '9.8', 'm/s^2')).toMatchObject({
+      outcome: 'wrong-dimension',
+      isCorrect: false,
+    })
   })
 
   it('leaves unreadable answers unverified instead of wrong', () => {
-    expect(compareQuantity('9.8 blah', '9.8', 'm/s^2')).toMatchObject({ outcome: 'unreadable-unit', isCorrect: null })
-    expect(compareQuantity('about ten', '9.8', 'm/s^2')).toMatchObject({ outcome: 'unreadable-number', isCorrect: null })
+    expect(compareQuantity('9.8 blah', '9.8', 'm/s^2')).toMatchObject({
+      outcome: 'unreadable-unit',
+      isCorrect: null,
+    })
+    expect(compareQuantity('about ten', '9.8', 'm/s^2')).toMatchObject({
+      outcome: 'unreadable-number',
+      isCorrect: null,
+    })
   })
 })
 

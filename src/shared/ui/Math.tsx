@@ -41,7 +41,7 @@ export function Math({ latex, display = false, className }: MathProps): JSX.Elem
     return (
       <code
         className={cn(
-          'inline-block max-w-full overflow-x-auto rounded bg-muted px-2 py-1 font-mono text-[13px] break-words',
+          'inline-block max-w-full overflow-x-auto break-words rounded bg-muted px-2 py-1 font-mono text-[13px]',
           className,
         )}
       >

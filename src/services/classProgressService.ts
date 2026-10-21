@@ -72,10 +72,7 @@ export interface TopicMatch {
 }
 
 /** Best topic for one transcript chunk, or null when nothing overlaps enough. */
-export function matchChunkToTopic(
-  chunkText: string,
-  topics: ProgressTopic[],
-): TopicMatch | null {
+export function matchChunkToTopic(chunkText: string, topics: ProgressTopic[]): TopicMatch | null {
   const lowerChunk = (chunkText ?? '').toLowerCase()
   let best: TopicMatch | null = null
 
@@ -131,7 +128,9 @@ export function computeClassProgress(input: {
   const currentIndex = currentTopicId !== undefined ? (orderOf.get(currentTopicId) ?? -1) : -1
   const completedTopicIds =
     currentIndex >= 0
-      ? topics.filter((topic, index) => covered.has(topic.id) && index < currentIndex).map((t) => t.id)
+      ? topics
+          .filter((topic, index) => covered.has(topic.id) && index < currentIndex)
+          .map((t) => t.id)
       : []
 
   const progress: ClassProgress = {

@@ -1,4 +1,8 @@
-import type { ChunkContentType, DocumentType, LearningMaterialType } from '@/entities/document/types'
+import type {
+  ChunkContentType,
+  DocumentType,
+  LearningMaterialType,
+} from '@/entities/document/types'
 import type { DocumentChunk, NewChunkInput } from '@/entities/chunk/types'
 import { buildSourceReference } from '@/entities/chunk/types'
 
@@ -18,7 +22,10 @@ interface ChunkLine {
 }
 
 function splitSentences(text: string): string[] {
-  return text.split(/(?<=[.!?。！？\n])\s+/).map((s) => s.trim()).filter(Boolean)
+  return text
+    .split(/(?<=[.!?。！？\n])\s+/)
+    .map((s) => s.trim())
+    .filter(Boolean)
 }
 
 function pack(lines: ChunkLine[]): ChunkLine[] {
@@ -85,7 +92,10 @@ export function chunksFromPdf(
   const lines: ChunkLine[] = []
   let section: string | undefined
   for (const page of pages) {
-    const rawLines = page.text.split(/\n+/).map((s) => s.trim()).filter(Boolean)
+    const rawLines = page.text
+      .split(/\n+/)
+      .map((s) => s.trim())
+      .filter(Boolean)
     for (const raw of rawLines) {
       const isHeading = page.headings.some((h) => h.text === raw)
       // A heading updates the running section *as it is encountered*, so the
@@ -119,7 +129,12 @@ export function chunksFromPdf(
 
 export function chunksFromDocx(
   ctx: ChunkerContext,
-  blocks: Array<{ type: 'heading' | 'paragraph' | 'table' | 'list'; level?: number; text: string; rows?: string[][] }>,
+  blocks: Array<{
+    type: 'heading' | 'paragraph' | 'table' | 'list'
+    level?: number
+    text: string
+    rows?: string[][]
+  }>,
 ): NewChunkInput[] {
   const lines: ChunkLine[] = []
   let section: string | undefined
@@ -128,7 +143,11 @@ export function chunksFromDocx(
       section = block.text
       lines.push({ contentType: 'heading', text: block.text, section })
     } else if (block.type === 'paragraph' || block.type === 'list') {
-      lines.push({ contentType: block.type === 'list' ? 'list' : 'paragraph', text: block.text, section })
+      lines.push({
+        contentType: block.type === 'list' ? 'list' : 'paragraph',
+        text: block.text,
+        section,
+      })
     } else if (block.type === 'table') {
       const rowsText = (block.rows ?? []).map((r) => r.join(' | ')).join('\n')
       lines.push({ contentType: 'table', text: rowsText, section })
@@ -153,13 +172,38 @@ export function chunksFromDocx(
 
 export function chunksFromPptx(
   ctx: ChunkerContext,
-  slides: Array<{ slideNumber: number; title?: string; body: string; notes: string; tables: string[][][]; imageCount: number }>,
+  slides: Array<{
+    slideNumber: number
+    title?: string
+    body: string
+    notes: string
+    tables: string[][][]
+    imageCount: number
+  }>,
 ): NewChunkInput[] {
   const lines: ChunkLine[] = []
   for (const slide of slides) {
-    if (slide.title) lines.push({ contentType: 'heading', text: slide.title, pageNumber: slide.slideNumber, section: slide.title })
-    if (slide.body) lines.push({ contentType: 'paragraph', text: slide.body, pageNumber: slide.slideNumber, section: slide.title })
-    if (slide.notes) lines.push({ contentType: 'note', text: slide.notes, pageNumber: slide.slideNumber, section: slide.title })
+    if (slide.title)
+      lines.push({
+        contentType: 'heading',
+        text: slide.title,
+        pageNumber: slide.slideNumber,
+        section: slide.title,
+      })
+    if (slide.body)
+      lines.push({
+        contentType: 'paragraph',
+        text: slide.body,
+        pageNumber: slide.slideNumber,
+        section: slide.title,
+      })
+    if (slide.notes)
+      lines.push({
+        contentType: 'note',
+        text: slide.notes,
+        pageNumber: slide.slideNumber,
+        section: slide.title,
+      })
     for (const table of slide.tables) {
       lines.push({
         contentType: 'table',

@@ -58,12 +58,17 @@ export class WalkthroughRepository {
       const existing = await this.walkthroughs().get(id)
       if (!existing) return
       const sections = existing.sections.filter((section) => keep.has(section.id))
-      if (sections.length !== existing.sections.length) await this.walkthroughs().put({ ...existing, sections })
+      if (sections.length !== existing.sections.length)
+        await this.walkthroughs().put({ ...existing, sections })
     })
   }
 
   listNotes(setId: string): Promise<WalkthroughNote[]> {
-    return this.notes().where('[setId+updatedAt]').between([setId, -Infinity], [setId, Infinity]).reverse().toArray()
+    return this.notes()
+      .where('[setId+updatedAt]')
+      .between([setId, -Infinity], [setId, Infinity])
+      .reverse()
+      .toArray()
   }
 
   getNote(id: string): Promise<WalkthroughNote | undefined> {
@@ -80,13 +85,19 @@ export class WalkthroughRepository {
   }
 
   countNotes(setId: string): Promise<number> {
-    return this.notes().where('[setId+updatedAt]').between([setId, -Infinity], [setId, Infinity]).count()
+    return this.notes()
+      .where('[setId+updatedAt]')
+      .between([setId, -Infinity], [setId, Infinity])
+      .count()
   }
 
   /** Called inside the assignment / document / project delete transactions. */
   async deleteBySet(setId: string): Promise<void> {
     await this.walkthroughs().where('setId').equals(setId).delete()
-    await this.notes().where('[setId+updatedAt]').between([setId, -Infinity], [setId, Infinity]).delete()
+    await this.notes()
+      .where('[setId+updatedAt]')
+      .between([setId, -Infinity], [setId, Infinity])
+      .delete()
   }
 
   async deleteByProject(projectId: string): Promise<void> {

@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 
 export type SpeechInputState = 'idle' | 'starting' | 'listening' | 'stopping' | 'error'
 export type SpeechInputError =
-  | 'not-allowed' | 'no-speech' | 'audio-capture' | 'network' | 'language-not-supported' | 'other'
+  'not-allowed' | 'no-speech' | 'audio-capture' | 'network' | 'language-not-supported' | 'other'
 
 interface SpeechResult {
   isFinal: boolean
@@ -77,13 +77,19 @@ export function useSpeechInput(language: string, onFinalText: (text: string) => 
     current.onresult = null
     current.onerror = null
     current.onend = null
-    try { current.abort() } catch { /* the browser may already have ended it */ }
+    try {
+      current.abort()
+    } catch {
+      /* the browser may already have ended it */
+    }
   }
 
   useEffect(() => {
     setState('idle')
     setError(null)
-    return () => { discardCurrent() }
+    return () => {
+      discardCurrent()
+    }
   }, [language])
 
   function start(): void {
@@ -121,7 +127,7 @@ export function useSpeechInput(language: string, onFinalText: (text: string) => 
     current.onend = () => {
       if (generation.current !== session) return
       recognition.current = null
-      setState((previous) => previous === 'error' ? 'error' : 'idle')
+      setState((previous) => (previous === 'error' ? 'error' : 'idle'))
     }
     try {
       current.start()

@@ -143,13 +143,16 @@ describe('ShortAnswerGrader', () => {
   })
 
   it('leaves the answer unscored when the check cannot be completed', async () => {
-    const failing = await new ShortAnswerGrader(ai(vi.fn().mockRejectedValue(new Error('offline')))).grade(
-      question(),
-      ANSWER,
-    )
+    const failing = await new ShortAnswerGrader(
+      ai(vi.fn().mockRejectedValue(new Error('offline'))),
+    ).grade(question(), ANSWER)
     expect(failing).toMatchObject({ isCorrect: null, method: 'unverified' })
     const insufficient = await new ShortAnswerGrader(
-      ai(vi.fn().mockResolvedValue({ data: { status: 'insufficient', reason: 'The question is cut off.' } })),
+      ai(
+        vi.fn().mockResolvedValue({
+          data: { status: 'insufficient', reason: 'The question is cut off.' },
+        }),
+      ),
     ).grade(question(), ANSWER)
     expect(insufficient.isCorrect).toBeNull()
     expect(insufficient.note).toContain('The question is cut off.')
@@ -164,12 +167,19 @@ describe('ShortAnswerGrader', () => {
   })
 
   it('is not scored offline', () => {
-    expect(evaluateDeterministic(question(), ANSWER)).toMatchObject({ isCorrect: null, method: 'unverified' })
+    expect(evaluateDeterministic(question(), ANSWER)).toMatchObject({
+      isCorrect: null,
+      method: 'unverified',
+    })
   })
 })
 
 describe('partial credit in scores and mastery', () => {
-  const attempt = (questionId: string, evaluation: QuestionEvaluation, type = 'short_answer'): QuestionAttempt => ({
+  const attempt = (
+    questionId: string,
+    evaluation: QuestionEvaluation,
+    type = 'short_answer',
+  ): QuestionAttempt => ({
     id: `a-${questionId}`,
     projectId: 'p1',
     questionId,
@@ -187,7 +197,12 @@ describe('partial credit in scores and mastery', () => {
   it('counts a short answer as earned / total of a question', () => {
     const score = scoreQuiz(quiz, [
       attempt('q1', { isCorrect: true, method: 'exact', confidence: 1 }, 'numeric'),
-      attempt('q2', { isCorrect: false, method: 'rubric_ai', confidence: 0.8, score: { earned: 3, total: 5 } }),
+      attempt('q2', {
+        isCorrect: false,
+        method: 'rubric_ai',
+        confidence: 0.8,
+        score: { earned: 3, total: 5 },
+      }),
       attempt('q3', { isCorrect: false, method: 'exact', confidence: 1 }, 'numeric'),
     ])
     expect(score.points).toBe(1.6)
@@ -197,19 +212,32 @@ describe('partial credit in scores and mastery', () => {
   it('leaves a disputed answer out of the score', () => {
     const score = scoreQuiz(quiz, [
       attempt('q1', { isCorrect: true, method: 'exact', confidence: 1 }, 'numeric'),
-      attempt('q2', { isCorrect: false, method: 'rubric_ai', confidence: 0.8, score: { earned: 0, total: 5 }, disputed: true }),
+      attempt('q2', {
+        isCorrect: false,
+        method: 'rubric_ai',
+        confidence: 0.8,
+        score: { earned: 0, total: 5 },
+        disputed: true,
+      }),
     ])
     expect(score).toMatchObject({ correct: 1, wrong: 0, percentage: 100 })
   })
 
   it('feeds mastery partial credit at half weight', () => {
     const observation = observationFromAttempt(
-      attempt('q2', { isCorrect: false, method: 'rubric_ai', confidence: 0.8, score: { earned: 3, total: 5 } }),
+      attempt('q2', {
+        isCorrect: false,
+        method: 'rubric_ai',
+        confidence: 0.8,
+        score: { earned: 3, total: 5 },
+      }),
     )
     expect(observation).toMatchObject({ credit: 0.6, weight: 0.5 })
     expect(computeMastery([observation])).toBeCloseTo(0.6)
     // Half weight: one fully wrong ordinary answer outweighs the short answer.
-    const wrong = observationFromAttempt(attempt('q3', { isCorrect: false, method: 'exact', confidence: 1 }, 'numeric'))
+    const wrong = observationFromAttempt(
+      attempt('q3', { isCorrect: false, method: 'exact', confidence: 1 }, 'numeric'),
+    )
     expect(computeMastery([{ ...observation, at: 0 }, wrong])).toBeLessThan(0.3)
   })
 })
@@ -221,8 +249,20 @@ describe('quiz generation', () => {
   it('keeps 2–6 distinct scoring points and drops a short answer without enough', () => {
     const output = {
       questions: [
-        { ...base, prompt: 'Explain A.', type: 'short_answer', correctAnswer: 'A because B.', rubric: ['A', 'a', ' B ', 7] },
-        { ...base, prompt: 'Explain C.', type: 'short_answer', correctAnswer: 'C.', rubric: ['only one'] },
+        {
+          ...base,
+          prompt: 'Explain A.',
+          type: 'short_answer',
+          correctAnswer: 'A because B.',
+          rubric: ['A', 'a', ' B ', 7],
+        },
+        {
+          ...base,
+          prompt: 'Explain C.',
+          type: 'short_answer',
+          correctAnswer: 'C.',
+          rubric: ['only one'],
+        },
       ],
     } as unknown as QuizGenerationOutput
     const valid = service.validateGenerated(output, 2)
@@ -274,7 +314,9 @@ describe('submit and dispute', () => {
       mistakes: new MistakeService(db),
     })
 
-    const result = await service.submitAnswer('quiz-1', stored!.id, ANSWER, { gradeShortAnswer: true })
+    const result = await service.submitAnswer('quiz-1', stored!.id, ANSWER, {
+      gradeShortAnswer: true,
+    })
     expect(result.evaluation.score).toEqual({ earned: 3, total: 5 })
     expect(await new MistakeRepository(db).findByQuestion(project.id, stored!.id)).toBeDefined()
     const completed = await new QuizRepository(db).get('quiz-1')
@@ -293,11 +335,18 @@ describe('submit and dispute', () => {
 describe('ShortAnswerFeedback', () => {
   it('shows the score, the evidence and a dispute action', async () => {
     const onDispute = vi.fn()
-    render(<ShortAnswerFeedback evaluation={buildRubricEvaluation(question(), ANSWER, AI_OUTPUT)} onDispute={onDispute} />)
+    render(
+      <ShortAnswerFeedback
+        evaluation={buildRubricEvaluation(question(), ANSWER, AI_OUTPUT)}
+        onDispute={onDispute}
+      />,
+    )
     expect(screen.getByText('3/5 scoring points · 60%')).toBeInTheDocument()
     expect(screen.getByText('You wrote: “the slope of the tangent line”')).toBeInTheDocument()
     expect(screen.getByText('Every continuous function is differentiable.')).toBeInTheDocument()
-    await userEvent.setup().click(screen.getByRole('button', { name: 'I disagree with this judgement' }))
+    await userEvent
+      .setup()
+      .click(screen.getByRole('button', { name: 'I disagree with this judgement' }))
     expect(onDispute).toHaveBeenCalled()
   })
 

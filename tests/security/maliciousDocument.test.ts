@@ -34,7 +34,16 @@ function capturingAI(): { ai: AIService; messages: ChatMessage[][] } {
     chatJSON: vi.fn(async (msgs: ChatMessage[]) => {
       messages.push(msgs)
       return {
-        data: { language: 'en', topics: [], concepts: [], formulas: [], symbols: [], examples: [], exercises: [], prerequisites: [] },
+        data: {
+          language: 'en',
+          topics: [],
+          concepts: [],
+          formulas: [],
+          symbols: [],
+          examples: [],
+          exercises: [],
+          prerequisites: [],
+        },
         raw: { content: '{}', model: 'fake' },
       }
     }),
@@ -42,7 +51,16 @@ function capturingAI(): { ai: AIService; messages: ChatMessage[][] } {
     streamJSON: vi.fn(async (msgs: ChatMessage[]) => {
       messages.push(msgs)
       return {
-        data: { language: 'en', topics: [], concepts: [], formulas: [], symbols: [], examples: [], exercises: [], prerequisites: [] },
+        data: {
+          language: 'en',
+          topics: [],
+          concepts: [],
+          formulas: [],
+          symbols: [],
+          examples: [],
+          exercises: [],
+          prerequisites: [],
+        },
         raw: { content: '{}', model: 'fake' },
       }
     }),
@@ -151,9 +169,7 @@ describe('Malicious document content', () => {
   it('carries malicious text through every chunking path without alteration', () => {
     const ctx = { documentId: 'd1', projectId: 'p1', documentName: 'x', type: 'pdf' as const }
 
-    const pdf = chunksFromPdf(ctx, [
-      { pageNumber: 1, text: INJECTION, headings: [] },
-    ])
+    const pdf = chunksFromPdf(ctx, [{ pageNumber: 1, text: INJECTION, headings: [] }])
     const docx = chunksFromDocx(ctx, [{ type: 'paragraph', text: INJECTION }])
     const pptx = chunksFromPptx(ctx, [
       { slideNumber: 1, title: 'T', body: INJECTION, notes: '', tables: [], imageCount: 0 },

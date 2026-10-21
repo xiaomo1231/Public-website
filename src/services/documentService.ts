@@ -1,6 +1,10 @@
 import type { DocumentRepository } from '@/entities/document/repository'
 import type { ProjectService } from './projectService'
-import { type CreateDocumentInput, type Document, type UpdateDocumentInput } from '@/entities/document/types'
+import {
+  type CreateDocumentInput,
+  type Document,
+  type UpdateDocumentInput,
+} from '@/entities/document/types'
 import { CourseContentService } from './courseContentService'
 import { getDb, type AppDatabase } from '@/infrastructure/db/database'
 import { ChunkRepository } from '@/entities/chunk/repository'
@@ -255,7 +259,10 @@ export class DocumentService {
       homeworkQuestions += questions.length
       homeworkAnswers += questions.filter((question) => hasStudentWork(question)).length
       // Questions saved about the walkthrough are student work too.
-      homeworkAnswers += await this.db.walkthroughNotes.where('[setId+updatedAt]').between([set.id, -Infinity], [set.id, Infinity]).count()
+      homeworkAnswers += await this.db.walkthroughNotes
+        .where('[setId+updatedAt]')
+        .between([set.id, -Infinity], [set.id, Infinity])
+        .count()
     }
 
     let practiceQuestions = 0

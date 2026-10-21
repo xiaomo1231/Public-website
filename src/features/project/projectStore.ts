@@ -14,7 +14,11 @@ interface ProjectStoreState {
 
 interface ProjectStoreActions {
   load: () => Promise<void>
-  create: (input: { name: string; subject: Project['subject']; description?: string }) => Promise<Project>
+  create: (input: {
+    name: string
+    subject: Project['subject']
+    description?: string
+  }) => Promise<Project>
   rename: (id: string, name: string) => Promise<void>
   update: (id: string, patch: Partial<Project>) => Promise<void>
   remove: (id: string) => Promise<void>

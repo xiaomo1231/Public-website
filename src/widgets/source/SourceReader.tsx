@@ -1,12 +1,7 @@
 import { Link, useInRouterContext } from 'react-router-dom'
 import { Copy, ExternalLink } from 'lucide-react'
 import { Button } from '@/shared/ui/Button'
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogTitle,
-} from '@/shared/ui/Dialog'
+import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/shared/ui/Dialog'
 import { RichText } from '@/shared/ui/RichText'
 import { TruncatedText } from '@/shared/ui/TruncatedText'
 import { toast } from '@/features/toast/toastStore'
@@ -72,9 +67,7 @@ export function SourceReader({
         aria-describedby={undefined}
       >
         <header className="shrink-0 space-y-1 border-b px-5 py-4 pr-14 sm:px-7">
-          <p className="text-xs font-medium text-muted-foreground">
-            {t('sourceReader.eyebrow')}
-          </p>
+          <p className="text-xs font-medium text-muted-foreground">{t('sourceReader.eyebrow')}</p>
           <DialogTitle className="text-base font-semibold leading-snug">
             <TruncatedText
               text={documentName || t('common.unknown')}
@@ -136,7 +129,7 @@ export function SourceReader({
 
               {technical && technical.length > 0 && (
                 <details className="group">
-                  <summary className="w-fit cursor-pointer list-none rounded text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline focus-ring">
+                  <summary className="focus-ring w-fit cursor-pointer list-none rounded text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline">
                     {t('sourceReader.advanced')}
                   </summary>
                   <dl className="mt-2 grid gap-1 text-[11px] text-muted-foreground">

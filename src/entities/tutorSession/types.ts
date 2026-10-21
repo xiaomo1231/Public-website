@@ -1,6 +1,10 @@
 import type { RubricPoint } from '@/entities/question/types'
 import type { ChatMessage } from '@/infrastructure/ai/types'
-import type { DifficultyLevel, SourceReference, TutorEvaluation } from '@/infrastructure/ai/prompts/types'
+import type {
+  DifficultyLevel,
+  SourceReference,
+  TutorEvaluation,
+} from '@/infrastructure/ai/prompts/types'
 import type { TranslationKey } from '@/i18n/types'
 
 export type { DifficultyLevel, SourceReference, TutorEvaluation }

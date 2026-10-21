@@ -50,9 +50,31 @@ export interface CourseOverview {
 
 /** "Pick up where you left off": the latest real study activity. */
 export type ResumeItem =
-  | { kind: 'tutor'; projectId: string; projectName: string; at: number; topicId?: string; topicName: string }
-  | { kind: 'homework'; projectId: string; projectName: string; at: number; setId: string; title: string; remaining: number }
-  | { kind: 'quiz'; projectId: string; projectName: string; at: number; quizId: string; title: string }
+  | {
+      kind: 'tutor'
+      projectId: string
+      projectName: string
+      at: number
+      topicId?: string
+      topicName: string
+    }
+  | {
+      kind: 'homework'
+      projectId: string
+      projectName: string
+      at: number
+      setId: string
+      title: string
+      remaining: number
+    }
+  | {
+      kind: 'quiz'
+      projectId: string
+      projectName: string
+      at: number
+      quizId: string
+      title: string
+    }
 
 export interface HomeOverview {
   courses: CourseOverview[]
@@ -95,9 +117,7 @@ export class HomeOverviewService {
 
   async load(projects: readonly Project[]): Promise<HomeOverview> {
     const results = await Promise.all(projects.map((p) => this.course(p)))
-    const courses = results
-      .map((r) => r.course)
-      .sort((a, b) => b.lastActivityAt - a.lastActivityAt)
+    const courses = results.map((r) => r.course).sort((a, b) => b.lastActivityAt - a.lastActivityAt)
     const resume =
       results
         .map((r) => r.resume)
@@ -162,11 +182,17 @@ export class HomeOverviewService {
       .map((m) => ({ knowledgePoint: m.knowledgePoint, mastery: m.mastery }))
 
     const analysisStatus: AnalysisStatus | 'none' = analysis?.status ?? 'none'
-    const homeworkSet = openSet as { setId: string; title: string; remaining: number; at: number } | null
+    const homeworkSet = openSet as {
+      setId: string
+      title: string
+      remaining: number
+      at: number
+    } | null
 
     let nextStep: CourseNextStep
     if (materials.total === 0) nextStep = { kind: 'upload' }
-    else if (analysisStatus !== 'ready' && materials.processing > 0) nextStep = { kind: 'processing' }
+    else if (analysisStatus !== 'ready' && materials.processing > 0)
+      nextStep = { kind: 'processing' }
     else if (analysisStatus === 'analyzing') nextStep = { kind: 'analyzing' }
     else if (analysisStatus !== 'ready') nextStep = { kind: 'analyze' }
     else if (openQuiz) nextStep = { kind: 'quiz', quizId: openQuiz.id, title: openQuiz.title }

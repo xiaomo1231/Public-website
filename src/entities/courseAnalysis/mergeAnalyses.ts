@@ -24,7 +24,13 @@ export interface AnalysisPart {
 const key = (text: string) => text.normalize('NFKC').trim().replace(/\s+/g, ' ').toLowerCase()
 
 function refKey(ref: SourceReference): string {
-  return [ref.documentName, ref.page ?? '', ref.slideNumber ?? '', ref.section ?? '', ref.quote ?? ''].join('|')
+  return [
+    ref.documentName,
+    ref.page ?? '',
+    ref.slideNumber ?? '',
+    ref.section ?? '',
+    ref.quote ?? '',
+  ].join('|')
 }
 
 function mergeRefs(into: SourceReference[], more: SourceReference[]): SourceReference[] {
@@ -68,7 +74,9 @@ export function mergeDocumentAnalyses(parts: AnalysisPart[]): DocumentAnalysisOu
         topics.push({ ...topic })
         continue
       }
-      const sharesChapter = parts[existing.part]!.chapterIds.some((id) => part.chapterIds.includes(id))
+      const sharesChapter = parts[existing.part]!.chapterIds.some((id) =>
+        part.chapterIds.includes(id),
+      )
       if (sharesChapter) {
         const kept = topics[existing.index]!
         topics[existing.index] = {
@@ -86,15 +94,22 @@ export function mergeDocumentAnalyses(parts: AnalysisPart[]): DocumentAnalysisOu
     }
   })
 
-  const names = (partIndex: number, list: string[]) => list.map((name) => renamed[partIndex]!.get(name) ?? name)
-  const each = <T>(pick: (output: DocumentAnalysisOutput) => T[], fix: (item: T, partIndex: number) => T): T[] =>
+  const names = (partIndex: number, list: string[]) =>
+    list.map((name) => renamed[partIndex]!.get(name) ?? name)
+  const each = <T>(
+    pick: (output: DocumentAnalysisOutput) => T[],
+    fix: (item: T, partIndex: number) => T,
+  ): T[] =>
     parts.flatMap((part, partIndex) => pick(part.output).map((item) => fix(item, partIndex)))
 
   return {
     language: parts[0]!.output.language,
     topics,
     concepts: dedupe(
-      each((o) => o.concepts, (c, i) => ({ ...c, topicNames: names(i, c.topicNames) })),
+      each(
+        (o) => o.concepts,
+        (c, i) => ({ ...c, topicNames: names(i, c.topicNames) }),
+      ),
       (c) => key(c.name),
       (kept, extra) => ({
         ...kept,
@@ -103,27 +118,42 @@ export function mergeDocumentAnalyses(parts: AnalysisPart[]): DocumentAnalysisOu
       }),
     ),
     formulas: dedupe(
-      each((o) => o.formulas, (f) => f),
+      each(
+        (o) => o.formulas,
+        (f) => f,
+      ),
       (f) => f.latex.replace(/\s+/g, ''),
       (kept, extra) => ({ ...kept, sourceRefs: mergeRefs(kept.sourceRefs, extra.sourceRefs) }),
     ),
     symbols: dedupe(
-      each((o) => o.symbols, (s) => s),
+      each(
+        (o) => o.symbols,
+        (s) => s,
+      ),
       (s) => `${s.symbol.trim()}|${key(s.meaning)}`,
       (kept, extra) => ({ ...kept, sourceRefs: mergeRefs(kept.sourceRefs, extra.sourceRefs) }),
     ),
     examples: dedupe(
-      each((o) => o.examples, (e, i) => ({ ...e, topicNames: names(i, e.topicNames) })),
+      each(
+        (o) => o.examples,
+        (e, i) => ({ ...e, topicNames: names(i, e.topicNames) }),
+      ),
       (e) => `${key(e.title)}|${key(e.problem)}`,
       (kept, extra) => ({ ...kept, topicNames: union(kept.topicNames, extra.topicNames) }),
     ),
     exercises: dedupe(
-      each((o) => o.exercises, (e, i) => ({ ...e, topicNames: names(i, e.topicNames) })),
+      each(
+        (o) => o.exercises,
+        (e, i) => ({ ...e, topicNames: names(i, e.topicNames) }),
+      ),
       (e) => key(e.prompt),
       (kept, extra) => ({ ...kept, topicNames: union(kept.topicNames, extra.topicNames) }),
     ),
     prerequisites: dedupe(
-      each((o) => o.prerequisites, (p, i) => ({ ...p, topicNames: names(i, p.topicNames) })),
+      each(
+        (o) => o.prerequisites,
+        (p, i) => ({ ...p, topicNames: names(i, p.topicNames) }),
+      ),
       (p) => key(p.name),
       (kept, extra) => ({ ...kept, topicNames: union(kept.topicNames, extra.topicNames) }),
     ),

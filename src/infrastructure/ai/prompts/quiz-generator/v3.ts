@@ -21,12 +21,7 @@ export const VERSION = 'v3' as const
 export const PROMPT_KIND = 'quiz-generator' as const
 
 export type QuizQuestionType =
-  | 'multiple_choice'
-  | 'true_false'
-  | 'numeric'
-  | 'math_expr'
-  | 'code_output'
-  | 'short_answer'
+  'multiple_choice' | 'true_false' | 'numeric' | 'math_expr' | 'code_output' | 'short_answer'
 
 export interface QuizGenerationInput {
   topicName: string

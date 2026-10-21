@@ -42,8 +42,18 @@ describe('physiology figures', () => {
   })
 
   it('rejects unknown or duplicated ions', () => {
-    expect(one({ type: 'membrane_potential_2d', ions: [{ ion: 'Mg2+', inside: 1, outside: 1 }] })).toBe('invalid-ion')
-    expect(one({ type: 'membrane_potential_2d', ions: [{ ion: 'K+', inside: 140, outside: 4 }, { ion: 'K⁺', inside: 140, outside: 4 }] })).toBe('duplicate-ion')
+    expect(
+      one({ type: 'membrane_potential_2d', ions: [{ ion: 'Mg2+', inside: 1, outside: 1 }] }),
+    ).toBe('invalid-ion')
+    expect(
+      one({
+        type: 'membrane_potential_2d',
+        ions: [
+          { ion: 'K+', inside: 140, outside: 4 },
+          { ion: 'K⁺', inside: 140, outside: 4 },
+        ],
+      }),
+    ).toBe('duplicate-ion')
   })
 
   it('derives SV, EF and CO for the pressure–volume loop', () => {
@@ -71,7 +81,9 @@ describe('physiology figures', () => {
     const content = text(container)
     expect(content).toContain('10')
     expect(content).toContain('120')
-    expect(one({ type: 'renal_2d', substances: [{ name: '菊粉', urine: 30, plasma: 0.25 }] })).toBe('missing-urine-flow')
+    expect(one({ type: 'renal_2d', substances: [{ name: '菊粉', urine: 30, plasma: 0.25 }] })).toBe(
+      'missing-urine-flow',
+    )
   })
 
   it('classifies a compensated metabolic acidosis with the textbook formula', () => {
@@ -88,7 +100,11 @@ describe('physiology figures', () => {
   })
 
   it('shows the dissociation curve at the lesson’s PO₂ values', () => {
-    const { container } = draw({ type: 'oxygen_2d', curves: [{ label: 'HbA', p50: 26.8 }], markers: [100, 40] })
+    const { container } = draw({
+      type: 'oxygen_2d',
+      curves: [{ label: 'HbA', p50: 26.8 }],
+      markers: [100, 40],
+    })
     expect(text(container)).toMatch(/PO₂ 100/)
     expect(text(container)).toMatch(/PO₂ 40/)
   })
@@ -99,10 +115,22 @@ describe('biochemistry and pharmacokinetics figures', () => {
     const { container } = draw({
       type: 'amino_acid_2d',
       name: 'Glycine',
-      groups: [{ pka: 2.34, kind: 'acid' }, { pka: 9.6, kind: 'base' }],
+      groups: [
+        { pka: 2.34, kind: 'acid' },
+        { pka: 9.6, kind: 'base' },
+      ],
     })
     expect(text(container)).toMatch(/5\.97/)
-    expect(one({ type: 'amino_acid_2d', name: 'X', groups: [{ pka: 2, kind: 'acid' }, { pka: 4, kind: 'acid' }] })).toBe('invalid-amino-acid')
+    expect(
+      one({
+        type: 'amino_acid_2d',
+        name: 'X',
+        groups: [
+          { pka: 2, kind: 'acid' },
+          { pka: 4, kind: 'acid' },
+        ],
+      }),
+    ).toBe('invalid-amino-acid')
   })
 
   it('totals the ATP of glycolysis and switches shuttle', () => {
@@ -125,15 +153,30 @@ describe('biochemistry and pharmacokinetics figures', () => {
   })
 
   it('draws repeated dosing with a teaching-only disclaimer', () => {
-    const { container } = draw({ type: 'pharmacokinetics_2d', route: 'iv_bolus', dose: 500, vd: 50, halfLife: 6, doses: 5, interval: 6, mec: 5 })
+    const { container } = draw({
+      type: 'pharmacokinetics_2d',
+      route: 'iv_bolus',
+      dose: 500,
+      vd: 50,
+      halfLife: 6,
+      doses: 5,
+      interval: 6,
+      mec: 5,
+    })
     expect(text(container)).toMatch(/not dosing advice/i)
-    expect(one({ type: 'pharmacokinetics_2d', route: 'oral', dose: 500, vd: 50, halfLife: 6 })).not.toHaveProperty('type')
+    expect(
+      one({ type: 'pharmacokinetics_2d', route: 'oral', dose: 500, vd: 50, halfLife: 6 }),
+    ).not.toHaveProperty('type')
   })
 })
 
 describe('morphology figures', () => {
   it('shows an FDI chart and converts the notation', () => {
-    draw({ type: 'dental_chart_2d', dentition: 'permanent', teeth: [{ code: 16, label: '第一恒磨牙' }] })
+    draw({
+      type: 'dental_chart_2d',
+      dentition: 'permanent',
+      teeth: [{ code: 16, label: '第一恒磨牙' }],
+    })
     expect(screen.getAllByText('16').length).toBeGreaterThan(0)
     fireEvent.click(screen.getByRole('button', { name: /Universal/ }))
     expect(screen.getAllByText('3').length).toBeGreaterThan(0)
@@ -141,7 +184,9 @@ describe('morphology figures', () => {
 
   it('rejects invalid FDI codes and mixed dentitions', () => {
     expect(one({ type: 'dental_chart_2d', teeth: [{ code: 19 }] })).toBe('invalid-fdi-code')
-    expect(one({ type: 'dental_chart_2d', dentition: 'permanent', teeth: [{ code: 16 }, { code: 55 }] })).toBe('dentition-mismatch')
+    expect(
+      one({ type: 'dental_chart_2d', dentition: 'permanent', teeth: [{ code: 16 }, { code: 55 }] }),
+    ).toBe('dentition-mismatch')
     const primary = one({ type: 'dental_chart_2d', teeth: [{ code: 55 }, { code: 85 }] })
     expect(primary).toMatchObject({ dentition: 'primary' })
   })
@@ -153,7 +198,13 @@ describe('morphology figures', () => {
       kind: 'motor',
       side: 'left',
       neurons: [
-        { cellBody: '中央前回', level: 'cortex', tract: '锥体束', decussates: true, crossesAt: 'medulla' },
+        {
+          cellBody: '中央前回',
+          level: 'cortex',
+          tract: '锥体束',
+          decussates: true,
+          crossesAt: 'medulla',
+        },
         { cellBody: '脊髓前角', level: 'spinal_cord' },
       ],
     })
@@ -162,14 +213,26 @@ describe('morphology figures', () => {
 
   it('checks the order of a pathway and where it can cross', () => {
     expect(
-      one({ type: 'neural_pathway_2d', name: 'x', kind: 'sensory', neurons: [{ cellBody: 'a', level: 'thalamus' }, { cellBody: 'b', level: 'medulla' }] }),
+      one({
+        type: 'neural_pathway_2d',
+        name: 'x',
+        kind: 'sensory',
+        neurons: [
+          { cellBody: 'a', level: 'thalamus' },
+          { cellBody: 'b', level: 'medulla' },
+        ],
+      }),
     ).toBe('pathway-out-of-order')
     expect(
       one({
         type: 'neural_pathway_2d',
         name: 'x',
         kind: 'sensory',
-        neurons: [{ cellBody: 'a', level: 'periphery' }, { cellBody: 'b', level: 'medulla', decussates: true, crossesAt: 'spinal_cord' }, { cellBody: 'c', level: 'thalamus' }],
+        neurons: [
+          { cellBody: 'a', level: 'periphery' },
+          { cellBody: 'b', level: 'medulla', decussates: true, crossesAt: 'spinal_cord' },
+          { cellBody: 'c', level: 'thalamus' },
+        ],
       }),
     ).toBe('pathway-crossing-out-of-range')
     expect(
@@ -177,7 +240,10 @@ describe('morphology figures', () => {
         type: 'neural_pathway_2d',
         name: 'x',
         kind: 'sensory',
-        neurons: [{ cellBody: 'a', level: 'periphery', decussates: true }, { cellBody: 'b', level: 'medulla', decussates: true }],
+        neurons: [
+          { cellBody: 'a', level: 'periphery', decussates: true },
+          { cellBody: 'b', level: 'medulla', decussates: true },
+        ],
       }),
     ).toBe('pathway-multiple-decussations')
   })
@@ -185,7 +251,13 @@ describe('morphology figures', () => {
   it('limits timeline lanes and table shapes', () => {
     const events = ['a', 'b', 'c', 'd', 'e'].map((group, i) => ({ label: group, start: i, group }))
     expect(one({ type: 'timeline_2d', unit: 'week', events })).toBe('too-many-timeline-groups')
-    expect(one({ type: 'anatomy_table_2d', columns: ['起点', '止点'], rows: [{ name: '三角肌', cells: ['锁骨外侧'] }] })).toBe('invalid-anatomy-row')
+    expect(
+      one({
+        type: 'anatomy_table_2d',
+        columns: ['起点', '止点'],
+        rows: [{ name: '三角肌', cells: ['锁骨外侧'] }],
+      }),
+    ).toBe('invalid-anatomy-row')
   })
 
   it('turns an anatomy table into flashcards inside a lesson', async () => {
@@ -206,7 +278,10 @@ describe('morphology figures', () => {
     fireEvent.click(screen.getByRole('button', { name: /Add 2 flashcards/ }))
     await vi.waitFor(() => expect(addFromTable).toHaveBeenCalled())
     expect(addFromTable.mock.calls[0]![0]).toBe('p1')
-    expect(addFromTable.mock.calls[0]![1]).toMatchObject({ topicId: 't1', columns: ['神经支配', '作用'] })
+    expect(addFromTable.mock.calls[0]![1]).toMatchObject({
+      topicId: 't1',
+      columns: ['神经支配', '作用'],
+    })
     addFromTable.mockRestore()
   })
 })
@@ -216,7 +291,16 @@ describe('medical prompt families and gates', () => {
 
   it('sends the medical figures to medicine and the shared ones to biology / chemistry', () => {
     const medicine = prompt('medicine')
-    for (const type of ['acid_base_2d', 'cardiac_2d', 'pharmacokinetics_2d', 'dental_chart_2d', 'neural_pathway_2d', 'punnett_2d', 'enzyme_2d', 'chisquare_test_2d']) {
+    for (const type of [
+      'acid_base_2d',
+      'cardiac_2d',
+      'pharmacokinetics_2d',
+      'dental_chart_2d',
+      'neural_pathway_2d',
+      'punnett_2d',
+      'enzyme_2d',
+      'chisquare_test_2d',
+    ]) {
       expect(medicine).toContain(type)
     }
     expect(medicine).not.toContain('optics_2d')

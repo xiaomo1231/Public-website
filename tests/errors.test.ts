@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import { AppError, AuthError, NotFoundError, StorageError, ValidationError, isAppError } from '@/infrastructure/errors/AppError'
+import {
+  AppError,
+  AuthError,
+  NotFoundError,
+  StorageError,
+  ValidationError,
+  isAppError,
+} from '@/infrastructure/errors/AppError'
 
 describe('errors', () => {
   it('AppError captures message and code', () => {

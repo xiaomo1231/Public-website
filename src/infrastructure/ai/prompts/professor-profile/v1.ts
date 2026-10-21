@@ -44,10 +44,7 @@ export function buildUserPrompt(input: ProfessorProfileInput): string {
   return [
     `Course topics: ${input.topicNames.join(', ') || '(none)'}`,
     '',
-    untrustedContentWrapper(
-      'LECTURE TRANSCRIPT EXCERPTS',
-      input.transcriptExcerpts.join('\n\n'),
-    ),
+    untrustedContentWrapper('LECTURE TRANSCRIPT EXCERPTS', input.transcriptExcerpts.join('\n\n')),
   ].join('\n')
 }
 

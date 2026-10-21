@@ -327,7 +327,6 @@ export const en = {
   'mastery.loadFailedHint': 'Your practice records are safe. Please try again.',
   'common.skipToContent': 'Skip to content',
 
-
   'homework.title': 'Homework walkthrough',
   'homework.subtitle':
     'Upload an assignment; the AI reads the questions so you can work through them one at a time.',
@@ -1083,7 +1082,6 @@ export const en = {
   'teach.intuition': 'Intuition',
   'teach.summary': 'Summary',
   'teach.overview': 'Overview',
-
 
   'quiz.title': 'Quiz',
   'quiz.starting': 'starting',

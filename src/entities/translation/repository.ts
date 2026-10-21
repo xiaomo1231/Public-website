@@ -25,6 +25,10 @@ export class TranslationRepository {
   }
 
   async deleteByProject(projectId: string): Promise<number> {
-    return this.db.table<TranslationEntry, string>('translations').where('projectId').equals(projectId).delete()
+    return this.db
+      .table<TranslationEntry, string>('translations')
+      .where('projectId')
+      .equals(projectId)
+      .delete()
   }
 }

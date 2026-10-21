@@ -61,7 +61,10 @@ export function findAnchorOffset(full: string, anchor: TextAnchor): number {
   for (let at = full.indexOf(anchor.text); at >= 0; at = full.indexOf(anchor.text, at + 1)) {
     const score =
       sharedSuffix(full.slice(Math.max(0, at - anchor.prefix.length), at), anchor.prefix) +
-      sharedPrefix(full.slice(at + anchor.text.length, at + anchor.text.length + anchor.suffix.length), anchor.suffix)
+      sharedPrefix(
+        full.slice(at + anchor.text.length, at + anchor.text.length + anchor.suffix.length),
+        anchor.suffix,
+      )
     if (score > bestScore) {
       best = at
       bestScore = score

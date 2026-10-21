@@ -34,7 +34,10 @@ describe('DocumentService — project file deletion', () => {
     service = new DocumentService({ documents, projects, db, chunks, homework, practice })
   })
 
-  async function makeDoc(projectId: string, materialType: 'textbook' | 'homework' | 'professor_practice') {
+  async function makeDoc(
+    projectId: string,
+    materialType: 'textbook' | 'homework' | 'professor_practice',
+  ) {
     const doc = await documents.create({
       projectId,
       type: 'text',
@@ -58,7 +61,11 @@ describe('DocumentService — project file deletion', () => {
     return doc
   }
 
-  function hwQuestion(setId: string, documentId: string, over: Partial<HomeworkQuestion> = {}): HomeworkQuestion {
+  function hwQuestion(
+    setId: string,
+    documentId: string,
+    over: Partial<HomeworkQuestion> = {},
+  ): HomeworkQuestion {
     const now = Date.now()
     return {
       id: crypto.randomUUID(),
@@ -234,6 +241,8 @@ describe('DocumentService — project file deletion', () => {
       sizeBytes: 10,
     })
     expect(second.id).not.toBe(first.id)
-    expect((await documents.listByProject('p1')).filter((d) => d.name === 'homework.pdf')).toHaveLength(1)
+    expect(
+      (await documents.listByProject('p1')).filter((d) => d.name === 'homework.pdf'),
+    ).toHaveLength(1)
   })
 })

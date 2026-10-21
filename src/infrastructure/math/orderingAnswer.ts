@@ -30,7 +30,10 @@ function longestIncreasing(values: number[]): number {
   return tails.length
 }
 
-export function scoreOrdering(answer: string, reference: string): { earned: number; total: number } {
+export function scoreOrdering(
+  answer: string,
+  reference: string,
+): { earned: number; total: number } {
   const correct = orderingItems(reference)
   const position = new Map(correct.map((item, index) => [item, index]))
   const seen = new Set<number>()

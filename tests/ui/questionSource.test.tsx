@@ -47,9 +47,7 @@ describe('QuestionSource', () => {
   })
 
   it('asks the student to verify the passage when the exact excerpt is pending', () => {
-    renderSource([
-      source({ quote: undefined, quotePending: true, page: 5 }),
-    ])
+    renderSource([source({ quote: undefined, quotePending: true, page: 5 })])
     expect(
       screen.getByText(/exact passage for this question has not been located/i),
     ).toBeInTheDocument()
@@ -122,7 +120,9 @@ describe('QuestionSource', () => {
     expect(within(dialog).getByText('Source')).toBeInTheDocument()
     expect(within(dialog).getByText('Calculus Lecture 03.pdf')).toBeInTheDocument()
     expect(within(dialog).getByText('Page 12 · Derivatives')).toBeInTheDocument()
-    expect(within(dialog).getByText(/The derivative describes the rate of change\./)).toBeInTheDocument()
+    expect(
+      within(dialog).getByText(/The derivative describes the rate of change\./),
+    ).toBeInTheDocument()
   })
 
   it('exposes the chunk id only behind the advanced details disclosure', async () => {

@@ -51,7 +51,10 @@ export function useReferenceImages(
     void (async () => {
       try {
         const svc = await buildReferenceImageService()
-        const [cached, subjectOk] = await Promise.all([svc.list(projectId, topicId), svc.availableFor(projectId)])
+        const [cached, subjectOk] = await Promise.all([
+          svc.list(projectId, topicId),
+          svc.availableFor(projectId),
+        ])
         if (cancelled) return
         setService(svc)
         setImages(cached)

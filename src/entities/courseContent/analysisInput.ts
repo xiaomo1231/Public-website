@@ -74,7 +74,9 @@ function fit(
   const chars = chunks.reduce((total, chunk) => total + size(chunk), 0)
   if (chars <= budget) return [{ doc, chunks, chars }]
   if (bySection) {
-    return runsBy(chunks, (chunk) => chunk.sectionId ?? '').flatMap((run) => fit(doc, run, size, budget, false))
+    return runsBy(chunks, (chunk) => chunk.sectionId ?? '').flatMap((run) =>
+      fit(doc, run, size, budget, false),
+    )
   }
   const pieces: Piece[] = []
   let current: Piece = { doc, chunks: [], chars: 0 }
@@ -107,7 +109,9 @@ export function planAnalysisSegments(
 ): AnalysisSegment[] {
   const size = (chunk: DocumentChunk) => format(chunk).length + SEPARATOR
   const pieces = documents.flatMap((doc) =>
-    runsBy(doc.chunks, (chunk) => chunk.chapterId ?? '').flatMap((run) => fit(doc, run, size, budget, true)),
+    runsBy(doc.chunks, (chunk) => chunk.chapterId ?? '').flatMap((run) =>
+      fit(doc, run, size, budget, true),
+    ),
   )
 
   const groups: Piece[][] = []
@@ -138,7 +142,9 @@ export function planAnalysisSegments(
     return {
       documents: docs,
       label: first ? (last && last !== first ? `${first} – ${last}` : first) : `Part ${index + 1}`,
-      chapterIds: [...new Set(all.map((chunk) => chunk.chapterId).filter((id): id is string => Boolean(id)))],
+      chapterIds: [
+        ...new Set(all.map((chunk) => chunk.chapterId).filter((id): id is string => Boolean(id))),
+      ],
       chars: group.reduce((total, piece) => total + piece.chars, 0),
     }
   })
@@ -161,7 +167,8 @@ export function legacyInputWasTruncated(documents: AnalysisInputDocument[]): boo
   for (const doc of documents) {
     if (doc.chunks.length > LEGACY_CHUNKS_PER_DOCUMENT) return true
     chars += doc.id.length + 9
-    for (const chunk of doc.chunks) chars += buildCandidateChunkLabel(chunk).length + 3 + chunk.text.length + SEPARATOR
+    for (const chunk of doc.chunks)
+      chars += buildCandidateChunkLabel(chunk).length + 3 + chunk.text.length + SEPARATOR
   }
   return chars > LEGACY_ANALYSIS_CHARS
 }

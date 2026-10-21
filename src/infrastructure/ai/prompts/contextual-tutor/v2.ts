@@ -41,5 +41,7 @@ export function buildUserPrompt(input: ContextualTutorInput): string {
       ? untrustedContentWrapper('NEARBY CONTEXT', input.surroundingContext)
       : '',
     untrustedContentWrapper('LEARNER QUESTION', input.question),
-  ].filter(Boolean).join('\n')
+  ]
+    .filter(Boolean)
+    .join('\n')
 }

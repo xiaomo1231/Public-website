@@ -36,7 +36,9 @@ function state(overrides: Partial<UseReferenceImagesState>): UseReferenceImagesS
 
 describe('reference image gallery', () => {
   it('stays hidden when the feature is off and nothing is cached', () => {
-    const { container } = render(<ReferenceImageGallery state={state({ available: false })} hasCourseFigures={false} />)
+    const { container } = render(
+      <ReferenceImageGallery state={state({ available: false })} hasCourseFigures={false} />,
+    )
     expect(container).toBeEmptyDOMElement()
   })
 
@@ -49,7 +51,10 @@ describe('reference image gallery', () => {
   it('shows the source, licence, author and the unverified note', () => {
     render(<ReferenceImageGallery state={state({ images: [image] })} hasCourseFigures={false} />)
     expect(screen.getByRole('button', { name: 'Find more' })).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: /Mitochondrion/ })).toHaveAttribute('rel', 'noopener noreferrer')
+    expect(screen.getByRole('link', { name: /Mitochondrion/ })).toHaveAttribute(
+      'rel',
+      'noopener noreferrer',
+    )
     expect(screen.getByRole('link', { name: 'CC BY-SA 4.0' })).toBeInTheDocument()
     expect(screen.getByText(/Jane Doe/)).toBeInTheDocument()
     expect(screen.getByText('Reference picture — may not match exactly')).toBeInTheDocument()

@@ -6,7 +6,13 @@
  * coerced exactly like a full analysis. Only the envelope differs.
  */
 
-import { asEnum, asNormalizedArray, asRecord, asStringArray, asTrimmedString } from '../../validation'
+import {
+  asEnum,
+  asNormalizedArray,
+  asRecord,
+  asStringArray,
+  asTrimmedString,
+} from '../../validation'
 import {
   normalizeConcept,
   normalizeExample,

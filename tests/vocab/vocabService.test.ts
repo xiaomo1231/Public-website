@@ -16,7 +16,9 @@ import type { ChatMessage } from '@/infrastructure/ai/types'
 
 /** The real word data built by scripts/build-vocab.mjs. */
 beforeAll(() => {
-  setVocabDataLoaderForTesting(async (file) => JSON.parse(readFileSync(join(process.cwd(), 'public', 'vocab', file), 'utf8')))
+  setVocabDataLoaderForTesting(async (file) =>
+    JSON.parse(readFileSync(join(process.cwd(), 'public', 'vocab', file), 'utf8')),
+  )
   resetVocabIndexForTesting()
 })
 afterAll(() => {
@@ -38,7 +40,16 @@ beforeEach(() => {
 describe('word books', () => {
   it('ships every exam book, most frequent words first', async () => {
     const books = await service.books()
-    expect(books.map((book) => book.id).slice(0, 8)).toEqual(['exam:zk', 'exam:gk', 'exam:cet4', 'exam:cet6', 'exam:ky', 'exam:toefl', 'exam:ielts', 'exam:gre'])
+    expect(books.map((book) => book.id).slice(0, 8)).toEqual([
+      'exam:zk',
+      'exam:gk',
+      'exam:cet4',
+      'exam:cet6',
+      'exam:ky',
+      'exam:toefl',
+      'exam:ielts',
+      'exam:gre',
+    ])
     const cet4 = books.find((book) => book.id === 'exam:cet4')!
     expect(cet4.wordCount).toBeGreaterThan(3500)
     const words = await service.bookWords('exam:cet4')
@@ -77,13 +88,33 @@ describe('daily session', () => {
   it('moves settled words to spelling, gap-fill and dictation', () => {
     const settings = { bookId: 'exam:cet4', dailyNew: 20, reviewMode: 'auto' as const }
     const card = { word: 'bursa', state: 2, reps: 3 } as never
-    const withSentence = { word: 'bursa', phonetic: '', meanings: [], tags: [], context: { text: 'The bursa reduces friction.' } }
-    expect(service.reviewMode({ word: 'x', state: 1, reps: 1 } as never, withSentence, settings)).toBe('recognize')
+    const withSentence = {
+      word: 'bursa',
+      phonetic: '',
+      meanings: [],
+      tags: [],
+      context: { text: 'The bursa reduces friction.' },
+    }
+    expect(
+      service.reviewMode({ word: 'x', state: 1, reps: 1 } as never, withSentence, settings),
+    ).toBe('recognize')
     expect(service.reviewMode(card, withSentence, settings)).toBe('spell')
-    expect(service.reviewMode({ word: 'bursa', state: 2, reps: 4 } as never, withSentence, settings)).toBe('cloze')
-    expect(service.reviewMode({ word: 'bursa', state: 2, reps: 4 } as never, { ...withSentence, context: { text: 'No word here.' } }, settings)).toBe('spell')
-    expect(service.reviewMode({ word: 'bursa', state: 2, reps: 5 } as never, withSentence, settings)).toBe('dictation')
-    expect(service.reviewMode(card, withSentence, { ...settings, reviewMode: 'spell' })).toBe('spell')
+    expect(
+      service.reviewMode({ word: 'bursa', state: 2, reps: 4 } as never, withSentence, settings),
+    ).toBe('cloze')
+    expect(
+      service.reviewMode(
+        { word: 'bursa', state: 2, reps: 4 } as never,
+        { ...withSentence, context: { text: 'No word here.' } },
+        settings,
+      ),
+    ).toBe('spell')
+    expect(
+      service.reviewMode({ word: 'bursa', state: 2, reps: 5 } as never, withSentence, settings),
+    ).toBe('dictation')
+    expect(service.reviewMode(card, withSentence, { ...settings, reviewMode: 'spell' })).toBe(
+      'spell',
+    )
   })
 
   it('records misspellings for the mistake list and its practice', async () => {
@@ -91,7 +122,9 @@ describe('daily session', () => {
     await service.grade('abandon', 1, 'spell', { now: NOW + DAY, correct: false })
     const mistakes = await service.mistakes()
     expect(mistakes.map((m) => [m.view.word, m.card.mistakes])).toEqual([['abandon', 1]])
-    expect((await service.mistakeSession()).map((item) => [item.view.word, item.mode])).toEqual([['abandon', 'spell']])
+    expect((await service.mistakeSession()).map((item) => [item.view.word, item.mode])).toEqual([
+      ['abandon', 'spell'],
+    ])
     await service.clearMistakes('abandon')
     expect(await service.mistakes()).toEqual([])
   })
@@ -159,10 +192,23 @@ describe('course vocabulary', () => {
     const projects = new ProjectService(db)
     const project = await projects.create({ name: 'Anatomy', subject: 'medicine' })
     const docs = new DocumentRepository(db)
-    const doc = await docs.create({ projectId: project.id, type: 'pdf', name: 'atlas.pdf', sizeBytes: 1 })
+    const doc = await docs.create({
+      projectId: project.id,
+      type: 'pdf',
+      name: 'atlas.pdf',
+      sizeBytes: 1,
+    })
     await docs.update(doc.id, { status: 'ready' })
     await new ChunkRepository(db).addMany(
-      text.map((t, i) => ({ documentId: doc.id, projectId: project.id, contentType: 'paragraph' as const, text: t, sourceReference: 'atlas', order: i, pageNumber: i + 2 })),
+      text.map((t, i) => ({
+        documentId: doc.id,
+        projectId: project.id,
+        contentType: 'paragraph' as const,
+        text: t,
+        sourceReference: 'atlas',
+        order: i,
+        pageNumber: i + 2,
+      })),
     )
     return { projects, projectId: project.id }
   }
@@ -176,7 +222,14 @@ describe('course vocabulary', () => {
     const chatJSON = vi.fn(async (messages: ChatMessage[]) => {
       const words = [...messages[1]!.content.matchAll(/^\d+\. (\S+) — /gm)].map((m) => m[1]!)
       return {
-        data: { terms: words.map((word) => ({ word, pos: 'n.', meaning: skip.includes(word) ? null : `${word}的释义`, phonetic: null })) },
+        data: {
+          terms: words.map((word) => ({
+            word,
+            pos: 'n.',
+            meaning: skip.includes(word) ? null : `${word}的释义`,
+            phonetic: null,
+          })),
+        },
       }
     })
     return { ai: { chatJSON } as unknown as AIService, chatJSON }
@@ -185,16 +238,26 @@ describe('course vocabulary', () => {
   it('picks the uncommon words with their sentence and page, glossing the rest with the AI', async () => {
     const { projects, projectId } = await course(TEXT)
     const { ai, chatJSON } = glossAI(['subacromial'])
-    const result = await new CourseVocabService({ projects, ai, db }).extract(projectId, { now: NOW })
+    const result = await new CourseVocabService({ projects, ai, db }).extract(projectId, {
+      now: NOW,
+    })
     const entries = await new VocabRepository(db).listEntries(result.book.id)
     const words = entries.map((entry) => entry.word)
-    expect(words).toEqual(expect.arrayContaining(['glenoid', 'labrum', 'fibrocartilage', 'acromion']))
+    expect(words).toEqual(
+      expect.arrayContaining(['glenoid', 'labrum', 'fibrocartilage', 'acromion']),
+    )
     // Common and CET-4-level words are skipped.
-    for (const common of ['reduce', 'between', 'common', 'friction', 'made']) expect(words).not.toContain(common)
+    for (const common of ['reduce', 'between', 'common', 'friction', 'made'])
+      expect(words).not.toContain(common)
     // The AI said "subacromial" is not a word: dropped.
     expect(words).not.toContain('subacromial')
     const labrum = entries.find((entry) => entry.word === 'labrum')!
-    expect(labrum).toMatchObject({ occurrences: 2, glossBy: 'ai', meanings: ['n. labrum的释义'], context: { page: 2, documentName: 'atlas.pdf' } })
+    expect(labrum).toMatchObject({
+      occurrences: 2,
+      glossBy: 'ai',
+      meanings: ['n. labrum的释义'],
+      context: { page: 2, documentName: 'atlas.pdf' },
+    })
     const inflammation = entries.find((entry) => entry.word === 'inflammation')
     if (inflammation) expect(inflammation.glossBy).toBe('dictionary')
     expect(chatJSON).toHaveBeenCalled()
@@ -205,9 +268,14 @@ describe('course vocabulary', () => {
 
   it('works without an AI and does not duplicate words when run again', async () => {
     const { projects, projectId } = await course(TEXT)
-    const first = await new CourseVocabService({ projects, ai: null, db }).extract(projectId, { now: NOW })
+    const first = await new CourseVocabService({ projects, ai: null, db }).extract(projectId, {
+      now: NOW,
+    })
     expect(first.unglossed).toBeGreaterThan(0)
-    const second = await new CourseVocabService({ projects, ai: glossAI().ai, db }).extract(projectId, { now: NOW + 1 })
+    const second = await new CourseVocabService({ projects, ai: glossAI().ai, db }).extract(
+      projectId,
+      { now: NOW + 1 },
+    )
     expect(second.added).toBe(0)
     expect(second.total).toBe(first.total)
     expect(second.unglossed).toBe(0)
@@ -216,7 +284,10 @@ describe('course vocabulary', () => {
 
   it('goes with its course, but word progress stays', async () => {
     const { projects, projectId } = await course(TEXT)
-    const { book } = await new CourseVocabService({ projects, ai: glossAI().ai, db }).extract(projectId, { now: NOW })
+    const { book } = await new CourseVocabService({ projects, ai: glossAI().ai, db }).extract(
+      projectId,
+      { now: NOW },
+    )
     await new VocabService(db).grade('labrum', 3, 'learn', { now: NOW, bookId: book.id })
     await new DataManagementService(db).deleteProject(projectId)
     const repo = new VocabRepository(db)

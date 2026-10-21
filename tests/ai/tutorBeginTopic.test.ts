@@ -85,7 +85,13 @@ describe('TutorService.beginTopic — single AI call', () => {
     await analyses.reseedProject(
       p.id,
       {
-        topics: [{ name: 'Derivatives', description: '', sourceRefs: [{ documentId: doc.id, documentName: 'c.txt' }] }],
+        topics: [
+          {
+            name: 'Derivatives',
+            description: '',
+            sourceRefs: [{ documentId: doc.id, documentName: 'c.txt' }],
+          },
+        ],
         concepts: [],
         formulas: [],
         symbols: [],
@@ -105,7 +111,14 @@ describe('TutorService.beginTopic — single AI call', () => {
     const streamedText = 'A derivative measures how a function changes.'
     const { ai, chat, streamChat } = scriptedAI(streamedText)
 
-    const tutor = new TutorService({ ai, projects, db, sessions: undefined as never, analyses, chunks })
+    const tutor = new TutorService({
+      ai,
+      projects,
+      db,
+      sessions: undefined as never,
+      analyses,
+      chunks,
+    })
     void docs
 
     const session = await tutor.startSession({
@@ -137,7 +150,14 @@ describe('TutorService.beginTopic — single AI call', () => {
     const { project, topicId, projects, chunks, analyses } = await setup()
     const { ai, chat, streamChat } = scriptedAI('unused')
 
-    const tutor = new TutorService({ ai, projects, db, sessions: undefined as never, analyses, chunks })
+    const tutor = new TutorService({
+      ai,
+      projects,
+      db,
+      sessions: undefined as never,
+      analyses,
+      chunks,
+    })
     const session = await tutor.startSession({
       projectId: project.id,
       topicId,

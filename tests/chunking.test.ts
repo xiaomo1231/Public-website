@@ -24,7 +24,11 @@ describe('chunking', () => {
   it('PDF chunks keep page number and section', () => {
     const chunks = chunksFromPdf(baseCtx, [
       { pageNumber: 1, text: 'Intro\nWelcome to calculus.', headings: [{ text: 'Intro' }] },
-      { pageNumber: 2, text: 'Derivatives\nA derivative is a rate of change.', headings: [{ text: 'Derivatives' }] },
+      {
+        pageNumber: 2,
+        text: 'Derivatives\nA derivative is a rate of change.',
+        headings: [{ text: 'Derivatives' }],
+      },
     ])
     expect(chunks.length).toBeGreaterThanOrEqual(2)
     const page1Chunks = chunks.filter((c) => c.pageNumber === 1)
@@ -35,13 +39,10 @@ describe('chunking', () => {
   })
 
   it('DOCX chunks group headings and paragraphs', () => {
-    const chunks = chunksFromDocx(
-      baseCtx,
-      [
-        { type: 'heading', text: 'Lecture 3', level: 1 },
-        { type: 'paragraph', text: 'Eigenvalues of a matrix.' },
-      ],
-    )
+    const chunks = chunksFromDocx(baseCtx, [
+      { type: 'heading', text: 'Lecture 3', level: 1 },
+      { type: 'paragraph', text: 'Eigenvalues of a matrix.' },
+    ])
     expect(chunks.some((c) => c.section === 'Lecture 3')).toBe(true)
     expect(chunks.some((c) => c.text.includes('Eigenvalues'))).toBe(true)
   })
@@ -55,7 +56,11 @@ describe('chunking', () => {
   })
 
   it('OCR chunks mark contentType as ocr', () => {
-    const chunks = chunksFromOcr(baseCtx, { text: 'Recognised text\nMore text', confidence: 80, language: 'en' })
+    const chunks = chunksFromOcr(baseCtx, {
+      text: 'Recognised text\nMore text',
+      confidence: 80,
+      language: 'en',
+    })
     expect(chunks.every((c) => c.contentType === 'ocr')).toBe(true)
     expect(chunks.length).toBeGreaterThan(0)
   })
@@ -81,8 +86,10 @@ describe('chunking', () => {
   })
 
   it('keeps every sentence of a long paragraph when splitting it', () => {
-    const sentences = Array.from({ length: 12 }, (_, i) =>
-      `Sentence ${i} explains the pivot column ${'and its reduced row echelon form '.repeat(4)}in detail.`,
+    const sentences = Array.from(
+      { length: 12 },
+      (_, i) =>
+        `Sentence ${i} explains the pivot column ${'and its reduced row echelon form '.repeat(4)}in detail.`,
     )
     const chunks = chunksFromText(baseCtx, sentences.join(' '))
     expect(chunks.length).toBeGreaterThan(1)
@@ -108,8 +115,8 @@ describe('chunking', () => {
 
   it('buildSourceReference composes file · page · section', () => {
     expect(buildSourceReference({ documentName: 'X.pdf', pageNumber: 3 })).toBe('X.pdf · Page 3')
-    expect(
-      buildSourceReference({ documentName: 'X.pptx', slideNumber: 2, section: 'Intro' }),
-    ).toBe('X.pptx · Slide 2 · § Intro')
+    expect(buildSourceReference({ documentName: 'X.pptx', slideNumber: 2, section: 'Intro' })).toBe(
+      'X.pptx · Slide 2 · § Intro',
+    )
   })
 })

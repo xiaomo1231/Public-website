@@ -74,7 +74,10 @@ export function TutorDistributionSvg({
   // A density that is unbounded at 0 (χ² with k < 2) is clipped at the top.
   const yPeak = unboundedAtZero(params)
     ? density(params, xMax * 0.04)
-    : Math.max(...(discrete ? bars.map((b) => b.p) : curve.map((c) => c.y)).filter(Number.isFinite), 1e-9)
+    : Math.max(
+        ...(discrete ? bars.map((b) => b.p) : curve.map((c) => c.y)).filter(Number.isFinite),
+        1e-9,
+      )
   const yMax = yPeak * 1.12
 
   const { pad, width, height } = layout
@@ -94,20 +97,21 @@ export function TutorDistributionSvg({
   const curvePath = curve
     .map((point, i) => `${i === 0 ? 'M' : 'L'} ${sx(point.x).toFixed(2)} ${sy(point.y).toFixed(2)}`)
     .join(' ')
-  const shaded = discrete || !interval
-    ? ''
-    : (() => {
-        const inside = curve.filter((point) => inInterval(point.x))
-        if (inside.length < 2) return ''
-        const first = inside[0]!
-        const last = inside[inside.length - 1]!
-        return [
-          `M ${sx(first.x).toFixed(2)} ${baseline}`,
-          ...inside.map((point) => `L ${sx(point.x).toFixed(2)} ${sy(point.y).toFixed(2)}`),
-          `L ${sx(last.x).toFixed(2)} ${baseline}`,
-          'Z',
-        ].join(' ')
-      })()
+  const shaded =
+    discrete || !interval
+      ? ''
+      : (() => {
+          const inside = curve.filter((point) => inInterval(point.x))
+          if (inside.length < 2) return ''
+          const first = inside[0]!
+          const last = inside[inside.length - 1]!
+          return [
+            `M ${sx(first.x).toFixed(2)} ${baseline}`,
+            ...inside.map((point) => `L ${sx(point.x).toFixed(2)} ${sy(point.y).toFixed(2)}`),
+            `L ${sx(last.x).toFixed(2)} ${baseline}`,
+            'Z',
+          ].join(' ')
+        })()
 
   const barWidth = Math.max(2, Math.min(28, (plotW / (bars.length || 1)) * 0.7))
   const name = describeParams(params)
@@ -130,16 +134,37 @@ export function TutorDistributionSvg({
       <g aria-hidden="true">
         {yTicks.map((v) => (
           <g key={`y-${v}`}>
-            <line x1={pad.left} x2={width - pad.right} y1={sy(v)} y2={sy(v)} stroke={GRID} strokeWidth="1" />
+            <line
+              x1={pad.left}
+              x2={width - pad.right}
+              y1={sy(v)}
+              y2={sy(v)}
+              stroke={GRID}
+              strokeWidth="1"
+            />
             <text x={pad.left - 6} y={sy(v) + 4} textAnchor="end" fontSize="11" fill={LABEL}>
               {formatNumber(v, 2)}
             </text>
           </g>
         ))}
-        <line x1={pad.left} x2={width - pad.right} y1={baseline} y2={baseline} stroke={AXIS} strokeWidth="1.2" />
+        <line
+          x1={pad.left}
+          x2={width - pad.right}
+          y1={baseline}
+          y2={baseline}
+          stroke={AXIS}
+          strokeWidth="1.2"
+        />
         {xTicks.map((v) => (
           <g key={`x-${v}`}>
-            <line x1={sx(v)} x2={sx(v)} y1={baseline} y2={baseline + 4} stroke={AXIS} strokeWidth="1" />
+            <line
+              x1={sx(v)}
+              x2={sx(v)}
+              y1={baseline}
+              y2={baseline + 4}
+              stroke={AXIS}
+              strokeWidth="1"
+            />
             <text x={sx(v)} y={baseline + 17} textAnchor="middle" fontSize="11" fill={LABEL}>
               {formatNumber(v, 3)}
             </text>
@@ -161,7 +186,15 @@ export function TutorDistributionSvg({
 
         <g clipPath={`url(#${clipId})`}>
           {!discrete && shaded && <path d={shaded} fill={FILL} stroke="none" />}
-          {!discrete && <path d={curvePath} fill="none" stroke={SERIES} strokeWidth="2.2" strokeLinejoin="round" />}
+          {!discrete && (
+            <path
+              d={curvePath}
+              fill="none"
+              stroke={SERIES}
+              strokeWidth="2.2"
+              strokeLinejoin="round"
+            />
+          )}
         </g>
       </g>
     </svg>
@@ -179,7 +212,11 @@ export function DistributionFacts({
   const { params, interval } = visualization
   const { mean, variance } = moments(params)
   const moment = (value: number) =>
-    Number.isNaN(value) ? t('viz.distributionUndefined') : value === Infinity ? '∞' : formatNumber(value)
+    Number.isNaN(value)
+      ? t('viz.distributionUndefined')
+      : value === Infinity
+        ? '∞'
+        : formatNumber(value)
   const probabilityText = intervalLabel(interval)
   const probability = interval ? intervalProbability(params, interval) : null
   return (

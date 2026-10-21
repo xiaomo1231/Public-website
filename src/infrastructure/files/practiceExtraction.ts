@@ -57,10 +57,15 @@ function parseAnswerKey(keyLines: string[]): Record<string, string> {
   return key
 }
 
-function inferType(prompt: string, options: string[], answer: string | undefined): PracticeQuestionType {
+function inferType(
+  prompt: string,
+  options: string[],
+  answer: string | undefined,
+): PracticeQuestionType {
   if (options.length >= 2) {
     const labels = options.map((option) => option.trim().toLowerCase())
-    if (labels.length === 2 && labels.every((l) => l === 'true' || l === 'false')) return 'true_false'
+    if (labels.length === 2 && labels.every((l) => l === 'true' || l === 'false'))
+      return 'true_false'
     return 'single_choice'
   }
   if (/true\s*(or|\/)\s*false/i.test(prompt)) return 'true_false'
@@ -71,11 +76,7 @@ function inferType(prompt: string, options: string[], answer: string | undefined
   return 'short_answer'
 }
 
-function scoreConfidence(
-  prompt: string,
-  options: string[],
-  answer: string | undefined,
-): number {
+function scoreConfidence(prompt: string, options: string[], answer: string | undefined): number {
   let confidence = 0.5
   if (options.length >= 2) confidence += 0.3
   if (answer) confidence += 0.15
@@ -140,7 +141,10 @@ export function parsePracticeQuestions(text: string): ParsePracticeResult {
 
   const questions = drafts
     .map((draft) => {
-      const prompt = draft.promptLines.join('\n').replace(/\n{3,}/g, '\n\n').trim()
+      const prompt = draft.promptLines
+        .join('\n')
+        .replace(/\n{3,}/g, '\n\n')
+        .trim()
       if (!prompt) return null
       const answer = draft.number ? answerKey[draft.number] : undefined
       return {

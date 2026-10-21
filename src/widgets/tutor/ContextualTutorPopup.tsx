@@ -56,8 +56,7 @@ export function ContextualTutorPopup({
 
   // A selection that is really a figure — or a broken transcription of one —
   // must not be sent as if it were reliable maths text.
-  const askable =
-    !context.fromVisual && !looksLikeUnreliableVisualText(context.selectedText)
+  const askable = !context.fromVisual && !looksLikeUnreliableVisualText(context.selectedText)
 
   const send = useCallback(
     async (question: string) => {
@@ -217,7 +216,11 @@ export function ContextualTutorPopup({
                 </a>
               )}
               <Button size="sm" onClick={() => void send(input)} disabled={busy || !input.trim()}>
-                {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
+                {busy ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Send className="h-3.5 w-3.5" />
+                )}
                 {t('contextual.send')}
               </Button>
             </div>

@@ -8,17 +8,18 @@
 
 import type { DifficultyLevel, TutorEvaluation } from '@/infrastructure/ai/prompts/types'
 import type { TutorQuestion } from '@/entities/tutorSession/types'
-import {
-  asBoolean,
-  asEnum,
-  asStringArray,
-  asTrimmedString,
-} from '@/infrastructure/ai/validation'
+import { asBoolean, asEnum, asStringArray, asTrimmedString } from '@/infrastructure/ai/validation'
 import { AppError } from '@/infrastructure/errors/AppError'
 import { normalizeMathNotation } from '@/infrastructure/files/mathNotation'
 import { t } from '@/i18n'
 
-const QUESTION_TYPES = ['multiple_choice', 'true_false', 'numeric', 'math_expr', 'short_answer'] as const
+const QUESTION_TYPES = [
+  'multiple_choice',
+  'true_false',
+  'numeric',
+  'math_expr',
+  'short_answer',
+] as const
 
 /**
  * Canonicalise the maths in model-authored text before it is stored or shown.

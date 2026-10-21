@@ -105,7 +105,10 @@ export interface CardiacFacts {
 }
 
 /** The loop as points: filling, isovolumic contraction, ejection, isovolumic relaxation. */
-export function pvLoop(input: CardiacInput, perPhase = 40): Array<{ v: number; p: number; phase: 0 | 1 | 2 | 3 }> {
+export function pvLoop(
+  input: CardiacInput,
+  perPhase = 40,
+): Array<{ v: number; p: number; phase: 0 | 1 | 2 | 3 }> {
   const { edv, esv, edp, aorticOpen, peak, endSystolic, minimum } = input
   const out: Array<{ v: number; p: number; phase: 0 | 1 | 2 | 3 }> = []
   // Filling (mitral open): ESV → EDV along a rising compliance curve.
@@ -114,7 +117,8 @@ export function pvLoop(input: CardiacInput, perPhase = 40): Array<{ v: number; p
     out.push({ v: esv + (edv - esv) * s, p: minimum + (edp - minimum) * s * s, phase: 0 })
   }
   // Isovolumic contraction: pressure rises at EDV.
-  for (let i = 1; i <= perPhase / 4; i++) out.push({ v: edv, p: edp + ((aorticOpen - edp) * i) / (perPhase / 4), phase: 1 })
+  for (let i = 1; i <= perPhase / 4; i++)
+    out.push({ v: edv, p: edp + ((aorticOpen - edp) * i) / (perPhase / 4), phase: 1 })
   // Ejection: EDV → ESV, through the peak (quadratic through three points).
   const mid = (edv + esv) / 2
   for (let i = 1; i <= perPhase; i++) {
@@ -125,7 +129,8 @@ export function pvLoop(input: CardiacInput, perPhase = 40): Array<{ v: number; p
     out.push({ v, p: aorticOpen * a + peak * b + endSystolic * c, phase: 2 })
   }
   // Isovolumic relaxation: pressure falls at ESV.
-  for (let i = 1; i <= perPhase / 4; i++) out.push({ v: esv, p: endSystolic - ((endSystolic - minimum) * i) / (perPhase / 4), phase: 3 })
+  for (let i = 1; i <= perPhase / 4; i++)
+    out.push({ v: esv, p: endSystolic - ((endSystolic - minimum) * i) / (perPhase / 4), phase: 3 })
   return out
 }
 
@@ -158,8 +163,18 @@ export interface LungVolumes {
   rv: number
 }
 
-export function lungCapacities(v: LungVolumes): { ic: number; frc: number; vc: number; tlc: number } {
-  return { ic: v.tv + v.irv, frc: v.erv + v.rv, vc: v.irv + v.tv + v.erv, tlc: v.irv + v.tv + v.erv + v.rv }
+export function lungCapacities(v: LungVolumes): {
+  ic: number
+  frc: number
+  vc: number
+  tlc: number
+} {
+  return {
+    ic: v.tv + v.irv,
+    frc: v.erv + v.rv,
+    vc: v.irv + v.tv + v.erv,
+    tlc: v.irv + v.tv + v.erv + v.rv,
+  }
 }
 
 /** A spirogram: quiet breaths, a maximal inspiration and a maximal expiration. */
@@ -240,7 +255,12 @@ export function hendersonPH(paco2: number, hco3: number): number {
  * Primary disorder and expected compensation, with the formulas of the
  * standard Chinese pathophysiology textbook (PaCO₂ in mmHg, HCO₃⁻ in mmol/L).
  */
-export function analyzeAcidBase(ph: number, paco2: number, hco3: number, chronicity?: 'acute' | 'chronic'): AcidBaseAnalysis {
+export function analyzeAcidBase(
+  ph: number,
+  paco2: number,
+  hco3: number,
+  chronicity?: 'acute' | 'chronic',
+): AcidBaseAnalysis {
   const computedPH = hendersonPH(paco2, hco3)
   const consistent = Math.abs(computedPH - ph) <= 0.03
   const respAcid = paco2 > 45
@@ -248,15 +268,36 @@ export function analyzeAcidBase(ph: number, paco2: number, hco3: number, chronic
   const metAcid = hco3 < 22
   const metAlk = hco3 > 27
   let primary: AcidBaseDisorder = 'normal'
-  if (ph < 7.35) primary = respAcid && metAcid ? 'mixed_acidosis' : metAcid ? 'metabolic_acidosis' : respAcid ? 'respiratory_acidosis' : 'metabolic_acidosis'
-  else if (ph > 7.45) primary = respAlk && metAlk ? 'mixed_alkalosis' : metAlk ? 'metabolic_alkalosis' : respAlk ? 'respiratory_alkalosis' : 'metabolic_alkalosis'
+  if (ph < 7.35)
+    primary =
+      respAcid && metAcid
+        ? 'mixed_acidosis'
+        : metAcid
+          ? 'metabolic_acidosis'
+          : respAcid
+            ? 'respiratory_acidosis'
+            : 'metabolic_acidosis'
+  else if (ph > 7.45)
+    primary =
+      respAlk && metAlk
+        ? 'mixed_alkalosis'
+        : metAlk
+          ? 'metabolic_alkalosis'
+          : respAlk
+            ? 'respiratory_alkalosis'
+            : 'metabolic_alkalosis'
   else if (metAcid && respAlk) primary = ph <= 7.4 ? 'metabolic_acidosis' : 'respiratory_alkalosis'
   else if (metAlk && respAcid) primary = ph >= 7.4 ? 'metabolic_alkalosis' : 'respiratory_acidosis'
 
   const compensation: Compensation[] = []
   const dCO2 = paco2 - 40
   const dHCO3 = hco3 - 24
-  const band = (variable: Compensation['variable'], centre: number, spread: number, c?: 'acute' | 'chronic'): Compensation => ({
+  const band = (
+    variable: Compensation['variable'],
+    centre: number,
+    spread: number,
+    c?: 'acute' | 'chronic',
+  ): Compensation => ({
     variable,
     low: centre - spread,
     high: centre + spread,
@@ -280,7 +321,13 @@ export function analyzeAcidBase(ph: number, paco2: number, hco3: number, chronic
     if (value < low) additionalDisorder = 'too_low'
     else if (value > high) additionalDisorder = 'too_high'
   }
-  return { computedPH, consistent, primary, compensation, ...(additionalDisorder ? { additionalDisorder } : {}) }
+  return {
+    computedPH,
+    consistent,
+    primary,
+    compensation,
+    ...(additionalDisorder ? { additionalDisorder } : {}),
+  }
 }
 
 // --- amino acids -------------------------------------------------------------------
@@ -295,7 +342,8 @@ export interface IonizableGroup {
 /** Net charge at a pH (Henderson–Hasselbalch for every group). */
 export function netCharge(groups: IonizableGroup[], ph: number): number {
   return groups.reduce(
-    (sum, g) => sum + (g.kind === 'base' ? 1 / (1 + 10 ** (ph - g.pka)) : -1 / (1 + 10 ** (g.pka - ph))),
+    (sum, g) =>
+      sum + (g.kind === 'base' ? 1 / (1 + 10 ** (ph - g.pka)) : -1 / (1 + 10 ** (g.pka - ph))),
     0,
   )
 }
@@ -344,7 +392,11 @@ export interface EnergyYield {
   poFadh2: number
 }
 
-export function energyYield(steps: MetabolicStep[], convention: PoConvention = 'modern', shuttle: Shuttle = 'malate_aspartate'): EnergyYield {
+export function energyYield(
+  steps: MetabolicStep[],
+  convention: PoConvention = 'modern',
+  shuttle: Shuttle = 'malate_aspartate',
+): EnergyYield {
   const poNadh = convention === 'modern' ? 2.5 : 3
   const poFadh2 = convention === 'modern' ? 1.5 : 2
   let substrateLevel = 0
@@ -363,7 +415,17 @@ export function energyYield(steps: MetabolicStep[], convention: PoConvention = '
   // The glycerol-phosphate shuttle delivers cytosolic NADH electrons as FADH₂.
   const cytosolYield = shuttle === 'malate_aspartate' ? poNadh : poFadh2
   const oxidative = nadhMitochondria * poNadh + nadhCytosol * cytosolYield + fadh2 * poFadh2
-  return { substrateLevel, nadhCytosol, nadhMitochondria, fadh2, co2, oxidative, total: substrateLevel + oxidative, poNadh, poFadh2 }
+  return {
+    substrateLevel,
+    nadhCytosol,
+    nadhMitochondria,
+    fadh2,
+    co2,
+    oxidative,
+    total: substrateLevel + oxidative,
+    poNadh,
+    poFadh2,
+  }
 }
 
 // --- pharmacokinetics -----------------------------------------------------------------
@@ -410,8 +472,12 @@ export function concentrationAtTime(regimen: DosingRegimen, t: number): number {
     const elapsed = t - i * tau
     if (elapsed < 0) break
     if (regimen.route === 'iv_bolus') c += (regimen.dose / regimen.vd) * Math.exp(-ke * elapsed)
-    else if (Math.abs(ka - ke) < 1e-9) c += ((f * regimen.dose) / regimen.vd) * ke * elapsed * Math.exp(-ke * elapsed)
-    else c += ((f * regimen.dose * ka) / (regimen.vd * (ka - ke))) * (Math.exp(-ke * elapsed) - Math.exp(-ka * elapsed))
+    else if (Math.abs(ka - ke) < 1e-9)
+      c += ((f * regimen.dose) / regimen.vd) * ke * elapsed * Math.exp(-ke * elapsed)
+    else
+      c +=
+        ((f * regimen.dose * ka) / (regimen.vd * (ka - ke))) *
+        (Math.exp(-ke * elapsed) - Math.exp(-ka * elapsed))
   }
   return c
 }
@@ -420,7 +486,12 @@ export function pkFacts(regimen: DosingRegimen): PkFacts {
   const ke = Math.LN2 / regimen.halfLife
   const cl = ke * regimen.vd
   const f = regimen.route === 'oral' ? (regimen.bioavailability ?? 1) : 1
-  const facts: PkFacts = { ke, clearance: cl, auc: (f * regimen.dose) / cl, timeToSteadyState: 4.32 * regimen.halfLife }
+  const facts: PkFacts = {
+    ke,
+    clearance: cl,
+    auc: (f * regimen.dose) / cl,
+    timeToSteadyState: 4.32 * regimen.halfLife,
+  }
   if ((regimen.doses ?? 1) > 1 && regimen.interval) {
     const tau = regimen.interval
     facts.accumulation = 1 / (1 - Math.exp(-ke * tau))
@@ -438,11 +509,15 @@ export function pkFacts(regimen: DosingRegimen): PkFacts {
 export type Dentition = 'permanent' | 'primary'
 
 /** FDI two-digit code → its parts, or null for an invalid code. */
-export function parseFdi(code: number): { quadrant: number; tooth: number; dentition: Dentition } | null {
+export function parseFdi(
+  code: number,
+): { quadrant: number; tooth: number; dentition: Dentition } | null {
   const quadrant = Math.floor(code / 10)
   const tooth = code % 10
-  if (quadrant >= 1 && quadrant <= 4 && tooth >= 1 && tooth <= 8) return { quadrant, tooth, dentition: 'permanent' }
-  if (quadrant >= 5 && quadrant <= 8 && tooth >= 1 && tooth <= 5) return { quadrant, tooth, dentition: 'primary' }
+  if (quadrant >= 1 && quadrant <= 4 && tooth >= 1 && tooth <= 8)
+    return { quadrant, tooth, dentition: 'permanent' }
+  if (quadrant >= 5 && quadrant <= 8 && tooth >= 1 && tooth <= 5)
+    return { quadrant, tooth, dentition: 'primary' }
   return null
 }
 
@@ -451,10 +526,24 @@ export function universalOf(code: number): string | null {
   const p = parseFdi(code)
   if (!p) return null
   if (p.dentition === 'permanent') {
-    const n = p.quadrant === 1 ? 9 - p.tooth : p.quadrant === 2 ? 8 + p.tooth : p.quadrant === 3 ? 25 - p.tooth : 24 + p.tooth
+    const n =
+      p.quadrant === 1
+        ? 9 - p.tooth
+        : p.quadrant === 2
+          ? 8 + p.tooth
+          : p.quadrant === 3
+            ? 25 - p.tooth
+            : 24 + p.tooth
     return String(n)
   }
-  const index = p.quadrant === 5 ? 5 - p.tooth : p.quadrant === 6 ? 4 + p.tooth : p.quadrant === 7 ? 15 - p.tooth : 14 + p.tooth
+  const index =
+    p.quadrant === 5
+      ? 5 - p.tooth
+      : p.quadrant === 6
+        ? 4 + p.tooth
+        : p.quadrant === 7
+          ? 15 - p.tooth
+          : 14 + p.tooth
   return String.fromCharCode(65 + index)
 }
 
@@ -467,17 +556,51 @@ export function palmerOf(code: number): string | null {
   return q === 1 ? `${mark}┘` : q === 2 ? `└${mark}` : q === 3 ? `┌${mark}` : `${mark}┐`
 }
 
-const PERMANENT_NAMES = ['中切牙', '侧切牙', '尖牙', '第一前磨牙', '第二前磨牙', '第一磨牙', '第二磨牙', '第三磨牙']
-const PERMANENT_NAMES_EN = ['central incisor', 'lateral incisor', 'canine', 'first premolar', 'second premolar', 'first molar', 'second molar', 'third molar']
+const PERMANENT_NAMES = [
+  '中切牙',
+  '侧切牙',
+  '尖牙',
+  '第一前磨牙',
+  '第二前磨牙',
+  '第一磨牙',
+  '第二磨牙',
+  '第三磨牙',
+]
+const PERMANENT_NAMES_EN = [
+  'central incisor',
+  'lateral incisor',
+  'canine',
+  'first premolar',
+  'second premolar',
+  'first molar',
+  'second molar',
+  'third molar',
+]
 const PRIMARY_NAMES = ['乳中切牙', '乳侧切牙', '乳尖牙', '第一乳磨牙', '第二乳磨牙']
-const PRIMARY_NAMES_EN = ['primary central incisor', 'primary lateral incisor', 'primary canine', 'primary first molar', 'primary second molar']
+const PRIMARY_NAMES_EN = [
+  'primary central incisor',
+  'primary lateral incisor',
+  'primary canine',
+  'primary first molar',
+  'primary second molar',
+]
 
 export function toothName(code: number, language: 'zh' | 'en'): string | null {
   const p = parseFdi(code)
   if (!p) return null
   const q = ((p.quadrant - 1) % 4) + 1
-  const side = language === 'zh' ? ['右上', '左上', '左下', '右下'][q - 1]! : ['upper right', 'upper left', 'lower left', 'lower right'][q - 1]!
-  const names = p.dentition === 'permanent' ? (language === 'zh' ? PERMANENT_NAMES : PERMANENT_NAMES_EN) : language === 'zh' ? PRIMARY_NAMES : PRIMARY_NAMES_EN
+  const side =
+    language === 'zh'
+      ? ['右上', '左上', '左下', '右下'][q - 1]!
+      : ['upper right', 'upper left', 'lower left', 'lower right'][q - 1]!
+  const names =
+    p.dentition === 'permanent'
+      ? language === 'zh'
+        ? PERMANENT_NAMES
+        : PERMANENT_NAMES_EN
+      : language === 'zh'
+        ? PRIMARY_NAMES
+        : PRIMARY_NAMES_EN
   return language === 'zh' ? `${side}${names[p.tooth - 1]}` : `${side} ${names[p.tooth - 1]}`
 }
 
@@ -489,5 +612,8 @@ export function chartRows(dentition: Dentition): { upper: number[]; lower: numbe
     const teeth = Array.from({ length: n }, (_, i) => q * 10 + i + 1)
     return reverse ? teeth.reverse() : teeth
   }
-  return { upper: [...range(ur!, true), ...range(ul!, false)], lower: [...range(lr!, true), ...range(ll!, false)] }
+  return {
+    upper: [...range(ur!, true), ...range(ul!, false)],
+    lower: [...range(lr!, true), ...range(ll!, false)],
+  }
 }

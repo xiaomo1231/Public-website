@@ -24,7 +24,11 @@ export interface UseBatchUploadResult {
   summary: ReturnType<typeof summarizeBatch>
   running: boolean
   addFiles: (files: File[], materialType?: LearningMaterialType) => Promise<UploadQueueItem[]>
-  addText: (input: { text: string; name?: string; materialType?: LearningMaterialType }) => UploadQueueItem
+  addText: (input: {
+    text: string
+    name?: string
+    materialType?: LearningMaterialType
+  }) => UploadQueueItem
   /** Paste-text path: enqueue and immediately run, as a batch of one. */
   addTextAndStart: (input: {
     text: string
@@ -91,7 +95,11 @@ export function useBatchUpload(projectId: string): UseBatchUploadResult {
   )
 
   const addText = useCallback(
-    (input: { text: string; name?: string; materialType?: LearningMaterialType }): UploadQueueItem => {
+    (input: {
+      text: string
+      name?: string
+      materialType?: LearningMaterialType
+    }): UploadQueueItem => {
       const item = createTextQueueItem(input)
       setItems((prev) => [...prev, item])
       return item
@@ -166,11 +174,9 @@ export function useBatchUpload(projectId: string): UseBatchUploadResult {
         // material. This is the *processing* flow's job: opening a Tutor page
         // only ever reads what is already stored. A no-op when the content is
         // fresh, when no AI provider is configured, or when nothing is ready.
-        void new CourseContentService()
-          .ensureAnalyzed(projectId)
-          .catch((err: unknown) => {
-            logger.debug('Automatic course analysis skipped', { error: String(err) })
-          })
+        void new CourseContentService().ensureAnalyzed(projectId).catch((err: unknown) => {
+          logger.debug('Automatic course analysis skipped', { error: String(err) })
+        })
       }
     },
     [projectId, refresh, update],

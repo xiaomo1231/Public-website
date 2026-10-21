@@ -117,7 +117,10 @@ function MoleculeStructure({ molecule, t }: { molecule: MoleculeEntry; t: T }): 
     setFailed(!ok)
   }, [molecule.smiles])
 
-  const label = t('viz.moleculeAria', { name: molecule.name ?? molecule.formula, formula: molecule.formula })
+  const label = t('viz.moleculeAria', {
+    name: molecule.name ?? molecule.formula,
+    formula: molecule.formula,
+  })
   return (
     <div className="flex min-w-0 flex-col items-center gap-1">
       {failed ? (
@@ -131,7 +134,9 @@ function MoleculeStructure({ molecule, t }: { molecule: MoleculeEntry; t: T }): 
         />
       )}
       <p className="text-center text-[13px] text-muted-foreground">
-        {molecule.name && <span className="mr-1.5 font-medium text-foreground">{molecule.name}</span>}
+        {molecule.name && (
+          <span className="mr-1.5 font-medium text-foreground">{molecule.name}</span>
+        )}
         <TeX latex={formulaTeX(molecule.formula)} />
       </p>
     </div>
@@ -212,23 +217,50 @@ export function TutorEnergySvg({
   })
 
   return (
-    <svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label={label} className="block h-auto w-full max-w-full">
+    <svg
+      viewBox={`0 0 ${width} ${height}`}
+      role="img"
+      aria-label={label}
+      className="block h-auto w-full max-w-full"
+    >
       <title>{label}</title>
       <defs>
-        <marker id="energy-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+        <marker
+          id="energy-arrow"
+          viewBox="0 0 10 10"
+          refX="9"
+          refY="5"
+          markerWidth="6"
+          markerHeight="6"
+          orient="auto-start-reverse"
+        >
           <path d="M 0 0 L 10 5 L 0 10 z" fill={ACCENT} />
         </marker>
       </defs>
       <g aria-hidden="true">
         {yTicks.map((v) => (
           <g key={`y-${v}`}>
-            <line x1={pad.left} x2={width - pad.right} y1={sy(v)} y2={sy(v)} stroke={GRID} strokeWidth="1" />
+            <line
+              x1={pad.left}
+              x2={width - pad.right}
+              y1={sy(v)}
+              y2={sy(v)}
+              stroke={GRID}
+              strokeWidth="1"
+            />
             <text x={pad.left - 6} y={sy(v) + 4} textAnchor="end" fontSize="11" fill={LABEL}>
               {formatNumber(v, 3)}
             </text>
           </g>
         ))}
-        <line x1={pad.left} x2={pad.left} y1={pad.top} y2={height - pad.bottom} stroke={AXIS} strokeWidth="1.2" />
+        <line
+          x1={pad.left}
+          x2={pad.left}
+          y1={pad.top}
+          y2={height - pad.bottom}
+          stroke={AXIS}
+          strokeWidth="1.2"
+        />
         <text
           x={12}
           y={pad.top + plotH / 2}
@@ -258,8 +290,21 @@ export function TutorEnergySvg({
         {/* Eₐ and ΔH arrows. */}
         {facts.activationEnergy > 0 && peakIndex !== 0 && (
           <g>
-            <line x1={eaX} x2={eaX} y1={reactantY} y2={sy(energies[peakIndex]!) + 3} stroke={ACCENT} strokeWidth="1.4" markerEnd="url(#energy-arrow)" />
-            <text x={eaX + 6} y={(reactantY + sy(energies[peakIndex]!)) / 2} fontSize="12" fill={ACCENT}>
+            <line
+              x1={eaX}
+              x2={eaX}
+              y1={reactantY}
+              y2={sy(energies[peakIndex]!) + 3}
+              stroke={ACCENT}
+              strokeWidth="1.4"
+              markerEnd="url(#energy-arrow)"
+            />
+            <text
+              x={eaX + 6}
+              y={(reactantY + sy(energies[peakIndex]!)) / 2}
+              fontSize="12"
+              fill={ACCENT}
+            >
               Eₐ
             </text>
           </g>
@@ -275,7 +320,12 @@ export function TutorEnergySvg({
               strokeWidth="1.4"
               markerEnd="url(#energy-arrow)"
             />
-            <text x={productX + 6} y={(reactantY + sy(states[productIndex]!.energy)) / 2 + 4} fontSize="12" fill={ACCENT}>
+            <text
+              x={productX + 6}
+              y={(reactantY + sy(states[productIndex]!.energy)) / 2 + 4}
+              fontSize="12"
+              fill={ACCENT}
+            >
               ΔH
             </text>
           </g>
@@ -298,7 +348,13 @@ export function TutorEnergySvg({
   )
 }
 
-export function EnergyFacts({ visualization, t }: { visualization: EnergyVisualization; t: T }): JSX.Element {
+export function EnergyFacts({
+  visualization,
+  t,
+}: {
+  visualization: EnergyVisualization
+  t: T
+}): JSX.Element {
   const facts = energyProfileFacts(visualization.states)
   const unit = visualization.unit
   return (
@@ -310,7 +366,13 @@ export function EnergyFacts({ visualization, t }: { visualization: EnergyVisuali
       <span>
         Eₐ = {formatNumber(facts.activationEnergy)} {unit}
       </span>
-      <span>{facts.deltaH === 0 ? t('viz.energyThermoneutral') : facts.exothermic ? t('viz.energyExothermic') : t('viz.energyEndothermic')}</span>
+      <span>
+        {facts.deltaH === 0
+          ? t('viz.energyThermoneutral')
+          : facts.exothermic
+            ? t('viz.energyExothermic')
+            : t('viz.energyEndothermic')}
+      </span>
     </p>
   )
 }
@@ -326,11 +388,22 @@ function resolveTitration(visualization: TitrationVisualization): {
   const setup = asTitrationSetup(visualization.setup)
   const weak = setup.analyte === 'acid' ? Boolean(setup.ka?.length) : setup.kb !== undefined
   const fallbackAnalyte =
-    setup.analyte === 'acid' ? (weak ? ((setup.ka?.length ?? 1) > 1 ? `H${setup.ka!.length}A` : 'HA') : 'HCl') : weak ? 'B' : 'NaOH'
+    setup.analyte === 'acid'
+      ? weak
+        ? (setup.ka?.length ?? 1) > 1
+          ? `H${setup.ka!.length}A`
+          : 'HA'
+        : 'HCl'
+      : weak
+        ? 'B'
+        : 'NaOH'
   return {
     setup,
     analyte: visualization.analyteLabel ?? visualization.acidLabel ?? fallbackAnalyte,
-    titrant: visualization.titrantLabel ?? visualization.baseLabel ?? (setup.analyte === 'acid' ? 'NaOH' : 'HCl'),
+    titrant:
+      visualization.titrantLabel ??
+      visualization.baseLabel ??
+      (setup.analyte === 'acid' ? 'NaOH' : 'HCl'),
   }
 }
 
@@ -355,10 +428,16 @@ export function TutorTitrationSvg({
   const sy = (pH: number) => pad.top + (1 - Math.min(14, Math.max(0, pH)) / 14) * plotH
 
   const path = curve
-    .map((point, i) => `${i === 0 ? 'M' : 'L'} ${sx(point.volume).toFixed(2)} ${sy(point.pH).toFixed(2)}`)
+    .map(
+      (point, i) =>
+        `${i === 0 ? 'M' : 'L'} ${sx(point.volume).toFixed(2)} ${sy(point.pH).toFixed(2)}`,
+    )
     .join(' ')
   const equivalences = volumes.map((volume) => ({ volume, pH: titrationPH(setup, volume) }))
-  const buffers = bufferPoints(setup).map((point) => ({ ...point, pH: titrationPH(setup, point.volume) }))
+  const buffers = bufferPoints(setup).map((point) => ({
+    ...point,
+    pH: titrationPH(setup, point.volume),
+  }))
   const xTicks = ticks(0, xMax, niceTickStep(xMax, layout.compact ? 4 : 8))
   const yTicks = [0, 2, 4, 6, 8, 10, 12, 14]
   const label = t('viz.titrationAria', {
@@ -368,18 +447,37 @@ export function TutorTitrationSvg({
   const many = equivalences.length > 1
 
   return (
-    <svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label={label} className="block h-auto w-full max-w-full">
+    <svg
+      viewBox={`0 0 ${width} ${height}`}
+      role="img"
+      aria-label={label}
+      className="block h-auto w-full max-w-full"
+    >
       <title>{label}</title>
       <g aria-hidden="true">
         {yTicks.map((v) => (
           <g key={`y-${v}`}>
-            <line x1={pad.left} x2={width - pad.right} y1={sy(v)} y2={sy(v)} stroke={GRID} strokeWidth="1" />
+            <line
+              x1={pad.left}
+              x2={width - pad.right}
+              y1={sy(v)}
+              y2={sy(v)}
+              stroke={GRID}
+              strokeWidth="1"
+            />
             <text x={pad.left - 6} y={sy(v) + 4} textAnchor="end" fontSize="11" fill={LABEL}>
               {v}
             </text>
           </g>
         ))}
-        <line x1={pad.left} x2={width - pad.right} y1={sy(0)} y2={sy(0)} stroke={AXIS} strokeWidth="1.2" />
+        <line
+          x1={pad.left}
+          x2={width - pad.right}
+          y1={sy(0)}
+          y2={sy(0)}
+          stroke={AXIS}
+          strokeWidth="1.2"
+        />
         {xTicks.map((v) => (
           <g key={`x-${v}`}>
             <line x1={sx(v)} x2={sx(v)} y1={sy(0)} y2={sy(0) + 4} stroke={AXIS} strokeWidth="1" />
@@ -396,7 +494,16 @@ export function TutorTitrationSvg({
         </text>
 
         {equivalences.map((point) => (
-          <line key={`eq-${point.volume}`} x1={sx(point.volume)} x2={sx(point.volume)} y1={sy(0)} y2={sy(14)} stroke={ACCENT} strokeWidth="1" strokeDasharray="4 4" />
+          <line
+            key={`eq-${point.volume}`}
+            x1={sx(point.volume)}
+            x2={sx(point.volume)}
+            y1={sy(0)}
+            y2={sy(14)}
+            stroke={ACCENT}
+            strokeWidth="1"
+            strokeDasharray="4 4"
+          />
         ))}
         <path d={path} fill="none" stroke={SERIES} strokeWidth="2.4" strokeLinejoin="round" />
         {equivalences.map((point, i) => (
@@ -424,7 +531,13 @@ export function TutorTitrationSvg({
   )
 }
 
-export function TitrationFacts({ visualization, t }: { visualization: TitrationVisualization; t: T }): JSX.Element {
+export function TitrationFacts({
+  visualization,
+  t,
+}: {
+  visualization: TitrationVisualization
+  t: T
+}): JSX.Element {
   const { setup, analyte, titrant } = resolveTitration(visualization)
   const volumes = equivalenceVolumes(setup)
   const buffers = bufferPoints(setup)
@@ -441,7 +554,10 @@ export function TitrationFacts({ visualization, t }: { visualization: TitrationV
       </span>
       <span>{t('viz.titrationInitialPH', { value: formatNumber(titrationPH(setup, 0), 3) })}</span>
       {volumes.map((volume, i) => (
-        <span key={volume} className={i === volumes.length - 1 ? 'font-medium text-foreground' : undefined}>
+        <span
+          key={volume}
+          className={i === volumes.length - 1 ? 'font-medium text-foreground' : undefined}
+        >
           {volumes.length > 1
             ? t('viz.titrationEquivalenceAt', {
                 n: i + 1,
@@ -456,7 +572,8 @@ export function TitrationFacts({ visualization, t }: { visualization: TitrationV
       ))}
       {buffers.map((point, i) => (
         <span key={point.volume}>
-          {setup.analyte === 'acid' ? `pKₐ${buffers.length > 1 ? '₁₂₃'[i] : ''}` : 'pKₐ(BH⁺)'} = {formatNumber(point.pKa, 3)}
+          {setup.analyte === 'acid' ? `pKₐ${buffers.length > 1 ? '₁₂₃'[i] : ''}` : 'pKₐ(BH⁺)'} ={' '}
+          {formatNumber(point.pKa, 3)}
         </span>
       ))}
     </p>

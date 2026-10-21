@@ -117,9 +117,7 @@ describe('TutorLessonView', () => {
   it('offers a retry when generation failed outright', async () => {
     const user = userEvent.setup()
     const regenerate = vi.fn().mockResolvedValue(undefined)
-    renderLesson(
-      state({ status: 'error', lesson: undefined, error: 'AI unavailable', regenerate }),
-    )
+    renderLesson(state({ status: 'error', lesson: undefined, error: 'AI unavailable', regenerate }))
 
     expect(screen.getByText('AI unavailable')).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Retry' }))
@@ -234,7 +232,7 @@ describe('Math rendering', () => {
     ['\\overline{Y}'],
     ['X \\cap Y = \\{c\\}'],
     ['U = \\{a,b,c,d,e,f\\}'],
-    ['f\'(x) = \\frac{dy}{dx}'],
+    ["f'(x) = \\frac{dy}{dx}"],
   ])('renders %s', (latex) => {
     const { container } = render(<Math latex={latex} display />)
     expect(container.querySelector('.katex')).toBeInTheDocument()

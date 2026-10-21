@@ -37,7 +37,10 @@ export const MAX_IMAGE_BYTES = 3 * 1024 * 1024
 function isAllowedUrl(url: string): boolean {
   try {
     const parsed = new URL(url)
-    return parsed.protocol === 'https:' && (ALLOWED_IMAGE_HOSTS as readonly string[]).includes(parsed.hostname)
+    return (
+      parsed.protocol === 'https:' &&
+      (ALLOWED_IMAGE_HOSTS as readonly string[]).includes(parsed.hostname)
+    )
   } catch {
     return false
   }
@@ -67,7 +70,10 @@ export function plainText(value: unknown, max = 120): string | undefined {
 export function isReusableLicense(name: string): boolean {
   const license = name.trim().toLowerCase()
   if (!license) return false
-  if (/\bnc\b|\bnd\b|non-?commercial|no-?deriv|fair use|copyrighted|all rights reserved/.test(license)) return false
+  if (
+    /\bnc\b|\bnd\b|non-?commercial|no-?deriv|fair use|copyrighted|all rights reserved/.test(license)
+  )
+    return false
   return /^(public domain|pd\b|pd-|cc0|cc[ -]by(?:[ -]sa)?\b)/.test(license)
 }
 
@@ -86,7 +92,10 @@ export async function findPubChemCompound(
   const json = asRecord(await response.json())
   const table = asRecord(json?.PropertyTable)
   const first = Array.isArray(table?.Properties) ? asRecord(table!.Properties[0]) : null
-  const cid = typeof first?.CID === 'number' && Number.isInteger(first.CID) && first.CID > 0 ? first.CID : null
+  const cid =
+    typeof first?.CID === 'number' && Number.isInteger(first.CID) && first.CID > 0
+      ? first.CID
+      : null
   const formula = typeof first?.MolecularFormula === 'string' ? first.MolecularFormula : ''
   if (!cid) return null
   // The name must resolve to the substance the lesson is about.
@@ -128,7 +137,10 @@ export async function searchCommons(
     iiurlwidth: '640',
     iiextmetadatafilter: 'LicenseShortName|LicenseUrl|Artist|ObjectName',
   })
-  const response = await options.fetch(`${COMMONS_API}?${params.toString()}`, options.signal ? { signal: options.signal } : undefined)
+  const response = await options.fetch(
+    `${COMMONS_API}?${params.toString()}`,
+    options.signal ? { signal: options.signal } : undefined,
+  )
   if (!response.ok) return []
   const json = asRecord(await response.json())
   const pages = asRecord(asRecord(json?.query)?.pages)
@@ -152,7 +164,9 @@ export async function searchCommons(
     const author = plainText(field('Artist'), 80)
     const title =
       plainText(field('ObjectName'), 80) ??
-      (typeof page.title === 'string' ? page.title.replace(/^File:/, '').replace(/\.[a-z0-9]+$/i, '') : query)
+      (typeof page.title === 'string'
+        ? page.title.replace(/^File:/, '').replace(/\.[a-z0-9]+$/i, '')
+        : query)
     out.push({
       source: 'wikimedia',
       title,

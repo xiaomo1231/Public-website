@@ -93,10 +93,16 @@ export class HomeworkRepository {
   }
 
   /** Commit a generated review only if its question and answer inputs are still current. */
-  async applyReviewGuide(id: string, guide: HomeworkReviewGuide): Promise<HomeworkQuestion | undefined> {
+  async applyReviewGuide(
+    id: string,
+    guide: HomeworkReviewGuide,
+  ): Promise<HomeworkQuestion | undefined> {
     return this.db.transaction('rw', this.questions(), async () => {
       const existing = await this.questions().get(id)
-      if (!existing || homeworkReviewInputHash(existing, guide.language, guide.promptVersion) !== guide.inputHash) {
+      if (
+        !existing ||
+        homeworkReviewInputHash(existing, guide.language, guide.promptVersion) !== guide.inputHash
+      ) {
         return undefined
       }
       const next: HomeworkQuestion = { ...existing, reviewGuide: guide, updatedAt: Date.now() }
@@ -106,11 +112,20 @@ export class HomeworkRepository {
   }
 
   /** A slow AI check must never overwrite newer student work or a changed answer key. */
-  async applyAnswerCheck(id: string, submittedDraft: string, check: HomeworkAnswerCheck): Promise<HomeworkQuestion | undefined> {
+  async applyAnswerCheck(
+    id: string,
+    submittedDraft: string,
+    check: HomeworkAnswerCheck,
+  ): Promise<HomeworkQuestion | undefined> {
     return this.db.transaction('rw', this.questions(), async () => {
       const existing = await this.questions().get(id)
-      if (!existing || existing.draftText !== submittedDraft ||
-        answerCheckInputHash(existing, submittedDraft, check.language, check.promptVersion) !== check.inputHash) return undefined
+      if (
+        !existing ||
+        existing.draftText !== submittedDraft ||
+        answerCheckInputHash(existing, submittedDraft, check.language, check.promptVersion) !==
+          check.inputHash
+      )
+        return undefined
       const next: HomeworkQuestion = { ...existing, answerCheck: check, updatedAt: Date.now() }
       await this.questions().put(next)
       return next
@@ -238,9 +253,11 @@ export class HomeworkRepository {
               answerStatus: 'matched',
               // An edited answer must not leave old AI help labelled as based
               // on the new answer. Student work and the old help stay intact.
-              answerBased: existing.answerText === link.answer.answerText &&
+              answerBased:
+                existing.answerText === link.answer.answerText &&
                 existing.answerNumber === link.answer.answerNumber
-                ? existing.answerBased : false,
+                  ? existing.answerBased
+                  : false,
               updatedAt: Date.now(),
             }
           : {
@@ -277,22 +294,30 @@ export class HomeworkRepository {
   async deleteByDocument(documentId: string): Promise<void> {
     const sets = await this.sets().where('documentId').equals(documentId).toArray()
     const walkthroughs = new WalkthroughRepository(this.db)
-    await this.db.transaction('rw', [this.sets(), this.questions(), this.db.homeworkWalkthroughs, this.db.walkthroughNotes], async () => {
-      for (const set of sets) {
-        await this.questions().where('setId').equals(set.id).delete()
-        await walkthroughs.deleteBySet(set.id)
-        await this.sets().delete(set.id)
-      }
-    })
+    await this.db.transaction(
+      'rw',
+      [this.sets(), this.questions(), this.db.homeworkWalkthroughs, this.db.walkthroughNotes],
+      async () => {
+        for (const set of sets) {
+          await this.questions().where('setId').equals(set.id).delete()
+          await walkthroughs.deleteBySet(set.id)
+          await this.sets().delete(set.id)
+        }
+      },
+    )
   }
 
   async deleteByProject(projectId: string): Promise<number> {
     const sets = await this.sets().where('projectId').equals(projectId).toArray()
-    await this.db.transaction('rw', [this.sets(), this.questions(), this.db.homeworkWalkthroughs, this.db.walkthroughNotes], async () => {
-      await new WalkthroughRepository(this.db).deleteByProject(projectId)
-      await this.questions().where('projectId').equals(projectId).delete()
-      await this.sets().where('projectId').equals(projectId).delete()
-    })
+    await this.db.transaction(
+      'rw',
+      [this.sets(), this.questions(), this.db.homeworkWalkthroughs, this.db.walkthroughNotes],
+      async () => {
+        await new WalkthroughRepository(this.db).deleteByProject(projectId)
+        await this.questions().where('projectId').equals(projectId).delete()
+        await this.sets().where('projectId').equals(projectId).delete()
+      },
+    )
     return sets.length
   }
 }

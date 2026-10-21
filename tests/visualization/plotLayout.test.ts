@@ -1,9 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import {
-  NARROW_THRESHOLD,
-  WIDE_LAYOUT,
-  layoutForWidth,
-} from '@/widgets/tutor/plotLayout'
+import { NARROW_THRESHOLD, WIDE_LAYOUT, layoutForWidth } from '@/widgets/tutor/plotLayout'
 
 /**
  * Regression for the Phase 1.1 browser finding: a fixed wide viewBox shrank

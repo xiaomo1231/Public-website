@@ -20,7 +20,13 @@ import type { DocumentAnalysisOutput } from '@/infrastructure/ai/prompts/types'
 import type { AIService } from '@/services/aiService'
 import type { ChatMessage } from '@/infrastructure/ai/types'
 
-function chunk(id: string, text: string, order: number, chapter?: number, section?: string): DocumentChunk {
+function chunk(
+  id: string,
+  text: string,
+  order: number,
+  chapter?: number,
+  section?: string,
+): DocumentChunk {
   return {
     id,
     documentId: 'doc',
@@ -39,20 +45,33 @@ const plain = (c: DocumentChunk) => c.text
 
 describe('planning the analysis parts', () => {
   it('keeps a course that fits in one request, in the old input format', () => {
-    const doc: AnalysisInputDocument = { id: 'doc', name: 'book.pdf', chunks: [chunk('a', 'one', 0, 1), chunk('b', 'two', 1, 2)] }
+    const doc: AnalysisInputDocument = {
+      id: 'doc',
+      name: 'book.pdf',
+      chunks: [chunk('a', 'one', 0, 1), chunk('b', 'two', 1, 2)],
+    }
     const format = (c: DocumentChunk) => `[${buildCandidateChunkLabel(c)}] ${c.text}`
     const segments = planAnalysisSegments([doc], format)
     expect(segments).toHaveLength(1)
-    expect(segmentText(segments[0]!, format)).toBe('=== doc ===\n[c:a · Ch 1] one\n\n[c:b · Ch 2] two')
+    expect(segmentText(segments[0]!, format)).toBe(
+      '=== doc ===\n[c:a · Ch 1] one\n\n[c:b · Ch 2] two',
+    )
     expect(segments[0]!.label).toBe('Ch 1 – Ch 2')
   })
 
   it('packs whole chapters into parts and never drops a chunk', () => {
-    const chunks = [1, 2, 3, 4].flatMap((ch) => [0, 1].map((i) => chunk(`c${ch}${i}`, 'x'.repeat(20), ch * 10 + i, ch)))
+    const chunks = [1, 2, 3, 4].flatMap((ch) =>
+      [0, 1].map((i) => chunk(`c${ch}${i}`, 'x'.repeat(20), ch * 10 + i, ch)),
+    )
     // Each chapter is 2 × (20 + 2) = 44 characters; two chapters fit in 100.
     const segments = planAnalysisSegments([{ id: 'doc', name: 'book.pdf', chunks }], plain, 100)
-    expect(segments.map((s) => s.chapterIds)).toEqual([['ch1', 'ch2'], ['ch3', 'ch4']])
-    expect(segments.flatMap((s) => s.documents.flatMap((d) => d.chunks.map((c) => c.id)))).toEqual(chunks.map((c) => c.id))
+    expect(segments.map((s) => s.chapterIds)).toEqual([
+      ['ch1', 'ch2'],
+      ['ch3', 'ch4'],
+    ])
+    expect(segments.flatMap((s) => s.documents.flatMap((d) => d.chunks.map((c) => c.id)))).toEqual(
+      chunks.map((c) => c.id),
+    )
     expect(segments[1]!.label).toBe('Ch 3 – Ch 4')
   })
 
@@ -75,15 +94,37 @@ describe('planning the analysis parts', () => {
   it('recognises material the old single request would have cut short', () => {
     const short = [{ id: 'doc', name: 'n', chunks: [chunk('a', 'text', 0)] }]
     expect(legacyInputWasTruncated(short)).toBe(false)
-    const manyChunks = [{ id: 'doc', name: 'n', chunks: Array.from({ length: 201 }, (_, i) => chunk(`c${i}`, 't', i)) }]
+    const manyChunks = [
+      {
+        id: 'doc',
+        name: 'n',
+        chunks: Array.from({ length: 201 }, (_, i) => chunk(`c${i}`, 't', i)),
+      },
+    ]
     expect(legacyInputWasTruncated(manyChunks)).toBe(true)
-    const longText = [{ id: 'doc', name: 'n', chunks: Array.from({ length: 60 }, (_, i) => chunk(`c${i}`, 'x'.repeat(900), i)) }]
+    const longText = [
+      {
+        id: 'doc',
+        name: 'n',
+        chunks: Array.from({ length: 60 }, (_, i) => chunk(`c${i}`, 'x'.repeat(900), i)),
+      },
+    ]
     expect(legacyInputWasTruncated(longText)).toBe(true)
   })
 })
 
 function analysis(partial: Partial<DocumentAnalysisOutput>): DocumentAnalysisOutput {
-  return { language: 'zh', topics: [], concepts: [], formulas: [], symbols: [], examples: [], exercises: [], prerequisites: [], ...partial }
+  return {
+    language: 'zh',
+    topics: [],
+    concepts: [],
+    formulas: [],
+    symbols: [],
+    examples: [],
+    exercises: [],
+    prerequisites: [],
+    ...partial,
+  }
 }
 
 const ref = (page: number) => ({ documentId: '', documentName: 'book.pdf', page })
@@ -96,8 +137,18 @@ describe('merging the parts', () => {
         chapterIds: ['ch1'],
         output: analysis({
           topics: [{ name: '导数', description: 'd', sourceRefs: [] }],
-          concepts: [{ name: '导数', definition: '变化率', topicNames: ['导数'], sourceRefs: [ref(1)] }],
-          formulas: [{ name: 'f', latex: 'f\'(x) = \\lim', description: '', variables: [], sourceRefs: [ref(1)] }],
+          concepts: [
+            { name: '导数', definition: '变化率', topicNames: ['导数'], sourceRefs: [ref(1)] },
+          ],
+          formulas: [
+            {
+              name: 'f',
+              latex: "f'(x) = \\lim",
+              description: '',
+              variables: [],
+              sourceRefs: [ref(1)],
+            },
+          ],
         }),
       },
       {
@@ -105,8 +156,23 @@ describe('merging the parts', () => {
         chapterIds: ['ch2'],
         output: analysis({
           topics: [{ name: '积分', description: 'i', sourceRefs: [] }],
-          concepts: [{ name: ' 导数 ', definition: '另一种说法', topicNames: ['积分'], sourceRefs: [ref(9)] }],
-          formulas: [{ name: 'f', latex: "f'(x)=\\lim", description: '', variables: [], sourceRefs: [ref(9)] }],
+          concepts: [
+            {
+              name: ' 导数 ',
+              definition: '另一种说法',
+              topicNames: ['积分'],
+              sourceRefs: [ref(9)],
+            },
+          ],
+          formulas: [
+            {
+              name: 'f',
+              latex: "f'(x)=\\lim",
+              description: '',
+              variables: [],
+              sourceRefs: [ref(9)],
+            },
+          ],
         }),
       },
     ])
@@ -118,7 +184,12 @@ describe('merging the parts', () => {
   })
 
   it('merges a topic split across parts of one chapter, and renames a reused name elsewhere', () => {
-    const summary = (chunkId: string) => ({ name: '本章小结', description: 's', sourceRefs: [], sourceChunkIds: [chunkId] })
+    const summary = (chunkId: string) => ({
+      name: '本章小结',
+      description: 's',
+      sourceRefs: [],
+      sourceChunkIds: [chunkId],
+    })
     const merged = mergeDocumentAnalyses([
       { label: 'Ch 1', chapterIds: ['ch1'], output: analysis({ topics: [summary('a')] }) },
       { label: 'Ch 1', chapterIds: ['ch1'], output: analysis({ topics: [summary('b')] }) },
@@ -138,13 +209,31 @@ describe('merging the parts', () => {
 })
 
 describe('freshness of analyses written before parts', () => {
-  const current: CourseContentVersions = { sourceHash: 'h', promptVersion: 'v', schemaVersion: '1', structureVersion: 0, structureHash: '' }
-  const saved = { sourceHash: 'h', promptVersion: 'v', schemaVersion: '1', status: 'ready' as const }
+  const current: CourseContentVersions = {
+    sourceHash: 'h',
+    promptVersion: 'v',
+    schemaVersion: '1',
+    structureVersion: 0,
+    structureHash: '',
+  }
+  const saved = {
+    sourceHash: 'h',
+    promptVersion: 'v',
+    schemaVersion: '1',
+    status: 'ready' as const,
+  }
 
   it('re-analyses only courses the old limits cut short', () => {
     expect(evaluateFreshness(saved, current).fresh).toBe(true)
-    expect(evaluateFreshness(saved, { ...current, legacyInputTruncated: true }).reasons).toEqual(['input-truncated'])
-    expect(evaluateFreshness({ ...saved, inputCoverage: 'complete' }, { ...current, legacyInputTruncated: true }).fresh).toBe(true)
+    expect(evaluateFreshness(saved, { ...current, legacyInputTruncated: true }).reasons).toEqual([
+      'input-truncated',
+    ])
+    expect(
+      evaluateFreshness(
+        { ...saved, inputCoverage: 'complete' },
+        { ...current, legacyInputTruncated: true },
+      ).fresh,
+    ).toBe(true)
   })
 })
 
@@ -167,13 +256,32 @@ describe('analysing a long textbook', () => {
       return {
         data: {
           language: 'en',
-          topics: [{ name: `Topic ${part}`, description: 'd', sourceChunkIds: [firstChunk], sourceRefs: [] }],
-          concepts: [{ name: 'Limit', definition: `from part ${part}`, topicNames: [`Topic ${part}`], sourceRefs: [] }],
+          topics: [
+            {
+              name: `Topic ${part}`,
+              description: 'd',
+              sourceChunkIds: [firstChunk],
+              sourceRefs: [],
+            },
+          ],
+          concepts: [
+            {
+              name: 'Limit',
+              definition: `from part ${part}`,
+              topicNames: [`Topic ${part}`],
+              sourceRefs: [],
+            },
+          ],
         },
         raw: { content: '{}', finishReason: 'stop', model: 'm' },
       }
     })
-    const ai = { streamJSON, chatJSON: vi.fn(), currentProvider: { id: 'custom' }, maxOutputTokens: 2048 } as unknown as AIService
+    const ai = {
+      streamJSON,
+      chatJSON: vi.fn(),
+      currentProvider: { id: 'custom' },
+      maxOutputTokens: 2048,
+    } as unknown as AIService
     return { ai, streamJSON }
   }
 
@@ -210,11 +318,15 @@ describe('analysing a long textbook', () => {
     const { projects, projectId } = await seedBook(4, 60, 500)
     const { ai, streamJSON } = partAI()
     const progress: string[] = []
-    await service(projects, ai).analyzeProject(projectId, { onProgress: (p) => p.message && progress.push(p.message) })
+    await service(projects, ai).analyzeProject(projectId, {
+      onProgress: (p) => p.message && progress.push(p.message),
+    })
 
     expect(streamJSON).toHaveBeenCalledTimes(4)
     const users = streamJSON.mock.calls.map((call) => (call[0] as ChatMessage[])[1]!.content)
-    const parts = users.map((u) => /This is part (\d) of 4 of the course material \((Ch \d+)\)/.exec(u)?.slice(1).join(' '))
+    const parts = users.map((u) =>
+      /This is part (\d) of 4 of the course material \((Ch \d+)\)/.exec(u)?.slice(1).join(' '),
+    )
     expect(parts.sort()).toEqual(['1 Ch 1', '2 Ch 2', '3 Ch 3', '4 Ch 4'])
     expect(users.some((u) => u.includes('Chapter 4 passage 239'))).toBe(true)
 
@@ -226,7 +338,11 @@ describe('analysing a long textbook', () => {
     expect(last.sourceChunkIds).toHaveLength(1)
     expect(last.chapterId).toBe('ch-4')
     expect(await analyses.listConcepts(projectId)).toHaveLength(1)
-    expect(await analyses.getByProject(projectId)).toMatchObject({ status: 'ready', inputCoverage: 'complete', inputParts: 4 })
+    expect(await analyses.getByProject(projectId)).toMatchObject({
+      status: 'ready',
+      inputCoverage: 'complete',
+      inputParts: 4,
+    })
     expect(progress).toContain('Asking AI to extract knowledge (part 4 of 4)')
   })
 
@@ -235,8 +351,13 @@ describe('analysing a long textbook', () => {
     const { ai, streamJSON } = partAI()
     await service(projects, ai).analyzeProject(projectId)
     expect(streamJSON).toHaveBeenCalledTimes(1)
-    expect((streamJSON.mock.calls[0]![0] as ChatMessage[])[1]!.content).not.toContain('This is part')
-    expect(await new CourseAnalysisRepository(db).getByProject(projectId)).toMatchObject({ inputCoverage: 'complete', inputParts: 1 })
+    expect((streamJSON.mock.calls[0]![0] as ChatMessage[])[1]!.content).not.toContain(
+      'This is part',
+    )
+    expect(await new CourseAnalysisRepository(db).getByProject(projectId)).toMatchObject({
+      inputCoverage: 'complete',
+      inputParts: 1,
+    })
   })
 
   it('stores nothing when one part fails, keeping the previous analysis', async () => {
@@ -244,7 +365,9 @@ describe('analysing a long textbook', () => {
     await service(projects, partAI().ai).analyzeProject(projectId)
     const before = await new CourseAnalysisRepository(db).listTopics(projectId)
 
-    await expect(service(projects, partAI(3).ai).analyzeProject(projectId)).rejects.toThrow('provider down')
+    await expect(service(projects, partAI(3).ai).analyzeProject(projectId)).rejects.toThrow(
+      'provider down',
+    )
     const analyses = new CourseAnalysisRepository(db)
     expect((await analyses.listTopics(projectId)).map((t) => t.id)).toEqual(before.map((t) => t.id))
     expect(await analyses.getByProject(projectId)).toMatchObject({ status: 'ready', inputParts: 4 })

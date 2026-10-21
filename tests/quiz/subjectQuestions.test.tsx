@@ -36,7 +36,10 @@ describe('physics: numeric answers with units', () => {
   const g = question({ unit: 'm/s^2' })
 
   it('accepts any equivalent unit', () => {
-    expect(evaluateDeterministic(g, '9.8 m/s^2')).toMatchObject({ isCorrect: true, method: 'unit_conversion' })
+    expect(evaluateDeterministic(g, '9.8 m/s^2')).toMatchObject({
+      isCorrect: true,
+      method: 'unit_conversion',
+    })
     expect(evaluateDeterministic(g, '980 cm/s²').isCorrect).toBe(true)
   })
 
@@ -58,7 +61,10 @@ describe('physics: numeric answers with units', () => {
   })
 
   it('does not grade an unreadable unit as wrong', () => {
-    expect(evaluateDeterministic(g, '9.8 furlongs-ish')).toMatchObject({ isCorrect: null, method: 'unverified' })
+    expect(evaluateDeterministic(g, '9.8 furlongs-ish')).toMatchObject({
+      isCorrect: null,
+      method: 'unverified',
+    })
   })
 
   it('keeps unit-free numeric questions as before', () => {
@@ -67,10 +73,17 @@ describe('physics: numeric answers with units', () => {
 })
 
 describe('computer science: code output questions', () => {
-  const q = question({ type: 'code_output', prompt: `What does this print?\n\n${PROGRAM}`, correctAnswer: '0\n2\n4' })
+  const q = question({
+    type: 'code_output',
+    prompt: `What does this print?\n\n${PROGRAM}`,
+    correctAnswer: '0\n2\n4',
+  })
 
   it('matches output exactly, ignoring line endings and trailing spaces', () => {
-    expect(evaluateDeterministic(q, '0\r\n2  \n4\n')).toMatchObject({ isCorrect: true, method: 'exact_output' })
+    expect(evaluateDeterministic(q, '0\r\n2  \n4\n')).toMatchObject({
+      isCorrect: true,
+      method: 'exact_output',
+    })
     expect(evaluateDeterministic(q, '0 2 4').isCorrect).toBe(false)
     expect(evaluateDeterministic(q, '0\n2\n4.0').isCorrect).toBe(false)
   })
@@ -108,7 +121,12 @@ describe('quiz generator output validation', () => {
     const output = {
       questions: [
         { ...base, prompt: 'What does print(1) print?', type: 'code_output', correctAnswer: '1' },
-        { ...base, prompt: `What does this print?\n${PROGRAM}`, type: 'code_output', correctAnswer: '0\n2\n4  \n' },
+        {
+          ...base,
+          prompt: `What does this print?\n${PROGRAM}`,
+          type: 'code_output',
+          correctAnswer: '0\n2\n4  \n',
+        },
       ],
     } as unknown as QuizGenerationOutput
     const valid = service.validateGenerated(output, 2)
@@ -132,7 +150,11 @@ describe('quiz UI', () => {
   })
 
   it('renders the program as a code block and takes multi-line output', () => {
-    const q = question({ type: 'code_output', prompt: `What does this print?\n\n${PROGRAM}`, correctAnswer: '0\n2\n4' })
+    const q = question({
+      type: 'code_output',
+      prompt: `What does this print?\n\n${PROGRAM}`,
+      correctAnswer: '0\n2\n4',
+    })
     const { container } = render(
       <QuestionCard
         question={q}

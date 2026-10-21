@@ -15,7 +15,8 @@ import { prompts } from '@/infrastructure/ai/prompts'
 import type { AIService } from '@/services/aiService'
 import type { HomeworkQuestion, HomeworkSet } from '@/entities/homework/types'
 
-const P1 = 'Consider the system x1 + 2x2 + 3x3 + 4x4 = 10, 2x1 + 3x2 + 5x3 + 6x4 = 14, 3x1 + 4x2 + 6x3 + 8x4 = 18. Using the augmented matrix and RREF, solve it.'
+const P1 =
+  'Consider the system x1 + 2x2 + 3x3 + 4x4 = 10, 2x1 + 3x2 + 5x3 + 6x4 = 14, 3x1 + 4x2 + 6x3 + 8x4 = 18. Using the augmented matrix and RREF, solve it.'
 const P2 = 'Solve the system with augmented matrix [0 1 | 2; 2 0 | 1].'
 
 type Handler = (system: string, user: string) => unknown
@@ -28,7 +29,10 @@ function stubAI(handler: Handler) {
     calls.push({ system, user })
     return { data: await handler(system, user), raw: {} }
   })
-  return { calls, ai: { streamJSON, chatJSON: streamJSON, maxOutputTokens: 8192 } as unknown as AIService }
+  return {
+    calls,
+    ai: { streamJSON, chatJSON: streamJSON, maxOutputTokens: 8192 } as unknown as AIService,
+  }
 }
 
 const isFrame = (system: string) => system.includes('opening and the closing')
@@ -36,21 +40,54 @@ const isFrame = (system: string) => system.includes('opening and the closing')
 /** A model that writes every section, with an arithmetic slip in question 2. */
 const goodModel: Handler = (system, user) => {
   if (isFrame(system)) {
-    return { status: 'ready', overview: '### Row operations\n1. Swap two rows.', summary: '| Result | Questions |\n|---|---|\n| unique | 2 |', suggestions: ['Redo 1: a free variable.'] }
+    return {
+      status: 'ready',
+      overview: '### Row operations\n1. Swap two rows.',
+      summary: '| Result | Questions |\n|---|---|\n| unique | 2 |',
+      suggestions: ['Redo 1: a free variable.'],
+    }
   }
   if (user.includes('question 1.')) {
     return {
       status: 'ready',
       conclusion: 'Infinitely many solutions.',
       body: 'Start from $$\\left[\\begin{array}{cccc|c} 1&2&3&4&10 \\end{array}\\right]$$ and do $R_2 \\to R_2 - 2R_1$.',
-      linearSystems: [{ label: '1', augmented: [[1, 2, 3, 4, 10], [2, 3, 5, 6, 14], [3, 4, 6, 8, 18]], rref: [[1, 0, 0, 0, -2], [0, 1, 0, 2, 6], [0, 0, 1, 0, 0]], solution: 'infinite' }],
+      linearSystems: [
+        {
+          label: '1',
+          augmented: [
+            [1, 2, 3, 4, 10],
+            [2, 3, 5, 6, 14],
+            [3, 4, 6, 8, 18],
+          ],
+          rref: [
+            [1, 0, 0, 0, -2],
+            [0, 1, 0, 2, 6],
+            [0, 0, 1, 0, 0],
+          ],
+          solution: 'infinite',
+        },
+      ],
     }
   }
   return {
     status: 'ready',
     conclusion: 'Unique solution.',
     body: 'Swap the rows.',
-    linearSystems: [{ label: '2', augmented: [[0, 1, 2], [2, 0, 1]], rref: [[1, 0, '1/3'], [0, 1, 2]], solution: 'unique' }],
+    linearSystems: [
+      {
+        label: '2',
+        augmented: [
+          [0, 1, 2],
+          [2, 0, 1],
+        ],
+        rref: [
+          [1, 0, '1/3'],
+          [0, 1, 2],
+        ],
+        solution: 'unique',
+      },
+    ],
   }
 }
 
@@ -86,9 +123,17 @@ function question(partial: Partial<HomeworkQuestion>): HomeworkQuestion {
 beforeEach(async () => {
   db = new AppDatabase()
   setDbForTesting(db)
-  projectId = (await new ProjectService(db).create({ name: 'Linear algebra', subject: 'linear_algebra' })).id
+  projectId = (
+    await new ProjectService(db).create({ name: 'Linear algebra', subject: 'linear_algebra' })
+  ).id
   const documents = new DocumentRepository(db)
-  const doc = await documents.create({ projectId, type: 'text', materialType: 'homework', name: 'hw3.pdf', sizeBytes: 0 })
+  const doc = await documents.create({
+    projectId,
+    type: 'text',
+    materialType: 'homework',
+    name: 'hw3.pdf',
+    sizeBytes: 0,
+  })
   await documents.update(doc.id, { status: 'ready' })
   documentId = doc.id
   repo = new HomeworkRepository(db)
@@ -111,7 +156,8 @@ beforeEach(async () => {
   await repo.upsertQuestion(question({ id: 'q2', order: 1, number: '2', prompt: P2 }))
 })
 
-const service = (ai: AIService | null) => new HomeworkWalkthroughService({ ai, db, homework: new HomeworkService({ ai, db }) })
+const service = (ai: AIService | null) =>
+  new HomeworkWalkthroughService({ ai, db, homework: new HomeworkService({ ai, db }) })
 
 describe('writing the walkthrough', () => {
   it('writes each question, then the opening and summary, and checks the row reduction', async () => {
@@ -135,9 +181,13 @@ describe('writing the walkthrough', () => {
     ])
     const q1 = state.plan[1]!.section!
     expect(q1).toMatchObject({ conclusion: 'Infinitely many solutions.', title: '1' })
-    expect(q1.checks).toEqual([expect.objectContaining({ label: '1', rrefMatches: true, kindMatches: true })])
+    expect(q1.checks).toEqual([
+      expect.objectContaining({ label: '1', rrefMatches: true, kindMatches: true }),
+    ])
     // The slip in question 2 is caught locally.
-    expect(state.plan[2]!.section!.checks).toEqual([expect.objectContaining({ label: '2', rrefMatches: false, computedKind: 'unique' })])
+    expect(state.plan[2]!.section!.checks).toEqual([
+      expect.objectContaining({ label: '2', rrefMatches: false, computedKind: 'unique' }),
+    ])
     expect(state.plan[3]!.section).toMatchObject({ suggestions: ['Redo 1: a free variable.'] })
   })
 
@@ -150,9 +200,17 @@ describe('writing the walkthrough', () => {
 
     await repo.updateQuestion('q2', { prompt: `${P2} Show every step.` })
     const state = await service(null).state(setId)
-    expect(state.plan.filter((entry) => entry.outdated).map((entry) => entry.id)).toEqual(['overview', 'q:q2', 'summary'])
+    expect(state.plan.filter((entry) => entry.outdated).map((entry) => entry.id)).toEqual([
+      'overview',
+      'q:q2',
+      'summary',
+    ])
     await service(ai).generate(setId)
-    expect(calls.map((call) => (isFrame(call.system) ? 'frame' : call.user.includes('question 2.') ? 'q2' : 'q1'))).toEqual(['q2', 'frame'])
+    expect(
+      calls.map((call) =>
+        isFrame(call.system) ? 'frame' : call.user.includes('question 2.') ? 'q2' : 'q1',
+      ),
+    ).toEqual(['q2', 'frame'])
   })
 
   it('keeps a finished section when rewriting it fails, and records sections the model cannot write', async () => {
@@ -171,7 +229,9 @@ describe('writing the walkthrough', () => {
     expect(q1.outdated).toBe(true)
 
     const { ai: unsure } = stubAI((system, user) =>
-      isFrame(system) ? goodModel(system, user) : { status: 'insufficient', reason: 'The matrix in question 1 is unreadable.' },
+      isFrame(system)
+        ? goodModel(system, user)
+        : { status: 'insufficient', reason: 'The matrix in question 1 is unreadable.' },
     )
     await service(unsure).generate(setId, { force: true })
     const after = await service(null).state(setId)
@@ -182,17 +242,26 @@ describe('writing the walkthrough', () => {
   })
 
   it('uses the confirmed professor answer and never asks without an AI', async () => {
-    await repo.updateQuestion('q1', { answerStatus: 'matched', answerText: 'x1 = -2, x2 = 6 - 2t, x3 = 0, x4 = t' })
+    await repo.updateQuestion('q1', {
+      answerStatus: 'matched',
+      answerText: 'x1 = -2, x2 = 6 - 2t, x3 = 0, x4 = t',
+    })
     const { ai, calls } = stubAI(goodModel)
     await service(ai).generate(setId)
-    expect(calls.find((call) => call.user.includes('question 1.'))!.user).toContain('CONFIRMED PROFESSOR ANSWER')
-    await expect(service(null).generate(setId, { force: true })).rejects.toMatchObject({ code: 'NO_PROVIDER' })
+    expect(calls.find((call) => call.user.includes('question 1.'))!.user).toContain(
+      'CONFIRMED PROFESSOR ANSWER',
+    )
+    await expect(service(null).generate(setId, { force: true })).rejects.toMatchObject({
+      code: 'NO_PROVIDER',
+    })
   })
 
   it('leaves out retired questions and treats "not enough information" as settled', async () => {
     await repo.updateQuestion('q2', { retired: true, retiredAt: 5 })
     const { ai, calls } = stubAI((system, user) =>
-      isFrame(system) ? goodModel(system, user) : { status: 'insufficient', reason: 'The matrix is unreadable.' },
+      isFrame(system)
+        ? goodModel(system, user)
+        : { status: 'insufficient', reason: 'The matrix is unreadable.' },
     )
     await service(ai).generate(setId)
     expect(calls.some((call) => call.user.includes('question 2.'))).toBe(false)
@@ -239,19 +308,36 @@ describe('saved questions', () => {
     quote: 'R2 → R2 − 2R1',
     anchor,
     surrounding: 'Start from the matrix and do R2 → R2 − 2R1.',
-    turns: [{ question: 'Why subtract twice row 1?', answer: 'To clear the 2 below the pivot.', at: 10 }],
+    turns: [
+      { question: 'Why subtract twice row 1?', answer: 'To clear the 2 below the pivot.', at: 10 },
+    ],
   })
 
   it('saves, continues, renames and deletes a note', async () => {
     const notes = new WalkthroughNoteService(db)
     const note = await notes.create(input(), 100)
-    expect(note).toMatchObject({ projectId, title: 'Why subtract twice row 1?', turns: [expect.anything()] })
-    await notes.appendTurn(note.id, { question: 'And row 3?', answer: 'Subtract three times row 1.', at: 200 })
+    expect(note).toMatchObject({
+      projectId,
+      title: 'Why subtract twice row 1?',
+      turns: [expect.anything()],
+    })
+    await notes.appendTurn(note.id, {
+      question: 'And row 3?',
+      answer: 'Subtract three times row 1.',
+      at: 200,
+    })
     await notes.rename(note.id, '  Clearing column 1  ')
     await notes.saveRect(note.id, { x: 10, y: 20, width: 400, height: 300 })
     const [stored] = await notes.list(setId)
-    expect(stored).toMatchObject({ title: 'Clearing column 1', updatedAt: expect.any(Number), rect: { x: 10 } })
-    expect(stored!.turns.map((turn) => turn.question)).toEqual(['Why subtract twice row 1?', 'And row 3?'])
+    expect(stored).toMatchObject({
+      title: 'Clearing column 1',
+      updatedAt: expect.any(Number),
+      rect: { x: 10 },
+    })
+    expect(stored!.turns.map((turn) => turn.question)).toEqual([
+      'Why subtract twice row 1?',
+      'And row 3?',
+    ])
     await expect(notes.rename(note.id, '   ')).rejects.toThrow()
     await expect(notes.create({ ...input(), turns: [] })).rejects.toThrow()
     await notes.delete(note.id)
@@ -264,7 +350,11 @@ describe('saved questions', () => {
     expect(await notes.addToReviewCards(note.id)).toBe(1)
     expect(await notes.addToReviewCards(note.id)).toBe(0)
     const [card] = await new ReviewCardService(db).list(projectId)
-    expect(card).toMatchObject({ front: 'Why subtract twice row 1?', back: 'To clear the 2 below the pivot.', source: 'note' })
+    expect(card).toMatchObject({
+      front: 'Why subtract twice row 1?',
+      back: 'To clear the 2 below the pivot.',
+      source: 'note',
+    })
     const long = `${'a'.repeat(900)}\n\n${'b'.repeat(900)}`
     expect(cardBack(long)).toBe(`${'a'.repeat(900)}\n\n…`)
   })
@@ -272,7 +362,11 @@ describe('saved questions', () => {
   it('protects a homework file that has saved questions, and goes with its assignment and course', async () => {
     const { ai } = stubAI(goodModel)
     await service(ai).generate(setId)
-    const docs = new DocumentService({ documents: new DocumentRepository(db), projects: new ProjectService(db), db })
+    const docs = new DocumentService({
+      documents: new DocumentRepository(db),
+      projects: new ProjectService(db),
+      db,
+    })
     // The generated walkthrough alone is not student work; a saved question is.
     expect((await docs.getDeleteImpact(documentId)).blocked).toBe(false)
     await new WalkthroughNoteService(db).create(input())
@@ -300,13 +394,25 @@ describe('saved questions', () => {
 
 describe('contextual tutor prompt v3', () => {
   it('asks the same as before outside a walkthrough, and adds the walkthrough rule and history', () => {
-    expect(prompts.contextualTutor.buildSystemPrompt('homework')).toContain('do not reveal the final answer')
+    expect(prompts.contextualTutor.buildSystemPrompt('homework')).toContain(
+      'do not reveal the final answer',
+    )
     const walkthrough = prompts.contextualTutor.buildSystemPrompt('walkthrough')
     expect(walkthrough).toContain('solution is already in front of them')
     expect(walkthrough).not.toContain('do not reveal')
-    const base = { selectedText: 'R2 → R2 − 2R1', surroundingContext: '', question: 'Why?', language: 'en' }
-    expect(prompts.contextualTutor.buildUserPrompt(base)).not.toContain('EARLIER IN THIS CONVERSATION')
-    const withHistory = prompts.contextualTutor.buildUserPrompt({ ...base, history: [{ question: 'What is a pivot?', answer: 'The leading 1.' }] })
+    const base = {
+      selectedText: 'R2 → R2 − 2R1',
+      surroundingContext: '',
+      question: 'Why?',
+      language: 'en',
+    }
+    expect(prompts.contextualTutor.buildUserPrompt(base)).not.toContain(
+      'EARLIER IN THIS CONVERSATION',
+    )
+    const withHistory = prompts.contextualTutor.buildUserPrompt({
+      ...base,
+      history: [{ question: 'What is a pivot?', answer: 'The leading 1.' }],
+    })
     expect(withHistory).toContain('EARLIER IN THIS CONVERSATION')
     expect(withHistory).toContain('Q1: What is a pivot?')
   })

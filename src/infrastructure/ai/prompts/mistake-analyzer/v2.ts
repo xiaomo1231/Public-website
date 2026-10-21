@@ -9,7 +9,6 @@
 import type { MistakeType, SimilarExample } from '@/entities/mistake/types'
 import { securityFooter, untrustedContentWrapper } from '../security'
 
-
 export const VERSION = 'v2' as const
 export const PROMPT_KIND = 'mistake-analyzer' as const
 
@@ -46,7 +45,8 @@ const SCHEMA = {
   whyWrong: 'string — why that step does not hold',
   correctApproach: 'string — the correct reasoning path, step by step but concise',
   possibleCause: 'string — MUST start with "This may indicate" or "A possible cause is"',
-  mistakeType: 'conceptual | formula | calculation | sign | unit | misreading | incomplete_reasoning | unknown',
+  mistakeType:
+    'conceptual | formula | calculation | sign | unit | misreading | incomplete_reasoning | unknown',
   reviewKnowledgePoints: ['string'],
   shouldPracticeMore: 'boolean',
   similarExample: { prompt: 'string', answer: 'string', explanation: 'string' },

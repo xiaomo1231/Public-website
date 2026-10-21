@@ -144,7 +144,12 @@ export function RenameProjectDialog({
           )}
 
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={busy}>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => onOpenChange(false)}
+              disabled={busy}
+            >
               {t('common.cancel')}
             </Button>
             <Button type="submit" disabled={!canSubmit}>

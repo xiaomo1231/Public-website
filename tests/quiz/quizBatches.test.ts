@@ -115,7 +115,9 @@ describe('quiz generation for large quizzes', () => {
     // 3 + 2 asked again → 5; a model that always stops at 3 still reaches 5 in two rounds.
     expect(quiz.questionIds).toHaveLength(5)
     const short = planAI(() => true)
-    await expect(new QuizService({ ai: short.ai, db }).generateQuiz(projectId, config(3, ['numeric']))).rejects.toThrow()
+    await expect(
+      new QuizService({ ai: short.ai, db }).generateQuiz(projectId, config(3, ['numeric'])),
+    ).rejects.toThrow()
   })
 })
 

@@ -70,8 +70,10 @@ export class SettingsService {
       next.maxTokens = m
     }
 
-    if (patch.webImagesEnabled !== undefined) next.webImagesEnabled = patch.webImagesEnabled === true
-    if (patch.webImagesVisionCheck !== undefined) next.webImagesVisionCheck = patch.webImagesVisionCheck === true
+    if (patch.webImagesEnabled !== undefined)
+      next.webImagesEnabled = patch.webImagesEnabled === true
+    if (patch.webImagesVisionCheck !== undefined)
+      next.webImagesVisionCheck = patch.webImagesVisionCheck === true
 
     if (patch.apiKey !== undefined) {
       const trimmed = patch.apiKey.trim()

@@ -39,7 +39,13 @@ import {
   type ParsedFormula,
   type RiemannMethod,
 } from './formula'
-import { MAX_RESISTORS, countResistors, type CircuitNode, type Force, type OpticalElement } from './physics'
+import {
+  MAX_RESISTORS,
+  countResistors,
+  type CircuitNode,
+  type Force,
+  type OpticalElement,
+} from './physics'
 import type { InhibitionType } from './models'
 import { MAX_BST_KEYS, MAX_SORT_VALUES, SORT_ALGORITHMS, type SortAlgorithm } from './algorithms'
 
@@ -78,7 +84,13 @@ function variableOf(raw: unknown): string {
 }
 
 /** At least a fifth of the samples must be finite, or there is nothing to draw. */
-function drawable(formula: ParsedFormula, variable: string, scope: Record<string, number>, min: number, max: number): boolean {
+function drawable(
+  formula: ParsedFormula,
+  variable: string,
+  scope: Record<string, number>,
+  min: number,
+  max: number,
+): boolean {
   let finite = 0
   for (let i = 0; i <= 100; i++) {
     const y = formula.evaluate({ ...scope, [variable]: min + ((max - min) * i) / 100 })
@@ -100,23 +112,39 @@ function normalizeFormula(draft: VisualizationDraft, base: CommonBase): Normaliz
     const min = readNumber(item?.min)
     const max = readNumber(item?.max)
     const value = readNumber(item?.value)
-    if (!isValidSymbolName(name) || name === variable || params.some((p) => p.name === name)) return fail('invalid-formula-parameter')
-    if (min === null || max === null || value === null || min >= max) return fail('invalid-formula-parameter')
+    if (!isValidSymbolName(name) || name === variable || params.some((p) => p.name === name))
+      return fail('invalid-formula-parameter')
+    if (min === null || max === null || value === null || min >= max)
+      return fail('invalid-formula-parameter')
     const rawStep = readNumber(item?.step)
-    const step = rawStep !== null && rawStep > 0 && rawStep <= max - min ? rawStep : (max - min) / 100
+    const step =
+      rawStep !== null && rawStep > 0 && rawStep <= max - min ? rawStep : (max - min) / 100
     const label = sanitizeText(item?.label, MAX_LABEL)
     const unit = sanitizeText(item?.unit, 16)
-    params.push({ name, value: Math.min(max, Math.max(min, value)), min, max, step, ...(label ? { label } : {}), ...(unit ? { unit } : {}) })
+    params.push({
+      name,
+      value: Math.min(max, Math.max(min, value)),
+      min,
+      max,
+      step,
+      ...(label ? { label } : {}),
+      ...(unit ? { unit } : {}),
+    })
   }
   const symbols = [variable, ...params.map((p) => p.name)]
   const scope = Object.fromEntries(params.map((p) => [p.name, p.value]))
-  const rawCurves = Array.isArray(draft.curves) ? draft.curves.slice(0, 4) : draft.expression ? [{ expression: draft.expression }] : []
+  const rawCurves = Array.isArray(draft.curves)
+    ? draft.curves.slice(0, 4)
+    : draft.expression
+      ? [{ expression: draft.expression }]
+      : []
   const curves: FormulaVisualization['curves'] = []
   for (const raw of rawCurves) {
     const item = asRecord(raw)
     const formula = parseFormula(item?.expression, symbols)
     if (!formula) return fail('invalid-formula-expression')
-    if (!drawable(formula, variable, scope, domain.min, domain.max)) return fail('formula-not-drawable')
+    if (!drawable(formula, variable, scope, domain.min, domain.max))
+      return fail('formula-not-drawable')
     const label = sanitizeText(item?.label, MAX_LABEL)
     curves.push({ expression: formula.source, ...(label ? { label } : {}) })
   }
@@ -136,7 +164,9 @@ function normalizeFormula(draft: VisualizationDraft, base: CommonBase): Normaliz
   return { ok: true, value }
 }
 
-function singleFunction(draft: VisualizationDraft): { formula: ParsedFormula; variable: string; source: string } | null {
+function singleFunction(
+  draft: VisualizationDraft,
+): { formula: ParsedFormula; variable: string; source: string } | null {
   const variable = variableOf(draft.variable)
   const formula = parseFormula(draft.expression, [variable])
   return formula ? { formula, variable, source: formula.source } : null
@@ -147,12 +177,17 @@ function normalizeTangent(draft: VisualizationDraft, base: CommonBase): Normaliz
   const domain = domainOf(draft.domain)
   if (!fn || !domain) return fail('invalid-tangent-function')
   const raw = readNumber(draft.point)
-  const point = raw === null ? (domain.min + domain.max) / 2 : Math.min(domain.max, Math.max(domain.min, raw))
+  const point =
+    raw === null ? (domain.min + domain.max) / 2 : Math.min(domain.max, Math.max(domain.min, raw))
   const at = { [fn.variable]: point }
   const derivative = derivativeOf(fn.formula, fn.variable)
-  const slope = derivative ? derivative.evaluate(at) : numericDerivative(fn.formula.evaluate, at, fn.variable)
-  if (!Number.isFinite(fn.formula.evaluate(at)) || !Number.isFinite(slope)) return fail('tangent-undefined')
-  if (!drawable(fn.formula, fn.variable, {}, domain.min, domain.max)) return fail('formula-not-drawable')
+  const slope = derivative
+    ? derivative.evaluate(at)
+    : numericDerivative(fn.formula.evaluate, at, fn.variable)
+  if (!Number.isFinite(fn.formula.evaluate(at)) || !Number.isFinite(slope))
+    return fail('tangent-undefined')
+  if (!drawable(fn.formula, fn.variable, {}, domain.min, domain.max))
+    return fail('formula-not-drawable')
   const value: TangentVisualization = {
     ...base,
     type: 'tangent_2d',
@@ -172,7 +207,9 @@ function normalizeRiemann(draft: VisualizationDraft, base: CommonBase): Normaliz
   if (!fn || a === null || b === null || a >= b) return fail('invalid-riemann-setup')
   if (!drawable(fn.formula, fn.variable, {}, a, b)) return fail('formula-not-drawable')
   const n = inRange(draft.n, 1, 200)
-  const method = ['left', 'right', 'midpoint', 'trapezoid'].includes(String(draft.method)) ? (draft.method as RiemannMethod) : 'left'
+  const method = ['left', 'right', 'midpoint', 'trapezoid'].includes(String(draft.method))
+    ? (draft.method as RiemannMethod)
+    : 'left'
   const value: RiemannVisualization = {
     ...base,
     type: 'riemann_2d',
@@ -190,13 +227,24 @@ function normalizeTaylor(draft: VisualizationDraft, base: CommonBase): Normalize
   const fn = singleFunction(draft)
   const domain = domainOf(draft.domain)
   const center = readNumber(draft.center) ?? 0
-  if (!fn || !domain || center < domain.min || center > domain.max) return fail('invalid-taylor-setup')
+  if (!fn || !domain || center < domain.min || center > domain.max)
+    return fail('invalid-taylor-setup')
   const rawOrder = inRange(draft.order, 1, 10)
   const order = rawOrder === null ? 5 : Math.round(rawOrder)
   // The highest order the slider can reach must be computable.
-  if (!taylorCoefficients(fn.formula, fn.variable, center, 10)) return fail('taylor-not-differentiable')
-  if (!drawable(fn.formula, fn.variable, {}, domain.min, domain.max)) return fail('formula-not-drawable')
-  const value: TaylorVisualization = { ...base, type: 'taylor_2d', expression: fn.source, variable: fn.variable, center, order, domain }
+  if (!taylorCoefficients(fn.formula, fn.variable, center, 10))
+    return fail('taylor-not-differentiable')
+  if (!drawable(fn.formula, fn.variable, {}, domain.min, domain.max))
+    return fail('formula-not-drawable')
+  const value: TaylorVisualization = {
+    ...base,
+    type: 'taylor_2d',
+    expression: fn.source,
+    variable: fn.variable,
+    center,
+    order,
+    domain,
+  }
   return { ok: true, value }
 }
 
@@ -250,13 +298,21 @@ function normalizeMotion(draft: VisualizationDraft, base: CommonBase): Normalize
   return { ok: true, value }
 }
 
-const ELEMENTS: OpticalElement[] = ['converging_lens', 'diverging_lens', 'concave_mirror', 'convex_mirror']
+const ELEMENTS: OpticalElement[] = [
+  'converging_lens',
+  'diverging_lens',
+  'concave_mirror',
+  'convex_mirror',
+]
 
 function normalizeOptics(draft: VisualizationDraft, base: CommonBase): Normalized {
-  const element = ELEMENTS.includes(draft.element as OpticalElement) ? (draft.element as OpticalElement) : null
+  const element = ELEMENTS.includes(draft.element as OpticalElement)
+    ? (draft.element as OpticalElement)
+    : null
   const focal = readNumber(draft.focalLength)
   const objectDistance = positive(draft.objectDistance, 1e4)
-  if (!element || focal === null || focal === 0 || Math.abs(focal) > 1e4 || objectDistance === null) return fail('invalid-optics-setup')
+  if (!element || focal === null || focal === 0 || Math.abs(focal) > 1e4 || objectDistance === null)
+    return fail('invalid-optics-setup')
   const value: OpticsVisualization = {
     ...base,
     type: 'optics_2d',
@@ -272,7 +328,9 @@ function parseNetwork(raw: unknown, depth: number, labels: string[]): CircuitNod
   const item = asRecord(raw)
   if (!item || depth > 3) return null
   if (item.kind === 'series' || item.kind === 'parallel') {
-    const items = Array.isArray(item.items) ? item.items.map((child) => parseNetwork(child, depth + 1, labels)) : []
+    const items = Array.isArray(item.items)
+      ? item.items.map((child) => parseNetwork(child, depth + 1, labels))
+      : []
     if (items.length < 2 || items.some((child) => !child)) return null
     return { kind: item.kind, items: items as CircuitNode[] }
   }
@@ -329,7 +387,8 @@ function normalizeConfidence(draft: VisualizationDraft, base: CommonBase): Norma
   const mean = readNumber(draft.mean)
   const sd = positive(draft.sd)
   const n = inRange(draft.n, 2, 1e6)
-  if (mean === null || sd === null || n === null || !Number.isInteger(n)) return fail('invalid-confidence-setup')
+  if (mean === null || sd === null || n === null || !Number.isInteger(n))
+    return fail('invalid-confidence-setup')
   const label = sanitizeText(draft.label, MAX_LABEL)
   const value: ConfidenceIntervalVisualization = {
     ...base,
@@ -377,13 +436,19 @@ function normalizeArrhenius(draft: VisualizationDraft, base: CommonBase): Normal
       points.push({ t, k })
     }
     if (new Set(points.map((p) => p.t)).size < 2) return fail('invalid-arrhenius-points')
-    return { ok: true, value: { ...base, type: 'arrhenius_2d', points } satisfies ArrheniusVisualization }
+    return {
+      ok: true,
+      value: { ...base, type: 'arrhenius_2d', points } satisfies ArrheniusVisualization,
+    }
   }
   // Ea in kJ/mol from the model, stored in J/mol.
   const ea = positive(draft.ea, 1e4)
   const a = positive(draft.a, 1e30)
   if (ea === null || a === null) return fail('invalid-arrhenius-setup')
-  return { ok: true, value: { ...base, type: 'arrhenius_2d', ea: ea * 1000, a } satisfies ArrheniusVisualization }
+  return {
+    ok: true,
+    value: { ...base, type: 'arrhenius_2d', ea: ea * 1000, a } satisfies ArrheniusVisualization,
+  }
 }
 
 const INHIBITIONS: InhibitionType[] = ['competitive', 'noncompetitive', 'uncompetitive', 'mixed']
@@ -395,7 +460,9 @@ function normalizeEnzyme(draft: VisualizationDraft, base: CommonBase): Normalize
   const raw = asRecord(draft.inhibitor)
   let inhibitor: EnzymeVisualization['inhibitor']
   if (raw) {
-    const type = INHIBITIONS.includes(raw.type as InhibitionType) ? (raw.type as InhibitionType) : null
+    const type = INHIBITIONS.includes(raw.type as InhibitionType)
+      ? (raw.type as InhibitionType)
+      : null
     const concentration = inRange(raw.concentration, 0, 1e9)
     const ki = positive(raw.ki)
     const kiPrime = positive(raw.kiPrime)
@@ -417,7 +484,8 @@ function normalizeEnzyme(draft: VisualizationDraft, base: CommonBase): Normalize
 }
 
 function normalizePopulation(draft: VisualizationDraft, base: CommonBase): Normalized {
-  const model = draft.model === 'logistic' ? 'logistic' : draft.model === 'exponential' ? 'exponential' : null
+  const model =
+    draft.model === 'logistic' ? 'logistic' : draft.model === 'exponential' ? 'exponential' : null
   const n0 = positive(draft.n0)
   const r = positive(draft.r, 100)
   const k = positive(draft.k)
@@ -450,10 +518,15 @@ function integers(raw: unknown, min: number, max: number, limit: number): number
 }
 
 function normalizeSorting(draft: VisualizationDraft, base: CommonBase): Normalized {
-  const algorithm = SORT_ALGORITHMS.includes(draft.algorithm as SortAlgorithm) ? (draft.algorithm as SortAlgorithm) : null
+  const algorithm = SORT_ALGORITHMS.includes(draft.algorithm as SortAlgorithm)
+    ? (draft.algorithm as SortAlgorithm)
+    : null
   const values = integers(draft.values, 2, MAX_SORT_VALUES, 999)
   if (!algorithm || !values) return fail('invalid-sorting-setup')
-  return { ok: true, value: { ...base, type: 'sorting_2d', algorithm, values } satisfies SortingVisualization }
+  return {
+    ok: true,
+    value: { ...base, type: 'sorting_2d', algorithm, values } satisfies SortingVisualization,
+  }
 }
 
 function normalizeBst(draft: VisualizationDraft, base: CommonBase): Normalized {
@@ -462,7 +535,10 @@ function normalizeBst(draft: VisualizationDraft, base: CommonBase): Normalized {
   return { ok: true, value: { ...base, type: 'bst_2d', keys } satisfies BstVisualization }
 }
 
-export const SUBJECT_NORMALIZERS: Record<string, (draft: VisualizationDraft, base: CommonBase) => Normalized> = {
+export const SUBJECT_NORMALIZERS: Record<
+  string,
+  (draft: VisualizationDraft, base: CommonBase) => Normalized
+> = {
   formula_2d: normalizeFormula,
   tangent_2d: normalizeTangent,
   riemann_2d: normalizeRiemann,

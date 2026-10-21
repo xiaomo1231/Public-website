@@ -168,10 +168,15 @@ export class HomeworkWalkthroughService {
     return promise
   }
 
-  private async run(setId: string, force: boolean, progress: WalkthroughProgress): Promise<WalkthroughRunResult> {
+  private async run(
+    setId: string,
+    force: boolean,
+    progress: WalkthroughProgress,
+  ): Promise<WalkthroughRunResult> {
     const ai = this.requireAI()
     const state = await this.state(setId)
-    if (state.questions.length === 0) throw new AppError(t('homework.walkthrough.noQuestions'), 'VALIDATION_ERROR')
+    if (state.questions.length === 0)
+      throw new AppError(t('homework.walkthrough.noQuestions'), 'VALIDATION_ERROR')
     const subject = await loadProjectSubject(state.set.projectId, this.db)
     const base = {
       id: walkthroughId(setId, state.language),
@@ -187,7 +192,9 @@ export class HomeworkWalkthroughService {
     emit()
 
     const result: WalkthroughRunResult = { generated: 0, failed: 0 }
-    const labels = new Map(state.questions.map((question, index) => [question.id, questionLabel(question, index)]))
+    const labels = new Map(
+      state.questions.map((question, index) => [question.id, questionLabel(question, index)]),
+    )
     let fatal: string | undefined
     /** The assignment was deleted during the run: stop asking, write nothing. */
     let gone = false
@@ -223,7 +230,9 @@ export class HomeworkWalkthroughService {
         }
       }
     }
-    await Promise.all(Array.from({ length: Math.min(SECTION_CONCURRENCY, queue.length) }, () => worker()))
+    await Promise.all(
+      Array.from({ length: Math.min(SECTION_CONCURRENCY, queue.length) }, () => worker()),
+    )
 
     if (frameNeeded && !fatal && !gone) {
       progress.running.push('overview', 'summary')
@@ -262,7 +271,8 @@ export class HomeworkWalkthroughService {
     subject: Subject | undefined,
   ): Promise<WalkthroughSection> {
     const question = entry.question!
-    const deferred = question.answerStatus === 'matched' && isDeferredProfessorAnswer(question.answerText ?? '')
+    const deferred =
+      question.answerStatus === 'matched' && isDeferredProfessorAnswer(question.answerText ?? '')
     const professorAnswer =
       question.answerStatus === 'matched' && !deferred && (question.answerText ?? '').trim()
         ? question.answerText
@@ -344,7 +354,10 @@ export class HomeworkWalkthroughService {
     const messages: ChatMessage[] = [
       {
         role: 'system',
-        content: prompts.subjectProfile.withSubject(prompts.homeworkWalkthrough.buildFrameSystemPrompt(), subject),
+        content: prompts.subjectProfile.withSubject(
+          prompts.homeworkWalkthrough.buildFrameSystemPrompt(),
+          subject,
+        ),
       },
       {
         role: 'user',
@@ -374,7 +387,9 @@ export class HomeworkWalkthroughService {
         kind: 'summary',
         title: 'summary',
         body: formatHomeworkReviewText(frame.summary),
-        ...(frame.suggestions.length > 0 ? { suggestions: frame.suggestions.map(formatHomeworkReviewText) } : {}),
+        ...(frame.suggestions.length > 0
+          ? { suggestions: frame.suggestions.map(formatHomeworkReviewText) }
+          : {}),
         status: 'ready',
         inputHash: frameHash,
         generatedAt: now,
@@ -388,7 +403,11 @@ export class HomeworkWalkthroughService {
   }
 }
 
-function failedSection(entry: WalkthroughPlanEntry, title: string, error: string): WalkthroughSection {
+function failedSection(
+  entry: WalkthroughPlanEntry,
+  title: string,
+  error: string,
+): WalkthroughSection {
   return {
     id: entry.id,
     kind: entry.kind,
@@ -410,7 +429,8 @@ function failedSection(entry: WalkthroughPlanEntry, title: string, error: string
  */
 async function requestSectionJSON(ai: AIService, messages: ChatMessage[]): Promise<unknown> {
   const inputChars = messages.reduce((sum, message) => sum + message.content.length, 0)
-  const userCap = Number.isFinite(ai.maxOutputTokens) && ai.maxOutputTokens > 0 ? ai.maxOutputTokens : Infinity
+  const userCap =
+    Number.isFinite(ai.maxOutputTokens) && ai.maxOutputTokens > 0 ? ai.maxOutputTokens : Infinity
   let budget = planOutputBudget({
     inputChars,
     userMaxTokens: ai.maxOutputTokens,
@@ -430,7 +450,10 @@ async function requestSectionJSON(ai: AIService, messages: ChatMessage[]): Promi
     const controller = new AbortController()
     const timer = setTimeout(() => controller.abort(), SECTION_DEADLINE_MS)
     try {
-      const { data } = await ai.streamJSON<unknown>(messages, undefined, { maxTokens: budget, signal: controller.signal })
+      const { data } = await ai.streamJSON<unknown>(messages, undefined, {
+        maxTokens: budget,
+        signal: controller.signal,
+      })
       return data
     } catch (err) {
       const failure = controller.signal.aborted ? new AITimeoutError(SECTION_DEADLINE_MS) : err

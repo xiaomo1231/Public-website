@@ -94,7 +94,11 @@ type MaskShape =
 /** Shapes whose union (white minus black) is exactly one region. */
 function regionShapes(regionKey: VennRegionKey, setCount: number): MaskShape[] {
   const rect = (): MaskShape => ({ kind: 'rect', fill: 'white' })
-  const circle = (setIndex: number, fill: 'white' | 'black' = 'white', clipBy: number[] = []): MaskShape => ({
+  const circle = (
+    setIndex: number,
+    fill: 'white' | 'black' = 'white',
+    clipBy: number[] = [],
+  ): MaskShape => ({
     kind: 'circle',
     setIndex,
     fill,
@@ -161,12 +165,7 @@ export interface TutorVennSvgProps {
   t: UseTranslationResult['t']
 }
 
-export function TutorVennSvg({
-  visualization,
-  layout,
-  idBase,
-  t,
-}: TutorVennSvgProps): JSX.Element {
+export function TutorVennSvg({ visualization, layout, idBase, t }: TutorVennSvgProps): JSX.Element {
   const width = layout.width
   const height = layout.height
   const sets = visualization.sets
@@ -177,7 +176,8 @@ export function TutorVennSvg({
     regions,
     visualization.operands,
   )
-  const geometry = sets.length === 2 ? twoSetGeometry(width, height) : threeSetGeometry(width, height)
+  const geometry =
+    sets.length === 2 ? twoSetGeometry(width, height) : threeSetGeometry(width, height)
   const setIndexById = new Map(sets.map((set, index) => [set.id, index]))
   const operandLabels = visualization.operands
     .map((id) => sets[setIndexById.get(id) ?? -1]?.label)
@@ -217,22 +217,17 @@ export function TutorVennSvg({
             >
               {regionShapes(regionKey, sets.length).map((shape, shapeIndex) => {
                 if (shape.kind === 'rect') {
-                  return <rect key={shapeIndex} x={0} y={0} width={width} height={height} fill="white" />
+                  return (
+                    <rect key={shapeIndex} x={0} y={0} width={width} height={height} fill="white" />
+                  )
                 }
                 const circle = geometry.circles[shape.setIndex]
                 if (!circle) return null
                 let element: JSX.Element = (
-                  <circle
-                    cx={circle.cx}
-                    cy={circle.cy}
-                    r={circle.r}
-                    fill={shape.fill}
-                  />
+                  <circle cx={circle.cx} cy={circle.cy} r={circle.r} fill={shape.fill} />
                 )
                 for (const clipIndex of shape.clipBy) {
-                  element = (
-                    <g clipPath={`url(#venn-clip-${clipIndex}-${idBase})`}>{element}</g>
-                  )
+                  element = <g clipPath={`url(#venn-clip-${clipIndex}-${idBase})`}>{element}</g>
                 }
                 return <g key={shapeIndex}>{element}</g>
               })}

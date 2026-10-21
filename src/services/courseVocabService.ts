@@ -57,7 +57,10 @@ export class CourseVocabService {
    * book, refreshing counts of known ones), then gloss what still has no
    * meaning.
    */
-  async extract(projectId: string, options: { signal?: AbortSignal; now?: number } = {}): Promise<CourseVocabResult> {
+  async extract(
+    projectId: string,
+    options: { signal?: AbortSignal; now?: number } = {},
+  ): Promise<CourseVocabResult> {
     const now = options.now ?? Date.now()
     const project = await this.projects.get(projectId)
     const documents = selectAnalysisDocuments(await this.documents.listByProject(projectId))
@@ -79,7 +82,9 @@ export class CourseVocabService {
     // Words from school-level and CET-4 lists count as known to a university student.
     const basic = (word: string) => {
       const entry = byWord.get(word)
-      return Boolean(entry && entry.tags.some((tag) => tag === 'zk' || tag === 'gk' || tag === 'cet4'))
+      return Boolean(
+        entry && entry.tags.some((tag) => tag === 'zk' || tag === 'gk' || tag === 'cet4'),
+      )
     }
     const known = (word: string) => byWord.has(word) || common.has(word)
     const candidates = extractCourseTerms(sources, {
@@ -99,12 +104,18 @@ export class CourseVocabService {
     }
     // Every entry of the book after this run, by word: earlier ones (counts
     // refreshed when found again) plus the new ones.
-    const byTerm = new Map((await this.repo.listEntries(book.id)).map((entry) => [entry.word, entry]))
+    const byTerm = new Map(
+      (await this.repo.listEntries(book.id)).map((entry) => [entry.word, entry]),
+    )
     const fresh = new Set<string>()
     for (const [i, candidate] of candidates.entries()) {
       const before = byTerm.get(candidate.word)
       if (before) {
-        byTerm.set(candidate.word, { ...before, occurrences: candidate.occurrences, context: before.context ?? candidate.context })
+        byTerm.set(candidate.word, {
+          ...before,
+          occurrences: candidate.occurrences,
+          context: before.context ?? candidate.context,
+        })
         continue
       }
       const entry = byWord.get(candidate.word)
@@ -125,7 +136,11 @@ export class CourseVocabService {
     }
 
     const entries = [...byTerm.values()]
-    const { glossed, dropped } = await this.gloss(entries, await loadProjectSubject(projectId), options.signal)
+    const { glossed, dropped } = await this.gloss(
+      entries,
+      await loadProjectSubject(projectId),
+      options.signal,
+    )
     const kept = entries.filter((entry) => !dropped.has(entry.id))
     await this.repo.putBook(book)
     await this.repo.putEntries(kept)
@@ -163,13 +178,19 @@ export class CourseVocabService {
               role: 'user',
               content: prompts.vocabGloss.buildUserPrompt({
                 ...(subject ? { subject } : {}),
-                terms: batch.map((entry) => ({ word: entry.word, sentence: entry.context?.text ?? '' })),
+                terms: batch.map((entry) => ({
+                  word: entry.word,
+                  sentence: entry.context?.text ?? '',
+                })),
               }),
             },
           ],
           { maxTokens: 2048, ...(signal ? { signal } : {}) },
         )
-        const glosses = prompts.vocabGloss.readGlosses(data, batch.map((entry) => entry.word))
+        const glosses = prompts.vocabGloss.readGlosses(
+          data,
+          batch.map((entry) => entry.word),
+        )
         for (const entry of batch) {
           const gloss = glosses.get(entry.word)
           if (gloss === null) dropped.add(entry.id)

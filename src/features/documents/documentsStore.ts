@@ -74,7 +74,10 @@ export const useDocumentsStore = create<DocumentsStore>((set, get) => ({
   async load(projectId) {
     if (!projectId) return
     if (get().loading[projectId]) return
-    set((s) => ({ loading: { ...s.loading, [projectId]: true }, error: { ...s.error, [projectId]: null } }))
+    set((s) => ({
+      loading: { ...s.loading, [projectId]: true },
+      error: { ...s.error, [projectId]: null },
+    }))
     try {
       const docs = await getService().listByProject(projectId)
       set((s) => ({

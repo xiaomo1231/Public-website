@@ -9,8 +9,14 @@ const q = (prompt: string, number: string, chunkIds: string[]) => ({ prompt, num
 
 describe('matchHomeworkQuestions', () => {
   it('matches by content regardless of order', () => {
-    const existing = [q('Find the derivative of x^2.', '1', ['a']), q('Evaluate the integral of 2x.', '2', ['b'])]
-    const incoming = [q('Evaluate the integral of 2x.', '2', ['b']), q('Find the derivative of x^2.', '1', ['a'])]
+    const existing = [
+      q('Find the derivative of x^2.', '1', ['a']),
+      q('Evaluate the integral of 2x.', '2', ['b']),
+    ]
+    const incoming = [
+      q('Evaluate the integral of 2x.', '2', ['b']),
+      q('Find the derivative of x^2.', '1', ['a']),
+    ]
 
     const { pairs, unmatchedNew, unmatchedOld } = matchHomeworkQuestions(incoming, existing)
     expect(unmatchedNew).toEqual([])
@@ -64,7 +70,10 @@ describe('matchHomeworkQuestions', () => {
 describe('matchRetiredCandidates', () => {
   it('restores when a retired row is the unique reliable candidate', () => {
     const incoming = [q('Alpha beta gamma.', '1', ['a'])]
-    const retired = [q('Alpha beta gamma.', '1', ['a']), q('Completely unrelated topic.', '9', ['z'])]
+    const retired = [
+      q('Alpha beta gamma.', '1', ['a']),
+      q('Completely unrelated topic.', '9', ['z']),
+    ]
 
     const { pairs, ambiguousNew } = matchRetiredCandidates(incoming, [0], retired)
     expect(pairs).toHaveLength(1)

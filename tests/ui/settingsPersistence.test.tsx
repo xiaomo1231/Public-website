@@ -4,10 +4,7 @@ import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { SettingsPage } from '@/pages/SettingsPage'
 import { SettingsService } from '@/services/settingsService'
-import {
-  setSettingsServiceForTesting,
-  useSettingsStore,
-} from '@/features/settings/settingsStore'
+import { setSettingsServiceForTesting, useSettingsStore } from '@/features/settings/settingsStore'
 import { clearCachedDeviceKey } from '@/infrastructure/crypto/deviceKey'
 import { setDbForTesting, AppDatabase } from '@/infrastructure/db/database'
 
@@ -79,9 +76,7 @@ describe('Settings page persistence', () => {
       </MemoryRouter>,
     )
 
-    expect(await screen.findByLabelText('API Base URL')).toHaveValue(
-      'https://api.example.com/v1',
-    )
+    expect(await screen.findByLabelText('API Base URL')).toHaveValue('https://api.example.com/v1')
     expect(screen.getByLabelText('Key')).toHaveValue('sk-ui-test-key')
     expect(screen.getByLabelText('Model')).toHaveValue('ui-model')
   })

@@ -59,15 +59,7 @@ export const PROCESSING_STATUS_LABEL_KEYS: Record<ProcessingStatus, TranslationK
   failed: 'docStatus.failed',
 }
 export type ChunkContentType =
-  | 'heading'
-  | 'paragraph'
-  | 'table'
-  | 'list'
-  | 'formula'
-  | 'caption'
-  | 'note'
-  | 'ocr'
-  | 'other'
+  'heading' | 'paragraph' | 'table' | 'list' | 'formula' | 'caption' | 'note' | 'ocr' | 'other'
 
 export interface DocumentMetadata {
   pageCount?: number

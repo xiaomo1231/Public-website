@@ -15,12 +15,7 @@ import { AppError } from '@/infrastructure/errors/AppError'
  */
 
 /** Overall state of a project's persisted course content. */
-export type CourseContentStatus =
-  | 'missing'
-  | 'processing'
-  | 'ready'
-  | 'stale'
-  | 'error'
+export type CourseContentStatus = 'missing' | 'processing' | 'ready' | 'stale' | 'error'
 
 /** Why a stored analysis can no longer be trusted. */
 export type CourseContentStaleReason =
@@ -197,7 +192,8 @@ export function evaluateFreshness(
   if (structureDiffers(saved, current)) reasons.push('structure-changed')
   // Only courses the old limits actually cut are re-analysed; short ones were
   // always read in full.
-  if (current.legacyInputTruncated && saved.inputCoverage !== 'complete') reasons.push('input-truncated')
+  if (current.legacyInputTruncated && saved.inputCoverage !== 'complete')
+    reasons.push('input-truncated')
   if (saved.status === 'failed') reasons.push('analysis-failed')
   else if (saved.status !== 'ready') reasons.push('incomplete')
 

@@ -65,7 +65,11 @@ describe('ProcessingService — slide images', () => {
   it('preserves a slide image and binds it to the slide number', async () => {
     const blob = await makeTestPptx({
       slides: [
-        { title: 'Force', body: 'A force has magnitude and direction.', images: [{ name: 'arrow.png' }] },
+        {
+          title: 'Force',
+          body: 'A force has magnitude and direction.',
+          images: [{ name: 'arrow.png' }],
+        },
         { title: 'Energy', body: 'Energy is conserved.' },
       ],
     })
@@ -76,7 +80,13 @@ describe('ProcessingService — slide images', () => {
       sizeBytes: 0,
       blob,
     })
-    await new ProcessingService({ documents, chunks, jobs, projects: new ProjectService(db), visuals }).process(doc.id)
+    await new ProcessingService({
+      documents,
+      chunks,
+      jobs,
+      projects: new ProjectService(db),
+      visuals,
+    }).process(doc.id)
 
     const sources = await visuals.listByDocument(doc.id)
     expect(sources).toHaveLength(1)

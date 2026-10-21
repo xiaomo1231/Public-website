@@ -47,7 +47,10 @@ export async function makeTestPdf(options: TestPdfOptions = {}): Promise<Blob> {
   }
 
   const bytes = await doc.save()
-  const arrayBuffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer
+  const arrayBuffer = bytes.buffer.slice(
+    bytes.byteOffset,
+    bytes.byteOffset + bytes.byteLength,
+  ) as ArrayBuffer
   return new Blob([arrayBuffer], { type: 'application/pdf' })
 }
 

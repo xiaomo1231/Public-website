@@ -42,23 +42,27 @@ const DIFFICULTIES: readonly DifficultyLevel[] = [
 ]
 
 function normalizeSourceRefs(value: unknown): SourceReference[] {
-  return asNormalizedArray(value, (raw) => {
-    const documentName = asTrimmedString(raw.documentName)
-    if (!documentName) return null
-    const ref: SourceReference = {
-      documentId: asString(raw.documentId),
-      documentName,
-    }
-    const page = raw.page
-    if (typeof page === 'number' && Number.isFinite(page)) ref.page = page
-    const slide = raw.slideNumber
-    if (typeof slide === 'number' && Number.isFinite(slide)) ref.slideNumber = slide
-    const section = asTrimmedString(raw.section)
-    if (section) ref.section = section
-    const quote = asTrimmedString(raw.quote)
-    if (quote) ref.quote = quote
-    return ref
-  }, 20)
+  return asNormalizedArray(
+    value,
+    (raw) => {
+      const documentName = asTrimmedString(raw.documentName)
+      if (!documentName) return null
+      const ref: SourceReference = {
+        documentId: asString(raw.documentId),
+        documentName,
+      }
+      const page = raw.page
+      if (typeof page === 'number' && Number.isFinite(page)) ref.page = page
+      const slide = raw.slideNumber
+      if (typeof slide === 'number' && Number.isFinite(slide)) ref.slideNumber = slide
+      const section = asTrimmedString(raw.section)
+      if (section) ref.section = section
+      const quote = asTrimmedString(raw.quote)
+      if (quote) ref.quote = quote
+      return ref
+    },
+    20,
+  )
 }
 
 function normalizeTopic(raw: Record<string, unknown>): DocumentTopic | null {

@@ -149,7 +149,5 @@ export function rankContextChunks(
  * chunk is untouched, so quiz/topic quote matching is unaffected.
  */
 export function formatTopicSources(sources: TopicSource[]): string[] {
-  return sources.map(
-    (source) => `[${source.label}] ${normalizeMathNotation(source.text).text}`,
-  )
+  return sources.map((source) => `[${source.label}] ${normalizeMathNotation(source.text).text}`)
 }

@@ -92,7 +92,9 @@ describe('extraction text-encoding pipeline', () => {
 
     const { doc } = await ingest(source)
 
-    expect(doc.warnings.some((w) => w.includes('无法解码') || w.includes('could not be decoded'))).toBe(true)
+    expect(
+      doc.warnings.some((w) => w.includes('无法解码') || w.includes('could not be decoded')),
+    ).toBe(true)
     expect(doc.warnings).toContain(t('errors.undecodableCharacters', { count: 1 }))
   })
 
@@ -169,6 +171,8 @@ describe('extraction text-encoding pipeline', () => {
     const { doc, text } = await ingest(source)
 
     expect(text).toContain('\uFFFD')
-    expect(doc.warnings.some((w) => w.includes('could not be decoded') || w.includes('无法解码'))).toBe(true)
+    expect(
+      doc.warnings.some((w) => w.includes('could not be decoded') || w.includes('无法解码')),
+    ).toBe(true)
   })
 })

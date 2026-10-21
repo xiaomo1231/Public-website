@@ -22,12 +22,7 @@ export interface ProfessorTeachingProfile {
 
 /** How a note relates to the textbook passage it was matched to. */
 export type NoteRelation =
-  | 'supplement'
-  | 'clarification'
-  | 'example'
-  | 'question'
-  | 'emphasis'
-  | 'unknown'
+  'supplement' | 'clarification' | 'example' | 'question' | 'emphasis' | 'unknown'
 
 export interface NoteLink {
   noteChunkId: string

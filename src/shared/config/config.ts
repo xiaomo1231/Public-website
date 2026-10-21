@@ -22,10 +22,7 @@ export const DEFAULT_THEME = 'system' as const
  * There is no UI for managing codes; change this list and clear the app's
  * IndexedDB to reseed.
  */
-export const SEED_INVITE_CODES: ReadonlyArray<string> = [
-  'WELCOME-LEARN',
-  'STUDENT-2026',
-]
+export const SEED_INVITE_CODES: ReadonlyArray<string> = ['WELCOME-LEARN', 'STUDENT-2026']
 
 export const TOAST_LIMIT = 5
 export const TOAST_DEFAULT_DURATION = 4000

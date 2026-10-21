@@ -43,11 +43,19 @@ function ReferenceFigure({
   }, [image.id, load])
 
   return (
-    <figure data-reference-image={image.id} className="min-w-0 space-y-2 rounded-lg border border-border/70 bg-card p-3">
+    <figure
+      data-reference-image={image.id}
+      className="min-w-0 space-y-2 rounded-lg border border-border/70 bg-card p-3"
+    >
       <div className="relative">
         {url ? (
           // Reference pictures are usually drawn on white; keep them legible in dark mode.
-          <img src={url} alt={image.purpose} loading="lazy" className="mx-auto block h-auto max-h-80 max-w-full rounded-md bg-white" />
+          <img
+            src={url}
+            alt={image.purpose}
+            loading="lazy"
+            className="mx-auto block h-auto max-h-80 max-w-full rounded-md bg-white"
+          />
         ) : failed ? (
           <div className="flex items-center gap-2 rounded-md border border-dashed border-border px-3 py-4 text-[13px] text-muted-foreground">
             <ImageOff className="h-4 w-4 shrink-0" aria-hidden />
@@ -74,7 +82,9 @@ function ReferenceFigure({
             {t('referenceImages.verified')}
           </p>
         ) : (
-          <p className="text-xs text-amber-700 dark:text-amber-400">{t('referenceImages.unverified')}</p>
+          <p className="text-xs text-amber-700 dark:text-amber-400">
+            {t('referenceImages.unverified')}
+          </p>
         )}
         <p className="text-xs text-muted-foreground">
           <a
@@ -90,7 +100,12 @@ function ReferenceFigure({
           {SOURCE_NAMES[image.source]}
           {' · '}
           {image.licenseUrl ? (
-            <a href={image.licenseUrl} target="_blank" rel="noopener noreferrer" className="underline-offset-2 hover:underline">
+            <a
+              href={image.licenseUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="underline-offset-2 hover:underline"
+            >
               {image.license}
             </a>
           ) : (
@@ -123,11 +138,18 @@ export function ReferenceImageGallery({
     <section className="space-y-3" aria-label={t('referenceImages.title')}>
       <div className="flex flex-wrap items-end justify-between gap-2">
         <div className="min-w-0">
-          <h2 className="text-[22px] font-semibold leading-snug tracking-tight text-foreground">{t('referenceImages.title')}</h2>
+          <h2 className="text-[22px] font-semibold leading-snug tracking-tight text-foreground">
+            {t('referenceImages.title')}
+          </h2>
           <p className="text-xs text-muted-foreground">{t('referenceImages.subtitle')}</p>
         </div>
         {offerSearch && (
-          <Button variant="outline" size="sm" onClick={() => void state.search()} disabled={state.searching}>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => void state.search()}
+            disabled={state.searching}
+          >
             {state.searching ? <Loader2 className="animate-spin" /> : <Globe />}
             {state.searching
               ? t('referenceImages.searching')
@@ -138,11 +160,18 @@ export function ReferenceImageGallery({
         )}
       </div>
       {state.error && <p className="text-sm text-destructive">{state.error}</p>}
-      {state.searchedEmpty && !state.error && <p className="text-sm text-muted-foreground">{t('referenceImages.none')}</p>}
+      {state.searchedEmpty && !state.error && (
+        <p className="text-sm text-muted-foreground">{t('referenceImages.none')}</p>
+      )}
       {state.images.length > 0 && (
         <div className="grid gap-3 sm:grid-cols-2">
           {state.images.map((image) => (
-            <ReferenceFigure key={image.id} image={image} load={state.loadImage} onRemove={() => void state.remove(image.id)} />
+            <ReferenceFigure
+              key={image.id}
+              image={image}
+              load={state.loadImage}
+              onRemove={() => void state.remove(image.id)}
+            />
           ))}
         </div>
       )}

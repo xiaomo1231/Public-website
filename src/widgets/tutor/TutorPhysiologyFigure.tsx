@@ -32,11 +32,17 @@ type T = UseTranslationResult['t']
 const f = formatNumber
 
 function Facts({ children }: { children: ReactNode }): JSX.Element {
-  return <div className="data-num flex flex-wrap justify-center gap-x-4 gap-y-1 text-center text-[13px] text-muted-foreground">{children}</div>
+  return (
+    <div className="data-num flex flex-wrap justify-center gap-x-4 gap-y-1 text-center text-[13px] text-muted-foreground">
+      {children}
+    </div>
+  )
 }
 
 function Teaching({ t }: { t: T }): JSX.Element {
-  return <p className="text-center text-[11px] text-muted-foreground">{t('viz.medicalTeachingOnly')}</p>
+  return (
+    <p className="text-center text-[11px] text-muted-foreground">{t('viz.medicalTeachingOnly')}</p>
+  )
 }
 
 function plotHeight(layout: PlotLayout, ratio = 0.62): number {
@@ -45,11 +51,22 @@ function plotHeight(layout: PlotLayout, ratio = 0.62): number {
 
 // --- membrane potential -----------------------------------------------------------
 
-export function TutorMembraneFigure({ visualization, layout, t }: { visualization: MembranePotentialVisualization; layout: PlotLayout; t: T }): JSX.Element {
+export function TutorMembraneFigure({
+  visualization,
+  layout,
+  t,
+}: {
+  visualization: MembranePotentialVisualization
+  layout: PlotLayout
+  t: T
+}): JSX.Element {
   const potassium = visualization.ions.find((ion) => ion.ion === 'K+')
   const [kOut, setKOut] = useState(potassium?.outside ?? 4)
   const ions = visualization.ions.map((ion) => (ion.ion === 'K+' ? { ...ion, outside: kOut } : ion))
-  const potentials = ions.map((ion) => ({ ion: ion.ion, value: nernst(ion.ion, ion.inside, ion.outside, visualization.celsius) }))
+  const potentials = ions.map((ion) => ({
+    ion: ion.ion,
+    value: nernst(ion.ion, ion.inside, ion.outside, visualization.celsius),
+  }))
   const vm = goldman(ions, visualization.celsius)
   const values = [...potentials.map((p) => p.value), ...(vm !== null ? [vm] : []), 0]
   const lo = Math.min(-120, Math.floor(Math.min(...values) / 20) * 20 - 10)
@@ -60,36 +77,80 @@ export function TutorMembraneFigure({ visualization, layout, t }: { visualizatio
   const label = t('viz.membraneAria', { vm: vm === null ? '—' : f(vm, 3) })
   return (
     <div className="space-y-2 px-1 py-2">
-      <svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label={label} className="block h-auto w-full max-w-full">
+      <svg
+        viewBox={`0 0 ${width} ${height}`}
+        role="img"
+        aria-label={label}
+        className="block h-auto w-full max-w-full"
+      >
         <title>{label}</title>
         <g aria-hidden="true">
           <line x1={30} x2={width - 30} y1={70} y2={70} stroke={AXIS} strokeWidth="1.4" />
-          {Array.from({ length: Math.floor((hi - lo) / 20) + 1 }, (_, i) => lo + i * 20).map((v) => (
-            <g key={v}>
-              <line x1={sx(v)} x2={sx(v)} y1={66} y2={74} stroke={AXIS} />
-              <text x={sx(v)} y={90} textAnchor="middle" fontSize="10" fill={LABEL}>{v}</text>
-            </g>
-          ))}
-          <text x={width - 30} y={108} textAnchor="end" fontSize="11" fill={LABEL}>mV</text>
+          {Array.from({ length: Math.floor((hi - lo) / 20) + 1 }, (_, i) => lo + i * 20).map(
+            (v) => (
+              <g key={v}>
+                <line x1={sx(v)} x2={sx(v)} y1={66} y2={74} stroke={AXIS} />
+                <text x={sx(v)} y={90} textAnchor="middle" fontSize="10" fill={LABEL}>
+                  {v}
+                </text>
+              </g>
+            ),
+          )}
+          <text x={width - 30} y={108} textAnchor="end" fontSize="11" fill={LABEL}>
+            mV
+          </text>
           {potentials.map((p, i) => (
             <g key={p.ion}>
-              <line x1={sx(p.value)} x2={sx(p.value)} y1={44 - (i % 2) * 16} y2={70} stroke={SERIES[i % 4]} strokeWidth="2" />
-              <text x={sx(p.value)} y={38 - (i % 2) * 16} textAnchor="middle" fontSize="11" fill={SERIES[i % 4]}>
+              <line
+                x1={sx(p.value)}
+                x2={sx(p.value)}
+                y1={44 - (i % 2) * 16}
+                y2={70}
+                stroke={SERIES[i % 4]}
+                strokeWidth="2"
+              />
+              <text
+                x={sx(p.value)}
+                y={38 - (i % 2) * 16}
+                textAnchor="middle"
+                fontSize="11"
+                fill={SERIES[i % 4]}
+              >
                 E{p.ion} {f(p.value, 3)}
               </text>
             </g>
           ))}
           {vm !== null && (
             <g>
-              <path d={`M ${sx(vm) - 6} 82 L ${sx(vm)} 72 L ${sx(vm) + 6} 82 Z`} fill={FOREGROUND} />
-              <text x={sx(vm)} y={104} textAnchor="middle" fontSize="12" fontWeight="600" fill={FOREGROUND}>Vm {f(vm, 3)}</text>
+              <path
+                d={`M ${sx(vm) - 6} 82 L ${sx(vm)} 72 L ${sx(vm) + 6} 82 Z`}
+                fill={FOREGROUND}
+              />
+              <text
+                x={sx(vm)}
+                y={104}
+                textAnchor="middle"
+                fontSize="12"
+                fontWeight="600"
+                fill={FOREGROUND}
+              >
+                Vm {f(vm, 3)}
+              </text>
             </g>
           )}
         </g>
       </svg>
       {potassium && (
         <div className="rounded-md border border-border/70 px-3 py-2">
-          <ParamSlider label="[K⁺]ₒ" value={kOut} min={1} max={Math.max(12, potassium.outside * 2)} step={0.1} unit="mmol/L" onChange={setKOut} />
+          <ParamSlider
+            label="[K⁺]ₒ"
+            value={kOut}
+            min={1}
+            max={Math.max(12, potassium.outside * 2)}
+            step={0.1}
+            unit="mmol/L"
+            onChange={setKOut}
+          />
         </div>
       )}
       <div className="overflow-x-auto overflow-y-hidden">
@@ -116,7 +177,13 @@ export function TutorMembraneFigure({ visualization, layout, t }: { visualizatio
       </div>
       <Facts>
         <span>{t('viz.membraneNernst', { celsius: visualization.celsius })}</span>
-        {vm !== null ? <span className="font-medium text-foreground">{t('viz.membraneGhk', { vm: f(vm, 3) })}</span> : <span>{t('viz.membraneNoGhk')}</span>}
+        {vm !== null ? (
+          <span className="font-medium text-foreground">
+            {t('viz.membraneGhk', { vm: f(vm, 3) })}
+          </span>
+        ) : (
+          <span>{t('viz.membraneNoGhk')}</span>
+        )}
       </Facts>
     </div>
   )
@@ -124,7 +191,11 @@ export function TutorMembraneFigure({ visualization, layout, t }: { visualizatio
 
 // --- action potential -----------------------------------------------------------------
 
-function actionPotentialCurve(v: ActionPotentialVisualization): { points: Array<{ x: number; y: number }>; phases: Array<{ x: number; label: string }>; unit: number } {
+function actionPotentialCurve(v: ActionPotentialVisualization): {
+  points: Array<{ x: number; y: number }>
+  phases: Array<{ x: number; label: string }>
+  unit: number
+} {
   const { resting: r, threshold: th, peak: p } = v
   const pts: Array<{ x: number; y: number }> = []
   const seg = (x0: number, x1: number, y: (s: number) => number, n = 30) => {
@@ -135,8 +206,17 @@ function actionPotentialCurve(v: ActionPotentialVisualization): { points: Array<
     seg(1, 1.4, (s) => r + (th - r) * s * s)
     seg(1.4, 1.6, (s) => th + (p - th) * Math.sin((s * Math.PI) / 2))
     seg(1.6, 2.5, (s) => p - (p - (r - 10)) * Math.sin((s * Math.PI) / 2))
-    seg(2.5, 4, (s) => r - 10 + 10 * (1 - Math.exp(-4 * s)) / (1 - Math.exp(-4)))
-    return { points: pts, phases: [{ x: 1.2, label: '①' }, { x: 1.5, label: '②' }, { x: 2.1, label: '③' }, { x: 3.2, label: '④' }], unit: 1 }
+    seg(2.5, 4, (s) => r - 10 + (10 * (1 - Math.exp(-4 * s))) / (1 - Math.exp(-4)))
+    return {
+      points: pts,
+      phases: [
+        { x: 1.2, label: '①' },
+        { x: 1.5, label: '②' },
+        { x: 2.1, label: '③' },
+        { x: 3.2, label: '④' },
+      ],
+      unit: 1,
+    }
   }
   if (v.cell === 'ventricular') {
     seg(0, 20, () => r, 4)
@@ -145,7 +225,17 @@ function actionPotentialCurve(v: ActionPotentialVisualization): { points: Array<
     seg(30, 220, (s) => 5 - 15 * s)
     seg(220, 300, (s) => -10 - (-10 - r) * Math.sin((s * Math.PI) / 2))
     seg(300, 380, () => r, 4)
-    return { points: pts, phases: [{ x: 21, label: '0' }, { x: 26, label: '1' }, { x: 125, label: '2' }, { x: 260, label: '3' }, { x: 340, label: '4' }], unit: 1 }
+    return {
+      points: pts,
+      phases: [
+        { x: 21, label: '0' },
+        { x: 26, label: '1' },
+        { x: 125, label: '2' },
+        { x: 260, label: '3' },
+        { x: 340, label: '4' },
+      ],
+      unit: 1,
+    }
   }
   // Pacemaker (sinoatrial node): slow diastolic depolarisation, slow upstroke.
   for (let cycle = 0; cycle < 2; cycle++) {
@@ -154,24 +244,81 @@ function actionPotentialCurve(v: ActionPotentialVisualization): { points: Array<
     seg(o + 250, o + 300, (s) => th + (p - th) * Math.sin((s * Math.PI) / 2))
     seg(o + 300, o + 400, (s) => p - (p - r) * Math.sin((s * Math.PI) / 2))
   }
-  return { points: pts, phases: [{ x: 125, label: '4' }, { x: 275, label: '0' }, { x: 350, label: '3' }], unit: 1 }
+  return {
+    points: pts,
+    phases: [
+      { x: 125, label: '4' },
+      { x: 275, label: '0' },
+      { x: 350, label: '3' },
+    ],
+    unit: 1,
+  }
 }
 
-export function TutorActionPotentialFigure({ visualization, layout, t }: { visualization: ActionPotentialVisualization; layout: PlotLayout; t: T }): JSX.Element {
+export function TutorActionPotentialFigure({
+  visualization,
+  layout,
+  t,
+}: {
+  visualization: ActionPotentialVisualization
+  layout: PlotLayout
+  t: T
+}): JSX.Element {
   const { points, phases } = actionPotentialCurve(visualization)
   const xMax = points[points.length - 1]!.x
-  const yRange: [number, number] = [Math.min(visualization.resting - 20, -100), Math.max(visualization.peak + 15, 40)]
-  const cellKey = visualization.cell === 'neuron' ? 'viz.apNeuron' : visualization.cell === 'ventricular' ? 'viz.apVentricular' : 'viz.apPacemaker'
-  const notesKey = visualization.cell === 'neuron' ? 'viz.apNeuronPhases' : visualization.cell === 'ventricular' ? 'viz.apVentricularPhases' : 'viz.apPacemakerPhases'
+  const yRange: [number, number] = [
+    Math.min(visualization.resting - 20, -100),
+    Math.max(visualization.peak + 15, 40),
+  ]
+  const cellKey =
+    visualization.cell === 'neuron'
+      ? 'viz.apNeuron'
+      : visualization.cell === 'ventricular'
+        ? 'viz.apVentricular'
+        : 'viz.apPacemaker'
+  const notesKey =
+    visualization.cell === 'neuron'
+      ? 'viz.apNeuronPhases'
+      : visualization.cell === 'ventricular'
+        ? 'viz.apVentricularPhases'
+        : 'viz.apPacemakerPhases'
   return (
     <div className="space-y-2 px-1 py-2">
-      <PlotFrame width={layout.width} height={plotHeight(layout)} xRange={[0, xMax]} yRange={yRange} xLabel={visualization.cell === 'neuron' ? 't (ms)' : 't (ms)'} yLabel="mV" label={t('viz.apAria', { cell: t(cellKey) })} compact={layout.compact}>
+      <PlotFrame
+        width={layout.width}
+        height={plotHeight(layout)}
+        xRange={[0, xMax]}
+        yRange={yRange}
+        xLabel={visualization.cell === 'neuron' ? 't (ms)' : 't (ms)'}
+        yLabel="mV"
+        label={t('viz.apAria', { cell: t(cellKey) })}
+        compact={layout.compact}
+      >
         {(scale) => (
           <>
-            <line x1={scale.left} x2={scale.right} y1={scale.sy(visualization.threshold)} y2={scale.sy(visualization.threshold)} stroke={LABEL} strokeDasharray="5 4" />
-            <path d={linePath(points, scale, yRange)} fill="none" stroke={SERIES[0]} strokeWidth="2.4" />
+            <line
+              x1={scale.left}
+              x2={scale.right}
+              y1={scale.sy(visualization.threshold)}
+              y2={scale.sy(visualization.threshold)}
+              stroke={LABEL}
+              strokeDasharray="5 4"
+            />
+            <path
+              d={linePath(points, scale, yRange)}
+              fill="none"
+              stroke={SERIES[0]}
+              strokeWidth="2.4"
+            />
             {phases.map((phase) => (
-              <text key={phase.label + phase.x} x={scale.sx(phase.x)} y={scale.top + 14} textAnchor="middle" fontSize="12" fill={SERIES[1]}>
+              <text
+                key={phase.label + phase.x}
+                x={scale.sx(phase.x)}
+                y={scale.top + 14}
+                textAnchor="middle"
+                fontSize="12"
+                fill={SERIES[1]}
+              >
                 {phase.label}
               </text>
             ))}
@@ -180,7 +327,13 @@ export function TutorActionPotentialFigure({ visualization, layout, t }: { visua
       </PlotFrame>
       <Facts>
         <span className="font-medium text-foreground">{t(cellKey)}</span>
-        <span>{t('viz.apValues', { resting: visualization.resting, threshold: visualization.threshold, peak: visualization.peak })}</span>
+        <span>
+          {t('viz.apValues', {
+            resting: visualization.resting,
+            threshold: visualization.threshold,
+            peak: visualization.peak,
+          })}
+        </span>
       </Facts>
       <p className="text-center text-xs text-muted-foreground">{t(notesKey)}</p>
       <p className="text-center text-[11px] text-muted-foreground">{t('viz.apSchematic')}</p>
@@ -190,22 +343,64 @@ export function TutorActionPotentialFigure({ visualization, layout, t }: { visua
 
 // --- oxygen ----------------------------------------------------------------------------
 
-export function TutorOxygenFigure({ visualization, layout, t }: { visualization: OxygenVisualization; layout: PlotLayout; t: T }): JSX.Element {
+export function TutorOxygenFigure({
+  visualization,
+  layout,
+  t,
+}: {
+  visualization: OxygenVisualization
+  layout: PlotLayout
+  t: T
+}): JSX.Element {
   const xMax = Math.max(120, ...visualization.markers) * 1.05
   const xs = Array.from({ length: 241 }, (_, i) => (xMax * i) / 240)
   const first = visualization.curves[0]!
   return (
     <div className="space-y-2 px-1 py-2">
-      <PlotFrame width={layout.width} height={plotHeight(layout)} xRange={[0, xMax]} yRange={[0, 105]} xLabel="PO₂ (mmHg)" yLabel="SO₂ (%)" label={t('viz.oxygenAria', { p50: f(first.p50, 3) })} compact={layout.compact}>
+      <PlotFrame
+        width={layout.width}
+        height={plotHeight(layout)}
+        xRange={[0, xMax]}
+        yRange={[0, 105]}
+        xLabel="PO₂ (mmHg)"
+        yLabel="SO₂ (%)"
+        label={t('viz.oxygenAria', { p50: f(first.p50, 3) })}
+        compact={layout.compact}
+      >
         {(scale) => (
           <>
             {visualization.markers.map((m) => (
-              <line key={m} x1={scale.sx(m)} x2={scale.sx(m)} y1={scale.top} y2={scale.bottom} stroke={LABEL} strokeDasharray="3 4" />
+              <line
+                key={m}
+                x1={scale.sx(m)}
+                x2={scale.sx(m)}
+                y1={scale.top}
+                y2={scale.bottom}
+                stroke={LABEL}
+                strokeDasharray="3 4"
+              />
             ))}
-            <line x1={scale.left} x2={scale.right} y1={scale.sy(50)} y2={scale.sy(50)} stroke={LABEL} strokeDasharray="2 5" />
+            <line
+              x1={scale.left}
+              x2={scale.right}
+              y1={scale.sy(50)}
+              y2={scale.sy(50)}
+              stroke={LABEL}
+              strokeDasharray="2 5"
+            />
             {visualization.curves.map((curve, i) => (
               <g key={curve.label}>
-                <path d={linePath(xs.map((x) => ({ x, y: 100 * saturation(x, curve.p50, curve.n) })), scale, [0, 105])} fill="none" stroke={SERIES[i % 4]} strokeWidth="2.4" strokeDasharray={i ? '7 4' : undefined} />
+                <path
+                  d={linePath(
+                    xs.map((x) => ({ x, y: 100 * saturation(x, curve.p50, curve.n) })),
+                    scale,
+                    [0, 105],
+                  )}
+                  fill="none"
+                  stroke={SERIES[i % 4]}
+                  strokeWidth="2.4"
+                  strokeDasharray={i ? '7 4' : undefined}
+                />
                 <circle cx={scale.sx(curve.p50)} cy={scale.sy(50)} r="4" fill={SERIES[i % 4]} />
               </g>
             ))}
@@ -215,7 +410,11 @@ export function TutorOxygenFigure({ visualization, layout, t }: { visualization:
       <ul className="flex flex-wrap justify-center gap-x-4 text-[13px]">
         {visualization.curves.map((curve, i) => (
           <li key={curve.label} className="inline-flex items-center gap-1.5">
-            <span aria-hidden className="inline-block h-0.5 w-4" style={{ background: SERIES[i % 4] }} />
+            <span
+              aria-hidden
+              className="inline-block h-0.5 w-4"
+              style={{ background: SERIES[i % 4] }}
+            />
             {curve.label}: P₅₀ = {f(curve.p50, 3)} mmHg
           </li>
         ))}
@@ -223,15 +422,29 @@ export function TutorOxygenFigure({ visualization, layout, t }: { visualization:
       <Facts>
         {visualization.markers.map((m) => (
           <span key={m}>
-            {t('viz.oxygenAt', { po2: f(m, 3), so2: f(100 * saturation(m, first.p50, first.n), 3), content: f(oxygenContent(visualization.hb, m, first.p50, first.n), 3) })}
+            {t('viz.oxygenAt', {
+              po2: f(m, 3),
+              so2: f(100 * saturation(m, first.p50, first.n), 3),
+              content: f(oxygenContent(visualization.hb, m, first.p50, first.n), 3),
+            })}
           </span>
         ))}
         {visualization.markers.length >= 2 && (
           <span className="font-medium text-foreground">
             {t('viz.oxygenExtraction', {
               value: f(
-                oxygenContent(visualization.hb, Math.max(...visualization.markers), first.p50, first.n) -
-                  oxygenContent(visualization.hb, Math.min(...visualization.markers), first.p50, first.n),
+                oxygenContent(
+                  visualization.hb,
+                  Math.max(...visualization.markers),
+                  first.p50,
+                  first.n,
+                ) -
+                  oxygenContent(
+                    visualization.hb,
+                    Math.min(...visualization.markers),
+                    first.p50,
+                    first.n,
+                  ),
                 3,
               ),
             })}
@@ -245,12 +458,25 @@ export function TutorOxygenFigure({ visualization, layout, t }: { visualization:
 
 // --- cardiac pressure–volume loop ----------------------------------------------------------
 
-export function TutorCardiacFigure({ visualization, layout, t }: { visualization: CardiacVisualization; layout: PlotLayout; t: T }): JSX.Element {
+export function TutorCardiacFigure({
+  visualization,
+  layout,
+  t,
+}: {
+  visualization: CardiacVisualization
+  layout: PlotLayout
+  t: T
+}): JSX.Element {
   const loop = pvLoop(visualization)
   const facts = cardiacFacts(visualization)
   const xRange: [number, number] = [Math.max(0, visualization.esv - 30), visualization.edv + 30]
   const yRange: [number, number] = [0, visualization.peak * 1.15]
-  const phaseKeys = ['viz.cardiacFilling', 'viz.cardiacIsoContraction', 'viz.cardiacEjection', 'viz.cardiacIsoRelaxation'] as const
+  const phaseKeys = [
+    'viz.cardiacFilling',
+    'viz.cardiacIsoContraction',
+    'viz.cardiacEjection',
+    'viz.cardiacIsoRelaxation',
+  ] as const
   const events = [
     { v: visualization.edv, p: visualization.edp, key: 'viz.cardiacMitralCloses' as const },
     { v: visualization.edv, p: visualization.aorticOpen, key: 'viz.cardiacAorticOpens' as const },
@@ -259,12 +485,42 @@ export function TutorCardiacFigure({ visualization, layout, t }: { visualization
   ]
   return (
     <div className="space-y-2 px-1 py-2">
-      <PlotFrame width={layout.width} height={plotHeight(layout, 0.7)} xRange={xRange} yRange={yRange} xLabel={t('viz.cardiacVolume')} yLabel={t('viz.cardiacPressure')} label={t('viz.cardiacAria', { sv: facts.strokeVolume, ef: f(facts.ejectionFraction * 100, 3) })} compact={layout.compact}>
+      <PlotFrame
+        width={layout.width}
+        height={plotHeight(layout, 0.7)}
+        xRange={xRange}
+        yRange={yRange}
+        xLabel={t('viz.cardiacVolume')}
+        yLabel={t('viz.cardiacPressure')}
+        label={t('viz.cardiacAria', {
+          sv: facts.strokeVolume,
+          ef: f(facts.ejectionFraction * 100, 3),
+        })}
+        compact={layout.compact}
+      >
         {(scale) => (
           <>
-            <path d={`${linePath(loop.map((p) => ({ x: p.v, y: p.p })), scale, yRange)} Z`} fill={SERIES_SOFT[0]} stroke="none" />
+            <path
+              d={`${linePath(
+                loop.map((p) => ({ x: p.v, y: p.p })),
+                scale,
+                yRange,
+              )} Z`}
+              fill={SERIES_SOFT[0]}
+              stroke="none"
+            />
             {[0, 1, 2, 3].map((phase) => (
-              <path key={phase} d={linePath(loop.filter((p) => p.phase === phase).map((p) => ({ x: p.v, y: p.p })), scale, yRange)} fill="none" stroke={SERIES[phase]} strokeWidth="2.6" />
+              <path
+                key={phase}
+                d={linePath(
+                  loop.filter((p) => p.phase === phase).map((p) => ({ x: p.v, y: p.p })),
+                  scale,
+                  yRange,
+                )}
+                fill="none"
+                stroke={SERIES[phase]}
+                strokeWidth="2.6"
+              />
             ))}
           </>
         )}
@@ -272,7 +528,11 @@ export function TutorCardiacFigure({ visualization, layout, t }: { visualization
       <ul className="flex flex-wrap justify-center gap-x-4 gap-y-1 text-xs">
         {phaseKeys.map((key, i) => (
           <li key={key} className="inline-flex items-center gap-1.5">
-            <span aria-hidden className="inline-block h-1 w-4 rounded" style={{ background: SERIES[i] }} />
+            <span
+              aria-hidden
+              className="inline-block h-1 w-4 rounded"
+              style={{ background: SERIES[i] }}
+            />
             {t(key)}
           </li>
         ))}
@@ -292,13 +552,26 @@ export function TutorCardiacFigure({ visualization, layout, t }: { visualization
 
 // --- lung volumes ---------------------------------------------------------------------------
 
-export function TutorLungFigure({ visualization, layout, t }: { visualization: LungVolumesVisualization; layout: PlotLayout; t: T }): JSX.Element {
+export function TutorLungFigure({
+  visualization,
+  layout,
+  t,
+}: {
+  visualization: LungVolumesVisualization
+  layout: PlotLayout
+  t: T
+}): JSX.Element {
   const curve = spirogram(visualization).map((p) => ({ x: p.t, y: p.volume }))
   const caps = lungCapacities(visualization)
   const yRange: [number, number] = [0, caps.tlc * 1.08]
   const width = layout.width
   const plotW = Math.round(width * 0.72)
-  const levels = { rv: visualization.rv, frc: caps.frc, tidalTop: caps.frc + visualization.tv, tlc: caps.tlc }
+  const levels = {
+    rv: visualization.rv,
+    frc: caps.frc,
+    tidalTop: caps.frc + visualization.tv,
+    tlc: caps.tlc,
+  }
   return (
     <div className="space-y-2 px-1 py-2">
       <PlotFrame
@@ -313,10 +586,24 @@ export function TutorLungFigure({ visualization, layout, t }: { visualization: L
         overlay={(scale) => {
           const bracket = (x: number, from: number, to: number, label: string, color: string) => (
             <g key={label}>
-              <line x1={x} x2={x} y1={scale.sy(from)} y2={scale.sy(to)} stroke={color} strokeWidth="2" />
+              <line
+                x1={x}
+                x2={x}
+                y1={scale.sy(from)}
+                y2={scale.sy(to)}
+                stroke={color}
+                strokeWidth="2"
+              />
               <line x1={x - 4} x2={x + 4} y1={scale.sy(from)} y2={scale.sy(from)} stroke={color} />
               <line x1={x - 4} x2={x + 4} y1={scale.sy(to)} y2={scale.sy(to)} stroke={color} />
-              <text x={x + 6} y={(scale.sy(from) + scale.sy(to)) / 2 + 4} fontSize="11" fill={color}>{label}</text>
+              <text
+                x={x + 6}
+                y={(scale.sy(from) + scale.sy(to)) / 2 + 4}
+                fontSize="11"
+                fill={color}
+              >
+                {label}
+              </text>
             </g>
           )
           const x = scale.right + 10
@@ -334,9 +621,22 @@ export function TutorLungFigure({ visualization, layout, t }: { visualization: L
         {(scale) => (
           <>
             {[levels.rv, levels.frc, levels.tidalTop, levels.tlc].map((v) => (
-              <line key={v} x1={scale.left} x2={scale.right} y1={scale.sy(v)} y2={scale.sy(v)} stroke={LABEL} strokeDasharray="3 4" />
+              <line
+                key={v}
+                x1={scale.left}
+                x2={scale.right}
+                y1={scale.sy(v)}
+                y2={scale.sy(v)}
+                stroke={LABEL}
+                strokeDasharray="3 4"
+              />
             ))}
-            <path d={linePath(curve, scale, yRange)} fill="none" stroke={SERIES[0]} strokeWidth="2.2" />
+            <path
+              d={linePath(curve, scale, yRange)}
+              fill="none"
+              stroke={SERIES[0]}
+              strokeWidth="2.2"
+            />
           </>
         )}
       </PlotFrame>
@@ -353,10 +653,21 @@ export function TutorLungFigure({ visualization, layout, t }: { visualization: L
 
 // --- renal ------------------------------------------------------------------------------------
 
-export function TutorRenalFigure({ visualization, layout, t }: { visualization: RenalVisualization; layout: PlotLayout; t: T }): JSX.Element {
+export function TutorRenalFigure({
+  visualization,
+  layout,
+  t,
+}: {
+  visualization: RenalVisualization
+  layout: PlotLayout
+  t: T
+}): JSX.Element {
   const { forces, substances, urineFlow } = visualization
   const nfp = forces ? netFiltrationPressure(forces) : null
-  const clearances = substances && urineFlow ? substances.map((s) => ({ ...s, value: clearance(s.urine, s.plasma, urineFlow) })) : []
+  const clearances =
+    substances && urineFlow
+      ? substances.map((s) => ({ ...s, value: clearance(s.urine, s.plasma, urineFlow) }))
+      : []
   const inulin = clearances.find((c) => /inulin|菊粉|肌酐|creatinine/i.test(c.name))
   const pah = clearances.find((c) => /PAH|对氨基马尿酸|aminohippur/i.test(c.name))
   const width = layout.width
@@ -373,15 +684,30 @@ export function TutorRenalFigure({ visualization, layout, t }: { visualization: 
   return (
     <div className="space-y-2 px-1 py-2">
       {forces && (
-        <svg viewBox={`0 0 ${width} ${bars.length * 30 + 20}`} role="img" aria-label={t('viz.renalAria', { nfp: f(nfp!, 3) })} className="block h-auto w-full max-w-full">
+        <svg
+          viewBox={`0 0 ${width} ${bars.length * 30 + 20}`}
+          role="img"
+          aria-label={t('viz.renalAria', { nfp: f(nfp!, 3) })}
+          className="block h-auto w-full max-w-full"
+        >
           <title>{t('viz.renalAria', { nfp: f(nfp!, 3) })}</title>
           <g aria-hidden="true">
             {bars.map((bar, i) => (
               <g key={bar.key}>
-                <text x={10} y={i * 30 + 24} fontSize="12" fill={FOREGROUND}>{bar.key}</text>
-                <rect x={60} y={i * 30 + 12} width={Math.max(1, bar.value * barScale)} height={16} rx="3" fill={bar.sign > 0 ? SERIES[0] : SERIES[1]} />
+                <text x={10} y={i * 30 + 24} fontSize="12" fill={FOREGROUND}>
+                  {bar.key}
+                </text>
+                <rect
+                  x={60}
+                  y={i * 30 + 12}
+                  width={Math.max(1, bar.value * barScale)}
+                  height={16}
+                  rx="3"
+                  fill={bar.sign > 0 ? SERIES[0] : SERIES[1]}
+                />
                 <text x={66 + bar.value * barScale} y={i * 30 + 24} fontSize="11" fill={LABEL}>
-                  {bar.sign > 0 ? '+' : '−'}{f(bar.value, 3)} mmHg
+                  {bar.sign > 0 ? '+' : '−'}
+                  {f(bar.value, 3)} mmHg
                 </text>
               </g>
             ))}
@@ -392,13 +718,17 @@ export function TutorRenalFigure({ visualization, layout, t }: { visualization: 
         <Facts>
           <span>{t('viz.renalFavoring')}</span>
           <span className="font-medium text-foreground">
-            NFP = ({f(forces.pgc, 3)} − {f(forces.pbs, 3)}) − ({f(forces.pigc, 3)} − {f(forces.pibs, 3)}) = {f(nfp!, 3)} mmHg
+            NFP = ({f(forces.pgc, 3)} − {f(forces.pbs, 3)}) − ({f(forces.pigc, 3)} −{' '}
+            {f(forces.pibs, 3)}) = {f(nfp!, 3)} mmHg
           </span>
         </Facts>
       )}
       {clearances.length > 0 && (
         <div className="overflow-x-auto overflow-y-hidden">
-          <table className="mx-auto border-collapse text-center text-[13px]" aria-label={t('viz.renalClearanceTable')}>
+          <table
+            className="mx-auto border-collapse text-center text-[13px]"
+            aria-label={t('viz.renalClearanceTable')}
+          >
             <thead>
               <tr className="text-xs text-muted-foreground">
                 <th className="px-2 py-1 font-normal" />
@@ -420,7 +750,15 @@ export function TutorRenalFigure({ visualization, layout, t }: { visualization: 
           </table>
           <p className="pt-1 text-center text-xs text-muted-foreground">
             V = {f(urineFlow!, 3)} mL/min
-            {inulin && pah && <span className="ml-3 font-medium text-foreground">{t('viz.renalFiltrationFraction', { gfr: f(inulin.value, 4), rpf: f(pah.value, 4), ff: f(inulin.value / pah.value, 3) })}</span>}
+            {inulin && pah && (
+              <span className="ml-3 font-medium text-foreground">
+                {t('viz.renalFiltrationFraction', {
+                  gfr: f(inulin.value, 4),
+                  rpf: f(pah.value, 4),
+                  ff: f(inulin.value / pah.value, 3),
+                })}
+              </span>
+            )}
           </p>
         </div>
       )}
@@ -440,7 +778,15 @@ const DISORDER_KEYS = {
   mixed_alkalosis: 'viz.acidBase_mixed_alkalosis',
 } as const satisfies Record<AcidBaseDisorder, string>
 
-export function TutorAcidBaseFigure({ visualization, layout, t }: { visualization: AcidBaseVisualization; layout: PlotLayout; t: T }): JSX.Element {
+export function TutorAcidBaseFigure({
+  visualization,
+  layout,
+  t,
+}: {
+  visualization: AcidBaseVisualization
+  layout: PlotLayout
+  t: T
+}): JSX.Element {
   const { ph, paco2, hco3, chronicity } = visualization
   const analysis = analyzeAcidBase(ph, paco2, hco3, chronicity)
   const xRange: [number, number] = [6.9, 7.7]
@@ -449,26 +795,64 @@ export function TutorAcidBaseFigure({ visualization, layout, t }: { visualizatio
   const xs = Array.from({ length: 81 }, (_, i) => 6.9 + i * 0.01)
   return (
     <div className="space-y-2 px-1 py-2">
-      <PlotFrame width={layout.width} height={plotHeight(layout, 0.7)} xRange={xRange} yRange={yRange} xLabel="pH" yLabel="HCO₃⁻ (mmol/L)" label={t('viz.acidBaseAria', { disorder: t(DISORDER_KEYS[analysis.primary]) })} compact={layout.compact}>
+      <PlotFrame
+        width={layout.width}
+        height={plotHeight(layout, 0.7)}
+        xRange={xRange}
+        yRange={yRange}
+        xLabel="pH"
+        yLabel="HCO₃⁻ (mmol/L)"
+        label={t('viz.acidBaseAria', { disorder: t(DISORDER_KEYS[analysis.primary]) })}
+        compact={layout.compact}
+      >
         {(scale) => (
           <>
-            <rect x={scale.sx(7.35)} y={scale.sy(27)} width={scale.sx(7.45) - scale.sx(7.35)} height={scale.sy(22) - scale.sy(27)} fill={SERIES_SOFT[2]} />
+            <rect
+              x={scale.sx(7.35)}
+              y={scale.sy(27)}
+              width={scale.sx(7.45) - scale.sx(7.35)}
+              height={scale.sy(22) - scale.sy(27)}
+              fill={SERIES_SOFT[2]}
+            />
             {isobars.map((pco2) => {
               const pts = xs.map((x) => ({ x, y: 0.03 * pco2 * 10 ** (x - 6.1) }))
               const end = pts.filter((p) => p.y <= 50).at(-1)!
               return (
                 <g key={pco2}>
-                  <path d={linePath(pts, scale, yRange)} fill="none" stroke={LABEL} strokeWidth="1.2" strokeDasharray={pco2 === 40 ? undefined : '4 4'} />
-                  <text x={scale.sx(end.x) - 4} y={scale.sy(end.y) + 12} textAnchor="end" fontSize="10" fill={LABEL}>{pco2} mmHg</text>
+                  <path
+                    d={linePath(pts, scale, yRange)}
+                    fill="none"
+                    stroke={LABEL}
+                    strokeWidth="1.2"
+                    strokeDasharray={pco2 === 40 ? undefined : '4 4'}
+                  />
+                  <text
+                    x={scale.sx(end.x) - 4}
+                    y={scale.sy(end.y) + 12}
+                    textAnchor="end"
+                    fontSize="10"
+                    fill={LABEL}
+                  >
+                    {pco2} mmHg
+                  </text>
                 </g>
               )
             })}
-            <circle cx={scale.sx(ph)} cy={scale.sy(hco3)} r="6" fill={SERIES[1]} stroke="hsl(var(--card))" strokeWidth="2" />
+            <circle
+              cx={scale.sx(ph)}
+              cy={scale.sy(hco3)}
+              r="6"
+              fill={SERIES[1]}
+              stroke="hsl(var(--card))"
+              strokeWidth="2"
+            />
           </>
         )}
       </PlotFrame>
       <Facts>
-        <span>pH {ph} · PaCO₂ {paco2} mmHg · HCO₃⁻ {hco3} mmol/L</span>
+        <span>
+          pH {ph} · PaCO₂ {paco2} mmHg · HCO₃⁻ {hco3} mmol/L
+        </span>
         <span className="font-medium text-foreground">{t(DISORDER_KEYS[analysis.primary])}</span>
       </Facts>
       <div className="space-y-0.5 text-center text-xs text-muted-foreground">
@@ -477,7 +861,9 @@ export function TutorAcidBaseFigure({ visualization, layout, t }: { visualizatio
             {t(c.variable === 'paco2' ? 'viz.acidBaseExpectedPaco2' : 'viz.acidBaseExpectedHco3', {
               low: f(c.low, 3),
               high: f(c.high, 3),
-              chronicity: c.chronicity ? t(c.chronicity === 'acute' ? 'viz.acidBaseAcute' : 'viz.acidBaseChronic') : '',
+              chronicity: c.chronicity
+                ? t(c.chronicity === 'acute' ? 'viz.acidBaseAcute' : 'viz.acidBaseChronic')
+                : '',
             })}
           </p>
         ))}
@@ -494,7 +880,11 @@ export function TutorAcidBaseFigure({ visualization, layout, t }: { visualizatio
             )}
           </p>
         )}
-        {!analysis.consistent && <p className="text-amber-700 dark:text-amber-400">{t('viz.acidBaseInconsistent', { ph: f(analysis.computedPH, 3) })}</p>}
+        {!analysis.consistent && (
+          <p className="text-amber-700 dark:text-amber-400">
+            {t('viz.acidBaseInconsistent', { ph: f(analysis.computedPH, 3) })}
+          </p>
+        )}
       </div>
       <Teaching t={t} />
     </div>

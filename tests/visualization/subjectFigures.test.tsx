@@ -37,10 +37,20 @@ describe('formula explorer', () => {
   }
 
   it('accepts a formula that uses only its parameters', () => {
-    expect(one(oscillator)).toMatchObject({ type: 'formula_2d', variable: 't', params: [{ name: 'A' }, { name: 'omega' }, { name: 'phi' }] })
-    expect(one({ ...oscillator, curves: [{ expression: 'A*cos(w*t)' }] })).toBe('invalid-formula-expression')
-    expect(one({ ...oscillator, params: [{ name: 'pi', value: 1, min: 0, max: 2 }] })).toBe('invalid-formula-parameter')
-    expect(one({ ...oscillator, curves: [{ expression: 'sqrt(-1 - t^2)' }] })).toBe('formula-not-drawable')
+    expect(one(oscillator)).toMatchObject({
+      type: 'formula_2d',
+      variable: 't',
+      params: [{ name: 'A' }, { name: 'omega' }, { name: 'phi' }],
+    })
+    expect(one({ ...oscillator, curves: [{ expression: 'A*cos(w*t)' }] })).toBe(
+      'invalid-formula-expression',
+    )
+    expect(one({ ...oscillator, params: [{ name: 'pi', value: 1, min: 0, max: 2 }] })).toBe(
+      'invalid-formula-parameter',
+    )
+    expect(one({ ...oscillator, curves: [{ expression: 'sqrt(-1 - t^2)' }] })).toBe(
+      'formula-not-drawable',
+    )
   })
 
   it('lets the student move the sliders and reset', () => {
@@ -56,7 +66,7 @@ describe('formula explorer', () => {
 describe('calculus figures', () => {
   it('shows the tangent slope from the symbolic derivative', () => {
     draw({ type: 'tangent_2d', expression: 'x^2', domain: { min: -3, max: 3 }, point: 1 })
-    expect(screen.getByText("f′(1) = 2")).toBeInTheDocument()
+    expect(screen.getByText('f′(1) = 2')).toBeInTheDocument()
   })
 
   it('shows a Riemann sum against the integral and switches rules', () => {
@@ -67,9 +77,17 @@ describe('calculus figures', () => {
   })
 
   it('builds the Taylor polynomial of the chosen order', () => {
-    draw({ type: 'taylor_2d', expression: 'exp(x)', center: 0, order: 2, domain: { min: -2, max: 2 } })
+    draw({
+      type: 'taylor_2d',
+      expression: 'exp(x)',
+      center: 0,
+      order: 2,
+      domain: { min: -2, max: 2 },
+    })
     expect(screen.getByText(/1 \+ x \+ 0\.5x\^2/)).toBeInTheDocument()
-    expect(one({ type: 'taylor_2d', expression: 'abs(x)', center: 0, domain: { min: -1, max: 1 } })).toBe('taylor-not-differentiable')
+    expect(
+      one({ type: 'taylor_2d', expression: 'abs(x)', center: 0, domain: { min: -1, max: 1 } }),
+    ).toBe('taylor-not-differentiable')
   })
 })
 
@@ -95,7 +113,13 @@ describe('physics figures', () => {
   })
 
   it('solves a lens and responds to the object-distance slider', () => {
-    draw({ type: 'optics_2d', element: 'converging_lens', focalLength: 10, objectDistance: 30, objectHeight: 2 })
+    draw({
+      type: 'optics_2d',
+      element: 'converging_lens',
+      focalLength: 10,
+      objectDistance: 30,
+      objectHeight: 2,
+    })
     expect(screen.getByText(/real、inverted、reduced|real, inverted, reduced/)).toBeInTheDocument()
     fireEvent.change(screen.getByRole('slider'), { target: { value: '5' } })
     expect(screen.getByText(/virtual, upright, enlarged/)).toBeInTheDocument()
@@ -109,21 +133,50 @@ describe('physics figures', () => {
         kind: 'series',
         items: [
           { kind: 'resistor', label: 'R1', resistance: 4 },
-          { kind: 'parallel', items: [{ kind: 'resistor', label: 'R2', resistance: 6 }, { kind: 'resistor', label: 'R3', resistance: 3 }] },
+          {
+            kind: 'parallel',
+            items: [
+              { kind: 'resistor', label: 'R2', resistance: 6 },
+              { kind: 'resistor', label: 'R3', resistance: 3 },
+            ],
+          },
         ],
       },
     })
     expect(screen.getByRole('table', { name: /Voltage, current and power/ })).toBeInTheDocument()
     expect(screen.getByText('I = 2 A')).toBeInTheDocument()
-    expect(one({ type: 'circuit_2d', voltage: 12, network: { kind: 'series', items: [{ kind: 'resistor', resistance: -1 }] } })).toBe('invalid-circuit')
+    expect(
+      one({
+        type: 'circuit_2d',
+        voltage: 12,
+        network: { kind: 'series', items: [{ kind: 'resistor', resistance: -1 }] },
+      }),
+    ).toBe('invalid-circuit')
   })
 })
 
 describe('statistics, chemistry and biology figures', () => {
   it('fits a regression line', () => {
-    draw({ type: 'regression_2d', points: [{ x: 1, y: 2 }, { x: 2, y: 4 }, { x: 3, y: 6.1 }, { x: 4, y: 7.9 }] })
+    draw({
+      type: 'regression_2d',
+      points: [
+        { x: 1, y: 2 },
+        { x: 2, y: 4 },
+        { x: 3, y: 6.1 },
+        { x: 4, y: 7.9 },
+      ],
+    })
     expect(screen.getByText(/R² = 0\.99/)).toBeInTheDocument()
-    expect(one({ type: 'regression_2d', points: [{ x: 1, y: 1 }, { x: 1, y: 2 }, { x: 1, y: 3 }] })).toBe('regression-constant-x')
+    expect(
+      one({
+        type: 'regression_2d',
+        points: [
+          { x: 1, y: 1 },
+          { x: 1, y: 2 },
+          { x: 1, y: 3 },
+        ],
+      }),
+    ).toBe('regression-constant-x')
   })
 
   it('builds a t interval', () => {
@@ -138,20 +191,30 @@ describe('statistics, chemistry and biology figures', () => {
   })
 
   it('fits Ea from (T, k) data', () => {
-    const points = [300, 320, 340].map((t) => ({ t, k: 1e7 * Math.exp(-50000 / (8.314462618 * t)) }))
+    const points = [300, 320, 340].map((t) => ({
+      t,
+      k: 1e7 * Math.exp(-50000 / (8.314462618 * t)),
+    }))
     draw({ type: 'arrhenius_2d', points })
     expect(screen.getByText(/= 50 kJ\/mol/)).toBeInTheDocument()
   })
 
   it('applies a competitive inhibitor', () => {
-    draw({ type: 'enzyme_2d', vmax: 10, km: 2, inhibitor: { type: 'competitive', concentration: 1, ki: 1 } })
+    draw({
+      type: 'enzyme_2d',
+      vmax: 10,
+      km: 2,
+      inhibitor: { type: 'competitive', concentration: 1, ki: 1 },
+    })
     expect(screen.getByText('Competitive inhibition: Km rises, Vmax unchanged')).toBeInTheDocument()
   })
 
   it('marks the logistic inflection point', () => {
     draw({ type: 'population_2d', model: 'logistic', n0: 10, r: 0.5, k: 1000 })
     expect(screen.getByText('maximum rate rK/4 = 125')).toBeInTheDocument()
-    expect(one({ type: 'population_2d', model: 'logistic', n0: 10, r: 0.5 })).toBe('invalid-population-capacity')
+    expect(one({ type: 'population_2d', model: 'logistic', n0: 10, r: 0.5 })).toBe(
+      'invalid-population-capacity',
+    )
   })
 })
 
@@ -160,7 +223,9 @@ describe('algorithm figures', () => {
     draw({ type: 'sorting_2d', algorithm: 'bubble', values: [3, 1, 2] })
     fireEvent.click(screen.getByRole('button', { name: 'Next step' }))
     expect(screen.getByText('Compare positions 1 and 0')).toBeInTheDocument()
-    expect(one({ type: 'sorting_2d', algorithm: 'bogo', values: [1, 2] })).toBe('invalid-sorting-setup')
+    expect(one({ type: 'sorting_2d', algorithm: 'bogo', values: [1, 2] })).toBe(
+      'invalid-sorting-setup',
+    )
   })
 
   it('lists BST traversals', () => {
@@ -182,11 +247,14 @@ describe('prompt families and gates', () => {
     expect(prompt('chemistry')).toContain('arrhenius_2d')
     expect(prompt('biology')).toContain('population_2d')
     expect(prompt('stats')).toContain('regression_2d')
-    for (const subject of ['physics', 'calculus', 'cs', 'linear_algebra'] as const) expect(prompt(subject)).toContain('formula_2d')
+    for (const subject of ['physics', 'calculus', 'cs', 'linear_algebra'] as const)
+      expect(prompt(subject)).toContain('formula_2d')
   })
 
   it('recognises lessons worth a figure', () => {
-    expect(looksLikePhysicsFigureText('物体放在倾角为 30° 的斜面上，受重力、支持力和摩擦力')).toBe(true)
+    expect(looksLikePhysicsFigureText('物体放在倾角为 30° 的斜面上，受重力、支持力和摩擦力')).toBe(
+      true,
+    )
     expect(looksLikeCalculusFigureText('用黎曼和逼近定积分')).toBe(true)
     expect(looksLikeAlgorithmText('Trace quicksort on the array')).toBe(true)
     expect(looksLikeFormulaText('简谐振动 $x(t) = A\\cos(\\omega t + \\varphi)$')).toBe(true)

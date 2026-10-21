@@ -96,7 +96,11 @@ export class WalkthroughNoteService {
   async appendTurn(id: string, turn: WalkthroughNoteTurn): Promise<WalkthroughNote> {
     return this.db.transaction('rw', this.db.walkthroughNotes, async () => {
       const note = await this.require(id)
-      return this.repo.putNote({ ...note, turns: [...note.turns, turn].slice(-MAX_NOTE_TURNS), updatedAt: turn.at })
+      return this.repo.putNote({
+        ...note,
+        turns: [...note.turns, turn].slice(-MAX_NOTE_TURNS),
+        updatedAt: turn.at,
+      })
     })
   }
 

@@ -145,10 +145,22 @@ interface PlotGeometry {
 /** Types drawn by a dedicated renderer rather than the shared plane plot. */
 type OwnRendererVisualization = Exclude<
   TutorVisualization,
-  { type: 'function_2d' | 'equation_2d' | 'inequality_2d' | 'points_2d' | 'table_2d' | 'vectors_2d' | 'transform_2d' | 'eigen_2d' }
+  {
+    type:
+      | 'function_2d'
+      | 'equation_2d'
+      | 'inequality_2d'
+      | 'points_2d'
+      | 'table_2d'
+      | 'vectors_2d'
+      | 'transform_2d'
+      | 'eigen_2d'
+  }
 >
 
-function hasOwnRendererType(visualization: TutorVisualization): visualization is OwnRendererVisualization {
+function hasOwnRendererType(
+  visualization: TutorVisualization,
+): visualization is OwnRendererVisualization {
   return (
     visualization.type === 'graph_2d' ||
     visualization.type === 'venn_2d' ||
@@ -280,8 +292,7 @@ function buildGeometry(visualization: TutorVisualization, aspect: number): PlotG
   if (lines.length === 0 && curveSpecs.length === 0) return null
 
   const baseViewport =
-    visualization.viewport ??
-    (forms.length > 0 ? computeAutoViewport(forms, []) : DEFAULT_VIEWPORT)
+    visualization.viewport ?? (forms.length > 0 ? computeAutoViewport(forms, []) : DEFAULT_VIEWPORT)
   const viewport = fitViewport(baseViewport, aspect)
 
   const curves: CurveEntry[] = curveSpecs.map((spec) => ({
@@ -473,10 +484,17 @@ export function TutorVisualizationFigure({
   if (visualization.type === 'hasse_2d') {
     return (
       <figure data-tutor-visualization={visualization.id} className="my-5 min-w-0 space-y-2">
-        <div ref={cardRef} className="w-full max-w-full overflow-hidden rounded-lg border border-border/70 bg-card p-2">
+        <div
+          ref={cardRef}
+          className="w-full max-w-full overflow-hidden rounded-lg border border-border/70 bg-card p-2"
+        >
           <TutorHasseSvg visualization={visualization} layout={layout} t={t} />
         </div>
-        {visualization.caption && <figcaption className="text-center text-[13px] text-muted-foreground">{visualization.caption}</figcaption>}
+        {visualization.caption && (
+          <figcaption className="text-center text-[13px] text-muted-foreground">
+            {visualization.caption}
+          </figcaption>
+        )}
       </figure>
     )
   }
@@ -484,11 +502,18 @@ export function TutorVisualizationFigure({
   if (visualization.type === 'distribution_2d') {
     return (
       <figure data-tutor-visualization={visualization.id} className="my-5 min-w-0 space-y-2">
-        <div ref={cardRef} className="w-full max-w-full overflow-hidden rounded-lg border border-border/70 bg-card p-2">
+        <div
+          ref={cardRef}
+          className="w-full max-w-full overflow-hidden rounded-lg border border-border/70 bg-card p-2"
+        >
           <TutorDistributionSvg visualization={visualization} layout={layout} t={t} />
         </div>
         <DistributionFacts visualization={visualization} t={t} />
-        {visualization.caption && <figcaption className="text-center text-[13px] text-muted-foreground">{visualization.caption}</figcaption>}
+        {visualization.caption && (
+          <figcaption className="text-center text-[13px] text-muted-foreground">
+            {visualization.caption}
+          </figcaption>
+        )}
       </figure>
     )
   }
@@ -496,11 +521,23 @@ export function TutorVisualizationFigure({
   if (isScienceVisualization(visualization)) {
     return (
       <figure data-tutor-visualization={visualization.id} className="my-5 min-w-0 space-y-2">
-        <div ref={cardRef} className="w-full max-w-full overflow-hidden rounded-lg border border-border/70 bg-card p-2">
-          <ScienceFigureBody visualization={visualization} layout={layout} t={t} language={language} />
+        <div
+          ref={cardRef}
+          className="w-full max-w-full overflow-hidden rounded-lg border border-border/70 bg-card p-2"
+        >
+          <ScienceFigureBody
+            visualization={visualization}
+            layout={layout}
+            t={t}
+            language={language}
+          />
         </div>
         <ScienceFigureFacts visualization={visualization} t={t} />
-        {visualization.caption && <figcaption className="text-center text-[13px] text-muted-foreground">{visualization.caption}</figcaption>}
+        {visualization.caption && (
+          <figcaption className="text-center text-[13px] text-muted-foreground">
+            {visualization.caption}
+          </figcaption>
+        )}
       </figure>
     )
   }
@@ -542,8 +579,7 @@ export function TutorVisualizationFigure({
     .map((expression, index) => ({ expression, index }))
     .filter((entry) => renderedIndices.has(entry.index))
   const showLegend =
-    legendEntries.length > 1 ||
-    legendEntries.some((entry) => entry.expression.label !== undefined)
+    legendEntries.length > 1 || legendEntries.some((entry) => entry.expression.label !== undefined)
 
   const vectorEntries = geometry.vectors
   const showVectorLegend = vectorEntries.length > 1
@@ -970,15 +1006,16 @@ export function TutorVisualizationFigure({
                 const slot = vectorColorSlot(entry.role)
                 const emphasized = entry.highlighted || entry.role === 'result'
                 const dash =
-                  entry.role === 'basis'
-                    ? '6 4'
-                    : entry.role === 'component'
-                      ? '2 3'
-                      : undefined
+                  entry.role === 'basis' ? '6 4' : entry.role === 'component' ? '2 3' : undefined
                 return (
                   <g key={`vector-${entry.index}`}>
                     {entry.role === 'component' && entry.start.x === 0 && entry.start.y === 0 && (
-                      <g stroke={seriesStroke(slot)} strokeWidth={1} strokeDasharray="2 3" opacity={0.55}>
+                      <g
+                        stroke={seriesStroke(slot)}
+                        strokeWidth={1}
+                        strokeDasharray="2 3"
+                        opacity={0.55}
+                      >
                         <line x1={b.sx} y1={b.sy} x2={b.sx} y2={axisX.sy} />
                         <line x1={b.sx} y1={b.sy} x2={axisY.sx} y2={b.sy} />
                       </g>
@@ -1085,8 +1122,7 @@ export function TutorVisualizationFigure({
             className="flex flex-wrap justify-center gap-x-4 gap-y-1.5"
           >
             {geometry.eigen.pairs.map((pair, index) => {
-              const name =
-                pair.label ?? (geometry.eigen!.pairs.length > 1 ? `v${index + 1}` : 'v')
+              const name = pair.label ?? (geometry.eigen!.pairs.length > 1 ? `v${index + 1}` : 'v')
               return (
                 <li key={`eigen-legend-${index}`} className="flex items-center gap-1.5">
                   <span
@@ -1144,9 +1180,12 @@ export function TutorVisualizationFigure({
                 className="inline-block h-0.5 w-4 shrink-0 rounded"
                 style={{ backgroundColor: seriesStroke(vectorColorSlot(entry.role)) }}
               />
-              {entry.label ? <span className="font-medium text-foreground">{entry.label}</span> : null}
+              {entry.label ? (
+                <span className="font-medium text-foreground">{entry.label}</span>
+              ) : null}
               <span className="tabular-nums">
-                ({formatTick(entry.end.x - entry.start.x)}, {formatTick(entry.end.y - entry.start.y)})
+                ({formatTick(entry.end.x - entry.start.x)},{' '}
+                {formatTick(entry.end.y - entry.start.y)})
               </span>
               {VECTOR_ROLE_KEYS[entry.role] ? (
                 <span>· {t(VECTOR_ROLE_KEYS[entry.role]!)}</span>

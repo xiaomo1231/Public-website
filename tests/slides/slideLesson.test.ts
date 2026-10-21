@@ -125,12 +125,60 @@ describe('SlideLessonService', () => {
 
     chunks = new ChunkRepository(db)
     const stored = await chunks.addMany([
-      { documentId, projectId, pageNumber: 1, contentType: 'heading', text: 'Limits', sourceReference: 'x', order: 0 },
-      { documentId, projectId, pageNumber: 1, contentType: 'paragraph', text: 'The limit of x^2 at 3 is 9.', sourceReference: 'x', order: 1 },
-      { documentId, projectId, pageNumber: 1, contentType: 'note', text: 'Emphasise substitution.', sourceReference: 'x', order: 2 },
-      { documentId, projectId, pageNumber: 2, contentType: 'heading', text: 'Derivatives', sourceReference: 'x', order: 3 },
-      { documentId, projectId, pageNumber: 2, contentType: 'paragraph', text: 'The slope of the tangent line.', sourceReference: 'x', order: 4 },
-      { documentId, projectId, pageNumber: 3, contentType: 'paragraph', text: 'A worked example.', sourceReference: 'x', order: 5 },
+      {
+        documentId,
+        projectId,
+        pageNumber: 1,
+        contentType: 'heading',
+        text: 'Limits',
+        sourceReference: 'x',
+        order: 0,
+      },
+      {
+        documentId,
+        projectId,
+        pageNumber: 1,
+        contentType: 'paragraph',
+        text: 'The limit of x^2 at 3 is 9.',
+        sourceReference: 'x',
+        order: 1,
+      },
+      {
+        documentId,
+        projectId,
+        pageNumber: 1,
+        contentType: 'note',
+        text: 'Emphasise substitution.',
+        sourceReference: 'x',
+        order: 2,
+      },
+      {
+        documentId,
+        projectId,
+        pageNumber: 2,
+        contentType: 'heading',
+        text: 'Derivatives',
+        sourceReference: 'x',
+        order: 3,
+      },
+      {
+        documentId,
+        projectId,
+        pageNumber: 2,
+        contentType: 'paragraph',
+        text: 'The slope of the tangent line.',
+        sourceReference: 'x',
+        order: 4,
+      },
+      {
+        documentId,
+        projectId,
+        pageNumber: 3,
+        contentType: 'paragraph',
+        text: 'A worked example.',
+        sourceReference: 'x',
+        order: 5,
+      },
     ])
     slide1ChunkId = stored[1]!.id
 
@@ -154,7 +202,10 @@ describe('SlideLessonService', () => {
     return new SlideLessonService({ ai, db, chunks, visuals })
   }
 
-  const okHandler = () => ({ explanation: '## Limits\n\nA limit describes a value.', question: 'Why substitute?' })
+  const okHandler = () => ({
+    explanation: '## Limits\n\nA limit describes a value.',
+    question: 'Why substitute?',
+  })
 
   it('lists the presentation with its real slide count', async () => {
     const { ai } = stubAI(okHandler)
@@ -229,7 +280,9 @@ describe('SlideLessonService', () => {
     expect(two.lesson.status).toBe('failed')
     expect(two.lesson.errorMessage).toBeTruthy()
     // Slide 1 is untouched.
-    expect((await svc.getLesson({ projectId, documentId, slideNumber: 1, language: 'en' }))?.status).toBe('ready')
+    expect(
+      (await svc.getLesson({ projectId, documentId, slideNumber: 1, language: 'en' }))?.status,
+    ).toBe('ready')
 
     failSlide2 = false
     const retried = await svc.regenerate({ projectId, documentId, slideNumber: 2, language: 'en' })

@@ -56,7 +56,9 @@ export interface ReferenceImageOptions {
 }
 
 /** Which sources a subject may use; null when the subject gets no web images. */
-export function referenceSourcesFor(subject: Subject | undefined): { allowPubChem: boolean; medical?: boolean } | null {
+export function referenceSourcesFor(
+  subject: Subject | undefined,
+): { allowPubChem: boolean; medical?: boolean } | null {
   if (subject === 'chemistry') return { allowPubChem: true }
   if (subject === 'biology') return { allowPubChem: false }
   // Anatomy and histology are learnt from images; drugs come from PubChem.
@@ -119,7 +121,8 @@ export class ReferenceImageService {
    * Returns every cached picture for the topic afterwards.
    */
   async search(input: ReferenceImageSearchInput): Promise<ReferenceImage[]> {
-    if (!this.options.enabled) throw new AppError(t('referenceImages.disabled'), 'WEB_IMAGES_DISABLED')
+    if (!this.options.enabled)
+      throw new AppError(t('referenceImages.disabled'), 'WEB_IMAGES_DISABLED')
     if (!this.ai) throw new AppError(t('errors.aiKeyRequired'), 'AI_NOT_CONFIGURED')
     const sources = referenceSourcesFor(await loadProjectSubject(input.projectId, this.db))
     if (!sources) return this.list(input.projectId, input.topicId)
@@ -159,7 +162,13 @@ export class ReferenceImageService {
 
           let relevance: ReferenceImage['relevance'] = 'unverified'
           if (visionAvailable) {
-            const verdict = await this.checkRelevance(input.topicName, query, candidate, image, input.signal)
+            const verdict = await this.checkRelevance(
+              input.topicName,
+              query,
+              candidate,
+              image,
+              input.signal,
+            )
             if (verdict === false) continue
             if (verdict === true) relevance = 'verified'
             // The model could not look at images: stop asking for this search.
@@ -191,13 +200,19 @@ export class ReferenceImageService {
       } catch (err) {
         if (isAbortError(err, input.signal)) throw err
         // One failed source must not cost the others.
-        logger.warn('Reference image query failed', { source: query.source, error: (err as Error)?.message })
+        logger.warn('Reference image query failed', {
+          source: query.source,
+          error: (err as Error)?.message,
+        })
       }
     }
     return this.list(input.projectId, input.topicId)
   }
 
-  private async candidatesFor(query: ReferenceImageQuery, signal?: AbortSignal): Promise<WebImageCandidate[]> {
+  private async candidatesFor(
+    query: ReferenceImageQuery,
+    signal?: AbortSignal,
+  ): Promise<WebImageCandidate[]> {
     if (query.source === 'pubchem') {
       const found = await findPubChemCompound(query.term, {
         fetch: this.fetchImpl,
@@ -206,7 +221,11 @@ export class ReferenceImageService {
       })
       return found ? [found] : []
     }
-    return searchCommons(query.term, { fetch: this.fetchImpl, limit: 3, ...(signal ? { signal } : {}) })
+    return searchCommons(query.term, {
+      fetch: this.fetchImpl,
+      limit: 3,
+      ...(signal ? { signal } : {}),
+    })
   }
 
   /** true / false from the vision model, or null when it cannot judge images. */

@@ -55,7 +55,10 @@ export class PracticeRepository {
     return questions
   }
 
-  async updateQuestion(id: string, patch: Partial<PracticeQuestion>): Promise<PracticeQuestion | undefined> {
+  async updateQuestion(
+    id: string,
+    patch: Partial<PracticeQuestion>,
+  ): Promise<PracticeQuestion | undefined> {
     const existing = await this.getQuestion(id)
     if (!existing) return undefined
     const next = { ...existing, ...patch }

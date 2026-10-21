@@ -66,7 +66,10 @@ interface Classified {
 }
 
 function cleanTitle(raw: string): string {
-  return raw.replace(/\s+/g, ' ').replace(/[.\s]+$/, '').trim()
+  return raw
+    .replace(/\s+/g, ' ')
+    .replace(/[.\s]+$/, '')
+    .trim()
 }
 
 function classifyHeading(text: string, isMarkedHeading: boolean): Classified | null {
@@ -187,7 +190,10 @@ export function detectStructure(chunks: StructureChunkInput[]): DetectedStructur
 }
 
 function normalizeTitle(title: string): string {
-  return title.toLowerCase().replace(/[^a-z0-9\u4e00-\u9fff]+/g, ' ').trim()
+  return title
+    .toLowerCase()
+    .replace(/[^a-z0-9\u4e00-\u9fff]+/g, ' ')
+    .trim()
 }
 
 /**
@@ -202,7 +208,9 @@ export function reconcileNodes(
   ids: { structureId: string; projectId: string },
 ): CourseStructureNode[] {
   const pool = previous.slice()
-  const take = (predicate: (node: CourseStructureNode) => boolean): CourseStructureNode | undefined => {
+  const take = (
+    predicate: (node: CourseStructureNode) => boolean,
+  ): CourseStructureNode | undefined => {
     const index = pool.findIndex(predicate)
     if (index === -1) return undefined
     return pool.splice(index, 1)[0]
@@ -213,7 +221,10 @@ export function reconcileNodes(
       (node.number !== undefined
         ? take((prev) => prev.type === node.type && prev.number === node.number)
         : undefined) ??
-      take((prev) => prev.type === node.type && normalizeTitle(prev.title) === normalizeTitle(node.title)) ??
+      take(
+        (prev) =>
+          prev.type === node.type && normalizeTitle(prev.title) === normalizeTitle(node.title),
+      ) ??
       take((prev) => prev.type === node.type)
 
     return {

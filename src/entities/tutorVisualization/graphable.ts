@@ -64,7 +64,9 @@ function looksLikeEigenText(text: string): boolean {
 }
 
 function looksLikeHasseText(text: string): boolean {
-  return /(?:\bHasse diagram\b|\bpartial order\b|\bpartially ordered set\b|\bposet\b|Hasse 图|偏序集|偏序关系)/i.test(text)
+  return /(?:\bHasse diagram\b|\bpartial order\b|\bpartially ordered set\b|\bposet\b|Hasse 图|偏序集|偏序关系)/i.test(
+    text,
+  )
 }
 
 /** A named probability distribution (the parameters are checked later). */
@@ -102,37 +104,51 @@ export function looksLikeBiologyFigureText(text: string): boolean {
 
 /** Forces, motion, optics or circuits (physics courses). */
 export function looksLikePhysicsFigureText(text: string): boolean {
-  return /(?:free-body|net force|\bforces?\b|incline|friction|velocity|acceleration|displacement|kinematics|\blens\b|\bmirror\b|focal length|resistors?|\bcircuit|Ohm|series|parallel|受力|合力|斜面|摩擦力|支持力|拉力|速度|加速度|位移|匀变速|运动学|透镜|面镜|焦距|物距|像距|电阻|电路|串联|并联|欧姆)/i.test(text)
+  return /(?:free-body|net force|\bforces?\b|incline|friction|velocity|acceleration|displacement|kinematics|\blens\b|\bmirror\b|focal length|resistors?|\bcircuit|Ohm|series|parallel|受力|合力|斜面|摩擦力|支持力|拉力|速度|加速度|位移|匀变速|运动学|透镜|面镜|焦距|物距|像距|电阻|电路|串联|并联|欧姆)/i.test(
+    text,
+  )
 }
 
 /** Derivatives, integrals or series (calculus courses). */
 export function looksLikeCalculusFigureText(text: string): boolean {
-  return /(?:derivative|tangent line|differentiat|integral|Riemann|Taylor|Maclaurin|导数|切线|微分|积分|黎曼|泰勒|麦克劳林)/i.test(text)
+  return /(?:derivative|tangent line|differentiat|integral|Riemann|Taylor|Maclaurin|导数|切线|微分|积分|黎曼|泰勒|麦克劳林)/i.test(
+    text,
+  )
 }
 
 /** Regression or interval estimation. */
 export function looksLikeRegressionText(text: string): boolean {
-  return /(?:regression|least squares|correlation coefficient|confidence interval|scatter plot|calibration curve|回归|最小二乘|相关系数|置信区间|散点图|标准曲线)/i.test(text)
+  return /(?:regression|least squares|correlation coefficient|confidence interval|scatter plot|calibration curve|回归|最小二乘|相关系数|置信区间|散点图|标准曲线)/i.test(
+    text,
+  )
 }
 
 /** Rate laws and the Arrhenius equation. */
 export function looksLikeKineticsText(text: string): boolean {
-  return /(?:rate law|rate constant|half-life|reaction order|first-order|second-order|zero-order|Arrhenius|速率方程|速率常数|半衰期|反应级数|一级反应|二级反应|零级反应|阿伦尼乌斯)/i.test(text)
+  return /(?:rate law|rate constant|half-life|reaction order|first-order|second-order|zero-order|Arrhenius|速率方程|速率常数|半衰期|反应级数|一级反应|二级反应|零级反应|阿伦尼乌斯)/i.test(
+    text,
+  )
 }
 
 /** Enzyme kinetics. */
 export function looksLikeEnzymeText(text: string): boolean {
-  return /(?:Michaelis|Lineweaver|enzyme kinetics|\bK_?m\b|V_?max|inhibit|米氏|酶动力学|酶促反应|双倒数|抑制剂|竞争性抑制)/i.test(text)
+  return /(?:Michaelis|Lineweaver|enzyme kinetics|\bK_?m\b|V_?max|inhibit|米氏|酶动力学|酶促反应|双倒数|抑制剂|竞争性抑制)/i.test(
+    text,
+  )
 }
 
 /** Population growth models. */
 export function looksLikePopulationText(text: string): boolean {
-  return /(?:population growth|logistic growth|carrying capacity|exponential growth|种群增长|逻辑斯谛|环境容纳量|指数增长|J\s*型|S\s*型曲线)/i.test(text)
+  return /(?:population growth|logistic growth|carrying capacity|exponential growth|种群增长|逻辑斯谛|环境容纳量|指数增长|J\s*型|S\s*型曲线)/i.test(
+    text,
+  )
 }
 
 /** Sorting algorithms and binary search trees. */
 export function looksLikeAlgorithmText(text: string): boolean {
-  return /(?:\bsort(?:ing)?\b|quicksort|merge sort|binary search tree|\bBST\b|traversal|in-?order|排序|冒泡|快速排序|归并|二叉搜索树|二叉排序树|遍历)/i.test(text)
+  return /(?:\bsort(?:ing)?\b|quicksort|merge sort|binary search tree|\bBST\b|traversal|in-?order|排序|冒泡|快速排序|归并|二叉搜索树|二叉排序树|遍历)/i.test(
+    text,
+  )
 }
 
 /** Membrane, cardiac, respiratory, renal or acid–base physiology. */
@@ -144,12 +160,16 @@ export function looksLikePhysiologyText(text: string): boolean {
 
 /** Amino-acid charge or the energy yield of a metabolic pathway. */
 export function looksLikeBiochemistryText(text: string): boolean {
-  return /(?:isoelectric|\bpI\b|glycolysis|citric acid cycle|\bTCA\b|Krebs|β-oxidation|beta-oxidation|oxidative phosphorylation|ATP yield|等电点|糖酵解|三羧酸循环|柠檬酸循环|β-?氧化|氧化磷酸化|ATP\s*(?:的)?生成|净生成.{0,6}ATP|穿梭)/i.test(text)
+  return /(?:isoelectric|\bpI\b|glycolysis|citric acid cycle|\bTCA\b|Krebs|β-oxidation|beta-oxidation|oxidative phosphorylation|ATP yield|等电点|糖酵解|三羧酸循环|柠檬酸循环|β-?氧化|氧化磷酸化|ATP\s*(?:的)?生成|净生成.{0,6}ATP|穿梭)/i.test(
+    text,
+  )
 }
 
 /** Dosing and plasma-concentration models. */
 export function looksLikePharmacokineticsText(text: string): boolean {
-  return /(?:pharmacokinetic|plasma concentration|volume of distribution|bioavailability|loading dose|dosing interval|steady[- ]state concentration|药代动力学|药动学|血药浓度|表观分布容积|生物利用度|负荷剂量|给药间隔|稳态血药|坪值)/i.test(text)
+  return /(?:pharmacokinetic|plasma concentration|volume of distribution|bioavailability|loading dose|dosing interval|steady[- ]state concentration|药代动力学|药动学|血药浓度|表观分布容积|生物利用度|负荷剂量|给药间隔|稳态血药|坪值)/i.test(
+    text,
+  )
 }
 
 /** Tooth notation, developmental timelines, conduction pathways or relation tables. */

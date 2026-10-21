@@ -1,11 +1,6 @@
 import * as SelectPrimitive from '@radix-ui/react-select'
 import { Check, ChevronDown } from 'lucide-react'
-import {
-  forwardRef,
-  type ComponentPropsWithoutRef,
-  type ElementRef,
-  type ReactNode,
-} from 'react'
+import { forwardRef, type ComponentPropsWithoutRef, type ElementRef, type ReactNode } from 'react'
 import { cn } from '@/shared/lib/utils'
 
 export const Select = SelectPrimitive.Root
@@ -18,7 +13,7 @@ export const SelectTrigger = forwardRef<
   <SelectPrimitive.Trigger
     ref={ref}
     className={cn(
-      'flex h-9 w-full items-center justify-between rounded-lg border border-input bg-background px-3 py-1 text-sm shadow-sm focus-ring disabled:cursor-not-allowed disabled:opacity-50 [&>span]:line-clamp-1',
+      'focus-ring flex h-9 w-full items-center justify-between rounded-lg border border-input bg-background px-3 py-1 text-sm shadow-sm disabled:cursor-not-allowed disabled:opacity-50 [&>span]:line-clamp-1',
       className,
     )}
     {...props}
@@ -40,7 +35,7 @@ export const SelectContent = forwardRef<
       ref={ref}
       position={position}
       className={cn(
-        'relative z-50 max-h-96 min-w-[8rem] max-w-[min(90vw,24rem)] origin-[--radix-select-content-transform-origin] overflow-hidden rounded-lg border border-border/70 bg-card text-popover-foreground shadow-lift data-[state=open]:animate-pop-in',
+        'text-popover-foreground relative z-50 max-h-96 min-w-[8rem] max-w-[min(90vw,24rem)] origin-[--radix-select-content-transform-origin] overflow-hidden rounded-lg border border-border/70 bg-card shadow-lift data-[state=open]:animate-pop-in',
         position === 'popper' && 'data-[side=bottom]:translate-y-1 data-[side=top]:-translate-y-1',
         className,
       )}

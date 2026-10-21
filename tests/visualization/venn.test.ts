@@ -37,20 +37,19 @@ describe('venn set maths', () => {
     ])
     expect(applyVennOperation('intersection', [A, B], regions, ['a', 'b']).result).toEqual(['3'])
     expect(applyVennOperation('difference', [A, B], regions, ['a', 'b']).result).toEqual(['1', '2'])
-    expect(
-      applyVennOperation('symmetric_difference', [A, B], regions, ['a', 'b']).result,
-    ).toEqual(['1', '2', '4', '5'])
+    expect(applyVennOperation('symmetric_difference', [A, B], regions, ['a', 'b']).result).toEqual([
+      '1',
+      '2',
+      '4',
+      '5',
+    ])
   })
 
   it('computes a complement within a universe', () => {
     const universe = ['1', '2', '3', '4', '5', '6']
     const regions = computeVennRegions([A, B], universe)
     expect(regions.outside).toEqual(['6'])
-    expect(applyVennOperation('complement', [A, B], regions, ['a']).result).toEqual([
-      '4',
-      '5',
-      '6',
-    ])
+    expect(applyVennOperation('complement', [A, B], regions, ['a']).result).toEqual(['4', '5', '6'])
   })
 
   it('splits three sets into seven regions plus outside', () => {

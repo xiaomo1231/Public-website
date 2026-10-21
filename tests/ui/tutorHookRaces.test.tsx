@@ -43,13 +43,23 @@ describe('useTutorLesson regenerate', () => {
     const slow = deferred<{ lesson: TutorLesson }>()
     const tutorLesson = {
       load: vi.fn(async ({ topicId }: { topicId: string }) => lesson(topicId)),
-      getOrGenerate: vi.fn(async ({ topicId }: { topicId: string }) => ({ lesson: lesson(topicId), fromCache: true })),
+      getOrGenerate: vi.fn(async ({ topicId }: { topicId: string }) => ({
+        lesson: lesson(topicId),
+        fromCache: true,
+      })),
       regenerate: vi.fn(() => slow.promise),
     }
     vi.mocked(buildAIServices).mockResolvedValue({ tutorLesson } as never)
 
-    const { result, rerender } = renderHook((props: { topicId: string }) =>
-      useTutorLesson({ projectId: 'p1', topicId: props.topicId, topicName: props.topicId, topicDescription: '', language: 'en' }),
+    const { result, rerender } = renderHook(
+      (props: { topicId: string }) =>
+        useTutorLesson({
+          projectId: 'p1',
+          topicId: props.topicId,
+          topicName: props.topicId,
+          topicDescription: '',
+          language: 'en',
+        }),
       { initialProps: { topicId: 'A' } },
     )
     await waitFor(() => expect(result.current.lesson?.topicId).toBe('A'))
@@ -77,10 +87,15 @@ describe('useReferenceImages', () => {
   it('resets searching and availability when the topic changes mid-search', async () => {
     const search = vi.fn(
       ({ signal }: { signal: AbortSignal }) =>
-        new Promise((_resolve, reject) => signal.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')))),
+        new Promise((_resolve, reject) =>
+          signal.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError'))),
+        ),
     )
     const availableFor = vi.fn(async () => true)
-    const enabledFor = new Map([['A', true], ['B', false]])
+    const enabledFor = new Map([
+      ['A', true],
+      ['B', false],
+    ])
     let current = 'A'
     vi.mocked(buildReferenceImageService).mockImplementation(
       async () =>
@@ -93,7 +108,8 @@ describe('useReferenceImages', () => {
     )
 
     const { result, rerender } = renderHook(
-      (props: { topicId: string }) => useReferenceImages(lesson(props.topicId), { name: props.topicId }),
+      (props: { topicId: string }) =>
+        useReferenceImages(lesson(props.topicId), { name: props.topicId }),
       { initialProps: { topicId: 'A' } },
     )
     await waitFor(() => expect(result.current.available).toBe(true))

@@ -15,7 +15,11 @@ import { formatSpan } from './formatSpan'
 
 type T = ReturnType<typeof useTranslation>['t']
 
-const RATINGS: Array<{ rating: VocabRating; labelKey: TranslationKey; variant: 'outline' | 'default' }> = [
+const RATINGS: Array<{
+  rating: VocabRating
+  labelKey: TranslationKey
+  variant: 'outline' | 'default'
+}> = [
   { rating: 1, labelKey: 'vocab.rate.again', variant: 'outline' },
   { rating: 2, labelKey: 'vocab.rate.hard', variant: 'outline' },
   { rating: 3, labelKey: 'vocab.rate.good', variant: 'default' },
@@ -36,11 +40,23 @@ const MAX_REPEATS = 2
 /** The mode actually used: dictation needs speech, a cloze needs a sentence holding the word. */
 function effectiveMode(item: SessionItem): VocabMode {
   if (item.mode === 'dictation' && !canSpeak()) return 'spell'
-  if (item.mode === 'cloze' && !(item.view.context && clozeOf(item.view.context.text, item.view.word, item.view.forms))) return 'spell'
+  if (
+    item.mode === 'cloze' &&
+    !(item.view.context && clozeOf(item.view.context.text, item.view.word, item.view.forms))
+  )
+    return 'spell'
   return item.mode
 }
 
-export function WordMeaning({ view, roots, t }: { view: WordView; roots?: RootEntry[]; t: T }): JSX.Element {
+export function WordMeaning({
+  view,
+  roots,
+  t,
+}: {
+  view: WordView
+  roots?: RootEntry[]
+  t: T
+}): JSX.Element {
   return (
     <div className="space-y-2 text-left">
       {view.meanings.length ? (
@@ -57,7 +73,10 @@ export function WordMeaning({ view, roots, t }: { view: WordView; roots?: RootEn
           <p className="italic">{view.context.text}</p>
           {(view.context.documentName || view.context.page !== undefined) && (
             <p className="mt-0.5 text-xs">
-              {[view.context.documentName, view.context.page !== undefined ? t('vocab.page', { page: view.context.page }) : '']
+              {[
+                view.context.documentName,
+                view.context.page !== undefined ? t('vocab.page', { page: view.context.page }) : '',
+              ]
                 .filter(Boolean)
                 .join(' · ')}
             </p>
@@ -69,7 +88,8 @@ export function WordMeaning({ view, roots, t }: { view: WordView; roots?: RootEn
           <p className="font-medium">{t('vocab.rootsHint')}</p>
           {roots.map(([key, , meaning, examples]) => (
             <p key={key}>
-              <span className="font-mono text-foreground">{key.replace(/\d+$/, '')}</span> — {meaning}
+              <span className="font-mono text-foreground">{key.replace(/\d+$/, '')}</span> —{' '}
+              {meaning}
               {examples.length ? `（${examples.join(', ')}）` : ''}
             </p>
           ))}
@@ -88,7 +108,13 @@ export interface StudySessionProps {
   onProgress?: () => void
 }
 
-export function StudySession({ items, bookId, service, onExit, onProgress }: StudySessionProps): JSX.Element {
+export function StudySession({
+  items,
+  bookId,
+  service,
+  onExit,
+  onProgress,
+}: StudySessionProps): JSX.Element {
   const { t } = useTranslation()
   const [queue, setQueue] = useState(items)
   const [done, setDone] = useState(0)
@@ -105,7 +131,10 @@ export function StudySession({ items, bookId, service, onExit, onProgress }: Stu
   const mode = current ? effectiveMode(current) : 'learn'
   const typing = mode === 'spell' || mode === 'dictation' || mode === 'cloze'
   const cloze = useMemo(
-    () => (current?.view.context ? clozeOf(current.view.context.text, current.view.word, current.view.forms) : null),
+    () =>
+      current?.view.context
+        ? clozeOf(current.view.context.text, current.view.word, current.view.forms)
+        : null,
     [current],
   )
 
@@ -115,7 +144,9 @@ export function StudySession({ items, bookId, service, onExit, onProgress }: Stu
     let cancelled = false
     setIntervals(null)
     setRoots([])
-    void service.previewIntervals(current.view.word).then((value) => !cancelled && setIntervals(value))
+    void service
+      .previewIntervals(current.view.word)
+      .then((value) => !cancelled && setIntervals(value))
     void service.details(current.view.word).then((value) => !cancelled && setRoots(value.roots))
     if (mode === 'dictation') speak(current.view.word)
     if (typing) setTimeout(() => inputRef.current?.focus(), 0)
@@ -150,7 +181,11 @@ export function StudySession({ items, bookId, service, onExit, onProgress }: Stu
         setResult(null)
         onProgress?.()
       } catch (err) {
-        toast({ variant: 'error', title: t('vocab.saveFailed'), description: (err as Error).message })
+        toast({
+          variant: 'error',
+          title: t('vocab.saveFailed'),
+          description: (err as Error).message,
+        })
       } finally {
         setBusy(false)
       }
@@ -197,7 +232,9 @@ export function StudySession({ items, bookId, service, onExit, onProgress }: Stu
       <Card>
         <CardContent className="space-y-3 p-6 text-center">
           <p className="text-lg font-medium">{t('vocab.sessionDone')}</p>
-          <p className="text-sm text-muted-foreground">{t('vocab.sessionDoneHint', { count: done })}</p>
+          <p className="text-sm text-muted-foreground">
+            {t('vocab.sessionDoneHint', { count: done })}
+          </p>
           <Button onClick={onExit}>{t('vocab.backToOverview')}</Button>
         </CardContent>
       </Card>
@@ -228,13 +265,20 @@ export function StudySession({ items, bookId, service, onExit, onProgress }: Stu
                 {view.word}
               </span>
               {canSpeak() && (
-                <Button variant="ghost" size="icon" aria-label={t('vocab.speak')} onClick={() => speak(view.word)}>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  aria-label={t('vocab.speak')}
+                  onClick={() => speak(view.word)}
+                >
                   <Volume2 className="h-4 w-4" />
                 </Button>
               )}
             </div>
           )}
-          {!typing && view.phonetic && <p className="text-sm text-muted-foreground">/{view.phonetic}/</p>}
+          {!typing && view.phonetic && (
+            <p className="text-sm text-muted-foreground">/{view.phonetic}/</p>
+          )}
           {mode === 'dictation' && (
             <Button variant="outline" onClick={() => speak(view.word)}>
               <Volume2 className="h-4 w-4" />
@@ -244,7 +288,14 @@ export function StudySession({ items, bookId, service, onExit, onProgress }: Stu
           {mode === 'cloze' && cloze && <p className="text-[15px] italic">{cloze.text}</p>}
           {(mode === 'spell' || mode === 'cloze') && !revealed && (
             <div className="mx-auto max-w-md">
-              <WordMeaning view={{ ...view, context: mode === 'spell' && cloze ? { ...view.context!, text: cloze.text } : undefined }} t={t} />
+              <WordMeaning
+                view={{
+                  ...view,
+                  context:
+                    mode === 'spell' && cloze ? { ...view.context!, text: cloze.text } : undefined,
+                }}
+                t={t}
+              />
             </div>
           )}
 
@@ -270,9 +321,18 @@ export function StudySession({ items, bookId, service, onExit, onProgress }: Stu
                 )}
               />
               {result && (
-                <p className={cn('flex items-center justify-center gap-1.5 text-sm', result.correct ? 'text-emerald-600' : 'text-destructive')}>
+                <p
+                  className={cn(
+                    'flex items-center justify-center gap-1.5 text-sm',
+                    result.correct ? 'text-emerald-600' : 'text-destructive',
+                  )}
+                >
                   {result.correct ? <Check className="h-4 w-4" /> : <X className="h-4 w-4" />}
-                  {result.correct ? t('vocab.correct') : result.nearMiss ? t('vocab.nearMiss') : t('vocab.wrong')}
+                  {result.correct
+                    ? t('vocab.correct')
+                    : result.nearMiss
+                      ? t('vocab.nearMiss')
+                      : t('vocab.wrong')}
                 </p>
               )}
             </div>
@@ -285,9 +345,16 @@ export function StudySession({ items, bookId, service, onExit, onProgress }: Stu
                   <span translate="no" className="notranslate text-2xl font-semibold">
                     {view.word}
                   </span>
-                  {view.phonetic && <span className="text-sm text-muted-foreground">/{view.phonetic}/</span>}
+                  {view.phonetic && (
+                    <span className="text-sm text-muted-foreground">/{view.phonetic}/</span>
+                  )}
                   {canSpeak() && (
-                    <Button variant="ghost" size="icon" aria-label={t('vocab.speak')} onClick={() => speak(view.word)}>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      aria-label={t('vocab.speak')}
+                      onClick={() => speak(view.word)}
+                    >
                       <Volume2 className="h-4 w-4" />
                     </Button>
                   )}
@@ -301,7 +368,13 @@ export function StudySession({ items, bookId, service, onExit, onProgress }: Stu
         {/* Actions */}
         {typing ? (
           result ? (
-            <Button className="w-full" disabled={busy} onClick={() => void advance(result.correct ? 3 : result.nearMiss ? 2 : 1, result.correct)}>
+            <Button
+              className="w-full"
+              disabled={busy}
+              onClick={() =>
+                void advance(result.correct ? 3 : result.nearMiss ? 2 : 1, result.correct)
+              }
+            >
               {t('vocab.next')}
             </Button>
           ) : (
@@ -323,11 +396,21 @@ export function StudySession({ items, bookId, service, onExit, onProgress }: Stu
         ) : revealed ? (
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
             {RATINGS.map(({ rating, labelKey, variant }) => (
-              <Button key={rating} variant={variant} disabled={busy} onClick={() => void advance(rating)} className="h-auto flex-col gap-0.5 py-2">
+              <Button
+                key={rating}
+                variant={variant}
+                disabled={busy}
+                onClick={() => void advance(rating)}
+                className="h-auto flex-col gap-0.5 py-2"
+              >
                 <span>
                   {t(labelKey)} <span className="text-xs opacity-60">{rating}</span>
                 </span>
-                {intervals && <span className="text-xs font-normal opacity-75">{formatSpan(intervals[rating], t)}</span>}
+                {intervals && (
+                  <span className="text-xs font-normal opacity-75">
+                    {formatSpan(intervals[rating], t)}
+                  </span>
+                )}
               </Button>
             ))}
           </div>
@@ -336,7 +419,9 @@ export function StudySession({ items, bookId, service, onExit, onProgress }: Stu
             {t('vocab.reveal')}
           </Button>
         )}
-        <p className="text-center text-xs text-muted-foreground">{typing ? t('vocab.keyboardTyping') : t('vocab.keyboardHint')}</p>
+        <p className="text-center text-xs text-muted-foreground">
+          {typing ? t('vocab.keyboardTyping') : t('vocab.keyboardHint')}
+        </p>
       </CardContent>
     </Card>
   )

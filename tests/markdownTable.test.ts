@@ -127,7 +127,11 @@ describe('tryParseTable', () => {
 
   it('rejects a lone pipe sentence', () => {
     expect(
-      tryParseTable(['The expression |x| means absolute value.', 'not a delimiter'], 0, noTerminator),
+      tryParseTable(
+        ['The expression |x| means absolute value.', 'not a delimiter'],
+        0,
+        noTerminator,
+      ),
     ).toBeNull()
   })
 
@@ -153,12 +157,7 @@ describe('tryParseTable', () => {
 describe('parseMarkdownBlocks — tables', () => {
   it('produces a table block for a truth table', () => {
     const blocks = parseMarkdownBlocks(
-      [
-        '| P | Q | P∧Q |',
-        '| :---: | :---: | :---: |',
-        '| T | T | T |',
-        '| T | F | F |',
-      ].join('\n'),
+      ['| P | Q | P∧Q |', '| :---: | :---: | :---: |', '| T | T | T |', '| T | F | F |'].join('\n'),
     )
     const table = blocks.find((block) => block.kind === 'table')
     if (table?.kind !== 'table') throw new Error('expected a table block')

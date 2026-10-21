@@ -67,7 +67,10 @@ export function VisualSourceFigure({ visual, documentName }: VisualSourceFigureP
           {t('tutor.visualUnavailable')}
         </div>
       ) : (
-        <div className="h-24 animate-pulse rounded-lg border border-border/70 bg-muted/40" aria-hidden />
+        <div
+          className="h-24 animate-pulse rounded-lg border border-border/70 bg-muted/40"
+          aria-hidden
+        />
       )}
       <figcaption className="text-center text-[13px] text-muted-foreground">
         {visual.caption}

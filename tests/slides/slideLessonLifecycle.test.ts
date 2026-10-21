@@ -64,7 +64,12 @@ describe('SlideLesson lifecycle', () => {
     const projects = new ProjectService(db)
     const project = await projects.create({ name: 'P', subject: 'cs' })
     const documents = new DocumentRepository(db)
-    const doc = await documents.create({ projectId: project.id, type: 'pptx', name: 'deck.pptx', sizeBytes: 0 })
+    const doc = await documents.create({
+      projectId: project.id,
+      type: 'pptx',
+      name: 'deck.pptx',
+      sizeBytes: 0,
+    })
     await new SlideLessonRepository(db).upsert(slideLesson(project.id, doc.id))
 
     const service = new DocumentService({ documents, projects, db })

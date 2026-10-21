@@ -4,11 +4,7 @@ import { AppDatabase, setDbForTesting } from '@/infrastructure/db/database'
 import { SettingsService } from '@/services/settingsService'
 import { SettingsRepository } from '@/entities/settings/repository'
 import { getDeviceKey } from '@/infrastructure/crypto/deviceKey'
-import {
-  decryptString,
-  encryptString,
-  isEncryptedPayload,
-} from '@/infrastructure/crypto/crypto'
+import { decryptString, encryptString, isEncryptedPayload } from '@/infrastructure/crypto/crypto'
 import { OpenAICompatibleProvider, redactUrl } from '@/infrastructure/ai/openaiCompatible'
 import { logger } from '@/infrastructure/logger/logger'
 import type { ProviderConfig } from '@/infrastructure/ai/types'
@@ -259,7 +255,9 @@ describe('API key is never logged', () => {
     expect(redactUrl(`https://proxy.example.com/v1/chat/completions?key=${SECRET}#x`)).toBe(
       'https://proxy.example.com/v1/chat/completions',
     )
-    expect(redactUrl(`https://user:${SECRET}@proxy.example.com/v1`)).toBe('https://proxy.example.com/v1')
+    expect(redactUrl(`https://user:${SECRET}@proxy.example.com/v1`)).toBe(
+      'https://proxy.example.com/v1',
+    )
     expect(redactUrl(`not a url?key=${SECRET}`)).not.toContain(SECRET)
   })
 
@@ -272,14 +270,12 @@ describe('API key is never logged', () => {
       temperature: 0.5,
       maxTokens: 128,
     }
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValue(
-        new Response(JSON.stringify({ choices: [{ message: { content: 'ok' } }] }), {
-          status: 200,
-          headers: { 'Content-Type': 'application/json' },
-        }),
-      )
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ choices: [{ message: { content: 'ok' } }] }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    )
     const originalFetch = globalThis.fetch
     globalThis.fetch = fetchMock as unknown as typeof fetch
     try {
@@ -305,14 +301,12 @@ describe('API key is never placed in a URL', () => {
       temperature: 0.5,
       maxTokens: 128,
     }
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValue(
-        new Response(JSON.stringify({ choices: [{ message: { content: 'ok' } }] }), {
-          status: 200,
-          headers: { 'Content-Type': 'application/json' },
-        }),
-      )
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ choices: [{ message: { content: 'ok' } }] }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    )
     const originalFetch = globalThis.fetch
     globalThis.fetch = fetchMock as unknown as typeof fetch
     try {

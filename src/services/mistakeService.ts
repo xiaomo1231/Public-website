@@ -43,7 +43,9 @@ export class MistakeService {
   async recordFromAttempt(attempt: QuestionAttempt, question: Question): Promise<Mistake | null> {
     if (attempt.evaluation.isCorrect !== false) return null
 
-    const existing = question.id ? await this.repo.findByQuestion(attempt.projectId, question.id) : undefined
+    const existing = question.id
+      ? await this.repo.findByQuestion(attempt.projectId, question.id)
+      : undefined
     if (existing) {
       return this.repo.update(existing.id, {
         attemptCount: existing.attemptCount + 1,
@@ -162,7 +164,8 @@ export class MistakeService {
   }): Promise<Mistake> {
     if (!input.question.trim()) throw new ValidationError(t('errors.mistakeQuestionRequired'))
     if (!input.correctAnswer.trim()) throw new ValidationError(t('errors.mistakeAnswerRequired'))
-    if (!input.knowledgePoint.trim()) throw new ValidationError(t('errors.mistakeKnowledgePointRequired'))
+    if (!input.knowledgePoint.trim())
+      throw new ValidationError(t('errors.mistakeKnowledgePointRequired'))
     const payload: AddMistakeInput = {
       projectId: input.projectId,
       question: input.question.trim(),
@@ -220,7 +223,11 @@ export class MistakeService {
   }
 
   /** Recent mistakes for a knowledge point — used to spot patterns. */
-  async recentForKnowledgePoint(projectId: string, knowledgePoint: string, limit = 5): Promise<Mistake[]> {
+  async recentForKnowledgePoint(
+    projectId: string,
+    knowledgePoint: string,
+    limit = 5,
+  ): Promise<Mistake[]> {
     const rows = await this.repo.listByProject(projectId, { knowledgePoint })
     return rows.slice(0, limit)
   }

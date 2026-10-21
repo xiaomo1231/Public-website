@@ -16,11 +16,20 @@ import type {
 } from '@/entities/quiz/types'
 import type { DifficultyLevel } from '@/infrastructure/ai/prompts/types'
 import { prompts } from '@/infrastructure/ai/prompts'
-import type { QuizGenerationOutput, GeneratedQuizQuestion } from '@/infrastructure/ai/prompts/quiz-generator/v6'
+import type {
+  QuizGenerationOutput,
+  GeneratedQuizQuestion,
+} from '@/infrastructure/ai/prompts/quiz-generator/v6'
 import type { ChatMessage } from '@/infrastructure/ai/types'
 import type { AIService } from './aiService'
 import { evaluateDeterministic, parseTrueFalse } from './answerEvaluationService'
-import { decideNextDifficulty, nextStreaks, DEFAULT_DIFFICULTY, DIFFICULTY_ORDER, stepDifficulty } from './adaptiveDifficulty'
+import {
+  decideNextDifficulty,
+  nextStreaks,
+  DEFAULT_DIFFICULTY,
+  DIFFICULTY_ORDER,
+  stepDifficulty,
+} from './adaptiveDifficulty'
 import { MasteryService } from './masteryService'
 import type { MistakeService } from './mistakeService'
 import type { ProjectService } from './projectService'
@@ -48,7 +57,6 @@ import type { Subject } from '@/entities/project/types'
 import { UserRepository } from '@/entities/user/repository'
 import { shuffled } from '@/shared/lib/shuffle'
 import { DEFAULT_QUESTION_LANGUAGE, type QuestionLanguage } from '@/entities/user/types'
-
 
 /** Scoring points per short answer: enough to grade, few enough to stay distinct. */
 const MIN_RUBRIC_POINTS = 2
@@ -128,7 +136,10 @@ function answerStandsOut(options: Array<{ label: string; isCorrect: boolean }>):
   const others = options.filter((o) => !o.isCorrect).map((o) => o.label.length)
   if (!correct || others.length === 0) return false
   const longest = Math.max(...others)
-  return correct.label.length > longest * ANSWER_LENGTH_RATIO && correct.label.length - longest >= ANSWER_LENGTH_MARGIN
+  return (
+    correct.label.length > longest * ANSWER_LENGTH_RATIO &&
+    correct.label.length - longest >= ANSWER_LENGTH_MARGIN
+  )
 }
 
 /** The language the generator writes in, from the student's preference and the material. */
@@ -339,7 +350,10 @@ export class QuizService {
       plan.push(current)
       if (config.difficulty === 'adaptive') {
         // Gentle ramp: every 3 questions bump one level until `advanced`.
-        if ((i + 1) % 3 === 0 && DIFFICULTY_ORDER.indexOf(current) < DIFFICULTY_ORDER.indexOf('advanced')) {
+        if (
+          (i + 1) % 3 === 0 &&
+          DIFFICULTY_ORDER.indexOf(current) < DIFFICULTY_ORDER.indexOf('advanced')
+        ) {
           current = stepDifficulty(current, +1)
         }
       }
@@ -417,7 +431,9 @@ export class QuizService {
         if (groups.length > 1) (entry as PlanEntry).group = i % groups.length
       })
       // Only ids actually offered to the model can ever be cited.
-      const snippetIndex = new Map(groups.flatMap((group) => group.snippets).map((s) => [s.chunkId, s]))
+      const snippetIndex = new Map(
+        groups.flatMap((group) => group.snippets).map((s) => [s.chunkId, s]),
+      )
 
       options.onProgress?.('generating', 30)
       // How the professor writes questions (never what is tested). Absent when
@@ -427,7 +443,8 @@ export class QuizService {
         ? formatQuestionStyleContext(courseContext.questionStyleProfile)
         : undefined
       const preference =
-        config.questionLanguage ?? (await new UserRepository(this.db).get().catch(() => undefined))?.questionLanguage
+        config.questionLanguage ??
+        (await new UserRepository(this.db).get().catch(() => undefined))?.questionLanguage
       const generated = await this.generateInBatches(
         plan,
         groups,
@@ -446,31 +463,32 @@ export class QuizService {
         generated.map(({ question: q, entry }, i) => {
           const group = groups[entry.group ?? 0]
           const topicId = group?.topicId ?? topic?.id
-          const fallbackPoint = group?.knowledgePoints[0] ?? knowledgePoints[i % Math.max(1, knowledgePoints.length)]
+          const fallbackPoint =
+            group?.knowledgePoints[0] ?? knowledgePoints[i % Math.max(1, knowledgePoints.length)]
           return {
-          projectId,
-          ...(topicId ? { topicId } : {}),
-          knowledgePoint:
-            q.knowledgePoint || fallbackPoint || topic?.name || config.topicName || 'General',
-          // The question's own (validated) type: a dropped question must never
-          // shift the types of the ones after it.
-          type: q.type,
-          difficulty: entry.difficulty,
-          prompt: q.prompt,
-          // Models put the answer first; the order the student sees is random.
-          ...(q.options ? { options: shuffled(q.options) } : {}),
-          correctAnswer: q.correctAnswer,
-          ...(q.unit ? { unit: q.unit } : {}),
-          ...(q.rubric?.length
-            ? { rubric: q.rubric.map((text, index) => ({ id: `p${index + 1}`, text })) }
-            : {}),
-          ...(q.orderItems?.length ? { orderItems: q.orderItems } : {}),
-          ...(q.matchItems?.length ? { matchItems: q.matchItems } : {}),
-          ...(q.blanks?.length ? { blanks: q.blanks } : {}),
-          ...(q.solution ? { solution: q.solution } : {}),
-          hints: q.hints ?? [],
-          sourceRefs: resolveSourceReferences(q.sourceChunkId, q.quote, snippetIndex),
-          promptVersion: prompts.quizGenerator.VERSION,
+            projectId,
+            ...(topicId ? { topicId } : {}),
+            knowledgePoint:
+              q.knowledgePoint || fallbackPoint || topic?.name || config.topicName || 'General',
+            // The question's own (validated) type: a dropped question must never
+            // shift the types of the ones after it.
+            type: q.type,
+            difficulty: entry.difficulty,
+            prompt: q.prompt,
+            // Models put the answer first; the order the student sees is random.
+            ...(q.options ? { options: shuffled(q.options) } : {}),
+            correctAnswer: q.correctAnswer,
+            ...(q.unit ? { unit: q.unit } : {}),
+            ...(q.rubric?.length
+              ? { rubric: q.rubric.map((text, index) => ({ id: `p${index + 1}`, text })) }
+              : {}),
+            ...(q.orderItems?.length ? { orderItems: q.orderItems } : {}),
+            ...(q.matchItems?.length ? { matchItems: q.matchItems } : {}),
+            ...(q.blanks?.length ? { blanks: q.blanks } : {}),
+            ...(q.solution ? { solution: q.solution } : {}),
+            hints: q.hints ?? [],
+            sourceRefs: resolveSourceReferences(q.sourceChunkId, q.quote, snippetIndex),
+            promptVersion: prompts.quizGenerator.VERSION,
           }
         }),
       )
@@ -483,7 +501,11 @@ export class QuizService {
         status: 'ready',
       }
       if (stored.length < config.count) {
-        logger.warn('Quiz has fewer questions than requested', { quizId: quiz.id, requested: config.count, generated: stored.length })
+        logger.warn('Quiz has fewer questions than requested', {
+          quizId: quiz.id,
+          requested: config.count,
+          generated: stored.length,
+        })
       }
       await this.quizzes.upsert(ready)
       options.onProgress?.('done', 100)
@@ -506,7 +528,10 @@ export class QuizService {
   private async generateInBatches(
     plan: PlanEntry[],
     groups: QuizGroup[],
-    context: Omit<Parameters<typeof prompts.quizGenerator.buildUserPrompt>[0], 'plan' | 'sourceSnippets' | 'knowledgePoints'>,
+    context: Omit<
+      Parameters<typeof prompts.quizGenerator.buildUserPrompt>[0],
+      'plan' | 'sourceSnippets' | 'knowledgePoints'
+    >,
     subject: Subject | undefined,
     signal?: AbortSignal,
   ): Promise<Array<{ question: GeneratedQuizQuestion; entry: PlanEntry }>> {
@@ -516,11 +541,17 @@ export class QuizService {
     let lastError: unknown = null
     for (let round = 0; round <= MAX_TOP_UP_ROUNDS && pending.length > 0; round++) {
       const batches: PlanEntry[][] = []
-      for (let i = 0; i < pending.length; i += QUIZ_BATCH_SIZE) batches.push(pending.slice(i, i + QUIZ_BATCH_SIZE))
+      for (let i = 0; i < pending.length; i += QUIZ_BATCH_SIZE)
+        batches.push(pending.slice(i, i + QUIZ_BATCH_SIZE))
       const missing: PlanEntry[] = []
       for (const [index, batch] of batches.entries()) {
         signal?.throwIfAborted()
-        const { knowledgePoints, snippets } = this.batchMaterial(batch, groups, index, batches.length)
+        const { knowledgePoints, snippets } = this.batchMaterial(
+          batch,
+          groups,
+          index,
+          batches.length,
+        )
         try {
           const questions = await this.generateWithRetry(
             {
@@ -528,7 +559,9 @@ export class QuizService {
               knowledgePoints,
               plan: batch,
               sourceSnippets: snippets,
-              ...(delivered.length > 0 ? { avoidRepeating: delivered.map((d) => d.question.prompt) } : {}),
+              ...(delivered.length > 0
+                ? { avoidRepeating: delivered.map((d) => d.question.prompt) }
+                : {}),
             },
             subject,
             signal,
@@ -574,10 +607,13 @@ export class QuizService {
     if (groups.length <= 1) {
       const only = groups[0] ?? { knowledgePoints: [], snippets: [] }
       const all = only.snippets
-      const share = all.length >= batchCount * 4 ? all.filter((_, i) => i % batchCount === index) : all
+      const share =
+        all.length >= batchCount * 4 ? all.filter((_, i) => i % batchCount === index) : all
       return { knowledgePoints: only.knowledgePoints, snippets: share.map(formatSnippetForPrompt) }
     }
-    const used = [...new Set(batch.map((entry) => entry.group ?? 0))].map((g) => groups[g]!).filter(Boolean)
+    const used = [...new Set(batch.map((entry) => entry.group ?? 0))]
+      .map((g) => groups[g]!)
+      .filter(Boolean)
     const seen = new Set<string>()
     const snippets = used
       .flatMap((group) => group.snippets)
@@ -612,11 +648,16 @@ export class QuizService {
         }),
       },
     ]
-    if (config.mode !== 'mixed' || config.topicId || config.focusKnowledgePoints?.length) return single()
+    if (config.mode !== 'mixed' || config.topicId || config.focusKnowledgePoints?.length)
+      return single()
     const topics = await this.analyses.listTopics(projectId)
     if (topics.length < 2) return single()
     const chosen =
-      topics.length <= config.count ? topics : shuffled(topics).slice(0, config.count).sort((a, b) => a.order - b.order)
+      topics.length <= config.count
+        ? topics
+        : shuffled(topics)
+            .slice(0, config.count)
+            .sort((a, b) => a.order - b.order)
     const concepts = await this.analyses.listConcepts(projectId)
     return chosen.map((each) => {
       const points = concepts
@@ -660,7 +701,10 @@ export class QuizService {
         // only a few, and a cut-off response is rejected as a whole.
         const maxTokens = Math.min(
           QUIZ_MAX_OUTPUT_TOKENS,
-          Math.max(this.ai.maxOutputTokens ?? 0, QUIZ_BASE_OUTPUT_TOKENS + QUIZ_TOKENS_PER_QUESTION * input.plan.length),
+          Math.max(
+            this.ai.maxOutputTokens ?? 0,
+            QUIZ_BASE_OUTPUT_TOKENS + QUIZ_TOKENS_PER_QUESTION * input.plan.length,
+          ),
         )
         const { data } = await this.ai.chatJSON<QuizGenerationOutput>(messages, {
           maxTokens,
@@ -674,7 +718,9 @@ export class QuizService {
       }
     }
     throw new AppError(
-      t('errors.invalidQuiz', { reason: lastError instanceof Error ? lastError.message : 'unknown error' }),
+      t('errors.invalidQuiz', {
+        reason: lastError instanceof Error ? lastError.message : 'unknown error',
+      }),
       'QUIZ_GENERATION_FAILED',
     )
   }
@@ -785,7 +831,10 @@ export class QuizService {
         const parsed = normalizeOptionSet(q.options)
         if (!parsed || parsed.length < 4 || parsed.filter((o) => o.isCorrect).length < 2) continue
         options = parsed
-        correctAnswer = parsed.filter((o) => o.isCorrect).map((o) => o.label).join(' | ')
+        correctAnswer = parsed
+          .filter((o) => o.isCorrect)
+          .map((o) => o.label)
+          .join(' | ')
       }
       // B-type: shared options, 2–5 stems, one valid option index per stem.
       let matchItems: string[] | undefined
@@ -796,7 +845,14 @@ export class QuizService {
           .map((item) => item.replace(/\s+/g, ' ').trim().slice(0, 200))
           .filter(Boolean)
         const answers = Array.isArray(q.matchAnswers) ? q.matchAnswers : []
-        if (!parsed || parsed.length < 3 || stems.length < 2 || stems.length > 5 || answers.length !== stems.length) continue
+        if (
+          !parsed ||
+          parsed.length < 3 ||
+          stems.length < 2 ||
+          stems.length > 5 ||
+          answers.length !== stems.length
+        )
+          continue
         if (answers.some((a) => !Number.isInteger(a) || a < 0 || a >= parsed.length)) continue
         options = parsed.map((o) => ({ label: o.label, isCorrect: false }))
         matchItems = stems
@@ -806,15 +862,20 @@ export class QuizService {
       let blanks: string[][] | undefined
       if (type === 'fill_blank') {
         const count = (q.prompt.match(/_{3,}/g) ?? []).length
-        blanks = (Array.isArray(q.blanks) ? q.blanks : [])
-          .map((list) =>
-            (Array.isArray(list) ? list : [])
-              .filter((answer): answer is string => typeof answer === 'string')
-              .map((answer) => answer.trim().slice(0, 60))
-              .filter((answer) => answer && !answer.includes('\n'))
-              .slice(0, 6),
-          )
-        if (count < 1 || count > 4 || blanks.length !== count || blanks.some((list) => list.length === 0)) continue
+        blanks = (Array.isArray(q.blanks) ? q.blanks : []).map((list) =>
+          (Array.isArray(list) ? list : [])
+            .filter((answer): answer is string => typeof answer === 'string')
+            .map((answer) => answer.trim().slice(0, 60))
+            .filter((answer) => answer && !answer.includes('\n'))
+            .slice(0, 6),
+        )
+        if (
+          count < 1 ||
+          count > 4 ||
+          blanks.length !== count ||
+          blanks.some((list) => list.length === 0)
+        )
+          continue
         correctAnswer = blanks.map((list) => list[0]!).join(' | ')
       }
       // Code output needs the program in the prompt; without it the question
@@ -841,7 +902,9 @@ export class QuizService {
         // question's group / topic, with 'General' only as the last resort.
         knowledgePoint: typeof q.knowledgePoint === 'string' ? q.knowledgePoint.trim() : '',
         difficulty: (q.difficulty ?? 'basic') as DifficultyLevel,
-        hints: Array.isArray(q.hints) ? q.hints.filter((h): h is string => typeof h === 'string') : [],
+        hints: Array.isArray(q.hints)
+          ? q.hints.filter((h): h is string => typeof h === 'string')
+          : [],
         // Citation hints from the model — resolved against local chunks later.
         ...(typeof q.sourceChunkId === 'string' && q.sourceChunkId.trim()
           ? { sourceChunkId: q.sourceChunkId.trim() }
@@ -856,21 +919,30 @@ export class QuizService {
     return valid
   }
 
-  private async resolveKnowledgePoints(projectId: string, config: QuizConfig, topicName?: string): Promise<string[]> {
+  private async resolveKnowledgePoints(
+    projectId: string,
+    config: QuizConfig,
+    topicName?: string,
+  ): Promise<string[]> {
     // Explicit focus wins — review sessions and "practice this mistake".
     if (config.focusKnowledgePoints?.length) {
       return config.focusKnowledgePoints.slice(0, 8)
     }
     const concepts = await this.analyses.listConcepts(projectId)
     const topicIds = config.topicId ? new Set([config.topicId]) : null
-    const relevant = concepts.filter((c) => (topicIds ? c.topicIds.some((id) => topicIds.has(id)) : true))
+    const relevant = concepts.filter((c) =>
+      topicIds ? c.topicIds.some((id) => topicIds.has(id)) : true,
+    )
     const names = relevant.map((c) => c.name)
     // Up to 8 points spread over the whole list (it follows the textbook), not
     // its first few; a mixed review starts at a random place so repeated
     // reviews cover different parts.
     if (names.length > 8) {
       const offset = config.topicId ? 0 : Math.floor(Math.random() * names.length)
-      return Array.from({ length: 8 }, (_, i) => names[(offset + Math.floor((i * names.length) / 8)) % names.length]!)
+      return Array.from(
+        { length: 8 },
+        (_, i) => names[(offset + Math.floor((i * names.length) / 8)) % names.length]!,
+      )
     }
     if (names.length > 0) return names
     return topicName ? [topicName] : []
@@ -994,7 +1066,11 @@ export class QuizService {
           content: `Question: ${question.prompt}\nExpected: ${question.correctAnswer}\nStudent: ${userAnswer}`,
         },
       ]
-      const { data } = await this.ai.chatJSON<{ isCorrect: boolean; feedback?: string; confidence?: number }>(messages)
+      const { data } = await this.ai.chatJSON<{
+        isCorrect: boolean
+        feedback?: string
+        confidence?: number
+      }>(messages)
       return {
         isCorrect: Boolean(data.isCorrect),
         method: 'ai',
@@ -1005,7 +1081,9 @@ export class QuizService {
         note: t('errors.judgedByAi'),
       }
     } catch (err) {
-      logger.warn('AI answer evaluation failed; keeping unverified', { error: (err as Error)?.message })
+      logger.warn('AI answer evaluation failed; keeping unverified', {
+        error: (err as Error)?.message,
+      })
       return fallback
     }
   }
@@ -1031,7 +1109,10 @@ export class QuizService {
     // Practice work on the same point counts too; a rebuild replaces the row.
     const history = [
       ...(await this.attempts.listByKnowledgePoint(attempt.projectId, attempt.knowledgePoint)),
-      ...(await new PracticeService({ db: this.db }).practiceHistory(attempt.projectId, attempt.knowledgePoint)),
+      ...(await new PracticeService({ db: this.db }).practiceHistory(
+        attempt.projectId,
+        attempt.knowledgePoint,
+      )),
     ]
     await this.mastery.rebuild(attempt.projectId, history)
 
@@ -1070,13 +1151,18 @@ export class QuizService {
    * Generate a follow-up quiz. `harder` / `easier` shift the difficulty plan;
    * `weakness` targets knowledge points with low mastery.
    */
-  async generateMore(quizId: string, mode: MoreQuestionsMode, options: GenerateQuizOptions = {}): Promise<Quiz> {
+  async generateMore(
+    quizId: string,
+    mode: MoreQuestionsMode,
+    options: GenerateQuizOptions = {},
+  ): Promise<Quiz> {
     const quiz = await this.getQuiz(quizId)
     const baseConfig = quiz.config
     let config: QuizConfig = { ...baseConfig }
 
     if (mode === 'harder' || mode === 'easier') {
-      const base: DifficultyLevel = baseConfig.difficulty === 'adaptive' ? DEFAULT_DIFFICULTY : baseConfig.difficulty
+      const base: DifficultyLevel =
+        baseConfig.difficulty === 'adaptive' ? DEFAULT_DIFFICULTY : baseConfig.difficulty
       config = {
         ...baseConfig,
         difficulty: stepDifficulty(base, mode === 'harder' ? +1 : -1),
@@ -1112,7 +1198,10 @@ export class QuizService {
  * questions the system could not grade.
  */
 export function scoreQuiz(quiz: Quiz, attempts: QuestionAttempt[]): QuizScore {
-  const byDifficulty: Record<string, { correct: number; wrong: number; unverified: number; total: number }> = {}
+  const byDifficulty: Record<
+    string,
+    { correct: number; wrong: number; unverified: number; total: number }
+  > = {}
   const byKpMap = new Map<string, QuizKnowledgeStat>()
   let correct = 0
   let wrong = 0
@@ -1154,9 +1243,10 @@ export function scoreQuiz(quiz: Quiz, attempts: QuestionAttempt[]): QuizScore {
       kStat.correct++
     } else if (isCorrect === false) {
       wrong++
-      points += evaluation.score && evaluation.score.total > 0
-        ? evaluation.score.earned / evaluation.score.total
-        : 0
+      points +=
+        evaluation.score && evaluation.score.total > 0
+          ? evaluation.score.earned / evaluation.score.total
+          : 0
       dStat.wrong++
       kStat.wrong++
     } else {

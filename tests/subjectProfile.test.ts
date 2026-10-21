@@ -59,7 +59,9 @@ describe('subject profile prompt', () => {
   })
 
   it('folds the profile and subject into the stored prompt version', () => {
-    expect(subjectPromptVersion('v4', 'linear_algebra')).toBe('v4+subject-profile/v1:linear_algebra')
+    expect(subjectPromptVersion('v4', 'linear_algebra')).toBe(
+      'v4+subject-profile/v1:linear_algebra',
+    )
     expect(subjectPromptVersion('v4', 'stats')).toBe('v4+subject-profile/v1:stats.r2')
     expect(subjectPromptVersion('v4', undefined)).toBe('v4+subject-profile/v1:other')
     expect(subjectPromptVersion('v4', 'stats')).not.toBe(subjectPromptVersion('v4', 'physics'))
@@ -115,7 +117,10 @@ describe('project subject drives analysis freshness', () => {
   })
 
   it('makes a stored analysis stale when the project subject changes', async () => {
-    const project = await new ProjectService(db).create({ name: 'Algebra', subject: 'linear_algebra' })
+    const project = await new ProjectService(db).create({
+      name: 'Algebra',
+      subject: 'linear_algebra',
+    })
     const content = new CourseContentRepository({ db })
     const sourceHash = await content.computeSourceHash(project.id)
     await new CourseAnalysisRepository(db).reseedProject(

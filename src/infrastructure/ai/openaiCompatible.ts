@@ -97,7 +97,11 @@ export class OpenAICompatibleProvider implements AIProvider {
       const content = choice?.message?.content ?? choice?.delta?.content ?? ''
       const u = json.usage
       const usage = u
-        ? { promptTokens: u.prompt_tokens ?? 0, completionTokens: u.completion_tokens ?? 0, totalTokens: u.total_tokens ?? 0 }
+        ? {
+            promptTokens: u.prompt_tokens ?? 0,
+            completionTokens: u.completion_tokens ?? 0,
+            totalTokens: u.total_tokens ?? 0,
+          }
         : undefined
       const model = json.model ?? req.model ?? this.config.model
       const finishReason =
@@ -269,7 +273,12 @@ export class OpenAICompatibleProvider implements AIProvider {
     }
   }
 
-  async testConnection(): Promise<{ ok: boolean; latencyMs: number; model: string; error?: string }> {
+  async testConnection(): Promise<{
+    ok: boolean
+    latencyMs: number
+    model: string
+    error?: string
+  }> {
     const start = Date.now()
     const budget = this.budgetSignal()
     try {

@@ -60,7 +60,15 @@ function splitPart(part: string): { gene: string; expr: string } {
 }
 
 /** The display name of a phenotype class, from the lesson's trait names where given. */
-function PhenotypeName({ phenotype, traits, t }: { phenotype: string; traits: PunnettTrait[]; t: T }): JSX.Element {
+function PhenotypeName({
+  phenotype,
+  traits,
+  t,
+}: {
+  phenotype: string
+  traits: PunnettTrait[]
+  t: T
+}): JSX.Element {
   const [sexPart, genesPart] = phenotype.includes('|') ? phenotype.split('|') : ['', phenotype]
   const male = sexPart === 'male'
   const parts = genesPart!.split(' ').map((part, index) => {
@@ -69,13 +77,20 @@ function PhenotypeName({ phenotype, traits, t }: { phenotype: string; traits: Pu
     const xLinked = part.startsWith('X:')
     if (expr === 'intermediate') {
       if (trait?.intermediate) return trait.intermediate
-      if (trait?.dominant && trait.recessive) return t('viz.punnettIntermediate', { dominant: trait.dominant, recessive: trait.recessive })
+      if (trait?.dominant && trait.recessive)
+        return t('viz.punnettIntermediate', {
+          dominant: trait.dominant,
+          recessive: trait.recessive,
+        })
       return <GenotypeText key={index} text={`${gene.toUpperCase()}${gene}`} />
     }
     const tokens = expr.split('+')
     if (trait?.alleles?.length) {
-      const names = tokens.map((token) => trait.alleles!.find((entry) => entry.allele === token)?.name)
-      if (names.every(Boolean)) return names.every((name) => name!.length === 1) ? names.join('') : names.join(' + ')
+      const names = tokens.map(
+        (token) => trait.alleles!.find((entry) => entry.allele === token)?.name,
+      )
+      if (names.every(Boolean))
+        return names.every((name) => name!.length === 1) ? names.join('') : names.join(' + ')
     }
     if (trait?.dominant && trait.recessive) {
       if (tokens.length === 1) return isDominant(tokens[0]!) ? trait.dominant : trait.recessive
@@ -120,7 +135,9 @@ function PhenotypeList({
           <span
             aria-hidden
             className="inline-block h-2.5 w-2.5 rounded-sm"
-            style={{ background: CLASS_SWATCHES[(classIndex.get(entry.key) ?? 0) % CLASS_SWATCHES.length] }}
+            style={{
+              background: CLASS_SWATCHES[(classIndex.get(entry.key) ?? 0) % CLASS_SWATCHES.length],
+            }}
           />
           <PhenotypeName phenotype={entry.key} traits={traits} t={t} />
           <span className="data-num">
@@ -132,11 +149,22 @@ function PhenotypeList({
   )
 }
 
-export function TutorPunnettFigure({ visualization, t }: { visualization: PunnettVisualization; t: T }): JSX.Element | null {
+export function TutorPunnettFigure({
+  visualization,
+  t,
+}: {
+  visualization: PunnettVisualization
+  t: T
+}): JSX.Element | null {
   const mother = genotypePairs(visualization.mother)
   const father = genotypePairs(visualization.father)
   if (!mother || !father) return null
-  const result = punnettSquare(mother, father, visualization.dominance, dominanceOrderOf(visualization.traits))
+  const result = punnettSquare(
+    mother,
+    father,
+    visualization.dominance,
+    dominanceOrderOf(visualization.traits),
+  )
   const classIndex = new Map(result.phenotypes.map((entry, index) => [entry.key, index]))
 
   return (
@@ -144,7 +172,10 @@ export function TutorPunnettFigure({ visualization, t }: { visualization: Punnet
       <div className="overflow-x-auto">
         <table
           className="mx-auto border-collapse text-center text-sm"
-          aria-label={t('viz.punnettAria', { mother: visualization.mother, father: visualization.father })}
+          aria-label={t('viz.punnettAria', {
+            mother: visualization.mother,
+            father: visualization.father,
+          })}
         >
           <thead>
             <tr>
@@ -168,10 +199,17 @@ export function TutorPunnettFigure({ visualization, t }: { visualization: Punnet
                   <td
                     key={`${row}-${column}`}
                     className="data-num min-w-12 border border-border/80 p-2"
-                    style={{ background: CLASS_TINTS[(classIndex.get(cell.phenotype) ?? 0) % CLASS_TINTS.length] }}
+                    style={{
+                      background:
+                        CLASS_TINTS[(classIndex.get(cell.phenotype) ?? 0) % CLASS_TINTS.length],
+                    }}
                   >
                     <GenotypeText text={cell.genotype} />
-                    {cell.sex ? <span className="ml-0.5 text-[10px] text-muted-foreground">{cell.sex === 'male' ? '♂' : '♀'}</span> : null}
+                    {cell.sex ? (
+                      <span className="ml-0.5 text-[10px] text-muted-foreground">
+                        {cell.sex === 'male' ? '♂' : '♀'}
+                      </span>
+                    ) : null}
                   </td>
                 ))}
               </tr>
@@ -181,7 +219,8 @@ export function TutorPunnettFigure({ visualization, t }: { visualization: Punnet
       </div>
       <div className="space-y-1 text-center text-[13px] text-muted-foreground">
         <p className="font-medium text-foreground">
-          {t('viz.punnettCrossLabel')} <GenotypeText text={visualization.mother} /> × <GenotypeText text={visualization.father} />
+          {t('viz.punnettCrossLabel')} <GenotypeText text={visualization.mother} /> ×{' '}
+          <GenotypeText text={visualization.father} />
         </p>
         <p className="data-num">
           {t('viz.punnettGenotypes')}{' '}
@@ -199,17 +238,35 @@ export function TutorPunnettFigure({ visualization, t }: { visualization: Punnet
               <p className="font-medium text-foreground">
                 {sex === 'female' ? t('viz.punnettDaughters') : t('viz.punnettSons')}{' '}
                 {result.bySex![sex].phenotypes.length > 1 && (
-                  <span className="data-num">{t('viz.punnettPhenotypeRatio', { ratio: ratioText(result.bySex![sex].phenotypes.map((entry) => entry.count)) })}</span>
+                  <span className="data-num">
+                    {t('viz.punnettPhenotypeRatio', {
+                      ratio: ratioText(result.bySex![sex].phenotypes.map((entry) => entry.count)),
+                    })}
+                  </span>
                 )}
               </p>
-              <PhenotypeList phenotypes={result.bySex![sex].phenotypes} total={result.bySex![sex].total} classIndex={classIndex} traits={visualization.traits} t={t} />
+              <PhenotypeList
+                phenotypes={result.bySex![sex].phenotypes}
+                total={result.bySex![sex].total}
+                classIndex={classIndex}
+                traits={visualization.traits}
+                t={t}
+              />
             </div>
           ))
         ) : (
           <>
-            <PhenotypeList phenotypes={result.phenotypes} total={result.total} classIndex={classIndex} traits={visualization.traits} t={t} />
+            <PhenotypeList
+              phenotypes={result.phenotypes}
+              total={result.total}
+              classIndex={classIndex}
+              traits={visualization.traits}
+              t={t}
+            />
             <p className="data-num font-medium text-foreground">
-              {t('viz.punnettPhenotypeRatio', { ratio: ratioText(result.phenotypes.map((entry) => entry.count)) })}
+              {t('viz.punnettPhenotypeRatio', {
+                ratio: ratioText(result.phenotypes.map((entry) => entry.count)),
+              })}
             </p>
           </>
         )}
@@ -256,18 +313,31 @@ export function TutorPedigreeSvg({
 
   return (
     <div className="space-y-2">
-      <svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label={label} className="block h-auto w-full max-w-full">
+      <svg
+        viewBox={`0 0 ${width} ${height}`}
+        role="img"
+        aria-label={label}
+        className="block h-auto w-full max-w-full"
+      >
         <title>{label}</title>
         <g aria-hidden="true">
           {pedigree.rows.map((_, generation) => (
-            <text key={`g-${generation}`} x={8} y={28 + generation * ROW_HEIGHT + 4} fontSize="12" fill={LABEL}>
+            <text
+              key={`g-${generation}`}
+              x={8}
+              y={28 + generation * ROW_HEIGHT + 4}
+              fontSize="12"
+              fill={LABEL}
+            >
               {romanNumeral(generation + 1)}
             </text>
           ))}
 
           {/* Partnership, descent and sibship lines. */}
           {pedigree.couples.map((couple, index) => {
-            const parents = [couple.father, couple.mother].filter((id): id is string => Boolean(id)).map(pos)
+            const parents = [couple.father, couple.mother]
+              .filter((id): id is string => Boolean(id))
+              .map(pos)
             const children = couple.children.map(pos)
             const parentY = parents[0]!.y
             const midX = parents.reduce((sum, p) => sum + p.x, 0) / parents.length
@@ -283,7 +353,12 @@ export function TutorPedigreeSvg({
                     y2={parentY}
                   />
                 )}
-                <line x1={midX} x2={midX} y1={parents.length === 2 ? parentY : parentY + half} y2={sibshipY} />
+                <line
+                  x1={midX}
+                  x2={midX}
+                  y1={parents.length === 2 ? parentY : parentY + half}
+                  y2={sibshipY}
+                />
                 <line x1={Math.min(...xs)} x2={Math.max(...xs)} y1={sibshipY} y2={sibshipY} />
                 {children.map((child, i) => (
                   <line key={i} x1={child.x} x2={child.x} y1={sibshipY} y2={child.y - half} />
@@ -299,11 +374,24 @@ export function TutorPedigreeSvg({
               const fill = member.affected ? SERIES : CARD
               const shape =
                 member.sex === 'male' ? (
-                  <rect x={x - half} y={y - half} width={SYMBOL} height={SYMBOL} fill={fill} stroke={LINE} strokeWidth="1.6" />
+                  <rect
+                    x={x - half}
+                    y={y - half}
+                    width={SYMBOL}
+                    height={SYMBOL}
+                    fill={fill}
+                    stroke={LINE}
+                    strokeWidth="1.6"
+                  />
                 ) : member.sex === 'female' ? (
                   <circle cx={x} cy={y} r={half} fill={fill} stroke={LINE} strokeWidth="1.6" />
                 ) : (
-                  <path d={`M ${x} ${y - half} L ${x + half} ${y} L ${x} ${y + half} L ${x - half} ${y} Z`} fill={fill} stroke={LINE} strokeWidth="1.6" />
+                  <path
+                    d={`M ${x} ${y - half} L ${x + half} ${y} L ${x} ${y + half} L ${x - half} ${y} Z`}
+                    fill={fill}
+                    stroke={LINE}
+                    strokeWidth="1.6"
+                  />
                 )
               return (
                 <g key={id}>
@@ -325,7 +413,11 @@ export function TutorPedigreeSvg({
       </svg>
       <ul className="flex flex-wrap justify-center gap-x-4 gap-y-1 text-[13px] text-muted-foreground">
         <li className="inline-flex items-center gap-1.5">
-          <span aria-hidden className="inline-block h-3 w-3 border border-foreground" style={{ background: SERIES }} />
+          <span
+            aria-hidden
+            className="inline-block h-3 w-3 border border-foreground"
+            style={{ background: SERIES }}
+          />
           {t('viz.pedigreeAffected')}
         </li>
         <li className="inline-flex items-center gap-1.5">
@@ -334,7 +426,10 @@ export function TutorPedigreeSvg({
         </li>
         {hasCarrier && (
           <li className="inline-flex items-center gap-1.5">
-            <span aria-hidden className="relative inline-block h-3 w-3 rounded-full border border-foreground bg-card">
+            <span
+              aria-hidden
+              className="relative inline-block h-3 w-3 rounded-full border border-foreground bg-card"
+            >
               <span className="absolute left-1/2 top-1/2 h-1 w-1 -translate-x-1/2 -translate-y-1/2 rounded-full bg-foreground" />
             </span>
             {t('viz.pedigreeCarrier')}
@@ -394,7 +489,10 @@ function InheritanceSummary({
       <p className="font-medium text-foreground">{t('viz.inheritanceTitle')}</p>
       <ul className="space-y-0.5">
         {verdicts.map((verdict) => (
-          <li key={verdict.mode} className={verdict.possible ? 'text-foreground' : 'text-muted-foreground'}>
+          <li
+            key={verdict.mode}
+            className={verdict.possible ? 'text-foreground' : 'text-muted-foreground'}
+          >
             <span className="mr-1.5 inline-block w-4 text-center" aria-hidden>
               {verdict.possible ? '✓' : '✗'}
             </span>
@@ -404,7 +502,9 @@ function InheritanceSummary({
             ) : (
               <span className="ml-1">
                 {t('viz.inheritanceExcluded')}
-                {verdict.reason ? ` — ${t(WITNESS_KEYS[verdict.reason.kind], { who: verdict.reason.ids.map(nameOf).join(', ') })}` : ''}
+                {verdict.reason
+                  ? ` — ${t(WITNESS_KEYS[verdict.reason.kind], { who: verdict.reason.ids.map(nameOf).join(', ') })}`
+                  : ''}
               </span>
             )}
           </li>
@@ -418,10 +518,26 @@ function InheritanceSummary({
 // --- transcription and translation ------------------------------------------------
 
 const AMINO_ACIDS_ZH: Record<string, string> = {
-  Phe: '苯丙氨酸', Leu: '亮氨酸', Ile: '异亮氨酸', Met: '甲硫氨酸', Val: '缬氨酸', Ser: '丝氨酸',
-  Pro: '脯氨酸', Thr: '苏氨酸', Ala: '丙氨酸', Tyr: '酪氨酸', His: '组氨酸', Gln: '谷氨酰胺',
-  Asn: '天冬酰胺', Lys: '赖氨酸', Asp: '天冬氨酸', Glu: '谷氨酸', Cys: '半胱氨酸', Trp: '色氨酸',
-  Arg: '精氨酸', Gly: '甘氨酸',
+  Phe: '苯丙氨酸',
+  Leu: '亮氨酸',
+  Ile: '异亮氨酸',
+  Met: '甲硫氨酸',
+  Val: '缬氨酸',
+  Ser: '丝氨酸',
+  Pro: '脯氨酸',
+  Thr: '苏氨酸',
+  Ala: '丙氨酸',
+  Tyr: '酪氨酸',
+  His: '组氨酸',
+  Gln: '谷氨酰胺',
+  Asn: '天冬酰胺',
+  Lys: '赖氨酸',
+  Asp: '天冬氨酸',
+  Glu: '谷氨酸',
+  Cys: '半胱氨酸',
+  Trp: '色氨酸',
+  Arg: '精氨酸',
+  Gly: '甘氨酸',
 }
 
 function BaseRun({ dna, mrna, label }: { dna: string; mrna: string; label: string }): JSX.Element {
@@ -450,21 +566,31 @@ export function TutorTranslationFigure({
   if (!result) return null
   const start = Math.max(0, result.startIndex)
   const end = result.startIndex < 0 ? 0 : start + result.codons.length * 3
-  const leader = result.startIndex > 0 ? { dna: result.alignedDna.slice(0, start), mrna: result.mrna.slice(0, start) } : null
+  const leader =
+    result.startIndex > 0
+      ? { dna: result.alignedDna.slice(0, start), mrna: result.mrna.slice(0, start) }
+      : null
   const trailing =
     end < result.mrna.length && result.startIndex >= 0
       ? { dna: result.alignedDna.slice(end), mrna: result.mrna.slice(end) }
       : null
-  const writtenDirection = visualization.direction ?? (visualization.strand === 'coding' ? '5to3' : '3to5')
-  const alignedLabel = visualization.strand === 'coding' ? t('viz.translationCoding') : t('viz.translationTemplate')
-  const chain = result.codons.filter((codon) => codon.aminoAcid !== 'Stop').map((codon) => codon.aminoAcid)
+  const writtenDirection =
+    visualization.direction ?? (visualization.strand === 'coding' ? '5to3' : '3to5')
+  const alignedLabel =
+    visualization.strand === 'coding' ? t('viz.translationCoding') : t('viz.translationTemplate')
+  const chain = result.codons
+    .filter((codon) => codon.aminoAcid !== 'Stop')
+    .map((codon) => codon.aminoAcid)
 
   return (
     <div className="space-y-3 px-1 py-2">
       <p className="break-all text-xs text-muted-foreground">
         {t('viz.translationGiven', {
-          strand: visualization.strand === 'coding' ? t('viz.translationCodingShort') : t('viz.translationTemplateShort'),
-          direction: writtenDirection === '5to3' ? "5′→3′" : "3′→5′",
+          strand:
+            visualization.strand === 'coding'
+              ? t('viz.translationCodingShort')
+              : t('viz.translationTemplateShort'),
+          direction: writtenDirection === '5to3' ? '5′→3′' : '3′→5′',
         })}{' '}
         <span className="font-mono tracking-wider text-foreground">{visualization.dna}</span>
         {result.reversed ? <span className="ml-1">{t('viz.translationReversed')}</span> : null}
@@ -481,7 +607,9 @@ export function TutorTranslationFigure({
         <p className="text-sm text-muted-foreground">{t('viz.translationNoStart')}</p>
       ) : null}
       <ol className="flex flex-wrap gap-1.5" aria-label={t('viz.translationAria')}>
-        {leader ? <BaseRun dna={leader.dna} mrna={leader.mrna} label={t('viz.translationLeader')} /> : null}
+        {leader ? (
+          <BaseRun dna={leader.dna} mrna={leader.mrna} label={t('viz.translationLeader')} />
+        ) : null}
         {result.codons.map((codon, index) => {
           const stop = codon.aminoAcid === 'Stop'
           const from = start + index * 3
@@ -489,26 +617,48 @@ export function TutorTranslationFigure({
             <li
               key={index}
               className="data-num flex min-w-[3.75rem] flex-col items-center rounded-md border border-border/80 px-1.5 py-1 text-center"
-              style={{ background: stop ? 'hsl(var(--viz-series-2) / 0.12)' : 'hsl(var(--viz-series-1) / 0.08)' }}
+              style={{
+                background: stop
+                  ? 'hsl(var(--viz-series-2) / 0.12)'
+                  : 'hsl(var(--viz-series-1) / 0.08)',
+              }}
             >
-              <span className="font-mono text-xs tracking-wider text-muted-foreground">{result.alignedDna.slice(from, from + 3)}</span>
+              <span className="font-mono text-xs tracking-wider text-muted-foreground">
+                {result.alignedDna.slice(from, from + 3)}
+              </span>
               <span className="font-mono text-sm font-semibold tracking-wider">{codon.codon}</span>
               <span className="text-xs">
                 {stop ? t('viz.translationStop') : codon.aminoAcid}
                 {!stop && language === 'zh-CN' && AMINO_ACIDS_ZH[codon.aminoAcid] && (
-                  <span className="block text-[10px] text-muted-foreground">{AMINO_ACIDS_ZH[codon.aminoAcid]}</span>
+                  <span className="block text-[10px] text-muted-foreground">
+                    {AMINO_ACIDS_ZH[codon.aminoAcid]}
+                  </span>
                 )}
               </span>
             </li>
           )
         })}
-        {trailing ? <BaseRun dna={trailing.dna} mrna={trailing.mrna} label={t('viz.translationUntranslated')} /> : null}
-        {result.startIndex < 0 ? <BaseRun dna={result.alignedDna} mrna={result.mrna} label={t('viz.translationUntranslated')} /> : null}
+        {trailing ? (
+          <BaseRun
+            dna={trailing.dna}
+            mrna={trailing.mrna}
+            label={t('viz.translationUntranslated')}
+          />
+        ) : null}
+        {result.startIndex < 0 ? (
+          <BaseRun
+            dna={result.alignedDna}
+            mrna={result.mrna}
+            label={t('viz.translationUntranslated')}
+          />
+        ) : null}
       </ol>
       <p className="text-center text-[13px] text-muted-foreground">
         <span className="font-medium text-foreground">{t('viz.translationChain')}</span>{' '}
         <span className="data-num">{chain.length ? `N–${chain.join('–')}–C` : '—'}</span>
-        {result.startIndex >= 0 && !result.stopped && <span className="ml-2">{t('viz.translationNoStop')}</span>}
+        {result.startIndex >= 0 && !result.stopped && (
+          <span className="ml-2">{t('viz.translationNoStop')}</span>
+        )}
       </p>
     </div>
   )

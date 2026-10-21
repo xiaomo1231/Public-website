@@ -37,7 +37,9 @@ export class ProcessingJobRepository {
 
   async update(
     id: string,
-    patch: Partial<Pick<ProcessingJob, 'stage' | 'progress' | 'message' | 'finishedAt' | 'errorMessage'>>,
+    patch: Partial<
+      Pick<ProcessingJob, 'stage' | 'progress' | 'message' | 'finishedAt' | 'errorMessage'>
+    >,
   ): Promise<ProcessingJob> {
     const existing = await this.db.processingJobs.get(id)
     if (!existing) throw new StorageError(t('errors.jobNotFound'))
@@ -59,7 +61,12 @@ export class ProcessingJobRepository {
     return this.db.processingJobs.where('documentId').equals(documentId).delete()
   }
 
-  async setStage(id: string, stage: ProcessingStage, progress = 0, message?: string): Promise<void> {
+  async setStage(
+    id: string,
+    stage: ProcessingStage,
+    progress = 0,
+    message?: string,
+  ): Promise<void> {
     await this.update(id, { stage, progress, message })
     logger.debug('Processing stage', { id, stage, progress })
   }

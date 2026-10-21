@@ -35,10 +35,10 @@ const PROFILES: Record<Exclude<Subject, 'other'>, SubjectProfile> = {
   calculus: {
     name: 'Calculus / mathematical analysis',
     notation: [
-      'Limits as \\lim_{x \\to a}, derivatives as f\'(x) or \\frac{dy}{dx} (follow the course material), integrals always with their differential (dx).',
+      "Limits as \\lim_{x \\to a}, derivatives as f'(x) or \\frac{dy}{dx} (follow the course material), integrals always with their differential (dx).",
     ],
     reasoning: [
-      'Check and state the hypotheses before applying a theorem (continuity, differentiability, the 0/0 or ∞/∞ form for L\'Hôpital, convergence for series and improper integrals).',
+      "Check and state the hypotheses before applying a theorem (continuity, differentiability, the 0/0 or ∞/∞ form for L'Hôpital, convergence for series and improper integrals).",
       'When the course is rigorous (ε–δ, uniform convergence, compactness), keep that rigour instead of replacing it with intuition.',
     ],
     answers: [
@@ -48,7 +48,7 @@ const PROFILES: Record<Exclude<Subject, 'other'>, SubjectProfile> = {
       'missing chain-rule factors',
       'sign errors in integration by parts or substitution',
       'forgetting + C or changing integration limits',
-      'applying L\'Hôpital outside an indeterminate form',
+      "applying L'Hôpital outside an indeterminate form",
       'swapping limits, sums or integrals without justification',
     ],
     lesson: [
@@ -86,7 +86,9 @@ const PROFILES: Record<Exclude<Subject, 'other'>, SubjectProfile> = {
       'For counting, name the principle used (product rule, sum rule, inclusion–exclusion, pigeonhole) and whether order and repetition matter.',
       'Check general claims on a small explicit example; a truth table is welcome when it settles a logical claim.',
     ],
-    answers: ['Exact integers or closed forms; a small table or enumeration when it makes the answer checkable.'],
+    answers: [
+      'Exact integers or closed forms; a small table or enumeration when it makes the answer checkable.',
+    ],
     pitfalls: [
       'off-by-one errors in counting',
       'confusing ordered and unordered selections',
@@ -99,12 +101,12 @@ const PROFILES: Record<Exclude<Subject, 'other'>, SubjectProfile> = {
     name: 'Physics (university level, calculus-based: mechanics, electromagnetism, waves and optics, thermodynamics, modern physics)',
     notation: [
       'SI units throughout; vectors with explicit components or directions (\\vec{F}, \\hat{x}); state the coordinate axes and sign convention used.',
-      'Use calculus where the course does: v = dx/dt, a = dv/dt, W = \\int \\vec{F}\\cdot d\\vec{r}, flux integrals for Gauss\'s law, line integrals for Ampère\'s law.',
+      "Use calculus where the course does: v = dx/dt, a = dv/dt, W = \\int \\vec{F}\\cdot d\\vec{r}, flux integrals for Gauss's law, line integrals for Ampère's law.",
     ],
     reasoning: [
-      'Identify the system and the forces or interactions (a free-body diagram), list knowns and unknowns, then start from the governing law (Newton\'s laws, conservation of energy, momentum or angular momentum, Maxwell\'s equations, the laws of thermodynamics).',
+      "Identify the system and the forces or interactions (a free-body diagram), list knowns and unknowns, then start from the governing law (Newton's laws, conservation of energy, momentum or angular momentum, Maxwell's equations, the laws of thermodynamics).",
       'Solve symbolically first, substitute numbers last, then check units (dimensional analysis) and a limiting case.',
-      'For oscillations and waves write the equation of motion and its solution (x = A cos(ωt + φ), ω = √(k/m)); for circuits apply Kirchhoff\'s laws; for optics state the sign convention of 1/f = 1/d_o + 1/d_i.',
+      "For oscillations and waves write the equation of motion and its solution (x = A cos(ωt + φ), ω = √(k/m)); for circuits apply Kirchhoff's laws; for optics state the sign convention of 1/f = 1/d_o + 1/d_i.",
       'Thermodynamics: distinguish state functions from path quantities (Q, W) and use the first and second laws with entropy.',
     ],
     answers: [
@@ -197,7 +199,7 @@ const PROFILES: Record<Exclude<Subject, 'other'>, SubjectProfile> = {
     name: 'Basic medical sciences for clinical medicine and dentistry (years 1–2: systematic and regional anatomy, histology and embryology, physiology, medical biochemistry and molecular biology, medical cell biology, immunology, medical microbiology, oral anatomy and physiology, introductory pharmacology)',
     notation: [
       'Give each term in Chinese followed by English (and the Latin name for anatomical structures where the course uses it), e.g. 三角肌（deltoid）; define abbreviations on first use (ACh, GFR, CO).',
-      'Directions are relative to the anatomical position (superior / inferior, medial / lateral, proximal / distal, superficial / deep, anterior / posterior); left and right are the body\'s own, never the viewer\'s.',
+      "Directions are relative to the anatomical position (superior / inferior, medial / lateral, proximal / distal, superficial / deep, anterior / posterior); left and right are the body's own, never the viewer's.",
       'Dentistry: FDI two-digit tooth notation unless the course uses another system (11 = upper right permanent central incisor, 55 = upper right primary second molar); tooth surfaces mesial, distal, buccal / labial, lingual / palatal, occlusal / incisal.',
       'Units: mmHg (and kPa), mmol/L, mL/min, L/min, bpm; reference ranges are approximate and laboratory-dependent.',
     ],
@@ -214,7 +216,7 @@ const PROFILES: Record<Exclude<Subject, 'other'>, SubjectProfile> = {
     ],
     pitfalls: [
       'left and right taken from the viewer instead of the body',
-      'confusing afferent / efferent, sympathetic / parasympathetic, or a muscle\'s origin / insertion',
+      "confusing afferent / efferent, sympathetic / parasympathetic, or a muscle's origin / insertion",
       'mixing up similar structures (layers of an organ wall, arteries and veins in histology)',
       'unit errors (mmHg vs kPa, mmol/L vs mg/dL)',
       'getting the direction of a shift wrong (e.g. oxyhaemoglobin curve to the right)',
@@ -223,7 +225,7 @@ const PROFILES: Record<Exclude<Subject, 'other'>, SubjectProfile> = {
     ],
     lesson: [
       'When a quantitative physiology or biochemistry topic is central, state the values a diagram needs: ion concentrations (and permeabilities) for membrane potentials; P50 for oxygen binding; EDV, ESV and pressures for the cardiac cycle; lung volumes; Starling forces or clearance data; pH, PaCO₂ and HCO₃⁻ for acid–base; pKa values for an amino acid; the steps of a pathway with their ATP / NADH / FADH₂ changes; dose, volume of distribution, half-life and dosing interval for pharmacokinetics.',
-      'For anatomy give relations as a table (a muscle\'s origin, insertion, action, innervation and blood supply); trace sensory and motor pathways neuron by neuron with the level of each decussation; for embryology and tooth eruption give a timeline with ages.',
+      "For anatomy give relations as a table (a muscle's origin, insertion, action, innervation and blood supply); trace sensory and motor pathways neuron by neuron with the level of each decussation; for embryology and tooth eruption give a timeline with ages.",
       'Anatomy and histology are learnt from images: refer the student to the course figures by page rather than describing them from memory.',
     ],
     boundaries: [
@@ -241,7 +243,9 @@ const PROFILES: Record<Exclude<Subject, 'other'>, SubjectProfile> = {
       'Analyse recursive algorithms with a recurrence (e.g. T(n) = 2T(n/2) + Θ(n)) solved by the master theorem or a recursion tree; distinguish worst, average and amortised cost.',
       'Consider edge cases explicitly: empty input, a single element, duplicates, boundaries, overflow; mention stability and in-place behaviour for sorting.',
     ],
-    answers: ['Precise code or pseudocode in the language the course uses, with its complexity stated.'],
+    answers: [
+      'Precise code or pseudocode in the language the course uses, with its complexity stated.',
+    ],
     pitfalls: [
       'off-by-one and boundary errors',
       'a missing or wrong recursion base case',
@@ -291,11 +295,15 @@ export interface SubjectBlockOptions {
 }
 
 /** The block appended to a system prompt, or '' for subject "other". */
-export function buildSubjectBlock(subject: Subject | undefined, options: SubjectBlockOptions = {}): string {
+export function buildSubjectBlock(
+  subject: Subject | undefined,
+  options: SubjectBlockOptions = {},
+): string {
   if (!subject || subject === 'other') return ''
   const profile = PROFILES[subject]
   const list = (items: string[]) => items.map((item) => `  - ${item}`).join('\n')
-  const lesson = options.forLesson && profile.lesson?.length ? ['In this lesson:', list(profile.lesson)] : []
+  const lesson =
+    options.forLesson && profile.lesson?.length ? ['In this lesson:', list(profile.lesson)] : []
   return [
     `COURSE SUBJECT: ${profile.name}.`,
     'Use the conventions below for this subject. They never override explicit output rules elsewhere in these instructions (JSON shape, field formats, numeric-answer rules), and when the course material uses a different notation, follow the material.',

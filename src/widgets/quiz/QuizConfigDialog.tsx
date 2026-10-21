@@ -17,13 +17,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/sha
 import { Input } from '@/shared/ui/Input'
 import { Label } from '@/shared/ui/Label'
 import { Progress } from '@/shared/ui/Progress'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/shared/ui/Select2'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/shared/ui/Select2'
 import { cn } from '@/shared/lib/utils'
 import { useTranslation, type TranslationKey } from '@/i18n'
 
@@ -57,7 +51,12 @@ const STAGE_LABEL_KEYS: Record<string, TranslationKey> = {
   done: 'stage.done',
 }
 
-export function QuizConfigDialog({ projectId, onStart, busy, progress }: QuizConfigDialogProps): JSX.Element {
+export function QuizConfigDialog({
+  projectId,
+  onStart,
+  busy,
+  progress,
+}: QuizConfigDialogProps): JSX.Element {
   const { t } = useTranslation()
   const { project } = useProject(projectId)
   const availableTypes = questionTypesForSubject(project?.subject)
@@ -131,9 +130,7 @@ export function QuizConfigDialog({ projectId, onStart, busy, progress }: QuizCon
       <Card>
         <CardHeader>
           <CardTitle>{t('quizConfig.needAnalysis')}</CardTitle>
-          <CardDescription>
-            {t('quizConfig.needAnalysisHint')}
-          </CardDescription>
+          <CardDescription>{t('quizConfig.needAnalysisHint')}</CardDescription>
         </CardHeader>
       </Card>
     )
@@ -146,9 +143,7 @@ export function QuizConfigDialog({ projectId, onStart, busy, progress }: QuizCon
           <Sparkles className="h-4 w-4" />
           {t('quizConfig.title')}
         </CardTitle>
-        <CardDescription>
-          {t('quizConfig.description')}
-        </CardDescription>
+        <CardDescription>{t('quizConfig.description')}</CardDescription>
       </CardHeader>
       <CardContent className="space-y-5">
         <div className="grid gap-4 sm:grid-cols-2">
@@ -185,7 +180,10 @@ export function QuizConfigDialog({ projectId, onStart, busy, progress }: QuizCon
 
         <div className="space-y-2">
           <Label htmlFor="quiz-language">{t('quizConfig.questionLanguage')}</Label>
-          <Select value={questionLanguage} onValueChange={(v) => void setQuestionLanguage(v as QuestionLanguage)}>
+          <Select
+            value={questionLanguage}
+            onValueChange={(v) => void setQuestionLanguage(v as QuestionLanguage)}
+          >
             <SelectTrigger id="quiz-language">
               <SelectValue />
             </SelectTrigger>
@@ -215,9 +213,7 @@ export function QuizConfigDialog({ projectId, onStart, busy, progress }: QuizCon
             </SelectContent>
           </Select>
           {difficulty === 'adaptive' && (
-            <p className="text-xs text-muted-foreground">
-              {t('quizConfig.difficultyHint')}
-            </p>
+            <p className="text-xs text-muted-foreground">{t('quizConfig.difficultyHint')}</p>
           )}
         </div>
 
@@ -242,9 +238,7 @@ export function QuizConfigDialog({ projectId, onStart, busy, progress }: QuizCon
               )
             })}
           </div>
-          <p className="text-xs text-muted-foreground">
-            {t('quizConfig.questionTypesHint')}
-          </p>
+          <p className="text-xs text-muted-foreground">{t('quizConfig.questionTypesHint')}</p>
         </div>
 
         {busy && progress && (

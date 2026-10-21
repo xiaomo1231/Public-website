@@ -10,12 +10,25 @@ import { t } from '@/i18n'
 export const MAX_FILE_BYTES = 2 * 1024 * 1024 * 1024 // 2 GB
 export const MAX_TEXT_BYTES = 1 * 1024 * 1024 // 1 MB pasted text
 
-export const ACCEPTED_TYPES: ReadonlyArray<{ type: DocumentType; mime: string[]; ext: string[] }> = [
-  { type: 'pdf', mime: ['application/pdf'], ext: ['pdf'] },
-  { type: 'docx', mime: ['application/vnd.openxmlformats-officedocument.wordprocessingml.document'], ext: ['docx'] },
-  { type: 'pptx', mime: ['application/vnd.openxmlformats-officedocument.presentationml.presentation'], ext: ['pptx'] },
-  { type: 'image', mime: ['image/png', 'image/jpeg', 'image/webp', 'image/gif', 'image/bmp'], ext: ['png', 'jpg', 'jpeg', 'webp', 'gif', 'bmp'] },
-]
+export const ACCEPTED_TYPES: ReadonlyArray<{ type: DocumentType; mime: string[]; ext: string[] }> =
+  [
+    { type: 'pdf', mime: ['application/pdf'], ext: ['pdf'] },
+    {
+      type: 'docx',
+      mime: ['application/vnd.openxmlformats-officedocument.wordprocessingml.document'],
+      ext: ['docx'],
+    },
+    {
+      type: 'pptx',
+      mime: ['application/vnd.openxmlformats-officedocument.presentationml.presentation'],
+      ext: ['pptx'],
+    },
+    {
+      type: 'image',
+      mime: ['image/png', 'image/jpeg', 'image/webp', 'image/gif', 'image/bmp'],
+      ext: ['png', 'jpg', 'jpeg', 'webp', 'gif', 'bmp'],
+    },
+  ]
 
 export function detectDocumentType(file: File): DocumentType | null {
   const name = file.name.toLowerCase()
@@ -34,8 +47,7 @@ export function detectDocumentType(file: File): DocumentType | null {
 export type FileRejection = 'unsupported' | 'too-large'
 
 export type FileClassification =
-  | { ok: true; type: DocumentType }
-  | { ok: false; reason: FileRejection }
+  { ok: true; type: DocumentType } | { ok: false; reason: FileRejection }
 
 /**
  * Non-throwing counterpart of `validateFile`. Both share the same rules, so a
@@ -52,7 +64,9 @@ export function validateFile(file: File): DocumentType {
   const result = classifyFile(file)
   if (!result.ok) {
     if (result.reason === 'too-large') {
-      throw new ValidationError(t('errors.fileTooLarge', { max: `${MAX_FILE_BYTES / 1024 ** 3} GB` }))
+      throw new ValidationError(
+        t('errors.fileTooLarge', { max: `${MAX_FILE_BYTES / 1024 ** 3} GB` }),
+      )
     }
     throw new ValidationError(t('errors.unsupportedFileType', { name: file.name }))
   }

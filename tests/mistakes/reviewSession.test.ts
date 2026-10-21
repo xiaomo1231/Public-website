@@ -66,9 +66,20 @@ async function setup() {
   await analyses.reseedProject(
     p.id,
     {
-      topics: [{ name: 'Differentiation', description: '', sourceRefs: [{ documentId: doc.id, documentName: 'c.txt' }] }],
+      topics: [
+        {
+          name: 'Differentiation',
+          description: '',
+          sourceRefs: [{ documentId: doc.id, documentName: 'c.txt' }],
+        },
+      ],
       concepts: [
-        { name: 'Chain Rule', definition: '', topicNames: ['Differentiation'], sourceRefs: [{ documentId: doc.id, documentName: 'c.txt' }] },
+        {
+          name: 'Chain Rule',
+          definition: '',
+          topicNames: ['Differentiation'],
+          sourceRefs: [{ documentId: doc.id, documentName: 'c.txt' }],
+        },
       ],
       formulas: [],
       symbols: [],
@@ -105,13 +116,33 @@ describe('ReviewSessionService', () => {
   })
 
   it('throws NO_MISTAKES when the book is empty', async () => {
-    await expect(ctx.review.createReviewSession(ctx.project.id)).rejects.toMatchObject({ code: 'NO_MISTAKES' })
+    await expect(ctx.review.createReviewSession(ctx.project.id)).rejects.toMatchObject({
+      code: 'NO_MISTAKES',
+    })
   })
 
   it('creates a review session weighted toward weak knowledge points', async () => {
-    await ctx.mistakes.addManual({ projectId: ctx.project.id, question: 'Q1', studentAnswer: 'a', correctAnswer: 'b', knowledgePoint: 'Chain Rule' })
-    await ctx.mistakes.addManual({ projectId: ctx.project.id, question: 'Q2', studentAnswer: 'a', correctAnswer: 'b', knowledgePoint: 'Chain Rule' })
-    await ctx.mistakes.addManual({ projectId: ctx.project.id, question: 'Q3', studentAnswer: 'a', correctAnswer: 'b', knowledgePoint: 'Limits' })
+    await ctx.mistakes.addManual({
+      projectId: ctx.project.id,
+      question: 'Q1',
+      studentAnswer: 'a',
+      correctAnswer: 'b',
+      knowledgePoint: 'Chain Rule',
+    })
+    await ctx.mistakes.addManual({
+      projectId: ctx.project.id,
+      question: 'Q2',
+      studentAnswer: 'a',
+      correctAnswer: 'b',
+      knowledgePoint: 'Chain Rule',
+    })
+    await ctx.mistakes.addManual({
+      projectId: ctx.project.id,
+      question: 'Q3',
+      studentAnswer: 'a',
+      correctAnswer: 'b',
+      knowledgePoint: 'Limits',
+    })
 
     const chatJSON = vi.fn().mockResolvedValue(
       generated([
@@ -141,9 +172,19 @@ describe('ReviewSessionService', () => {
   })
 
   it('honours the requested question count and difficulty', async () => {
-    await ctx.mistakes.addManual({ projectId: ctx.project.id, question: 'Q1', studentAnswer: 'a', correctAnswer: 'b', knowledgePoint: 'Chain Rule' })
+    await ctx.mistakes.addManual({
+      projectId: ctx.project.id,
+      question: 'Q1',
+      studentAnswer: 'a',
+      correctAnswer: 'b',
+      knowledgePoint: 'Chain Rule',
+    })
     const chatJSON = vi.fn().mockResolvedValue(
-      generated([{ prompt: 'P1', kp: 'Chain Rule', answer: 'a' }, { prompt: 'P2', kp: 'Chain Rule', answer: 'b' }, { prompt: 'P3', kp: 'Chain Rule', answer: 'c' }]),
+      generated([
+        { prompt: 'P1', kp: 'Chain Rule', answer: 'a' },
+        { prompt: 'P2', kp: 'Chain Rule', answer: 'b' },
+        { prompt: 'P3', kp: 'Chain Rule', answer: 'c' },
+      ]),
     )
     const quiz = new QuizService({
       ai: fakeAI(chatJSON),
@@ -157,21 +198,41 @@ describe('ReviewSessionService', () => {
       mistakes: ctx.mistakes,
     })
     const review = new ReviewSessionService({ quiz, mistakes: ctx.mistakes, db: ctx.db })
-    const session = await review.createReviewSession(ctx.project.id, { count: 3, difficulty: 'intermediate' })
+    const session = await review.createReviewSession(ctx.project.id, {
+      count: 3,
+      difficulty: 'intermediate',
+    })
     expect(session.config.count).toBe(3)
     expect(session.config.difficulty).toBe('intermediate')
     expect(session.questionIds).toHaveLength(3)
   })
 
   it('excludes archived mistakes from review candidates', async () => {
-    const m = await ctx.mistakes.addManual({ projectId: ctx.project.id, question: 'Q1', studentAnswer: 'a', correctAnswer: 'b', knowledgePoint: 'Chain Rule' })
+    const m = await ctx.mistakes.addManual({
+      projectId: ctx.project.id,
+      question: 'Q1',
+      studentAnswer: 'a',
+      correctAnswer: 'b',
+      knowledgePoint: 'Chain Rule',
+    })
     await ctx.mistakes.archive(m.id)
-    await expect(ctx.review.createReviewSession(ctx.project.id)).rejects.toMatchObject({ code: 'NO_MISTAKES' })
+    await expect(ctx.review.createReviewSession(ctx.project.id)).rejects.toMatchObject({
+      code: 'NO_MISTAKES',
+    })
   })
 
   it('generates practice for a single mistake — same concept', async () => {
-    const m = await ctx.mistakes.addManual({ projectId: ctx.project.id, question: 'Q1', studentAnswer: 'a', correctAnswer: 'b', knowledgePoint: 'Chain Rule', difficulty: 'intermediate' })
-    const chatJSON = vi.fn().mockResolvedValue(generated([{ prompt: 'Same concept', kp: 'Chain Rule', answer: 'a' }]))
+    const m = await ctx.mistakes.addManual({
+      projectId: ctx.project.id,
+      question: 'Q1',
+      studentAnswer: 'a',
+      correctAnswer: 'b',
+      knowledgePoint: 'Chain Rule',
+      difficulty: 'intermediate',
+    })
+    const chatJSON = vi
+      .fn()
+      .mockResolvedValue(generated([{ prompt: 'Same concept', kp: 'Chain Rule', answer: 'a' }]))
     const quiz = new QuizService({
       ai: fakeAI(chatJSON),
       db: ctx.db,
@@ -191,8 +252,17 @@ describe('ReviewSessionService', () => {
   })
 
   it('raises the difficulty for "harder" practice', async () => {
-    const m = await ctx.mistakes.addManual({ projectId: ctx.project.id, question: 'Q1', studentAnswer: 'a', correctAnswer: 'b', knowledgePoint: 'Chain Rule', difficulty: 'intermediate' })
-    const chatJSON = vi.fn().mockResolvedValue(generated([{ prompt: 'Harder', kp: 'Chain Rule', answer: 'a' }]))
+    const m = await ctx.mistakes.addManual({
+      projectId: ctx.project.id,
+      question: 'Q1',
+      studentAnswer: 'a',
+      correctAnswer: 'b',
+      knowledgePoint: 'Chain Rule',
+      difficulty: 'intermediate',
+    })
+    const chatJSON = vi
+      .fn()
+      .mockResolvedValue(generated([{ prompt: 'Harder', kp: 'Chain Rule', answer: 'a' }]))
     const quiz = new QuizService({
       ai: fakeAI(chatJSON),
       db: ctx.db,
@@ -210,8 +280,17 @@ describe('ReviewSessionService', () => {
   })
 
   it('lowers the difficulty for "easier" practice', async () => {
-    const m = await ctx.mistakes.addManual({ projectId: ctx.project.id, question: 'Q1', studentAnswer: 'a', correctAnswer: 'b', knowledgePoint: 'Chain Rule', difficulty: 'advanced' })
-    const chatJSON = vi.fn().mockResolvedValue(generated([{ prompt: 'Easier', kp: 'Chain Rule', answer: 'a' }]))
+    const m = await ctx.mistakes.addManual({
+      projectId: ctx.project.id,
+      question: 'Q1',
+      studentAnswer: 'a',
+      correctAnswer: 'b',
+      knowledgePoint: 'Chain Rule',
+      difficulty: 'advanced',
+    })
+    const chatJSON = vi
+      .fn()
+      .mockResolvedValue(generated([{ prompt: 'Easier', kp: 'Chain Rule', answer: 'a' }]))
     const quiz = new QuizService({
       ai: fakeAI(chatJSON),
       db: ctx.db,
@@ -229,9 +308,23 @@ describe('ReviewSessionService', () => {
   })
 
   it('builds weakness training from multiple mistakes', async () => {
-    const m = await ctx.mistakes.addManual({ projectId: ctx.project.id, question: 'Q1', studentAnswer: 'a', correctAnswer: 'b', knowledgePoint: 'Chain Rule' })
-    await ctx.mistakes.addManual({ projectId: ctx.project.id, question: 'Q2', studentAnswer: 'a', correctAnswer: 'b', knowledgePoint: 'Limits' })
-    const chatJSON = vi.fn().mockResolvedValue(generated([{ prompt: 'Weakness', kp: 'Chain Rule', answer: 'a' }]))
+    const m = await ctx.mistakes.addManual({
+      projectId: ctx.project.id,
+      question: 'Q1',
+      studentAnswer: 'a',
+      correctAnswer: 'b',
+      knowledgePoint: 'Chain Rule',
+    })
+    await ctx.mistakes.addManual({
+      projectId: ctx.project.id,
+      question: 'Q2',
+      studentAnswer: 'a',
+      correctAnswer: 'b',
+      knowledgePoint: 'Limits',
+    })
+    const chatJSON = vi
+      .fn()
+      .mockResolvedValue(generated([{ prompt: 'Weakness', kp: 'Chain Rule', answer: 'a' }]))
     const quiz = new QuizService({
       ai: fakeAI(chatJSON),
       db: ctx.db,
@@ -250,6 +343,8 @@ describe('ReviewSessionService', () => {
   })
 
   it('throws NOT_FOUND for an unknown mistake', async () => {
-    await expect(ctx.review.practiceMistake('missing', 'same_concept')).rejects.toMatchObject({ code: 'NOT_FOUND' })
+    await expect(ctx.review.practiceMistake('missing', 'same_concept')).rejects.toMatchObject({
+      code: 'NOT_FOUND',
+    })
   })
 })

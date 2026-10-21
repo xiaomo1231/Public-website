@@ -66,11 +66,13 @@ describe('resolveSourceChunkIds', () => {
 })
 
 describe('locateQuestionExcerpt', () => {
-  const chunk =
-    'Problem 4. Differentiate 3x^2.\nProblem 5. Find the limit of x^2 as x tends to 3.'
+  const chunk = 'Problem 4. Differentiate 3x^2.\nProblem 5. Find the limit of x^2 as x tends to 3.'
 
   it('locates the question’s own span inside a chunk holding several questions', () => {
-    const excerpt = locateQuestionExcerpt(chunk, 'Problem 5. Find the limit of x^2 as x tends to 3.')
+    const excerpt = locateQuestionExcerpt(
+      chunk,
+      'Problem 5. Find the limit of x^2 as x tends to 3.',
+    )
     expect(excerpt).toContain('Problem 5')
     expect(excerpt).not.toContain('Problem 4')
   })

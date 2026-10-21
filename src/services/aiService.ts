@@ -52,7 +52,10 @@ export class AIService {
     return this.provider
   }
 
-  async chat(messages: ChatMessage[], options?: { model?: string; temperature?: number; maxTokens?: number; signal?: AbortSignal }): Promise<ChatResponse> {
+  async chat(
+    messages: ChatMessage[],
+    options?: { model?: string; temperature?: number; maxTokens?: number; signal?: AbortSignal },
+  ): Promise<ChatResponse> {
     const req: ChatRequest = {
       messages,
       ...(options?.model ? { model: options.model } : {}),
@@ -70,7 +73,10 @@ export class AIService {
    * when the provider supports it, otherwise extracts JSON defensively from
    * the prose response.
    */
-  async chatJSON<T>(messages: ChatMessage[], options?: { model?: string; maxTokens?: number; signal?: AbortSignal }): Promise<{ data: T; raw: ChatResponse }> {
+  async chatJSON<T>(
+    messages: ChatMessage[],
+    options?: { model?: string; maxTokens?: number; signal?: AbortSignal },
+  ): Promise<{ data: T; raw: ChatResponse }> {
     const useNativeJson = this.provider.capabilities.jsonMode
     const maxTokens = options?.maxTokens ?? this.config.maxTokens
     const req: ChatRequest = {
@@ -173,7 +179,12 @@ export class AIService {
     return { ...res, content: stripThinkBlocks(res.content) }
   }
 
-  async testConnection(): Promise<{ ok: boolean; latencyMs: number; model: string; error?: string }> {
+  async testConnection(): Promise<{
+    ok: boolean
+    latencyMs: number
+    model: string
+    error?: string
+  }> {
     return this.provider.testConnection()
   }
 }

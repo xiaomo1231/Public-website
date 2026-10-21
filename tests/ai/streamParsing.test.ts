@@ -30,7 +30,12 @@ function bytesFetch(chunks: Uint8Array[], fail?: Error): typeof fetch {
         else controller.close()
       },
     })
-    return Promise.resolve({ ok: true, status: 200, body: stream, text: async () => '' } as unknown as Response)
+    return Promise.resolve({
+      ok: true,
+      status: 200,
+      body: stream,
+      text: async () => '',
+    } as unknown as Response)
   }) as unknown as typeof fetch
 }
 
@@ -80,7 +85,10 @@ describe('OpenAI-compatible stream parsing', () => {
   })
 
   it('wraps a mid-stream network failure as provider-unavailable with a friendly message', async () => {
-    globalThis.fetch = bytesFetch([encode(`${event('partial')}\n\n`)], new TypeError('network error'))
+    globalThis.fetch = bytesFetch(
+      [encode(`${event('partial')}\n\n`)],
+      new TypeError('network error'),
+    )
     const { result } = run()
     const err = await result.catch((e: unknown) => e)
     expect(err).toBeInstanceOf(ProviderUnavailableError)
@@ -88,6 +96,8 @@ describe('OpenAI-compatible stream parsing', () => {
   })
 
   it('maps a raw Chrome "network error" to the provider-unavailable hint', () => {
-    expect(friendlyAIError(new TypeError('network error'))).toBe(friendlyAIError(new TypeError('Failed to fetch')))
+    expect(friendlyAIError(new TypeError('network error'))).toBe(
+      friendlyAIError(new TypeError('Failed to fetch')),
+    )
   })
 })

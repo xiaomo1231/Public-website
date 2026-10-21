@@ -33,10 +33,7 @@ export class VisualSourceRepository {
   }
 
   async listByDocumentPage(documentId: string, pageNumber: number): Promise<VisualSource[]> {
-    return this.table()
-      .where('[documentId+pageNumber]')
-      .equals([documentId, pageNumber])
-      .toArray()
+    return this.table().where('[documentId+pageNumber]').equals([documentId, pageNumber]).toArray()
   }
 
   async get(id: string): Promise<VisualSource | undefined> {

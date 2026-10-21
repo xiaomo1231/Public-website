@@ -108,12 +108,9 @@ export function computeAnalysisSourceHash(documents: SourceDocumentFingerprint[]
     .slice()
     .sort((a, b) => a.id.localeCompare(b.id))
     .map((doc) =>
-      [
-        doc.id,
-        doc.name,
-        String(doc.sizeBytes),
-        computeDocumentContentFingerprint(doc.chunks),
-      ].join(':'),
+      [doc.id, doc.name, String(doc.sizeBytes), computeDocumentContentFingerprint(doc.chunks)].join(
+        ':',
+      ),
     )
   return fnv1a(parts.join('|'))
 }

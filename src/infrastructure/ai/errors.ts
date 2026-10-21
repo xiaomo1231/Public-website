@@ -109,7 +109,10 @@ export class ProviderUnavailableError extends AIProviderError {
 
 export class InvalidJSONError extends AIProviderError {
   constructor(detail?: string) {
-    super(detail ? `${t('errors.aiMalformedJson')}: ${detail}` : t('errors.aiMalformedJson'), 'INVALID_JSON')
+    super(
+      detail ? `${t('errors.aiMalformedJson')}: ${detail}` : t('errors.aiMalformedJson'),
+      'INVALID_JSON',
+    )
   }
 }
 

@@ -154,7 +154,7 @@ export class DataManagementService {
       processingJobs,
       hasApiKey: Boolean(
         (settings as { apiKeyEncrypted?: string } | undefined)?.apiKeyEncrypted ||
-          (settings as { apiKey?: string } | undefined)?.apiKey?.trim(),
+        (settings as { apiKey?: string } | undefined)?.apiKey?.trim(),
       ),
       estimatedTotalBytes: blobBytes,
     }
@@ -166,7 +166,13 @@ export class DataManagementService {
     const blobs: ExportBlob[] = []
     for (const { table, kind } of BINARY_TABLES) {
       const rows = await this.db.table(table).toArray()
-      for (const row of rows) blobs.push({ id: row.id, kind, bytesBase64: encodeBytes(row.bytes), mimeType: row.mimeType })
+      for (const row of rows)
+        blobs.push({
+          id: row.id,
+          kind,
+          bytesBase64: encodeBytes(row.bytes),
+          mimeType: row.mimeType,
+        })
     }
     return { json, blobs }
   }
@@ -187,7 +193,14 @@ export class DataManagementService {
         const row = await this.db.table(table).get(key)
         if (!row) continue
         const head = JSON.stringify({ id: row.id, kind, mimeType: row.mimeType }).slice(0, -1)
-        file = new Blob([file, first ? '' : ',', head, ',"bytesBase64":"', ...encodeBytesParts(row.bytes), '"}'])
+        file = new Blob([
+          file,
+          first ? '' : ',',
+          head,
+          ',"bytesBase64":"',
+          ...encodeBytesParts(row.bytes),
+          '"}',
+        ])
         first = false
       }
     }
@@ -197,15 +210,47 @@ export class DataManagementService {
   private async exportTables(): Promise<Record<string, unknown>> {
     const db = this.db
     const tables = [
-      'projects', 'documents', 'documentBlobs', 'chunks', 'processingJobs',
-      'courseAnalyses', 'topics', 'concepts', 'formulas', 'symbols', 'examples',
-      'courseExercises', 'prerequisites', 'tutorSessions', 'tutorLessons',
-      'visualSources', 'courseContexts', 'courseStructures', 'courseStructureNodes',
-      'practiceSets', 'practiceQuestions', 'practiceAttempts',
-      'homeworkSets', 'homeworkQuestions', 'homeworkWalkthroughs', 'walkthroughNotes', 'slideLessons', 'translations', 'reviewCards',
-      'vocabCards', 'vocabBooks', 'vocabEntries', 'vocabReviews',
-      'questions', 'questionAttempts', 'quizzes', 'knowledgeMastery', 'mistakes',
-      'inviteKeys', 'user', 'settings',
+      'projects',
+      'documents',
+      'documentBlobs',
+      'chunks',
+      'processingJobs',
+      'courseAnalyses',
+      'topics',
+      'concepts',
+      'formulas',
+      'symbols',
+      'examples',
+      'courseExercises',
+      'prerequisites',
+      'tutorSessions',
+      'tutorLessons',
+      'visualSources',
+      'courseContexts',
+      'courseStructures',
+      'courseStructureNodes',
+      'practiceSets',
+      'practiceQuestions',
+      'practiceAttempts',
+      'homeworkSets',
+      'homeworkQuestions',
+      'homeworkWalkthroughs',
+      'walkthroughNotes',
+      'slideLessons',
+      'translations',
+      'reviewCards',
+      'vocabCards',
+      'vocabBooks',
+      'vocabEntries',
+      'vocabReviews',
+      'questions',
+      'questionAttempts',
+      'quizzes',
+      'knowledgeMastery',
+      'mistakes',
+      'inviteKeys',
+      'user',
+      'settings',
     ] as const
     const json: Record<string, unknown> = {
       exportedAt: new Date().toISOString(),
@@ -256,7 +301,10 @@ export class DataManagementService {
     await this.db.transaction('rw', this.db.tables, async () => {
       await projectRepo.get(projectId)
       // If the selected word book is this course's book, fall back to the default.
-      const courseBooks = await this.db.vocabBooks.where('projectId').equals(projectId).primaryKeys()
+      const courseBooks = await this.db.vocabBooks
+        .where('projectId')
+        .equals(projectId)
+        .primaryKeys()
       const profile = await this.db.user.get('singleton')
       if (profile?.vocabBookId && courseBooks.includes(profile.vocabBookId)) {
         await this.db.user.put({ ...profile, vocabBookId: '' })

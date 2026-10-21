@@ -149,7 +149,9 @@ describe('ProcessingService + project isolation', () => {
     const documentsSvc = new DocumentService({ documents: documentsRepo, projects: projectsSvc })
 
     const blob = new Blob(
-      ['Chapter 1\nThe derivative measures sensitivity.\n\nChapter 2\nIntegrals accumulate change.'],
+      [
+        'Chapter 1\nThe derivative measures sensitivity.\n\nChapter 2\nIntegrals accumulate change.',
+      ],
       { type: 'text/plain' },
     )
     const doc = await documentsSvc.create({

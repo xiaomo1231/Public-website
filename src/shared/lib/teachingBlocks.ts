@@ -56,7 +56,16 @@ export interface TeachingBlockSpec {
  */
 const KEYWORDS: Record<TeachingBlockKind, string[]> = {
   definition: ['definition', 'definitions', '定义', '概念定义'],
-  keyIdea: ['key idea', 'key ideas', 'key concept', 'key concepts', 'core idea', '核心概念', '关键概念', '要点'],
+  keyIdea: [
+    'key idea',
+    'key ideas',
+    'key concept',
+    'key concepts',
+    'core idea',
+    '核心概念',
+    '关键概念',
+    '要点',
+  ],
   example: ['example', 'examples', '示例', '例子', '例题', '举例'],
   workedExample: ['worked example', 'worked examples', '详细示例', '解题示例', '例题解析'],
   important: ['important', 'important note', '重要提示', '重要', '重点'],
@@ -142,5 +151,8 @@ export function asPseudoHeading(text: string): string | undefined {
 
 /** `Intuition:` -> `Intuition` (handles both ASCII and full-width colons). */
 export function stripTrailingColon(text: string): string {
-  return text.trim().replace(/[：:]\s*$/, '').trim()
+  return text
+    .trim()
+    .replace(/[：:]\s*$/, '')
+    .trim()
 }
