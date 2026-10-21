@@ -442,7 +442,11 @@ export function QuizResultPage(): JSX.Element {
                         </p>
                       )}
                       <div className="mt-2">
-                        <QuestionSource sourceRefs={q.sourceRefs} projectId={q.projectId} />
+                        <QuestionSource
+                          sourceRefs={q.sourceRefs}
+                          projectId={q.projectId}
+                          aiWithoutSource={q.origin === 'ai_without_source'}
+                        />
                       </div>
                     </div>
                   )

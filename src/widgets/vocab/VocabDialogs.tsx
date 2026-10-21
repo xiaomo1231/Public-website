@@ -356,6 +356,14 @@ export function WordListDialog({
                           /{view.phonetic}/
                         </span>
                       )}
+                      {view.grammar && (
+                        <span
+                          translate="no"
+                          className="notranslate ml-2 text-xs text-muted-foreground"
+                        >
+                          {view.grammar}
+                        </span>
+                      )}
                     </p>
                     <p className="text-sm text-muted-foreground">
                       {view.meanings.join('；') || t('vocab.noMeaning')}

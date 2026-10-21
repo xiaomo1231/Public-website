@@ -22,6 +22,7 @@ import { ACCEPTED_TYPES } from '@/infrastructure/files/validation'
 import { formatBytes } from '@/shared/lib/format'
 import { cn } from '@/shared/lib/utils'
 import { useBatchUpload } from '@/features/documents/useBatchUpload'
+import { looksLikeSyllabus } from '@/entities/syllabus/parse'
 import {
   MAX_BATCH_FILES,
   type FileIssue,
@@ -51,6 +52,7 @@ const MATERIAL_LABEL_KEY: Record<LearningMaterialType, TranslationKey> = {
   professor_practice: 'materialType.professor_practice',
   homework: 'materialType.homework',
   homework_answer: 'materialType.homework_answer',
+  syllabus: 'materialType.syllabus',
 }
 
 const TEXT_TAB = 'text' as const
@@ -143,6 +145,16 @@ export function DocumentUploadDialog({
   const settled = summary.completed + summary.failed + summary.cancelled
   const overall = summary.uploadable > 0 ? Math.round((settled / summary.uploadable) * 100) : 0
   const invalid = summary.unsupported + summary.tooLarge
+  // Files whose name reads like a syllabus / handbook: suggest the role, the
+  // student confirms (never switched silently).
+  const syllabusLike = items.filter(
+    (item) =>
+      item.status === 'queued' &&
+      item.materialType !== 'syllabus' &&
+      item.materialType !== 'homework' &&
+      item.materialType !== 'homework_answer' &&
+      looksLikeSyllabus(item.name),
+  )
 
   function statusLabel(item: UploadQueueItem): string {
     if (item.issue) return t(ISSUE_KEYS[item.issue])
@@ -221,6 +233,12 @@ export function DocumentUploadDialog({
               </SelectContent>
             </Select>
           </div>
+        )}
+
+        {material === 'syllabus' && !running && !finished && (
+          <p className="rounded-lg border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
+            {t('materialType.syllabusHint')}
+          </p>
         )}
 
         {!running && !finished && (
@@ -347,6 +365,11 @@ export function DocumentUploadDialog({
                   >
                     {item.name || t('upload.tab.text')}
                   </span>
+                  {item.materialType && item.materialType !== material && (
+                    <span className="shrink-0 rounded border px-1 text-[11px] text-muted-foreground">
+                      {t(MATERIAL_LABEL_KEY[item.materialType])}
+                    </span>
+                  )}
                   <span className="shrink-0 text-xs text-muted-foreground">
                     {item.sizeBytes > 0 ? formatBytes(item.sizeBytes) : null}
                   </span>
@@ -386,6 +409,27 @@ export function DocumentUploadDialog({
                 </li>
               ))}
             </ul>
+
+            {!started && syllabusLike.length > 0 && (
+              <div className="flex flex-wrap items-center gap-2 rounded-lg border border-amber-500/40 bg-amber-50/50 px-3 py-2 text-xs dark:bg-amber-950/20">
+                <span className="min-w-0 flex-1">
+                  {t('upload.syllabusSuggest', { count: syllabusLike.length })}
+                </span>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() =>
+                    batch.setMaterial(
+                      syllabusLike.map((item) => item.id),
+                      'syllabus',
+                    )
+                  }
+                >
+                  {t('upload.syllabusAccept')}
+                </Button>
+              </div>
+            )}
 
             {!started && (
               <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">

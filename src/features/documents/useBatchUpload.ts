@@ -36,6 +36,8 @@ export interface UseBatchUploadResult {
     materialType?: LearningMaterialType
   }) => Promise<void>
   removeItem: (id: string) => void
+  /** Change the role of queued items (e.g. the student accepts "this is a syllabus"). */
+  setMaterial: (ids: string[], materialType: LearningMaterialType) => void
   start: () => Promise<void>
   retryFailed: () => Promise<void>
   cancelRemaining: () => void
@@ -109,6 +111,14 @@ export function useBatchUpload(projectId: string): UseBatchUploadResult {
 
   const removeItem = useCallback((id: string) => {
     setItems((prev) => prev.filter((item) => item.id !== id))
+  }, [])
+
+  const setMaterial = useCallback((ids: string[], materialType: LearningMaterialType) => {
+    setItems((prev) =>
+      prev.map((item) =>
+        ids.includes(item.id) && item.status === 'queued' ? { ...item, materialType } : item,
+      ),
+    )
   }, [])
 
   const run = useCallback(
@@ -225,6 +235,7 @@ export function useBatchUpload(projectId: string): UseBatchUploadResult {
     addText,
     addTextAndStart,
     removeItem,
+    setMaterial,
     start,
     retryFailed,
     cancelRemaining,

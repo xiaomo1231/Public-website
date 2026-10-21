@@ -14,6 +14,7 @@ import { CourseAnalysisPanel } from '@/widgets/documentAnalysis/CourseAnalysisPa
 import { RenameProjectDialog } from '@/widgets/project/RenameProjectDialog'
 import { ProjectFlowNav } from '@/widgets/project/ProjectFlowNav'
 import { CourseFigures } from '@/widgets/project/CourseFigures'
+import { ExamTopicsPanel } from '@/widgets/syllabus/ExamTopicsPanel'
 import { useCourseMastery } from '@/widgets/dashboard/useCourseMastery'
 import { useHomeOverview } from '@/features/home/useHomeOverview'
 import { useDocumentsStore } from '@/features/documents/documentsStore'
@@ -31,7 +32,8 @@ export function ProjectDetailPage(): JSX.Element {
   // The open tab lives in the URL (`?tab=analysis`), so links can point at it
   // and a reload or Back keeps the student where they were.
   const [searchParams, setSearchParams] = useSearchParams()
-  const tab = searchParams.get('tab') === 'analysis' ? 'analysis' : 'documents'
+  const tabParam = searchParams.get('tab')
+  const tab = tabParam === 'analysis' || tabParam === 'exams' ? tabParam : 'documents'
   // Read-only course summary (same counts as the homepage) and the mastery
   // estimate; neither triggers analysis or AI.
   const projectList = useMemo(() => (project ? [project] : []), [project])
@@ -188,12 +190,13 @@ export function ProjectDetailPage(): JSX.Element {
         <Tabs
           value={tab}
           onValueChange={(value) =>
-            setSearchParams(value === 'analysis' ? { tab: 'analysis' } : {}, { replace: true })
+            setSearchParams(value === 'documents' ? {} : { tab: value }, { replace: true })
           }
         >
           <TabsList>
             <TabsTrigger value="documents">{t('projectDetail.tab.documents')}</TabsTrigger>
             <TabsTrigger value="analysis">{t('projectDetail.tab.analysis')}</TabsTrigger>
+            <TabsTrigger value="exams">{t('projectDetail.tab.exams')}</TabsTrigger>
           </TabsList>
 
           <TabsContent value="documents">
@@ -209,6 +212,10 @@ export function ProjectDetailPage(): JSX.Element {
               projectId={project.id}
               onStartTutor={(topicId) => navigate(`/projects/${project.id}/tutor/${topicId}`)}
             />
+          </TabsContent>
+
+          <TabsContent value="exams">
+            <ExamTopicsPanel projectId={project.id} />
           </TabsContent>
         </Tabs>
       </PageContent>

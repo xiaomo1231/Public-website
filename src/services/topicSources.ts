@@ -1,7 +1,11 @@
 import type { CourseAnalysisRepository } from '@/entities/courseAnalysis/repository'
 import type { ChunkRepository } from '@/entities/chunk/repository'
 import type { DocumentChunk } from '@/entities/chunk/types'
-import { resolveMaterialType, type LearningMaterialType } from '@/entities/document/types'
+import {
+  isReferenceOnlyMaterial,
+  resolveMaterialType,
+  type LearningMaterialType,
+} from '@/entities/document/types'
 import { normalizeMathNotation } from '@/infrastructure/files/mathNotation'
 import { overlapScore } from './classProgressService'
 
@@ -67,6 +71,8 @@ export async function collectTopicSources(
   const add = (chunk: DocumentChunk, label: string): boolean => {
     if (seen.has(chunk.id)) return false
     if (!chunk.text.trim() || chunk.text.length > MAX_SOURCE_CHARS) return false
+    // An answer key or a syllabus is never teaching material.
+    if (isReferenceOnlyMaterial(chunk.materialType)) return false
     seen.add(chunk.id)
     out.push({
       chunkId: chunk.id,

@@ -8,6 +8,7 @@ import {
   TAG_ORDER,
   examBookId,
   examTagOf,
+  grammarLine,
   type DictEntry,
   type ExamTag,
   type ExportFormat,
@@ -250,11 +251,13 @@ export class VocabService {
    */
   private async viewOfStored(entry: VocabEntry, language?: string): Promise<WordView> {
     if (!isEnglish(language)) {
+      const grammar = grammarLine(entry)
       return {
         word: entry.word,
         phonetic: entry.phonetic ?? '',
         meanings: entry.meanings,
         tags: [],
+        ...(grammar ? { grammar } : {}),
         ...(entry.context ? { context: entry.context } : {}),
       }
     }

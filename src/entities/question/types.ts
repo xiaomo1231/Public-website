@@ -2,6 +2,15 @@ import type { DifficultyLevel } from '@/infrastructure/ai/prompts/types'
 import type { SourceReference } from '@/entities/courseAnalysis/types'
 import type { TranslationKey } from '@/i18n/types'
 import type { Subject } from '@/entities/project/types'
+import {
+  decodeGenderAnswer,
+  genderAnswerText,
+  paradigmAnswerText,
+  paradigmBlanks,
+  paradigmCellLabel,
+  type GenderNoun,
+  type ParadigmTable,
+} from './languageDrills'
 
 export type QuestionType =
   | 'multiple_choice'
@@ -15,6 +24,8 @@ export type QuestionType =
   | 'multiple_select'
   | 'matching'
   | 'fill_blank'
+  | 'article_gender'
+  | 'paradigm_table'
 
 export const QUESTION_TYPES: QuestionType[] = [
   'multiple_choice',
@@ -28,6 +39,8 @@ export const QUESTION_TYPES: QuestionType[] = [
   'multiple_select',
   'matching',
   'fill_blank',
+  'article_gender',
+  'paradigm_table',
 ]
 
 export const QUESTION_TYPE_LABEL_KEYS: Record<QuestionType, TranslationKey> = {
@@ -42,6 +55,8 @@ export const QUESTION_TYPE_LABEL_KEYS: Record<QuestionType, TranslationKey> = {
   multiple_select: 'questionType.multipleSelect',
   matching: 'questionType.matching',
   fill_blank: 'questionType.fillBlank',
+  article_gender: 'questionType.articleGender',
+  paradigm_table: 'questionType.paradigmTable',
 }
 
 /** One scoring point of a short-answer question. */
@@ -51,6 +66,8 @@ export interface RubricPoint {
   /** One idea the answer must contain, stated in a single sentence. */
   text: string
 }
+
+export type QuestionOrigin = 'ai_without_source'
 
 export interface QuestionOption {
   id: string
@@ -97,9 +114,19 @@ export interface Question {
    * answers — the standard term first, then exact synonyms / abbreviations.
    */
   blanks?: string[][]
+  /** Article question (German courses) only: the noun, its article and plural. */
+  gender?: GenderNoun
+  /** Paradigm-table question (language courses) only: the table with its blanks. */
+  paradigm?: ParadigmTable
   solution?: string
   hints: string[]
   sourceRefs: SourceReference[]
+  /**
+   * `ai_without_source`: generated for an exam topic the course material does
+   * not cover (syllabus quiz, opted in); it has no course source and is
+   * labelled as AI-generated. Absent for every other question.
+   */
+  origin?: QuestionOrigin
   /** Prompt version that produced this question. */
   promptVersion: string
   createdAt: number
@@ -119,9 +146,12 @@ export interface NewQuestionInput {
   orderItems?: string[]
   matchItems?: string[]
   blanks?: string[][]
+  gender?: GenderNoun
+  paradigm?: ParadigmTable
   solution?: string
   hints?: string[]
   sourceRefs?: SourceReference[]
+  origin?: QuestionOrigin
   promptVersion?: string
 }
 
@@ -138,8 +168,12 @@ export function normalizeQuestionOptions(
 /** The canonical answer as shown to the student, with its unit when it has one. */
 export function expectedAnswerText(
   question: Pick<Question, 'correctAnswer' | 'unit' | 'type'> &
-    Partial<Pick<Question, 'options' | 'matchItems' | 'blanks'>>,
+    Partial<Pick<Question, 'options' | 'matchItems' | 'blanks' | 'gender' | 'paradigm'>>,
 ): string {
+  if (question.type === 'article_gender' && question.gender)
+    return genderAnswerText(question.gender)
+  if (question.type === 'paradigm_table' && question.paradigm)
+    return paradigmAnswerText(question.paradigm)
   if (question.type === 'ordering') return question.correctAnswer.split('\n').join(' → ')
   if (question.type === 'multiple_select' && question.options) {
     return question.options
@@ -172,7 +206,8 @@ export function optionLetter(index: number): string {
  * and labels ("A. …"), matching answers "1→B", blanks "(1) … (2) …".
  */
 export function displayAnswer(
-  question: Pick<Question, 'type'> & Partial<Pick<Question, 'options' | 'matchItems'>>,
+  question: Pick<Question, 'type'> &
+    Partial<Pick<Question, 'options' | 'matchItems' | 'gender' | 'paradigm'>>,
   userAnswer: string,
 ): string {
   const options = question.options ?? []
@@ -193,6 +228,22 @@ export function displayAnswer(
       })
       .join('  ')
   }
+  if (question.type === 'article_gender') {
+    const { article, plural } = decodeGenderAnswer(userAnswer)
+    const noun = question.gender?.noun ?? ''
+    const singular = [article || '—', noun].filter(Boolean).join(' ')
+    return question.gender?.plural ? `${singular}, ${plural || '—'}` : singular
+  }
+  if (question.type === 'paradigm_table' && question.paradigm) {
+    const table = question.paradigm
+    const given = userAnswer.split('\n')
+    return paradigmBlanks(table)
+      .map(
+        (blank, i) =>
+          `${paradigmCellLabel(table, blank.row, blank.column)}: ${given[i]?.trim() || '—'}`,
+      )
+      .join('；')
+  }
   if (question.type === 'fill_blank')
     return userAnswer
       .split('\n')
@@ -203,12 +254,40 @@ export function displayAnswer(
 
 /**
  * Question types a course offers. "What does this program print?" only makes
- * sense in a computer-science course; every other type is offered everywhere.
+ * sense in a computer-science course, a chemical equation in chemistry; the
+ * language drills only in a language course (the article of a noun only when
+ * the course teaches German). Every other type is offered everywhere.
  */
-export function questionTypesForSubject(subject: Subject | undefined): QuestionType[] {
+export function questionTypesForSubject(
+  subject: Subject | undefined,
+  targetLanguage?: string,
+): QuestionType[] {
   return QUESTION_TYPES.filter(
     (type) =>
       (type !== 'code_output' || subject === 'cs') &&
-      (type !== 'chem_equation' || subject === 'chemistry'),
+      (type !== 'chem_equation' || subject === 'chemistry') &&
+      (type !== 'paradigm_table' || subject === 'language') &&
+      (type !== 'article_gender' || (subject === 'language' && targetLanguage === 'de')),
   )
+}
+
+/**
+ * The types ticked when a quiz is set up: a language course starts with its
+ * drills plus the exam formats that suit vocabulary; every other course with
+ * single choice.
+ */
+export function defaultQuestionTypes(
+  subject: Subject | undefined,
+  targetLanguage?: string,
+): QuestionType[] {
+  if (subject !== 'language') return ['multiple_choice']
+  const offered = questionTypesForSubject(subject, targetLanguage)
+  const wanted: QuestionType[] = [
+    'article_gender',
+    'paradigm_table',
+    'fill_blank',
+    'matching',
+    'multiple_choice',
+  ]
+  return wanted.filter((type) => offered.includes(type))
 }

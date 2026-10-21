@@ -5,7 +5,12 @@ import { QuestionAttemptRepository } from '@/entities/questionAttempt/repository
 import { QuizRepository } from '@/entities/quiz/repository'
 import { CourseAnalysisRepository } from '@/entities/courseAnalysis/repository'
 import { ChunkRepository } from '@/entities/chunk/repository'
-import { QUESTION_TYPES, type Question, type QuestionType } from '@/entities/question/types'
+import {
+  QUESTION_TYPES,
+  questionTypesForSubject,
+  type Question,
+  type QuestionType,
+} from '@/entities/question/types'
 import type { QuestionAttempt, QuestionEvaluation } from '@/entities/questionAttempt/types'
 import type {
   Quiz,
@@ -18,8 +23,20 @@ import type { DifficultyLevel } from '@/infrastructure/ai/prompts/types'
 import { prompts } from '@/infrastructure/ai/prompts'
 import type {
   QuizGenerationOutput,
-  GeneratedQuizQuestion,
-} from '@/infrastructure/ai/prompts/quiz-generator/v6'
+  GeneratedQuizQuestion as RawGeneratedQuizQuestion,
+  QuizSystemPromptOptions,
+} from '@/infrastructure/ai/prompts/quiz-generator/v7'
+import {
+  genderAnswerText,
+  paradigmAnswerText,
+  type GenderNoun,
+  type ParadigmTable,
+} from '@/entities/question/languageDrills'
+import {
+  normalizeForSource,
+  validateArticleQuestion,
+  validateParadigmTable,
+} from './languageDrillValidation'
 import type { ChatMessage } from '@/infrastructure/ai/types'
 import type { AIService } from './aiService'
 import { evaluateDeterministic, parseTrueFalse } from './answerEvaluationService'
@@ -41,6 +58,7 @@ import {
   type SourceSnippet,
 } from './sourceContext'
 import { DocumentRepository } from '@/entities/document/repository'
+import { examTopicsFor, planExamScopeEntries } from '@/entities/syllabus/examPlan'
 import { CourseContextRepository } from '@/entities/courseContext/repository'
 import { PracticeService, formatQuestionStyleContext } from './practiceService'
 import type { SourceReference } from '@/entities/courseAnalysis/types'
@@ -116,6 +134,11 @@ type PlanEntry = { type: QuestionType; difficulty: DifficultyLevel; group?: numb
 /** What one part of a quiz is about: a topic's knowledge points and source passages. */
 interface QuizGroup {
   topicId?: string
+  /**
+   * An exam topic the course material does not cover: no source passages, and
+   * its questions are stored as AI-generated without a course source.
+   */
+  aiOnly?: boolean
   knowledgePoints: string[]
   snippets: SourceSnippet[]
 }
@@ -150,6 +173,34 @@ export function quizLanguage(
 ): 'zh' | 'en' | 'mixed' | 'zh_terms' {
   const choice = preference ?? DEFAULT_QUESTION_LANGUAGE
   return choice === 'source' ? material : choice
+}
+
+/** A generated question after validation: language drills carry their checked data. */
+export type GeneratedQuizQuestion = RawGeneratedQuizQuestion & {
+  gender?: GenderNoun
+  paradigm?: ParadigmTable
+}
+
+const LANGUAGE_DRILLS: QuestionType[] = ['article_gender', 'paradigm_table']
+
+/**
+ * The requested types a course may use: a language drill only where
+ * `questionTypesForSubject` offers it (a language course; the article drill
+ * only for German). Other types pass unchanged. Never empty.
+ */
+export function offeredQuizTypes(types: QuestionType[], subject: SubjectInput): QuestionType[] {
+  const context = typeof subject === 'string' ? { subject } : subject
+  const offered = questionTypesForSubject(context?.subject, context?.targetLanguage)
+  const kept = types.filter((type) => !LANGUAGE_DRILLS.includes(type) || offered.includes(type))
+  return kept.length > 0 ? kept : [DEFAULT_QUESTION_TYPE]
+}
+
+/** The generator describes the language drills to a language course only. */
+function drillPromptOptions(subject: SubjectInput): QuizSystemPromptOptions {
+  const context = typeof subject === 'string' ? { subject } : subject
+  if (context?.subject !== 'language') return {}
+  const targetLanguage = 'targetLanguage' in context ? context.targetLanguage : undefined
+  return { languageDrills: targetLanguage ? { targetLanguage } : {} }
 }
 
 /** Used when the model omits `type` entirely. */
@@ -392,8 +443,13 @@ export class QuizService {
     const topicDescription = topic?.description ?? t('quiz.topicDescriptionMixed')
     const knowledgePoints = await this.resolveKnowledgePoints(projectId, config, topic?.name)
 
+    const subjectContext = await loadProjectSubjectContext(projectId)
     const difficultyPlan = this.buildDifficultyPlan(config)
-    const typePlan = this.buildTypePlan(config, config.count)
+    // A language drill is only asked for in a course that offers it.
+    const typePlan = this.buildTypePlan(
+      { ...config, types: offeredQuizTypes(config.types, subjectContext) },
+      config.count,
+    )
     const plan = difficultyPlan.map((difficulty, i) => ({ difficulty, type: typePlan[i]! }))
 
     const quiz: Quiz = {
@@ -455,7 +511,7 @@ export class QuizService {
           language: quizLanguage(preference, analysis.language),
           ...(professorStyleContext ? { professorStyleContext } : {}),
         },
-        await loadProjectSubjectContext(projectId),
+        subjectContext,
         options.signal,
       )
 
@@ -486,9 +542,15 @@ export class QuizService {
             ...(q.orderItems?.length ? { orderItems: q.orderItems } : {}),
             ...(q.matchItems?.length ? { matchItems: q.matchItems } : {}),
             ...(q.blanks?.length ? { blanks: q.blanks } : {}),
+            ...(q.gender ? { gender: q.gender } : {}),
+            ...(q.paradigm ? { paradigm: q.paradigm } : {}),
             ...(q.solution ? { solution: q.solution } : {}),
             hints: q.hints ?? [],
-            sourceRefs: resolveSourceReferences(q.sourceChunkId, q.quote, snippetIndex),
+            // An exam topic without course material has no source to cite.
+            sourceRefs: group?.aiOnly
+              ? []
+              : resolveSourceReferences(q.sourceChunkId, q.quote, snippetIndex),
+            ...(group?.aiOnly ? { origin: 'ai_without_source' as const } : {}),
             promptVersion: prompts.quizGenerator.VERSION,
           }
         }),
@@ -638,6 +700,7 @@ export class QuizService {
     knowledgePoints: string[],
     topic: Awaited<ReturnType<CourseAnalysisRepository['getTopic']>>,
   ): Promise<QuizGroup[]> {
+    if (config.examScope) return this.planExamGroups(projectId, config, candidates)
     const single = (): QuizGroup[] => [
       {
         ...(topic ? { topicId: topic.id } : {}),
@@ -680,6 +743,58 @@ export class QuizService {
     })
   }
 
+  /**
+   * Groups for a quiz over a syllabus exam scope (or one exam topic of it).
+   * A matched exam topic is quizzed from its course topics' passages and
+   * knowledge points; an unmatched one — only when the student opted in — is
+   * a group with no passages whose questions carry no course source.
+   */
+  private async planExamGroups(
+    projectId: string,
+    config: QuizConfig,
+    candidates: SourceSnippet[],
+  ): Promise<QuizGroup[]> {
+    const selection = config.examScope!
+    const document = await new DocumentRepository(this.db)
+      .get(selection.documentId)
+      .catch(() => undefined)
+    if (!document || document.projectId !== projectId || !document.syllabus) {
+      throw new AppError(t('syllabus.errors.notFound'), 'NOT_FOUND')
+    }
+    const topics = await this.analyses.listTopics(projectId)
+    const byId = new Map(topics.map((each) => [each.id, each]))
+    const entries = planExamScopeEntries(
+      examTopicsFor(document.syllabus.scopes, selection),
+      new Set(byId.keys()),
+      { includeUnmatched: selection.includeUnmatched, count: config.count },
+    )
+    if (entries.length === 0) {
+      throw new AppError(t('syllabus.errors.nothingToQuiz'), 'EXAM_SCOPE_EMPTY')
+    }
+    const concepts = await this.analyses.listConcepts(projectId)
+    return entries.map((entry): QuizGroup => {
+      if (entry.kind === 'unmatched') {
+        return { knowledgePoints: [entry.text], snippets: [], aiOnly: true }
+      }
+      const matched = entry.topicIds.map((id) => byId.get(id)!)
+      const points = concepts
+        .filter((concept) => concept.topicIds.some((id) => entry.topicIds.includes(id)))
+        .map((concept) => concept.name)
+        .slice(0, POINTS_PER_TOPIC)
+      const keywords = points.length > 0 ? points : matched.map((each) => each.name)
+      return {
+        topicId: matched[0]!.id,
+        knowledgePoints: keywords,
+        snippets: pickQuizSnippets(candidates, {
+          preferChunkIds: matched.flatMap((each) => each.sourceChunkIds ?? []),
+          keywords: [...matched.map((each) => each.name), ...keywords],
+          limit: SNIPPETS_PER_TOPIC,
+          fill: false,
+        }),
+      }
+    })
+  }
+
   private async generateWithRetry(
     input: Parameters<typeof prompts.quizGenerator.buildUserPrompt>[0],
     subject: SubjectInput,
@@ -689,7 +804,7 @@ export class QuizService {
       {
         role: 'system',
         content: prompts.subjectProfile.withSubject(
-          prompts.quizGenerator.buildSystemPrompt(),
+          prompts.quizGenerator.buildSystemPrompt(drillPromptOptions(subject)),
           subject,
         ),
       },
@@ -711,7 +826,9 @@ export class QuizService {
           maxTokens,
           ...(signal ? { signal } : {}),
         })
-        const questions = this.validateGenerated(data, input.plan.length)
+        const questions = this.validateGenerated(data, input.plan.length, {
+          sourceText: input.sourceSnippets.join('\n\n'),
+        })
         return questions
       } catch (err) {
         lastError = err
@@ -727,10 +844,22 @@ export class QuizService {
   }
 
   /** Defensive validation of AI output — never trust the shape blindly. */
-  validateGenerated(data: QuizGenerationOutput, expected: number): GeneratedQuizQuestion[] {
+  validateGenerated(
+    data: QuizGenerationOutput,
+    expected: number,
+    context: {
+      /**
+       * The source passages the questions were generated from. Language
+       * drills must copy their nouns and forms from it; without it they are
+       * dropped.
+       */
+      sourceText?: string
+    } = {},
+  ): GeneratedQuizQuestion[] {
     if (!data || typeof data !== 'object' || !Array.isArray(data.questions)) {
       throw new AppError(t('errors.quizMissingArray'), 'MALFORMED_QUIZ')
     }
+    const source = context.sourceText ? normalizeForSource(context.sourceText) : ''
     const valid: GeneratedQuizQuestion[] = []
     for (const raw of data.questions) {
       if (!raw || typeof raw !== 'object') continue
@@ -741,7 +870,12 @@ export class QuizService {
       if (!QUESTION_TYPES.includes(type)) continue
       // X / B / fill-blank answers are rebuilt from their structure below, so
       // a missing `correctAnswer` does not disqualify them.
-      const rebuilt = type === 'multiple_select' || type === 'matching' || type === 'fill_blank'
+      const rebuilt =
+        type === 'multiple_select' ||
+        type === 'matching' ||
+        type === 'fill_blank' ||
+        type === 'article_gender' ||
+        type === 'paradigm_table'
       let rawAnswer = typeof q.correctAnswer === 'string' ? q.correctAnswer.trim() : ''
       // True/false answers arrive as "正确", "×", JSON booleans…; the grader
       // compares "true"/"false", so anything unreadable is dropped.
@@ -879,6 +1013,28 @@ export class QuizService {
           continue
         correctAnswer = blanks.map((list) => list[0]!).join(' | ')
       }
+      // Language drills: the noun / forms must be copied from the source and
+      // the structure consistent; the answer is rebuilt from the checked data.
+      let gender: GenderNoun | undefined
+      if (type === 'article_gender') {
+        const checked = source ? validateArticleQuestion(q, source) : null
+        if (!checked) {
+          logger.debug('Dropped an article question not grounded in the source')
+          continue
+        }
+        gender = checked
+        correctAnswer = genderAnswerText(checked)
+      }
+      let paradigm: ParadigmTable | undefined
+      if (type === 'paradigm_table') {
+        const checked = source ? validateParadigmTable(q.table, source) : null
+        if (!checked) {
+          logger.debug('Dropped a paradigm table that is inconsistent or not in the source')
+          continue
+        }
+        paradigm = checked
+        correctAnswer = paradigmAnswerText(checked)
+      }
       // Code output needs the program in the prompt; without it the question
       // cannot be answered, so it is dropped.
       if (type === 'code_output') {
@@ -898,6 +1054,8 @@ export class QuizService {
         ...(orderItems ? { orderItems } : {}),
         ...(matchItems ? { matchItems } : {}),
         ...(blanks ? { blanks } : {}),
+        ...(gender ? { gender } : {}),
+        ...(paradigm ? { paradigm } : {}),
         solution: typeof q.solution === 'string' ? q.solution : '',
         // Empty when the model gave none: the caller resolves it from the
         // question's group / topic, with 'General' only as the last resort.
@@ -989,7 +1147,7 @@ export class QuizService {
         : evaluateDeterministic(
             question,
             userAnswer,
-            question.type === 'fill_blank'
+            question.type === 'fill_blank' || question.type === 'paradigm_table'
               ? { targetLanguage: await projectTargetLanguage(quiz.projectId, this.db) }
               : {},
           )

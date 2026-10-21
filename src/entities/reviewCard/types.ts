@@ -9,8 +9,8 @@
 
 export type ReviewGrade = 'again' | 'hard' | 'good' | 'easy'
 
-/** `note` — a question saved from a homework walkthrough. */
-export type ReviewCardSource = 'concept' | 'table' | 'manual' | 'note'
+/** `note` — a question saved from a homework walkthrough; `phrase` — a language-course phrase card. */
+export type ReviewCardSource = 'concept' | 'table' | 'manual' | 'note' | 'phrase'
 
 export interface ReviewCard {
   id: string

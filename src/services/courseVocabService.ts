@@ -14,7 +14,7 @@ import type { AIService } from './aiService'
 import type { ProjectService } from './projectService'
 import { loadProjectSubject } from './projectSubject'
 import { projectTargetLanguage } from './projectTargetLanguage'
-import { isEnglish } from '@/shared/lib/language'
+import { isEnglish, primaryLanguage } from '@/shared/lib/language'
 import { vocabIndex } from './vocabService'
 import { t } from '@/i18n'
 
@@ -85,12 +85,11 @@ export class CourseVocabService {
 
     const targetLanguage = await projectTargetLanguage(projectId)
     const language = isEnglish(targetLanguage) ? undefined : targetLanguage
-    const [{ byWord, lemmas }, common] = language
-      ? [
-          { byWord: new Map<string, DictEntry>(), lemmas: new Map<string, string>() },
-          new Set<string>(),
-        ]
-      : await Promise.all([vocabIndex(), loadCommonWords()])
+    const [english, englishCommon] = await Promise.all([vocabIndex(), loadCommonWords()])
+    const { byWord, lemmas } = language
+      ? { byWord: new Map<string, DictEntry>(), lemmas: new Map<string, string>() }
+      : english
+    const common = language ? new Set<string>() : englishCommon
     // Words from school-level and CET-4 lists count as known to a university student.
     const basic = (word: string) => {
       const entry = byWord.get(word)
@@ -99,8 +98,27 @@ export class CourseVocabService {
       )
     }
     const known = (word: string) => byWord.has(word) || common.has(word)
+    // Language textbooks are bilingual: their glosses and instructions are
+    // English. In a foreign-language course an English word is not a course
+    // term — except a German noun English shares (Hand, Name): capitalised
+    // inside a sentence, where an English instruction word ("Please") is not.
+    const englishKnown = (word: string) => english.byWord.has(word) || englishCommon.has(word)
+    const isEnglishWord = (surface: string, initial = false): boolean => {
+      if (primaryLanguage(language) === 'de' && !initial && /^\p{Lu}\p{Ll}/u.test(surface))
+        return false
+      const lower = surface.toLowerCase()
+      if (!/^[a-z'-]+$/.test(lower)) return false
+      // "Pain-where", "patient's": judged by their first English part.
+      const head = lower.split(/['-]/)[0] ?? lower
+      return [lower, head].some(
+        (form) =>
+          form.length > 1 &&
+          (englishKnown(form) || englishKnown(lemmaOf(form, english.lemmas, englishKnown))),
+      )
+    }
     const candidates = extractCourseTerms(sources, {
-      isCommon: (word) => common.has(word) || basic(word),
+      isCommon: (word, initial) =>
+        language ? isEnglishWord(word, initial) : common.has(word) || basic(word),
       lemma: (token) => lemmaOf(token, lemmas, known),
       limit: COURSE_TERM_LIMIT,
       ...(language ? { language } : {}),

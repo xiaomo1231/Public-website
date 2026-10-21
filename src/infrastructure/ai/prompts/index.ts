@@ -14,7 +14,7 @@ import * as TranslatorV2 from './translator/v2'
 import * as ContextualTutorV3 from './contextual-tutor/v3'
 import * as ProfessorProfileV1 from './professor-profile/v1'
 import * as MistakeAnalyzerV2 from './mistake-analyzer/v2'
-import * as QuizGeneratorV6 from './quiz-generator/v6'
+import * as QuizGeneratorV7 from './quiz-generator/v7'
 import * as VisualizationGeneratorV10 from './visualization-generator/v10'
 import * as HomeworkAnalyzerV2 from './homework-analyzer/v2'
 import * as HomeworkQuestionV3 from './homework-question/v3'
@@ -29,7 +29,11 @@ import * as RubricExtractorV1 from './rubric-extractor/v1'
 import * as ReferenceImageQueryV2 from './reference-image-query/v2'
 import * as ReferenceImageCheckV1 from './reference-image-check/v1'
 import * as FillBlankCheckV1 from './fill-blank-check/v1'
+import * as SyllabusTopicsV1 from './syllabus-topics/v1'
+import * as ExamTopicMatchV1 from './exam-topic-match/v1'
 import * as VocabGlossV2 from './vocab-gloss/v2'
+import * as VocabListSplitV1 from './vocab-list-split/v1'
+import * as PhraseExtractV1 from './phrase-extract/v1'
 
 export const PROMPT_VERSIONS = {
   documentAnalyzer: 'v2',
@@ -42,7 +46,7 @@ export const PROMPT_VERSIONS = {
   contextualTutor: 'v3',
   professorProfile: 'v1',
   mistakeAnalyzer: 'v2',
-  quizGenerator: 'v6',
+  quizGenerator: 'v7',
   visualizationGenerator: 'v10',
   homeworkAnalyzer: 'v2',
   homeworkQuestion: 'v3',
@@ -57,7 +61,11 @@ export const PROMPT_VERSIONS = {
   referenceImageQuery: 'v2',
   referenceImageCheck: 'v1',
   fillBlankCheck: 'v1',
+  syllabusTopics: 'v1',
+  examTopicMatch: 'v1',
   vocabGloss: 'v2',
+  vocabListSplit: 'v1',
+  phraseExtract: 'v1',
 } as const
 
 export const prompts = {
@@ -71,7 +79,7 @@ export const prompts = {
   contextualTutor: ContextualTutorV3,
   professorProfile: ProfessorProfileV1,
   mistakeAnalyzer: MistakeAnalyzerV2,
-  quizGenerator: QuizGeneratorV6,
+  quizGenerator: QuizGeneratorV7,
   visualizationGenerator: VisualizationGeneratorV10,
   homeworkAnalyzer: HomeworkAnalyzerV2,
   homeworkQuestion: HomeworkQuestionV3,
@@ -87,7 +95,11 @@ export const prompts = {
   referenceImageQuery: ReferenceImageQueryV2,
   referenceImageCheck: ReferenceImageCheckV1,
   fillBlankCheck: FillBlankCheckV1,
+  syllabusTopics: SyllabusTopicsV1,
+  examTopicMatch: ExamTopicMatchV1,
   vocabGloss: VocabGlossV2,
+  vocabListSplit: VocabListSplitV1,
+  phraseExtract: PhraseExtractV1,
 } as const
 
 export type { DocumentAnalyzerInput, DocumentAnalysisOutput } from './document-analyzer/v2'
@@ -104,7 +116,7 @@ export type {
   QuizGenerationOutput,
   GeneratedQuizQuestion,
   QuizQuestionType,
-} from './quiz-generator/v6'
+} from './quiz-generator/v7'
 export type { VisualizationInput, VisualizationOutput } from './visualization-generator/v10'
 export type { HomeworkAnalyzerInput, HomeworkAnalyzerOutput } from './homework-analyzer/v1'
 export type { HomeworkQuestionInput, HomeworkQuestionOutput } from './homework-question/v3'

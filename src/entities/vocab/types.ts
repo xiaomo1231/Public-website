@@ -89,7 +89,22 @@ export interface VocabEntry {
   occurrences?: number
   /** Where the meaning came from. */
   glossBy: 'dictionary' | 'ai' | 'user' | 'none'
+  /** German nouns from a textbook word list: the definite article (der / die / das). */
+  article?: string
+  /** German nouns from a textbook word list: the plural without article ("Köpfe"). */
+  plural?: string
+  /** The lesson / chapter of the textbook word list the word came from. */
+  lesson?: string
   createdAt: number
+}
+
+/** "der Kopf, die Köpfe" for a German noun with its article (and plural); undefined otherwise. */
+export function grammarLine(
+  entry: Pick<VocabEntry, 'word' | 'article' | 'plural'>,
+): string | undefined {
+  if (!entry.article) return undefined
+  const singular = `${entry.article} ${entry.word}`
+  return entry.plural ? `${singular}, die ${entry.plural}` : singular
 }
 
 /** A word as shown to the student, whichever book it comes from. */
@@ -100,6 +115,8 @@ export interface WordView {
   tags: ExamTag[]
   /** Inflected forms, when the dictionary knows them. */
   forms?: string[]
+  /** A German noun's dictionary form from a textbook list: "der Kopf, die Köpfe". */
+  grammar?: string
   context?: WordContext
 }
 

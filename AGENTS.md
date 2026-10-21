@@ -110,9 +110,11 @@ Dexie
 - **科目画像 `subject-profile/v1`**：按项目科目（`calculus / linear_algebra / discrete_math / physics / chemistry / biology / medicine / cs / stats / other`）给出记号、推理方式、答案格式与常见错误；由 `withSubject()` 追加到教学/判分/分析类 system prompt（课程分析、增量主题分析、导师课时、交互导师、划词提问、测验、错题分析、作业提示/解法/复习讲解/检查答案/逐题问答、幻灯片学习）。`other` 不追加。科目一律由服务端从项目读取（`services/projectSubject.ts`），**不由 UI 传入**。化学记号用 mhchem `$\ce{...}$`（`Math.tsx` 已加载 `katex/contrib/mhchem`）。
 - **外语课 `language` + 目标语言**（`Project.targetLanguage`，小写 BCP-47 主标签 `de` / `hu` / …，只在 `subject === 'language'` 时生效）：用于国际学生的医学德语 / 医学匈牙利语等语言课。画像要求：讲解用用户选择的「讲解与题目语言」（`UserProfile.questionLanguage`），目标语言的词与例句原样且拼写精确（重音、大小写），德语名词带冠词与复数，匈牙利语按词根 + 后缀切分并标元音和谐；医患对话只是沟通练习，沿用医学安全边界；不出科学图。科目推断 `inferCourse(name)` 先判语言课再判医学（German / Deutsch / 德语 → `de`，Hungarian / magyar / 匈牙利语 → `hu`；单独的 "Medical Terminology" 仍归医学）。缓存版本后缀 `:language-<lang>`。
 - **医学考试体系**（`Project.examStyle: 'domestic' | 'international'`，每门课单独设，新建 / 编辑课程时只对医学显示）：未设置时按课程已处理资料的主要语言自动判断（以非中文为主 → `international`，中文或尚无资料 → `domestic`），手动选择优先。`international`：英文 + 拉丁解剖学名（Terminologia Anatomica），人名命名映射到解剖学名，题型为结构辨认、口试式完整描述（组成 / 毗邻 / 神经 / 血供 / 淋巴 / 发育）与英文选择题，不出名词解释 / 简答 / 论述；版本后缀 `:medicine-intl`。`domestic` 与以前逐字相同（已有缓存不失效）。科目上下文统一由 `services/projectSubject.ts` 的 `loadProjectSubjectContext()`（`{ subject, targetLanguage?, examStyle? }`）读取，`withSubject` / `subjectPromptVersion` 接受该上下文。
+- **外语课练习提示词**：`quiz-generator/v7` 在 v6 上只对外语课（`withSubject` 前由 `buildSystemPrompt({ languageDrills: { targetLanguage } })` 追加）描述 `article_gender`（仅德语）与 `paradigm_table`，其它科目的 system / user 提示与 v6 逐字相同（v6 保留）。`vocab-list-split/v1`（课本词表拆分为 term / gloss / article / plural / lesson）、`phrase-extract/v1`（对话短语 prompt / phrase / kind / sourceChunkId），均用 `untrustedContentWrapper` + `securityFooter`，输出都经本地校验后才展示、确认后才落库。
 - 画像可带 `boundaries`（渲染为 `Boundaries (always apply):`，每次都追加）：目前只有**医学**使用——这是教育不是医疗，不对真实个人做诊断、不给治疗或剂量建议，遇到个人健康问题建议就医；例题中的参考值与剂量仅为示意。医学画像中英（拉丁）术语并列、解剖学姿势、FDI 牙位、名词解释 / 简答 / 论述的答题格式。科目推断：解剖 / 组织胚胎 / 生理学 / 病理 / 药理 / 口腔 / 牙等归为医学（在生物之前判断；“医用化学 / 医用物理 / 医用高数”仍归化学 / 物理 / 微积分，“植物生理学”仍归生物）。
 - 画像可带**仅课时用**的 `lesson` 指引，只有 `withSubject(..., { forLesson: true })`（导师课时）才追加：化学/生物要求把可画成图的事实写明（分子名+分子式、各状态能量、滴定浓度/体积/Kₐ、亲本基因型、家系、DNA 序列），并在课程资料有图时引导学生看原图。
 - 带缓存/可比对的产物把科目画像折进版本：`subjectPromptVersion(base, subject)` = `<base>+subject-profile/v1:<subject>`，某科画像修改时在 `PROFILE_REVISIONS` 里给**该科**加修订号（追加 `.rN`；当前化学 `.r3`、生物 `.r2`、概率统计 `.r2`、物理 `.r2`、微积分 `.r2`、计算机 `.r2`——均已按大学深度改写或补充课时指引），只让该科的缓存失效（CourseAnalysis、增量 Topic、TutorLesson、SlideLesson、作业复习讲解与检查答案），不会让其它科目全部重生成。
+- **课程大纲提示词**：`syllabus-topics/v1`（本地解析到的考点 < 5 时由学生手动触发；只许逐字摘抄文档里的考点，`readAiSyllabus` 把每条与文档文本（合并空白后）做子串核对，找不到的丢弃，绝不改写或补全）；`exam-topic-match/v1`（闭集匹配：课程主题以短 id `t1…` 给出，`readAiMatches` 只保留列表内的 id、每个考点 ≤3 个，空结果保留本地匹配）。两者都用 `untrustedContentWrapper` + `securityFooter`，不缓存、不加科目画像。
 
 ### 安全模型
 
@@ -150,6 +152,7 @@ Dexie
 - 所有业务表带 `projectId` 与 `[projectId+...]` 复合索引；未知 projectId 抛 `NotFoundError`。
 - `TutorLesson.contentHash` 是主题指纹（含 `chapterId`/`sectionId`/`promptVersion`/notes+transcript `contextHash`），课程重析后自动失效重生成。
 - `SourceReference` 必带 `chunkId`，引用必须来自**真实分块**，杜绝 AI 编造出处。
+- `Document.syllabus?: SyllabusData`（仅 `materialType: 'syllabus'`，**未升 Dexie**，随文档导出 / 恢复）：`{ scopes: { id, label, kind: midterm|final|other, topics: { id, text, order, group?, sourceChunkId?, page?, source: local|ai|manual, topicIds?, matchedBy?: local|ai }[] }[], extractedAt, method: local|ai, editedAt?, matchedAgainst?, matchedAt? }`。
 - 章节层级**只有** `CourseStructure`/`CourseStructureNode` 一处；Topic / chunk / NoteLink / LectureChunkLink / PracticeQuestion 只保存 `chapterId`/`sectionId` 引用，不复制章节树。
 
 ### 外观（Appearance）——三个独立维度
@@ -262,6 +265,18 @@ unchanged | relinkOnly | regenerateSection | regenerateChapter
 
 ---
 
+### 5.2 课程大纲 / 考点清单（`materialType: 'syllabus'`）
+
+- **资料角色** `syllabus`（「课程大纲 / 考试题目」）：照常提取 + 分块，但和 `homework_answer` 一样是**只作参考的资料**（`isReferenceOnlyMaterial()`）：不进课程分析输入与 `sourceHash`（`selectAnalysisDocuments` / `analyzeProject`）、不作测验片段（`loadQuizCandidates` / `collectSourceSnippetsDetailed` 按分块的 `materialType` 跳过）、不作导师兜底来源（`collectTopicSources`）、不进课程词汇（走 `selectAnalysisDocuments`）、不进幻灯片学习列表、不计入首页资料数。不做教材结构识别。
+- **角色建议**：上传对话框按文件名（syllabus / handbook / announcements / topics of the examination / 考试大纲 / 教学大纲…，`looksLikeSyllabus`）提示「标为课程大纲」，由学生确认（`useBatchUpload.setMaterial`）；考点清单页再按文件名或**第一页**文字列出已处理的教材 / 笔记 / 文字稿供确认，`SyllabusService.markAsSyllabus` 单事务改角色（文档 + 分块）、删除该文件的教材结构、清掉分块的章节字段并解析考点。
+- **本地解析**（`entities/syllabus/parse.ts`，处理流水线中对 syllabus 文档自动执行；学生编辑过（`editedAt`）则重处理时保留）：考点标题（含 topic(s) / theses / 题目 / 考点 / 复习提纲…）下，编号 / 项目符号行与逐行条目都是考点；普通考试标题（exam / midterm / final / 期末…，须是标题分块或大写行）下只认编号 / 项目符号行，读起来像规章（students / must / should / 必须…）的丢弃。小写开头、括号未闭合、以逗号等结尾的续行（含跨分块）并入上一条；`Musculoskeletal Anatomy` 式标题行与含 topics 的短行是组名（`group`，仅显示），连续 ≥3 行标题式则当作考点。考点保留原文、起始分块 id 与页码；scope 的 `kind` 由标题判断（semifinal 归 final），少于 2 条的 scope 丢弃。
+- **AI 提取**：本地考点 < 5（`MIN_LOCAL_TOPICS`）时提供，见 Prompts。没有考点保留下来则报错、不覆盖原列表。
+- **编辑**：重命名 / 新增 / 删除 scope，删除 / 合并（文本以 “ / ” 连接，`source: 'manual'`）/ 手动添加考点（`manual`，立即本地匹配）；都在 `documents` 单表事务内读改写并记 `editedAt`。「重新识别」会替换编辑（先确认）。
+- **匹配**（`entities/syllabus/match.ts`）：本地 = 折叠大小写 / 重音 → 分词（中文按字二元组）→ 去功能词与考点套话（general / gross anatomy / structure…）→ 粗词干（复数、-al/-ar/-ae/-us、thorax→thorac）→ 名称双向覆盖率均值（描述占 25%），≥0.45 匹配、保留与最高分差 20% 内的 ≤3 个。打开考点清单时若课程主题指纹（`matchedAgainst`）变了就重新本地匹配（AI 匹配且主题仍在则保留）。
+- **覆盖与掌握度**（`coverage.ts`）：匹配到的课程主题（仍存在的）→ 覆盖；练习数与掌握度取这些主题的 `KnowledgeMastery`（`topicId` 命中，或知识点 = 主题概念名 / 主题名 / 考点原文），掌握度按作答次数加权平均，是**估计值**；无练习显示 “—”。
+- **界面**：课程主页第三个标签「考点清单」（`?tab=exams`，`widgets/syllabus/ExamTopicsPanel.tsx`）：scope 切换、讲义风格为标题 + 规则线列表，精密实验室为细线表格 + 等宽编号；每行 原文 / 出处页 / 教材覆盖（链接到课时，或「教材中未找到」）/ 练习数 / 估计掌握度 / 学习（第一个匹配主题的课时）/ 出题（`/quiz?examDoc&examScope&examTopic`）。有大纲但没有教材 / 笔记 / 文字稿时提示大纲本身没有内容。
+- **按考试范围出题**：`QuizConfig.examScope = { documentId, scopeId, examTopicId?, includeUnmatched }`（测验配置里的 `ExamScopePicker`，选中后主题选择停用；`includeUnmatched` 默认只对医学 `international` 勾选）。`QuizService.planGroups` → `planExamGroups`：`planExamScopeEntries` 选出考点（多于题数时均匀抽取），已匹配的考点 = 一个按其课程主题（来源分块 + 概念）组成的组，未匹配的考点只在勾选时 = 无来源片段的组（`aiOnly`），其题目 `sourceRefs: []` 且 `Question.origin = 'ai_without_source'`，题卡与出处区标注「AI 出题 · 无教材出处」。一个都选不出时报 `EXAM_SCOPE_EMPTY`。出题的其它流程不变。
+
 ## 6. 教学 / Quiz / 错题系统
 
 ### 导师：阅读与交互分离（核心设计）
@@ -281,7 +296,7 @@ Topic
 ### Quiz
 
 - 题型：单选、判断、数值（容差）、数学表达式、**代码输出**（`code_output`，仅计算机科目提供：题干含带语言标记的代码块，答案为程序的确切输出，按行尾空白/换行规范化后**精确匹配**）。
-- 数值题可带 `unit`（mathjs 单位语法，如 `m/s^2`）：学生须带单位作答，任意同量纲单位先换算再按 1% **相对**容差比较；缺单位 / 量纲不对给出明确提示，单位无法识别则不判分（`infrastructure/math/quantityAnswer.ts`）。出题 prompt 为 `quiz-generator/v6`（v5 及更早保留）：v6 新增 `language: 'zh_terms'`（简体中文、关键术语首次出现附英文），干扰项规则（同一材料里真实易混的概念、各选项长短与句式相近、正确项不能是最长 / 最具体的、禁止荒谬或离题选项），以及题干不得以“根据讲义提纲 / 课件 / 教材”开头。
+- 数值题可带 `unit`（mathjs 单位语法，如 `m/s^2`）：学生须带单位作答，任意同量纲单位先换算再按 1% **相对**容差比较；缺单位 / 量纲不对给出明确提示，单位无法识别则不判分（`infrastructure/math/quantityAnswer.ts`）。出题 prompt 为 `quiz-generator/v7`（外语课练习题型，其余与 v6 逐字相同；v6 及更早保留）：v6 新增 `language: 'zh_terms'`（简体中文、关键术语首次出现附英文），干扰项规则（同一材料里真实易混的概念、各选项长短与句式相近、正确项不能是最长 / 最具体的、禁止荒谬或离题选项），以及题干不得以“根据讲义提纲 / 课件 / 教材”开头。
 - **化学方程式题（`chem_equation`，仅化学科目）**：`infrastructure/chemistry/equation.ts` 本地解析（`->`/`<=>`/`→`/`⇌`/`=`、`[条件]`、电荷 `Fe^3+`、按 mhchem 约定 `NH4+` 为 +1、水合物 `·`、状态符号忽略）。判分：物种一致（顺序无关）+ 原子与电荷守恒 + 系数成比例（整倍数也算对）；缺/多物种、不守恒、系数错误分别给出提示；读不懂则不判分。出题时参考答案本身必须能解析且配平，否则丢弃该题。**有机结构式**：物种内可写键（`CH2=CH2`、`HC#CH`/`HC≡CH`、`CH3-CH3`）；没有其它箭头时裸 `=` 才可能是反应箭头，取能配平的那个 `=`。物种按分子式匹配；参考答案写了 ≥2 个碳的结构式而作答结构写法不同（如乙醇 vs 二甲醚）时，判定为 `isomers`：不计分并提示可能是同分异构体（简单基团 `(CH2)3` 展开、键符号忽略后再比较）。
 - 单位（`quantityAnswer.ts` 使用独立 mathjs 实例，不影响表达式判分）额外支持 `M/mM/µM/nM`（mol/L）、`Da/kDa`、`cal/kcal`、`ppm/ppb`、`Å`，以及医学的 `bpm`（1/min）、`Osm/mOsm`（独立量纲，与 mol 不互换）、`Eq/mEq`（独立量纲）；`mmHg` 为 mathjs 自带。
 - **医学考试题型（`quiz-generator/v5`，全科可选，医学默认可用）**：
@@ -290,6 +305,9 @@ Topic
   - **填空（`fill_blank`）**：题干中每个 `____` 对应一组可接受答案（1–4 空，每空 ≤6 个）；本地按 NFKC + 小写 + 去空白标点比较，`乙酰胆碱（ACh）` 这类“术语（缩写）”两部分都须可接受；仍不匹配且已配置 AI 时，`fill-blank-check/v1` 只对未匹配的空判断是否**完全等价**（同义词 / 英文 / 缩写），计分仍在本地（`services/fillBlankChecker.ts`），AI 不可用则保持本地结果。
   - A2 型病例题只作为基础课的情境题：题干不要求诊断或治疗方案。三种题型的参考答案均由结构重建，`correctAnswer` 缺失不会导致丢题。作答组件在 `widgets/quiz/ExamFormatInputs.tsx`；结果页 / 错题本用 `displayAnswer` 把 id 显示为字母（`1→B`、`(1) …`）。
 - **排序题（`ordering`，全科可选，默认不勾选）**：`orderItems` 3–8 个互不相同的单行项，参考答案由其重建（换行连接）。作答 `widgets/quiz/OrderingInput`（拖拽 + 上/下按钮，从按题目 id 固定的打乱顺序开始，且绝不是正确顺序）。得分 = 最长保序子序列长度 / 总项数（`infrastructure/math/orderingAnswer.ts`），部分得分走与简答题相同的 `score` 通道。
+- **外语课练习题型**（`quiz-generator/v7`；`questionTypesForSubject(subject, targetLanguage)` 只对 `language` 课提供，`article_gender` 只对 `targetLanguage === 'de'`；服务端 `offeredQuizTypes` 再过滤一次；外语课测验配置默认勾选 冠词 / 变位表 / 填空 / 配伍 / 单选，`defaultQuestionTypes`）。数据与工具在 `entities/question/languageDrills.ts`，生成校验 `services/languageDrillValidation.ts`（名词 / 词形须按整词出现在本批来源片段中：NFC + 小写 + 合并空白，重音必须一致；没有来源文本时一律丢弃）：
+  - **冠词题 `article_gender`**：`Question.gender = { noun, gloss?, article: der|die|das, plural? }`，`correctAnswer` = “der Kopf, die Köpfe”。丢弃：冠词不是 der/die/das、名词不大写或不在原文、复数不在原文、`correctAnswer` 与字段矛盾、原文词表把该名词写成别的冠词（“die Hand, …”）。作答 `<article>\n<plural>`；冠词 1 分 + 复数 1 分（`compareTargetText`：exact 1、accent/case/variant 0.5；前缀 “die ” 可写可不写），走 `score` 通道，全对才算正确；`evaluation.blanks` 带 `label` 逐项反馈。作答组件 `widgets/quiz/LanguageDrillInputs.tsx`（der/die/das 固定顺序不打乱，键盘 1–3 选冠词，`quizKeyboard.ts` 的 `articleForKey`；复数框带德语 `LetterBar`，Enter 提交）。
+  - **变位 / 变格表 `paradigm_table`**：`Question.paradigm = { title, rows(2–10), columns(1–3), cells }`，格子为给定 `{ text }` 或空格 `{ accepted: 1–3 }`，空格 1–12 个；行列数不一致、同一格既给定又留空、行名重复、空格词形不在原文 ⇒ 丢弃。作答为空格按阅读顺序换行连接；逐格 `compareTargetText`（exact 1、accent/case/variant 0.5、wrong 0），得分 = 合计 / 空格数，全部 exact 才算正确，提交时传项目目标语言。组件是真正的 `<table>`（`th scope`），输入框可访问名“行 × 列”，Enter 跳下一格、Ctrl/⌘+Enter 提交，判分后逐格标出 exact / 接近 / 错并给出应填词形。
 - **教授练习题与交互导师的简答题**（第二期）复用同一判分器：练习题从教授参考答案经 `rubric-extractor/v1` 拆出得分点（按 答案+prompt 版本 哈希缓存在题目上），作答写入错题本 / 掌握度并支持异议（`PracticeService.disputeAttempt`）；导师出题 `tutor/v2-question` 可出带得分点的简答题，覆盖率 60–99% 或无法核对时难度不调整。
 - **简答题（`short_answer`）按得分点计分**：出题时生成参考答案 + 2–6 条得分点（`Question.rubric`）。判分 `services/shortAnswerGrader.ts` + `short-answer-check/v1`：AI 逐条判断是否答到（同义、等价表述都算），答到必须**逐字摘出学生原话**作为证据，本地校验证据确实出现在答案里，否则该点不算；得分 = 答到点数 / 总点数（3/5 → 60%），由本地计算，从不采用 AI 的整体结论。空答案不调用 AI；未配置 AI 或核对失败 ⇒ 不计分（展示得分点与参考答案）。
 - 简答题计分：测验百分比 = Σ得分 / 已判题数（简答题按 `earned/total` 计入，`QuizScore.points`）；只有全部答到才算“正确”，其余进入错题本；掌握度按得分比例、**半权重**计入（`observationFromAttempt`）。学生可点“我不同意这个判定”（`QuizService.disputeAttempt`）：该次作答保留展示但不再计分，同时移出错题本、重建该知识点掌握度、已完成测验重新算分。
@@ -318,10 +336,11 @@ Topic
 
 ### 复习卡片（间隔重复）
 
-- `ReviewCard`（Dexie **v15** `reviewCards`，索引 `[projectId+due]`）：正面 / 背面 / 来源（`concept` 课程概念 · `table` 解剖对照表 · `manual` 手写）/ 可选 `knowledgePoint`。全部本地，不调用 AI。
+- `ReviewCard`（Dexie **v15** `reviewCards`，索引 `[projectId+due]`）：正面 / 背面 / 来源（`concept` 课程概念 · `table` 解剖对照表 · `manual` 手写 · `note` 作业问答 · `phrase` 外语课短语）/ 可选 `knowledgePoint`。全部本地，不调用 AI。
 - 调度（`entities/reviewCard/types.ts`，SM-2 家族）：忘了 → 10 分钟后重学、ease −0.2、计一次遗忘；新卡“困难” → 6 小时后（仍在学习阶段）；困难 → 间隔 ×1.2、ease −0.15；记得 → 1 天 → 3 天 → 间隔 × ease；简单 → 间隔 × ease × 1.3、ease +0.15；ease 下限 1.3。
 - 页面 `/projects/:id/cards`（`ReviewCardsPage`）：统计（待复习 / 总数 / 新卡 / 已熟记 ≥21 天）、复习会话（空格显示答案，1–4 评分，按钮上显示各评分的下次间隔）、搜索 / 编辑 / 删除、从课程概念生成（名词 → 定义，按正面去重）、手写新建。课时中的 `anatomy_table_2d` 可一键加入（“行 — 列” → 单元格）。
 - 掌握度：带 `knowledgePoint` 的卡片复习以**半权重**观测计入（`MasteryService.recordObservation`，忘了 0 / 困难 0.6 / 其余 1）。随项目删除；纳入导出。
+- **外语课短语卡**（`services/phraseCards.ts`，复习卡片页「从对话生成短语卡」，仅外语课）：只把看起来是对话 / 情景的分块（≥3 行以破折号开头、≥3 个问号或说话人标签）按 ≤8000 字一批（最多 8 批）发给 `phrase-extract/v1`；`validatePhrases`：`sourceChunkId` 必须是本批分块、短语去空白后须**逐字**出现在该分块中、带“……”/“___”的练习行丢弃、按 prompt 去重。确认对话框（按问句 / 答句 / 表达分组、可改正面、取消勾选、分页）→ `ReviewCardService.addMany`（source `phrase`，正面 = 意思，背面 = 原句，可选反向卡），按正面去重。
 
 ---
 
@@ -336,6 +355,7 @@ Topic
 - **导出**（`formatExport`）：Anki（`#separator:tab` / `#html:true` / `#tags column:3`，背面音标 + 释义 + 例句）、CSV（带 BOM，`word,phonetic,meaning,example,source`）、纯单词 TXT；可导出任意词书 / 已学 / 易错词。导入：`parseWordList`（每行单词，或 制表符 / 逗号 / 冒号 / 空格+中文 分隔的释义）。
 - **非英语词书**（`VocabBook.language`，缺省为英语）：导入时可选语言；课程词书取项目目标语言。非英语词书不查 ECDICT、不做常用词 / 四级过滤、不做英语词形还原与词根提示，释义由用户或 `vocab-gloss/v2`（带 `targetLanguage`；英语时与 v1 逐字相同）提供；保留单词大小写（`wordKey`：英语照旧小写，已有进度不受影响）。分词、词表解析一律按 Unicode 字母（`\p{L}`），抽词前去掉在一半以上页面重复的页眉页脚行。
 - **目标语言判分**（`shared/lib/language.ts` `compareTargetText` → `exact / accent / case / variant / wrong`）：非英语词书的拼写题只差重音、大小写或德语 ß↔ss / ä↔ae 时评为「模糊」(2) 并提示正确写法；语言课测验填空同样情况计 0.5 分并提示，且不送 AI 等价核对。朗读 `speak(text, lang)` 按语言选语音，本机没有该语言语音时听写退回拼写并提示。符号键盘新增德语（ä ö ü ß „ “）与匈牙利语（á é í ó ö ő ú ü ű）组，按项目目标语言排在最前（`LetterBar` 也用于单词拼写与填空）。
+- **导入课本词表**（`services/textbookWordList.ts`；外语课文件菜单「导入课本词表」与背单词「课程词汇」中的同名按钮）：文档分块按章节（`chapterId`）切成 ≤12000 字的部分，只发看起来像词表的部分（词表标题、≥3 个德语“der X,”条目或短行为主；都不像时全发），并发 2 调 `vocab-list-split/v1`。`validateWordListItems`：term 须按整词出现在该部分原文（重音一致、大小写不敏感），释义非空，冠词须为 der/die/das（非德语不得带冠词）且不与原文词表矛盾，“der Kopf” 形式的 term 拆出冠词，不在原文的复数只丢复数，按 `wordKey` 去重，记录所在行作 `context`。确认对话框按课次分组、释义可改、可取消勾选、每页 100 行。`merge` 写入项目课程词书（不存在则新建，`language` = 目标语言），按 `wordKey`（再按忽略大小写）合并：已有的更新释义 / 冠词 / 复数 / 课次，确认的释义 `glossBy: 'user'`；单事务。`VocabEntry` 新增可选 `article` / `plural` / `lesson`，`WordView.grammar`（`grammarLine` → “der Kopf, die Köpfe”）在单词复习揭晓后与词表中显示。
 - 词根词缀提示（`rootHints`）只作联想，至少留 3 个字母的词干才提示。朗读用浏览器 `speechSynthesis`（`shared/lib/speech.ts`），不可用时听写模式退回拼写。
 
 ### 作业完整讲解（作业页「完整讲解」标签）
@@ -349,7 +369,7 @@ Topic
 - **加入复习卡片**：每轮问答一张卡（`ReviewCardSource` 新增 `note`），问题很短时正面附原文，背面过长在段落处截断；按正面去重。
 - **打印 / 导出 PDF**：`WalkthroughPrint` 只在打印时把纯净副本挂到 `body` 下，`body.printing-walkthrough` 的打印样式隐藏其它内容并强制白底黑字；`afterprint` 后卸载。
 - **删除与导出**：两表随作业删除（`deleteAssignment` / 删除作业文件 / 删除项目，均在同一事务）、纳入导出；**保存过的问答计入学生作业**（`studentWorkFor`），有问答的作业文件不能被直接删除。
-- 做题模式下首次进入显示“包含全部解法”提示（仅本次访问记住，不写存储）。只做桌面端布局。
+- 做题模式下首次进入显示“包含全部解法”提示（每份作业只出现一次：点「我知道了」后记在作业行 `HomeworkSet.walkthroughNoticeSeenAt`，刷新或下次进入都直接打开讲解）。只做桌面端布局。
 
 ## 7. 路由与目录
 

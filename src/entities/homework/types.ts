@@ -52,6 +52,11 @@ export interface HomeworkSet {
    * state (`ready` / `failed`). Optional, so rows written before it stay valid.
    */
   progress?: HomeworkProgress
+  /**
+   * When the student first dismissed the "the walkthrough contains every
+   * solution" notice. Set once; the notice is not shown again for this set.
+   */
+  walkthroughNoticeSeenAt?: number
   createdAt: number
   updatedAt: number
 }

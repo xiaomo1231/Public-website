@@ -27,6 +27,22 @@ export interface QuizConfig {
   sourceMistakeId?: string
   /** Language of the questions; absent uses the student's saved preference. */
   questionLanguage?: QuestionLanguage
+  /**
+   * A quiz over an exam scope of the course syllabus, or one exam topic of it.
+   * Exam topics matched to course topics are quizzed from those topics'
+   * sources; unmatched ones only with `includeUnmatched`, and their questions
+   * have no course source (labelled as AI-generated).
+   */
+  examScope?: ExamScopeSelection
+}
+
+export interface ExamScopeSelection {
+  /** The syllabus document. */
+  documentId: string
+  scopeId: string
+  /** One exam topic of the scope; absent = the whole scope. */
+  examTopicId?: string
+  includeUnmatched: boolean
 }
 
 export type QuizStatus = 'generating' | 'ready' | 'in_progress' | 'completed' | 'failed'

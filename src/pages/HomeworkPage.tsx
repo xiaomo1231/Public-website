@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { Link, useParams, useSearchParams } from 'react-router-dom'
 import {
   AlertTriangle,
   ArrowLeft,
@@ -49,10 +49,29 @@ export function HomeworkPage(): JSX.Element {
   const [retrying, setRetrying] = useState(false)
   const [summary, setSummary] = useState<ReanalysisSummary | null>(null)
   const [error, setError] = useState<string | null>(null)
+  // The chosen view lives in the URL (?view=review|walkthrough), so a reload,
+  // a dev-server hot update or the back button keeps it instead of falling
+  // back to practice.
+  const [searchParams, setSearchParams] = useSearchParams()
+  const viewParam = searchParams.get('view')
   /** Practice (answer hidden) or review (professor answer shown). */
-  const [mode, setMode] = useState<'practice' | 'review'>('practice')
+  const mode: 'practice' | 'review' = viewParam === 'review' ? 'review' : 'practice'
   /** One question at a time, or the whole assignment's walkthrough. */
-  const [view, setView] = useState<'questions' | 'walkthrough'>('questions')
+  const view: 'questions' | 'walkthrough' =
+    viewParam === 'walkthrough' ? 'walkthrough' : 'questions'
+  const showView = useCallback(
+    (next: 'practice' | 'review' | 'walkthrough') =>
+      setSearchParams(
+        (prev) => {
+          const params = new URLSearchParams(prev)
+          if (next === 'practice') params.delete('view')
+          else params.set('view', next)
+          return params
+        },
+        { replace: true },
+      ),
+    [setSearchParams],
+  )
 
   const load = useCallback(async () => {
     if (!service || !assignmentId) return
@@ -155,10 +174,7 @@ export function HomeworkPage(): JSX.Element {
                   variant={view === 'questions' && mode === 'practice' ? 'default' : 'ghost'}
                   size="sm"
                   aria-pressed={view === 'questions' && mode === 'practice'}
-                  onClick={() => {
-                    setView('questions')
-                    setMode('practice')
-                  }}
+                  onClick={() => showView('practice')}
                 >
                   {t('homework.mode.practice')}
                 </Button>
@@ -167,10 +183,7 @@ export function HomeworkPage(): JSX.Element {
                     variant={view === 'questions' && mode === 'review' ? 'default' : 'ghost'}
                     size="sm"
                     aria-pressed={view === 'questions' && mode === 'review'}
-                    onClick={() => {
-                      setView('questions')
-                      setMode('review')
-                    }}
+                    onClick={() => showView('review')}
                   >
                     {t('homework.mode.review')}
                   </Button>
@@ -179,7 +192,7 @@ export function HomeworkPage(): JSX.Element {
                   variant={view === 'walkthrough' ? 'default' : 'ghost'}
                   size="sm"
                   aria-pressed={view === 'walkthrough'}
-                  onClick={() => setView('walkthrough')}
+                  onClick={() => showView('walkthrough')}
                 >
                   {t('homework.mode.walkthrough')}
                 </Button>

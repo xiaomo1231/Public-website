@@ -7,6 +7,7 @@ import {
   FileText,
   Filter,
   Loader2,
+  ListPlus,
   MoreHorizontal,
   Pencil,
   Search,
@@ -45,6 +46,9 @@ import { cn, relativeTime } from '@/shared/lib/utils'
 import { useUiStyle } from '@/features/theme/useAppearance'
 import { LAB_CHIP_CLASS, LAB_TABLE_HEAD_CLASS } from '@/widgets/dashboard/Figures'
 import { formatBytes } from '@/shared/lib/format'
+import { targetLanguageOf } from '@/shared/lib/language'
+import { useProject } from '@/features/project/useProjects'
+import { WordListImportDialog } from '@/widgets/vocab/WordListImportDialog'
 import { useTranslation, type TranslationKey } from '@/i18n'
 
 const TYPE_LABEL_KEY: Record<DocumentType, TranslationKey> = {
@@ -82,6 +86,7 @@ const MATERIAL_LABEL_KEY: Record<LearningMaterialType, TranslationKey> = {
   professor_practice: 'materialType.professor_practice',
   homework: 'materialType.homework',
   homework_answer: 'materialType.homework_answer',
+  syllabus: 'materialType.syllabus',
 }
 
 type SortKey = 'newest' | 'oldest' | 'name' | 'size'
@@ -128,6 +133,10 @@ export function DocumentList({
   const [renaming, setRenaming] = useState<Document | null>(null)
   const [renameValue, setRenameValue] = useState('')
   const [deleting, setDeleting] = useState<Document | null>(null)
+  // A language course can read a textbook's word list into its vocabulary book.
+  const { project } = useProject(projectId)
+  const languageCourse = Boolean(targetLanguageOf(project))
+  const [wordListDoc, setWordListDoc] = useState<Document | null>(null)
   // Rows mounted so far: each row carries a dropdown and a tooltip, so a
   // course with thousands of files renders in batches instead of all at once.
   const [revealed, setRevealed] = useState(DOCUMENT_PAGE_SIZE)
@@ -349,6 +358,9 @@ export function DocumentList({
                               onDelete={() =>
                                 onDeleteRequest ? onDeleteRequest(doc) : setDeleting(doc)
                               }
+                              {...(languageCourse && doc.status === 'ready'
+                                ? { onImportWordList: () => setWordListDoc(doc) }
+                                : {})}
                             />
                           </td>
                         </tr>
@@ -408,6 +420,9 @@ export function DocumentList({
                           setRenameValue(doc.name)
                         }}
                         onDelete={() => (onDeleteRequest ? onDeleteRequest(doc) : setDeleting(doc))}
+                        {...(languageCourse && doc.status === 'ready'
+                          ? { onImportWordList: () => setWordListDoc(doc) }
+                          : {})}
                       />
                     </li>
                   )
@@ -496,6 +511,15 @@ export function DocumentList({
           </DialogContent>
         </Dialog>
       )}
+
+      {wordListDoc && (
+        <WordListImportDialog
+          projectId={projectId}
+          documentId={wordListDoc.id}
+          open
+          onOpenChange={(open) => !open && setWordListDoc(null)}
+        />
+      )}
     </div>
   )
 }
@@ -524,11 +548,14 @@ function RowMenu({
   projectId,
   onRename,
   onDelete,
+  onImportWordList,
 }: {
   doc: Document
   projectId: string
   onRename: () => void
   onDelete: () => void
+  /** Language courses: read this document's word list into the course vocabulary. */
+  onImportWordList?: () => void
 }): JSX.Element {
   const { t } = useTranslation()
   return (
@@ -551,6 +578,12 @@ function RowMenu({
           <Pencil className="h-4 w-4" />
           {t('documents.rename')}
         </DropdownMenuItem>
+        {onImportWordList && (
+          <DropdownMenuItem onSelect={onImportWordList}>
+            <ListPlus className="h-4 w-4" />
+            {t('wordList.open')}
+          </DropdownMenuItem>
+        )}
         <DropdownMenuSeparator />
         <DropdownMenuItem onSelect={onDelete} className="text-destructive focus:text-destructive">
           <Trash2 className="h-4 w-4" />

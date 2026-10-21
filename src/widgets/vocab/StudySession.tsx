@@ -418,6 +418,15 @@ export function StudySession({
                   )}
                 </div>
               )}
+              {view.grammar && (
+                <p
+                  lang={language}
+                  translate="no"
+                  className="notranslate text-center text-sm font-medium"
+                >
+                  {view.grammar}
+                </p>
+              )}
               <WordMeaning view={view} roots={roots} t={t} />
             </div>
           )}

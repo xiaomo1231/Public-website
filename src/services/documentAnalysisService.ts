@@ -36,7 +36,7 @@ import { AppError } from '@/infrastructure/errors/AppError'
 import { asRecord } from '@/infrastructure/ai/validation'
 import type { DocumentChunk } from '@/entities/chunk/types'
 import { tokenize } from './classProgressService'
-import { resolveMaterialType } from '@/entities/document/types'
+import { isReferenceOnlyMaterial, resolveMaterialType } from '@/entities/document/types'
 import { normalizeMathNotation } from '@/infrastructure/files/mathNotation'
 import { t } from '@/i18n'
 
@@ -145,11 +145,9 @@ export class DocumentAnalysisService {
 
     const documents = await this.documents.listByProject(projectId)
     const readyDocs = documents.filter((d) => d.status === 'ready')
-    // A professor answer key is reference material, never course knowledge; it
-    // is excluded from the analysis (and from its source hash) entirely.
-    const courseDocs = readyDocs.filter(
-      (d) => resolveMaterialType(d.materialType) !== 'homework_answer',
-    )
+    // A professor answer key or a syllabus is reference material, never course
+    // knowledge; it is excluded from the analysis (and its source hash) entirely.
+    const courseDocs = readyDocs.filter((d) => !isReferenceOnlyMaterial(d.materialType))
     if (courseDocs.length === 0) {
       throw new AppError(t('errors.noProcessedDocuments'), 'NO_DOCUMENTS')
     }

@@ -8,6 +8,7 @@ import { useProject } from '@/features/project/useProjects'
 import { MathField } from '@/widgets/mathInput/MathField'
 import { OrderingInput } from './OrderingInput'
 import { FillBlankInput, MatchingInput, MultipleSelectInput } from './ExamFormatInputs'
+import { ArticleGenderInput, ParadigmTableInput } from './LanguageDrillInputs'
 import {
   gradedOptionStatusKey,
   optionKeyClass,
@@ -125,6 +126,31 @@ export function AnswerInput({
         value={value}
         onChange={onChange}
         disabled={disabled}
+        language={language}
+        {...(onSubmit ? { onSubmit } : {})}
+      />
+    )
+  }
+  if (question.type === 'article_gender') {
+    return (
+      <ArticleGenderInput
+        question={question}
+        value={value}
+        onChange={onChange}
+        disabled={disabled}
+        revealed={revealed}
+        {...(onSubmit ? { onSubmit } : {})}
+      />
+    )
+  }
+  if (question.type === 'paradigm_table') {
+    return (
+      <ParadigmTableInput
+        question={question}
+        value={value}
+        onChange={onChange}
+        disabled={disabled}
+        revealed={revealed}
         language={language}
         {...(onSubmit ? { onSubmit } : {})}
       />

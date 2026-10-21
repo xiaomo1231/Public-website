@@ -14,6 +14,8 @@ export type EvaluationMethod =
   | 'multi_select'
   | 'match_items'
   | 'blank_match'
+  | 'article_gender'
+  | 'paradigm_cells'
   | 'option_id'
   | 'ai'
   | 'unverified'
@@ -32,6 +34,8 @@ export const EVAL_METHOD_LABEL_KEYS: Record<EvaluationMethod, TranslationKey> = 
   multi_select: 'evalMethod.multi_select',
   match_items: 'evalMethod.match_items',
   blank_match: 'evalMethod.blank_match',
+  article_gender: 'evalMethod.article_gender',
+  paradigm_cells: 'evalMethod.paradigm_cells',
   option_id: 'evalMethod.option_id',
   ai: 'evalMethod.ai',
   unverified: 'evalMethod.unverified',
@@ -69,6 +73,11 @@ export interface QuestionEvaluation {
 }
 
 export interface BlankResult {
+  /**
+   * What the part is, when it is not a numbered blank: "Artikel", a table
+   * cell "du × Präsens". Shown in place of "(1)".
+   */
+  label?: string
   given: string
   accepted: string[]
   correct: boolean

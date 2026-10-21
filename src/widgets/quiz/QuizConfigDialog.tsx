@@ -3,7 +3,12 @@ import { Loader2, Sparkles } from 'lucide-react'
 import type { CourseAnalysis, Topic } from '@/entities/courseAnalysis/types'
 import type { QuizConfig, QuizDifficulty } from '@/entities/quiz/types'
 import type { QuestionType } from '@/entities/question/types'
-import { QUESTION_TYPE_LABEL_KEYS, questionTypesForSubject } from '@/entities/question/types'
+import {
+  QUESTION_TYPE_LABEL_KEYS,
+  defaultQuestionTypes,
+  questionTypesForSubject,
+} from '@/entities/question/types'
+import { targetLanguageOf } from '@/shared/lib/language'
 import { useProject } from '@/features/project/useProjects'
 import { useAuth } from '@/features/auth/useAuth'
 import {
@@ -19,6 +24,7 @@ import { Label } from '@/shared/ui/Label'
 import { Progress } from '@/shared/ui/Progress'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/shared/ui/Select2'
 import { cn } from '@/shared/lib/utils'
+import { ExamScopePicker, type ExamScopeChoice } from '@/widgets/syllabus/ExamScopePicker'
 import { useTranslation, type TranslationKey } from '@/i18n'
 
 export interface QuizConfigDialogProps {
@@ -59,13 +65,21 @@ export function QuizConfigDialog({
 }: QuizConfigDialogProps): JSX.Element {
   const { t } = useTranslation()
   const { project } = useProject(projectId)
-  const availableTypes = questionTypesForSubject(project?.subject)
+  const targetLanguage = targetLanguageOf(project)
+  const availableTypes = questionTypesForSubject(project?.subject, targetLanguage)
   const [analysis, setAnalysis] = useState<CourseAnalysis | null>(null)
   const [topics, setTopics] = useState<Topic[]>([])
   const [topicId, setTopicId] = useState<string>('__mixed__')
+  // Optional: quiz an exam scope of the course syllabus instead of a topic.
+  const [examScope, setExamScope] = useState<ExamScopeChoice | null>(null)
   const [count, setCount] = useState(5)
   const [difficulty, setDifficulty] = useState<QuizDifficulty>('adaptive')
   const [types, setTypes] = useState<QuestionType[]>(['multiple_choice'])
+  // A language course starts with its drills ticked (once the course is known).
+  const subject = project?.subject
+  useEffect(() => {
+    if (subject) setTypes(defaultQuestionTypes(subject, targetLanguage))
+  }, [subject, targetLanguage])
   const [loading, setLoading] = useState(true)
   // The saved preference; changing it here saves it for every later quiz.
   const { profile, setQuestionLanguage } = useAuth()
@@ -112,7 +126,17 @@ export function QuizConfigDialog({
       questionLanguage,
       ...(topic ? { topicId: topic.id, topicName: topic.name } : {}),
     }
-    onStart(config)
+    onStart(
+      examScope
+        ? {
+            ...config,
+            mode: 'mixed',
+            topicId: undefined,
+            topicName: examScope.label,
+            examScope: examScope.selection,
+          }
+        : config,
+    )
   }
 
   if (loading) {
@@ -149,7 +173,7 @@ export function QuizConfigDialog({
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="space-y-2">
             <Label htmlFor="quiz-topic">{t('quizConfig.topic')}</Label>
-            <Select value={topicId} onValueChange={setTopicId}>
+            <Select value={topicId} onValueChange={setTopicId} disabled={examScope !== null}>
               <SelectTrigger id="quiz-topic">
                 <SelectValue />
               </SelectTrigger>
@@ -177,6 +201,8 @@ export function QuizConfigDialog({
             <p className="text-xs text-muted-foreground">{t('quizConfig.questionCountHint')}</p>
           </div>
         </div>
+
+        <ExamScopePicker projectId={projectId} value={examScope} onChange={setExamScope} />
 
         <div className="space-y-2">
           <Label htmlFor="quiz-language">{t('quizConfig.questionLanguage')}</Label>

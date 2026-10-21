@@ -65,9 +65,12 @@ export class QuestionRepository {
           ? { matchItems: input.matchItems }
           : {}),
         ...(input.type === 'fill_blank' && input.blanks?.length ? { blanks: input.blanks } : {}),
+        ...(input.type === 'article_gender' && input.gender ? { gender: input.gender } : {}),
+        ...(input.type === 'paradigm_table' && input.paradigm ? { paradigm: input.paradigm } : {}),
         ...(input.solution ? { solution: input.solution } : {}),
         hints: input.hints ?? [],
         sourceRefs: input.sourceRefs ?? [],
+        ...(input.origin ? { origin: input.origin } : {}),
         promptVersion: input.promptVersion ?? 'v1',
         createdAt: now,
       }

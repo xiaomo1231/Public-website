@@ -192,7 +192,8 @@ interface FoundTerm extends TermCandidate {
 export function extractCourseTerms(
   sources: TermSource[],
   options: {
-    isCommon: (word: string) => boolean
+    /** `initial`: the word opens its sentence (only passed for non-English material). */
+    isCommon: (word: string, initial?: boolean) => boolean
     lemma: (token: string) => string
     limit: number
     /** BCP-47 language of the material; English when absent. */
@@ -227,7 +228,8 @@ export function extractCourseTerms(
         } else {
           surface = wordKey(raw, options.language)
           word = surface.toLowerCase()
-          if (!WORD.test(surface) || isStopword(word) || options.isCommon(surface)) continue
+          if (!WORD.test(surface) || isStopword(word) || options.isCommon(surface, initial))
+            continue
         }
         const existing = found.get(word)
         if (existing) {

@@ -126,6 +126,8 @@ export class DocumentRepository {
     if (patch.textLength !== undefined) next.textLength = patch.textLength
     if (patch.chunkCount !== undefined) next.chunkCount = patch.chunkCount
     if (patch.processedAt !== undefined) next.processedAt = patch.processedAt
+    if (patch.syllabus === null) delete next.syllabus
+    else if (patch.syllabus !== undefined) next.syllabus = patch.syllabus
     await this.db.documents.put(next)
     return next
   }

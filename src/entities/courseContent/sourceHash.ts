@@ -1,5 +1,5 @@
 import type { Document } from '../document/types'
-import { resolveMaterialType } from '../document/types'
+import { isReferenceOnlyMaterial, resolveMaterialType } from '../document/types'
 import type { DocumentChunk } from '../chunk/types'
 import { fnv1a } from '@/shared/lib/hash'
 
@@ -18,10 +18,11 @@ import { fnv1a } from '@/shared/lib/hash'
  * This mirrors the selection the analyzer performs, and must keep doing so.
  */
 export function selectAnalysisDocuments(documents: Document[]): Document[] {
-  // A professor answer key is reference material, not course knowledge. It must
-  // never be fingerprinted or analysed as if it were a textbook / notes.
+  // A professor answer key or a syllabus is reference material, not course
+  // knowledge. It must never be fingerprinted or analysed as if it were a
+  // textbook / notes (course vocabulary reads this selection too).
   const ready = documents.filter(
-    (doc) => doc.status === 'ready' && resolveMaterialType(doc.materialType) !== 'homework_answer',
+    (doc) => doc.status === 'ready' && !isReferenceOnlyMaterial(doc.materialType),
   )
   const textbooks = ready.filter((doc) => resolveMaterialType(doc.materialType) === 'textbook')
   return textbooks.length > 0 ? textbooks : ready

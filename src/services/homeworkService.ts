@@ -1225,6 +1225,11 @@ export class HomeworkService {
     return { set: finalSet, summary: { ...summary, failed } }
   }
 
+  /** Remember that the walkthrough's spoiler notice was dismissed for this set. */
+  async markWalkthroughNoticeSeen(setId: string): Promise<void> {
+    await this.homework.updateSet(setId, { walkthroughNoticeSeenAt: Date.now() })
+  }
+
   /** Persist live progress. Best-effort: a deleted set is simply not updated. */
   private async setProgress(
     setId: string,

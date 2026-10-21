@@ -136,7 +136,7 @@ describe('quiz generator output validation', () => {
 
   it('describes both in the generator prompt', () => {
     const system = prompts.quizGenerator.buildSystemPrompt()
-    expect(prompts.quizGenerator.VERSION).toBe('v6')
+    expect(prompts.quizGenerator.VERSION).toBe('v7')
     expect(system).toContain('`unit`')
     expect(system).toContain('`code_output`')
   })

@@ -8,12 +8,18 @@ import {
 import { compareQuantity, splitQuantity } from '@/infrastructure/math/quantityAnswer'
 import { compareEquations, parseEquation } from '@/infrastructure/chemistry/equation'
 import { orderingItems, scoreOrdering } from '@/infrastructure/math/orderingAnswer'
-import { expectedAnswerText, optionLetter } from '@/entities/question/types'
+import { displayAnswer, expectedAnswerText, optionLetter } from '@/entities/question/types'
 import { logger } from '@/infrastructure/logger/logger'
 import { unverifiedShortAnswer } from './shortAnswerGrader'
 import { compareTargetText, isNearTarget } from '@/shared/lib/language'
 import type { BlankResult, NearSpelling } from '@/entities/questionAttempt/types'
 import { t } from '@/i18n'
+import {
+  decodeGenderAnswer,
+  paradigmBlanks,
+  paradigmCellLabel,
+  stripPluralArticle,
+} from '@/entities/question/languageDrills'
 
 const UNVERIFIED_NOTE = (): string => t('question.unverified')
 
@@ -60,6 +66,10 @@ export function evaluateDeterministic(
       return evaluateMatching(question, userAnswer)
     case 'fill_blank':
       return evaluateFillBlank(question, userAnswer, options.targetLanguage)
+    case 'article_gender':
+      return evaluateArticleGender(question, userAnswer)
+    case 'paradigm_table':
+      return evaluateParadigm(question, userAnswer, options.targetLanguage)
     case 'short_answer':
       // Graded by scoring points with AI (ShortAnswerGrader); offline it is
       // shown with its points but not scored.
@@ -505,6 +515,107 @@ function evaluateFillBlank(
     expected: expectedAnswerText(question),
     normalizedUser: results.map((r, i) => `(${i + 1}) ${r.given || '—'}`).join('  '),
     normalizedExpected: expectedAnswerText(question),
+  }
+}
+
+/**
+ * One form in the course's language, graded by spelling: exact → 1, only
+ * accents / capitals / a spelling variant apart → ½ with the form it should
+ * have been, anything else → 0. The closest accepted form wins.
+ */
+export function gradeTargetForm(
+  answer: string,
+  accepted: string[],
+  language: string | undefined,
+  label?: string,
+): BlankResult {
+  const given = answer.trim()
+  const base = { ...(label ? { label } : {}), given, accepted }
+  if (!given) return { ...base, correct: false }
+  let near: { outcome: NearSpelling; expected: string } | null = null
+  for (const expected of accepted) {
+    const outcome = compareTargetText(expected, given, language)
+    if (outcome === 'exact') return { ...base, correct: true }
+    if (!near && isNearTarget(outcome)) near = { outcome, expected }
+  }
+  return near
+    ? { ...base, correct: false, spelling: near.outcome, expectedForm: near.expected }
+    : { ...base, correct: false }
+}
+
+/**
+ * German article (and plural): the article is one point, right or wrong; the
+ * plural, when asked, is a second point graded by spelling (half for an
+ * umlaut or capital slip). Correct only when everything is exact.
+ */
+function evaluateArticleGender(question: Question, userAnswer: string): QuestionEvaluation {
+  const noun = question.gender
+  const expected = expectedAnswerText(question)
+  if (!noun) {
+    return { isCorrect: null, method: 'unverified', confidence: 0, note: UNVERIFIED_NOTE() }
+  }
+  const { article, plural } = decodeGenderAnswer(userAnswer)
+  const parts: BlankResult[] = [
+    {
+      label: t('articleGender.article'),
+      given: article,
+      accepted: [noun.article],
+      correct: article.toLowerCase() === noun.article,
+    },
+  ]
+  if (noun.plural) {
+    parts.push(
+      gradeTargetForm(stripPluralArticle(plural), [noun.plural], 'de', t('articleGender.plural')),
+    )
+  }
+  const earned = parts.reduce((sum, part) => sum + blankCredit(part), 0)
+  return {
+    isCorrect: parts.every((part) => part.correct),
+    method: 'article_gender',
+    confidence: 1,
+    score: { earned, total: parts.length },
+    blanks: parts,
+    expected,
+    normalizedUser: displayAnswer(question, userAnswer),
+    normalizedExpected: expected,
+  }
+}
+
+/**
+ * Paradigm table: each blank against its accepted forms, by spelling in the
+ * course's language. Score = sum of cell credits / blanks; correct only when
+ * every cell is exact.
+ */
+function evaluateParadigm(
+  question: Question,
+  userAnswer: string,
+  targetLanguage?: string,
+): QuestionEvaluation {
+  const table = question.paradigm
+  const blanks = table ? paradigmBlanks(table) : []
+  if (!table || blanks.length === 0) {
+    return { isCorrect: null, method: 'unverified', confidence: 0, note: UNVERIFIED_NOTE() }
+  }
+  const given = userAnswer.split('\n')
+  const cells = blanks.map((blank, i) =>
+    gradeTargetForm(
+      given[i] ?? '',
+      blank.accepted,
+      targetLanguage,
+      paradigmCellLabel(table, blank.row, blank.column),
+    ),
+  )
+  const earned = cells.reduce((sum, cell) => sum + blankCredit(cell), 0)
+  const expected = expectedAnswerText(question)
+  return {
+    isCorrect: cells.every((cell) => cell.correct),
+    method: 'paradigm_cells',
+    confidence: 1,
+    score: { earned, total: cells.length },
+    blanks: cells,
+    expected,
+    normalizedUser: displayAnswer(question, userAnswer),
+    normalizedExpected: expected,
   }
 }
 

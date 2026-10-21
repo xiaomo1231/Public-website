@@ -53,7 +53,7 @@ beforeEach(() => {
 })
 
 describe('ProjectDetailPage', () => {
-  it('renders the project header, its two tabs and the default documents tab', () => {
+  it('renders the project header, its tabs and the default documents tab', () => {
     renderPage()
 
     expect(screen.getByText('Physics 101')).toBeInTheDocument()
@@ -63,6 +63,7 @@ describe('ProjectDetailPage', () => {
     expect(screen.getAllByRole('tab').map((tab) => tab.textContent)).toEqual([
       'Documents',
       'Analysis',
+      'Exam topics',
     ])
     expect(screen.getByTestId('documents-tab')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Edit' })).toBeInTheDocument()

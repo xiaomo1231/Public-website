@@ -3,6 +3,7 @@ import type { ChunkRepository } from '@/entities/chunk/repository'
 import type { ProcessingJobRepository } from '@/entities/processingJob/repository'
 import type { ProjectService } from './projectService'
 import { resolveMaterialType, type Document, type DocumentType } from '@/entities/document/types'
+import { localSyllabus } from '@/entities/syllabus/parse'
 import { CourseStructureService, type PreparedStructure } from './courseStructureService'
 import type { DocumentChunk, NewChunkInput } from '@/entities/chunk/types'
 import type { VisualSource } from '@/entities/visualSource/types'
@@ -173,6 +174,21 @@ export class ProcessingService {
 
       const storedChunks = this.chunks.prepareMany(newChunks)
 
+      // A syllabus: read its exam topics from the stored chunks (local parser
+      // only; the AI fallback is the student's choice). A list the student
+      // edited is kept as it is.
+      const syllabus =
+        resolveMaterialType(document.materialType) === 'syllabus' && !document.syllabus?.editedAt
+          ? localSyllabus(
+              storedChunks.map((chunk) => ({
+                id: chunk.id,
+                text: chunk.text,
+                contentType: chunk.contentType,
+                ...(chunk.pageNumber !== undefined ? { pageNumber: chunk.pageNumber } : {}),
+              })),
+            )
+          : undefined
+
       // New documents tolerate a figure-rendering failure. Re-processing
       // keeps the previous complete result when figure preparation fails.
       let visualSources: PreparedVisualSource[] = []
@@ -245,6 +261,7 @@ export class ProcessingService {
             chunkCount: newChunks.length,
             processedAt: Date.now(),
             metadata: extraction.metadata,
+            ...(syllabus ? { syllabus } : {}),
           })
           await this.jobs.setStage(jobId, 'done', 100)
         },

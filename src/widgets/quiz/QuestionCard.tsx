@@ -9,7 +9,7 @@ import { RichText } from '@/shared/ui/RichText'
 import { AnswerInput } from './AnswerInput'
 import { QuestionSource } from './QuestionSource'
 import { ShortAnswerFeedback } from './ShortAnswerFeedback'
-import { isKeyboardChoice, lastKeyboardLetter, useQuizKeyboard } from './quizKeyboard'
+import { isKeyboardChoice, keyboardKeysLabel, useQuizKeyboard } from './quizKeyboard'
 import { cn } from '@/shared/lib/utils'
 import { difficultyLabelKey } from '@/infrastructure/ai/prompts/types'
 import { useTranslation } from '@/i18n'
@@ -71,6 +71,11 @@ export function QuestionCard({
         </span>
         <span className={META_CELL}>{t(difficultyLabelKey(difficulty))}</span>
         <span className={META_CELL}>{t(QUESTION_TYPE_LABEL_KEYS[question.type])}</span>
+        {question.origin === 'ai_without_source' && (
+          <span className={cn(META_CELL, 'text-amber-700 dark:text-amber-400')}>
+            {t('question.aiWithoutSource')}
+          </span>
+        )}
         {question.knowledgePoint && (
           <span className={cn(META_CELL, 'min-w-0 max-w-full truncate lab:ml-auto lab:border-r-0')}>
             {question.knowledgePoint}
@@ -118,7 +123,11 @@ export function QuestionCard({
         )}
 
         {answered && (
-          <QuestionSource sourceRefs={question.sourceRefs} projectId={question.projectId} />
+          <QuestionSource
+            sourceRefs={question.sourceRefs}
+            projectId={question.projectId}
+            aiWithoutSource={question.origin === 'ai_without_source'}
+          />
         )}
       </CardContent>
 
@@ -143,7 +152,7 @@ export function QuestionCard({
                 ? t('question.showHint')
                 : t('question.nextHint', { remaining: `${hintIndex}/${question.hints.length}` })}
             </Button>
-            {keyboardChoice && <KeyboardHint keys={`A–${lastKeyboardLetter(question)}`} />}
+            {keyboardChoice && <KeyboardHint keys={keyboardKeysLabel(question)} />}
           </>
         ) : (
           <Button onClick={onNext}>
@@ -221,7 +230,9 @@ function EvaluationBox({ evaluation }: { evaluation: QuestionEvaluation }): JSX.
       </div>
       {(evaluation.method === 'multi_select' ||
         evaluation.method === 'match_items' ||
-        evaluation.method === 'blank_match') &&
+        evaluation.method === 'blank_match' ||
+        evaluation.method === 'article_gender' ||
+        evaluation.method === 'paradigm_cells') &&
         evaluation.score &&
         evaluation.score.total > 0 && (
           <p className="data-num text-xs font-medium">
@@ -246,8 +257,9 @@ function EvaluationBox({ evaluation }: { evaluation: QuestionEvaluation }): JSX.
               ) : (
                 <XCircle className="h-3.5 w-3.5 text-destructive" />
               )}
-              <span>
-                ({i + 1}) {blank.given || '—'}
+              <span translate="no" className="notranslate">
+                {blank.label ? `${blank.label}: ` : `(${i + 1}) `}
+                {blank.given || '—'}
               </span>
               {blank.byAi && <span className="text-muted-foreground">{t('fillBlank.byAi')}</span>}
               {blank.spelling && blank.expectedForm && (

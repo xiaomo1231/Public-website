@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
 import {
   BookA,
+  BookOpen,
   BookOpenCheck,
   GraduationCap,
   Loader2,
@@ -27,6 +28,8 @@ import { cn } from '@/shared/lib/utils'
 import { useThemeStore } from '@/features/theme/themeStore'
 import { StudySession } from '@/widgets/vocab/StudySession'
 import { ExportMenu, ImportDialog, WordListDialog } from '@/widgets/vocab/VocabDialogs'
+import { WordListImportDialog } from '@/widgets/vocab/WordListImportDialog'
+import { targetLanguageOf } from '@/shared/lib/language'
 import {
   MAX_DAILY_NEW,
   VocabService,
@@ -689,6 +692,8 @@ function CourseVocabPanel({
 }): JSX.Element {
   const { projects, loading } = useProjects()
   const [running, setRunning] = useState<string | null>(null)
+  /** The language course whose textbook word list is being imported. */
+  const [importFor, setImportFor] = useState<string | null>(null)
 
   const extract = async (projectId: string) => {
     setRunning(projectId)
@@ -757,6 +762,17 @@ function CourseVocabPanel({
                   )}
                   {book ? t('vocab.course.update') : t('vocab.course.extract')}
                 </Button>
+                {targetLanguageOf(project) && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={running !== null}
+                    onClick={() => setImportFor(project.id)}
+                  >
+                    <BookOpen className="h-4 w-4" />
+                    {t('wordList.open')}
+                  </Button>
+                )}
               </div>
               {book && (
                 <BookRow
@@ -772,6 +788,14 @@ function CourseVocabPanel({
           )
         })}
       </CardContent>
+      {importFor && (
+        <WordListImportDialog
+          projectId={importFor}
+          open
+          onOpenChange={(open) => !open && setImportFor(null)}
+          onImported={onChanged}
+        />
+      )}
     </Card>
   )
 }

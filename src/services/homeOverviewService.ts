@@ -142,7 +142,10 @@ export class HomeOverviewService {
       ])
 
     const learning = documents.filter(
-      (d) => d.materialType !== 'homework' && d.materialType !== 'homework_answer',
+      (d) =>
+        d.materialType !== 'homework' &&
+        d.materialType !== 'homework_answer' &&
+        d.materialType !== 'syllabus',
     )
     const materials = {
       total: learning.length,

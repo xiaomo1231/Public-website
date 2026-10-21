@@ -1,4 +1,5 @@
 import type { TranslationKey } from '@/i18n/types'
+import type { SyllabusData } from '@/entities/syllabus/types'
 
 export type DocumentType = 'pdf' | 'docx' | 'pptx' | 'image' | 'text'
 
@@ -22,6 +23,13 @@ export type LearningMaterialType =
    * analysis and never sent to the tutor as course context.
    */
   | 'homework_answer'
+  /**
+   * The course handbook / syllabus / exam-topic list. Processed like any other
+   * file (extracted + chunked) so its exam topics can be read, but it has no
+   * course content of its own: excluded from analysis, quizzes, tutor sources
+   * and course vocabulary, exactly like a professor answer key.
+   */
+  | 'syllabus'
 
 export const LEARNING_MATERIAL_TYPES: readonly LearningMaterialType[] = [
   'textbook',
@@ -30,15 +38,26 @@ export const LEARNING_MATERIAL_TYPES: readonly LearningMaterialType[] = [
   'professor_practice',
   'homework',
   'homework_answer',
+  'syllabus',
 ]
 
 /**
+ * Reference-only material: read for its own feature (answer matching, exam
+ * topics) but never a knowledge source for analysis, quizzes, the tutor or
+ * course vocabulary.
+ */
+export function isReferenceOnlyMaterial(value: unknown): boolean {
+  const type = resolveMaterialType(value)
+  return type === 'homework_answer' || type === 'syllabus'
+}
+
+/**
  * True for material that may ground a course analysis / tutor lesson.
- * A professor answer key is deliberately excluded: it is an answer sheet, not
- * something the tutor should teach from.
+ * A professor answer key and a syllabus are deliberately excluded: an answer
+ * sheet and a list of exam topics are not something the tutor should teach from.
  */
 export function isCourseMaterialType(value: unknown): boolean {
-  return resolveMaterialType(value) !== 'homework_answer'
+  return !isReferenceOnlyMaterial(value)
 }
 
 export function isLearningMaterialType(value: unknown): value is LearningMaterialType {
@@ -105,6 +124,13 @@ export interface Document {
    * pasted text and for documents created before this field existed.
    */
   sourceModifiedAt?: number
+  /**
+   * `syllabus` documents only: the exam topics read from the file (scopes →
+   * topics, each with its exact source text, chunk and page), the user's edits
+   * and the topic matches. Optional and stored on the row, so it is exported
+   * and restored with the document.
+   */
+  syllabus?: SyllabusData
 }
 
 export interface DocumentBlobRow {
@@ -138,4 +164,6 @@ export interface UpdateDocumentInput {
   textLength?: number
   chunkCount?: number
   processedAt?: number
+  /** `null` removes the exam-topic list. */
+  syllabus?: SyllabusData | null
 }

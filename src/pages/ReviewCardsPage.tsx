@@ -1,6 +1,16 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { ArrowLeft, Layers, Loader2, Pencil, Plus, Search, Sparkles, Trash2 } from 'lucide-react'
+import {
+  ArrowLeft,
+  Layers,
+  Loader2,
+  MessagesSquare,
+  Pencil,
+  Plus,
+  Search,
+  Sparkles,
+  Trash2,
+} from 'lucide-react'
 import { Button } from '@/shared/ui/Button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/shared/ui/Card'
 import { Badge } from '@/shared/ui/Badge'
@@ -22,6 +32,9 @@ import { Progress } from '@/shared/ui/Progress'
 import { Textarea } from '@/shared/ui/Textarea'
 import { PageContainer, PageContent, PageHeader } from '@/shared/ui/Page'
 import { ProjectFlowNav } from '@/widgets/project/ProjectFlowNav'
+import { PhraseCardsDialog } from '@/widgets/vocab/PhraseCardsDialog'
+import { useProject } from '@/features/project/useProjects'
+import { targetLanguageOf } from '@/shared/lib/language'
 import { ReviewCardService, type ReviewStats } from '@/services/reviewCardService'
 import {
   DAY_MS,
@@ -85,6 +98,10 @@ export function ReviewCardsPage(): JSX.Element {
   const [grading, setGrading] = useState(false)
   const [editing, setEditing] = useState<ReviewCard | 'new' | null>(null)
   const [deleting, setDeleting] = useState<ReviewCard | null>(null)
+  // A language course can turn its textbook dialogues into phrase cards.
+  const { project } = useProject(projectId)
+  const targetLanguage = targetLanguageOf(project)
+  const [phrasesOpen, setPhrasesOpen] = useState(false)
 
   const refresh = useCallback(async () => {
     if (!projectId) return
@@ -233,6 +250,12 @@ export function ReviewCardsPage(): JSX.Element {
         nav={<ProjectFlowNav projectId={projectId} active="cards" />}
         actions={
           <div className="flex flex-wrap gap-2">
+            {targetLanguage && (
+              <Button variant="outline" onClick={() => setPhrasesOpen(true)}>
+                <MessagesSquare className="h-4 w-4" />
+                {t('phrases.open')}
+              </Button>
+            )}
             <Button variant="outline" onClick={() => void generate()} disabled={generating}>
               {generating ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
@@ -396,6 +419,15 @@ export function ReviewCardsPage(): JSX.Element {
       </PageContent>
 
       <CardEditorDialog editing={editing} onClose={() => setEditing(null)} onSave={save} t={t} />
+      {projectId && targetLanguage && (
+        <PhraseCardsDialog
+          projectId={projectId}
+          language={targetLanguage}
+          open={phrasesOpen}
+          onOpenChange={setPhrasesOpen}
+          onSaved={() => setReloadKey((k) => k + 1)}
+        />
+      )}
       <ConfirmDialog
         open={deleting !== null}
         onOpenChange={(open) => !open && setDeleting(null)}

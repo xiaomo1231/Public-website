@@ -17,6 +17,7 @@ import type {
   WalkthroughPlanEntry,
 } from '@/entities/homework/walkthrough'
 import { formatHomeworkQuestion } from '@/entities/homework/formatQuestion'
+import { useHomeworkService } from '@/features/homework/useHomeworkService'
 import { questionLabel } from '@/services/homeworkWalkthroughService'
 import { useWalkthrough } from '@/features/homework/useWalkthrough'
 import { openNote } from '@/features/homework/floatingQA'
@@ -39,8 +40,8 @@ import { caretAt, locatePassages, markPassages, revealPassage } from './passage'
 
 type T = ReturnType<typeof useTranslation>['t']
 
-/** Assignments whose spoiler notice was dismissed during this visit. */
-const opened = new Set<string>()
+/** Dismissed in this visit, before the page's copy of the assignment reloads. */
+const dismissed = new Set<string>()
 
 export interface HomeworkWalkthroughPanelProps {
   set: HomeworkSet
@@ -60,7 +61,12 @@ export function HomeworkWalkthroughPanel({
 }: HomeworkWalkthroughPanelProps): JSX.Element {
   const { t, language: uiLanguage } = useTranslation()
   const { state, notes, progress, loading, error, generate } = useWalkthrough(set.id)
-  const [revealed, setRevealed] = useState(() => mode === 'review' || opened.has(set.id))
+  const homework = useHomeworkService()
+  // The spoiler notice appears once per assignment; dismissing it is stored on
+  // the assignment, so a reload or another visit opens the walkthrough directly.
+  const [revealed, setRevealed] = useState(
+    () => mode === 'review' || Boolean(set.walkthroughNoticeSeenAt) || dismissed.has(set.id),
+  )
   const [notesOpen, setNotesOpen] = useState(false)
   const [confirmRedo, setConfirmRedo] = useState(false)
   const [printing, setPrinting] = useState(false)
@@ -163,8 +169,9 @@ export function HomeworkWalkthroughPanel({
         <CardContent>
           <Button
             onClick={() => {
-              opened.add(set.id)
+              dismissed.add(set.id)
               setRevealed(true)
+              void homework?.markWalkthroughNoticeSeen(set.id)
             }}
           >
             <BookOpenText className="h-4 w-4" />

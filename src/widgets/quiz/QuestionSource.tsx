@@ -13,6 +13,11 @@ export interface QuestionSourceProps {
   sourceRefs?: SourceReference[] | null
   /** When set, each citation links to the document it came from. */
   projectId?: string
+  /**
+   * The question was generated for an exam topic the course material does not
+   * cover: it has no course source, and says so.
+   */
+  aiWithoutSource?: boolean
 }
 
 /** Build the human-readable location line for a citation. */
@@ -35,7 +40,11 @@ function locationOf(reference: SourceReference, t: ReturnType<typeof useTranslat
  * The excerpt is rendered as plain text (with LaTeX typeset), so markdown,
  * quotes and newlines from the source material cannot break the layout.
  */
-export function QuestionSource({ sourceRefs, projectId }: QuestionSourceProps): JSX.Element {
+export function QuestionSource({
+  sourceRefs,
+  projectId,
+  aiWithoutSource,
+}: QuestionSourceProps): JSX.Element {
   const { t } = useTranslation()
   const stored = (sourceRefs ?? []).filter((ref) => ref && (ref.documentName || ref.documentId))
   // A citation stored without an excerpt shows the course text it points at.
@@ -65,7 +74,11 @@ export function QuestionSource({ sourceRefs, projectId }: QuestionSourceProps): 
         {t('questionSource.title')}
       </h3>
 
-      {refs.length === 0 ? (
+      {aiWithoutSource ? (
+        <p className="text-xs text-amber-700 dark:text-amber-400">
+          {t('questionSource.aiWithoutSource')}
+        </p>
+      ) : refs.length === 0 ? (
         <p className="text-xs text-muted-foreground">
           {sourceRefs === undefined || sourceRefs === null
             ? t('questionSource.notRecorded')

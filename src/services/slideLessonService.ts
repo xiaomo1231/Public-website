@@ -17,7 +17,7 @@ import { computeSlideContentHash } from '@/entities/slideLesson/contentHash'
 import type { TutorVisual } from '@/entities/tutorLesson/types'
 import type { SourceReference } from '@/entities/courseAnalysis/types'
 import type { DocumentChunk } from '@/entities/chunk/types'
-import type { Document } from '@/entities/document/types'
+import { isReferenceOnlyMaterial, type Document } from '@/entities/document/types'
 import { prompts } from '@/infrastructure/ai/prompts'
 import { asRecord, asTrimmedString } from '@/infrastructure/ai/validation'
 import { extractSymbolsFromMarkdown } from '@/shared/lib/latexSymbols'
@@ -132,7 +132,9 @@ export class SlideLessonService {
   /** Presentations in this project, with a study-ready flag. */
   async listSlideDocuments(projectId: string): Promise<SlideDocumentInfo[]> {
     const documents = await this.documents.listByProject(projectId)
-    const presentations = documents.filter((document) => document.type === 'pptx')
+    const presentations = documents.filter(
+      (document) => document.type === 'pptx' && !isReferenceOnlyMaterial(document.materialType),
+    )
     const out: SlideDocumentInfo[] = []
     for (const document of presentations) {
       let slideCount = document.metadata.slideCount ?? 0

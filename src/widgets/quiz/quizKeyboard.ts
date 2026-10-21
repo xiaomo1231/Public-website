@@ -1,11 +1,17 @@
 import { useEffect, useRef } from 'react'
 import { optionLetter, type Question } from '@/entities/question/types'
+import {
+  GERMAN_ARTICLES,
+  decodeGenderAnswer,
+  encodeGenderAnswer,
+} from '@/entities/question/languageDrills'
 
 /** Option lists of up to six rows can be answered from the keyboard (A–F / 1–6). */
 export const MAX_KEYBOARD_OPTIONS = 6
 
-/** Question types whose options are picked with A–F / 1–6. */
+/** Question types whose options are picked from the keyboard (A–F / 1–6; articles 1–3). */
 export function isKeyboardChoice(question: Question): boolean {
+  if (question.type === 'article_gender') return Boolean(question.gender)
   const count = question.options?.length ?? 0
   return (
     (question.type === 'multiple_choice' || question.type === 'multiple_select') &&
@@ -17,6 +23,20 @@ export function isKeyboardChoice(question: Question): boolean {
 /** The last option letter the keyboard reaches ("D" for four options). */
 export function lastKeyboardLetter(question: Question): string {
   return optionLetter(Math.min(question.options?.length ?? 1, MAX_KEYBOARD_OPTIONS) - 1)
+}
+
+/** The keys shown in the keyboard hint: "1–3" for articles, "A–D" for four options. */
+export function keyboardKeysLabel(question: Question): string {
+  return question.type === 'article_gender' ? '1–3' : `A–${lastKeyboardLetter(question)}`
+}
+
+/**
+ * The answer after pressing `key` on an article question (1 der, 2 die,
+ * 3 das; the plural typed so far is kept), or null for any other key.
+ */
+export function articleForKey(key: string, value: string): string | null {
+  if (!/^[1-3]$/.test(key)) return null
+  return encodeGenderAnswer(GERMAN_ARTICLES[Number(key) - 1]!, decodeGenderAnswer(value).plural)
 }
 
 /** Toggle one option of a multi-select answer, keeping option order. */
@@ -86,7 +106,8 @@ export interface QuizKeyboardOptions {
 }
 
 /**
- * A–F / 1–6 pick an option (multi-select toggles), Enter submits. Never while
+ * A–F / 1–6 pick an option (multi-select toggles; 1–3 pick der / die / das
+ * on an article question), Enter submits. Never while
  * focus is in a text field, a modifier is held, an IME is composing or a menu,
  * listbox, popover or dialog has focus. Enter / Space on a focused option row
  * select it like any button; Enter submits from an already-chosen row or when
@@ -117,6 +138,13 @@ export function useQuizKeyboard(options: QuizKeyboardOptions): void {
         return
       }
       if (event.repeat || !isKeyboardChoice(question)) return
+      if (question.type === 'article_gender') {
+        const next = articleForKey(event.key, value)
+        if (next === null) return
+        event.preventDefault()
+        onChange(next)
+        return
+      }
       const index = optionIndexForKey(event.key, question.options!.length)
       if (index === -1) return
       const option = question.options![index]!
