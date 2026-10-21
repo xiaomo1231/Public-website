@@ -34,6 +34,7 @@ import type { MistakeService } from './mistakeService'
 import type { MasteryService } from './masteryService'
 import { ShortAnswerGrader, unverifiedShortAnswer } from './shortAnswerGrader'
 import { loadProjectSubject } from './projectSubject'
+import { parseTrueFalse } from './answerEvaluationService'
 
 /** Extraction confidence at or above this is imported without a review step. */
 const AUTO_VERIFY_CONFIDENCE = 0.6
@@ -588,16 +589,23 @@ export class PracticeService {
   async progress(setId: string): Promise<PracticeProgress> {
     const questions = await this.practice.listQuestionsBySet(setId)
     const attempts = await this.practice.listAttemptsBySet(setId)
-    const latest = new Map<string, PracticeAttempt>()
-    for (const attempt of attempts) latest.set(attempt.questionId, attempt)
-
+    // Completed = answered at all. Right / wrong comes from the latest graded,
+    // undisputed answer only: an ungraded answer (no key, subjective) or a
+    // disputed judgement says nothing about correctness.
+    const answered = new Set<string>()
+    const graded = new Map<string, boolean>()
+    for (const attempt of attempts) {
+      answered.add(attempt.questionId)
+      if (attempt.evaluation?.disputed || attempt.isCorrect === undefined) continue
+      graded.set(attempt.questionId, attempt.isCorrect)
+    }
     let correct = 0
     let needsReview = 0
-    for (const attempt of latest.values()) {
-      if (attempt.isCorrect === true) correct++
+    for (const isCorrect of graded.values()) {
+      if (isCorrect) correct++
       else needsReview++
     }
-    return { total: questions.length, completed: latest.size, correct, needsReview }
+    return { total: questions.length, completed: answered.size, correct, needsReview }
   }
 
   /**
@@ -708,8 +716,21 @@ export class PracticeService {
     if (!expected) return { method: 'none' }
 
     switch (question.type) {
-      case 'single_choice':
       case 'true_false': {
+        // The key may say 正确 / 对 / T while the options read True / False
+        // (or there are no options at all): compare the truth values.
+        const expectedTruth = this.truthOf(question, expected)
+        const givenTruth = this.truthOf(question, userAnswer)
+        if (expectedTruth !== null && givenTruth !== null) {
+          return { isCorrect: expectedTruth === givenTruth, method: 'exact' }
+        }
+        const expectedLetter = this.resolveChoiceLabel(question, expected)
+        return {
+          isCorrect: normalizeAnswer(userAnswer) === normalizeAnswer(expectedLetter),
+          method: 'exact',
+        }
+      }
+      case 'single_choice': {
         const expectedLetter = this.resolveChoiceLabel(question, expected)
         return {
           isCorrect: normalizeAnswer(userAnswer) === normalizeAnswer(expectedLetter),
@@ -730,6 +751,19 @@ export class PracticeService {
         // Subjective / unsupported: never auto-grade.
         return { method: 'none' }
     }
+  }
+
+  /**
+   * A true/false answer as a truth value: an option letter is read through
+   * its label (`A` → "True"), anything else directly (`正确`, `T`, `false`).
+   */
+  private truthOf(question: PracticeQuestion, value: string): boolean | null {
+    const trimmed = value.trim()
+    if (/^[A-Ea-e]$/.test(trimmed) && question.options.length > 0) {
+      const option = question.options[trimmed.toUpperCase().charCodeAt(0) - 65]
+      return option ? parseTrueFalse(option.label) : null
+    }
+    return parseTrueFalse(trimmed)
   }
 
   /** An answer key may be a letter (`B`) or the option text itself. */

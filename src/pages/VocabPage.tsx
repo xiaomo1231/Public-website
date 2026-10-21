@@ -24,6 +24,7 @@ import { PageContainer, PageContent, PageHeader } from '@/shared/ui/Page'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/shared/ui/Select2'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/shared/ui/Tabs'
 import { cn } from '@/shared/lib/utils'
+import { useThemeStore } from '@/features/theme/themeStore'
 import { StudySession } from '@/widgets/vocab/StudySession'
 import { ExportMenu, ImportDialog, WordListDialog } from '@/widgets/vocab/VocabDialogs'
 import {
@@ -351,7 +352,10 @@ function TodayCard({
   const newLeft = Math.max(0, stats.dailyNew - stats.newToday)
   const allDone = stats.due === 0 && newLeft === 0
   const [mistakeCount, setMistakeCount] = useState<number | null>(null)
+  // The mistake count is only shown in the lab readout; lecture skips the load.
+  const lab = useThemeStore((s) => s.uiStyle) === 'lab'
   useEffect(() => {
+    if (!lab) return
     let alive = true
     void service
       .mistakes()
@@ -360,7 +364,7 @@ function TodayCard({
     return () => {
       alive = false
     }
-  }, [service, stats])
+  }, [service, stats, lab])
   const { language } = useTranslation()
   // Two-digit readouts ("07"); larger values get locale grouping (14,912).
   const pad = (value: number) =>
@@ -376,7 +380,15 @@ function TodayCard({
           <h2 className="font-heading text-[30px] font-bold leading-snug text-foreground">
             {allDone
               ? t('vocab.allDone')
-              : t('vocab.todaySentence', { review: stats.due, fresh: newLeft })}
+              : t('vocab.todaySentence', {
+                  // Zero parts are left out; at least one is non-zero here.
+                  parts: [
+                    stats.due > 0 ? t('vocab.todayReview', { count: stats.due }) : null,
+                    newLeft > 0 ? t('vocab.todayNew', { count: newLeft }) : null,
+                  ]
+                    .filter(Boolean)
+                    .join(t('vocab.todayJoin')),
+                })}
           </h2>
           <p className="text-sm text-muted-foreground">
             {[

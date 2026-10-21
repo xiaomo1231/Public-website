@@ -99,10 +99,17 @@ export function computeLessonContentHash(
   promptVersion: string,
   /** Hash of the notes/transcript context actually used for this topic. */
   contextHash = '',
+  /**
+   * Hash of the textbook source texts the lesson is built from, so re-processed
+   * material with new wording invalidates the lesson even when the topic row
+   * itself did not change.
+   */
+  sourceTextHash = '',
 ): string {
   const payload = JSON.stringify({
     promptVersion,
     contextHash,
+    ...(sourceTextHash ? { sourceTextHash } : {}),
     name: topic.name,
     description: topic.description,
     // A structure change must invalidate the affected lesson, not all of them.
@@ -175,20 +182,35 @@ export class TutorLessonService {
     const key = keyOf(input)
     const existing = inFlight.get(key)
     if (existing) return existing
-
-    const run = this.resolve(input, options).finally(() => {
-      inFlight.delete(key)
-    })
-    inFlight.set(key, run)
-    return run
+    return this.track(key, () => this.resolve(input, options))
   }
 
-  /** Force a fresh generation, replacing whatever is stored. */
+  /**
+   * Force a fresh generation, replacing whatever is stored.
+   *
+   * Shares the in-flight map: a regenerate waits for a request already running
+   * for this key (so two writers never race), and a concurrent `getOrGenerate`
+   * joins the regeneration instead of starting its own.
+   */
   async regenerate(
     input: TutorLessonInput,
     options: TutorLessonOptions = {},
   ): Promise<TutorLessonResult> {
-    return this.generate(input, options)
+    const key = keyOf(input)
+    const existing = inFlight.get(key)
+    if (existing) await existing.catch(() => undefined)
+    // Another regenerate may have registered while we waited: join it.
+    const pending = inFlight.get(key)
+    if (pending) return pending
+    return this.track(key, () => this.generate(input, options))
+  }
+
+  private track(key: string, start: () => Promise<TutorLessonResult>): Promise<TutorLessonResult> {
+    const run = start().finally(() => {
+      if (inFlight.get(key) === run) inFlight.delete(key)
+    })
+    inFlight.set(key, run)
+    return run
   }
 
   private async resolve(
@@ -208,7 +230,18 @@ export class TutorLessonService {
     // The hash must include the notes/transcript context this topic would use,
     // otherwise a stored lesson could never match.
     const { contextHash } = await this.topicContext(input, topic)
-    const contentHash = computeLessonContentHash(topic, promptVersion, contextHash)
+    const sources = await collectTopicSources(
+      { analyses: this.analyses, chunks: this.chunks },
+      input.projectId,
+      input.topicId,
+      MAX_LESSON_SOURCES,
+    )
+    const contentHash = computeLessonContentHash(
+      topic,
+      promptVersion,
+      contextHash,
+      sourceTextHashOf(sources),
+    )
 
     const stored = await this.lessons.find(input)
     if (
@@ -362,7 +395,12 @@ export class TutorLessonService {
         ...notesChunks.map((chunk) => chunk.id),
         ...transcriptChunks.map((chunk) => chunk.id),
       ],
-      contentHash: computeLessonContentHash(topic, promptVersion, contextHash),
+      contentHash: computeLessonContentHash(
+        topic,
+        promptVersion,
+        contextHash,
+        sourceTextHashOf(sources),
+      ),
       promptVersion,
       ...(response.model ? { model: response.model } : {}),
       generatedAt: now,
@@ -370,10 +408,22 @@ export class TutorLessonService {
       version: TUTOR_LESSON_VERSION,
     }
 
-    // Replace any previous lesson for this topic + language.
-    const previous = await this.lessons.find(input)
-    if (previous) await this.lessons.deleteByTopic(input)
-    await this.lessons.upsert(lesson)
+    // Replace any previous lesson for this topic + language atomically: reuse
+    // its id and drop stray duplicates in the same transaction, so a reader
+    // never sees the topic without a lesson (or with two).
+    await this.db.transaction('rw', this.db.table('tutorLessons'), async () => {
+      const rows = await this.db
+        .table<TutorLesson, string>('tutorLessons')
+        .where('[projectId+topicId+language]')
+        .equals([input.projectId, input.topicId, input.language])
+        .toArray()
+      const [keep, ...extra] = rows
+      if (keep) lesson.id = keep.id
+      if (extra.length > 0) {
+        await this.db.table('tutorLessons').bulkDelete(extra.map((row) => row.id))
+      }
+      await this.db.table<TutorLesson, string>('tutorLessons').put(lesson)
+    })
 
     logger.debug('Tutor lesson stored', {
       topicId: input.topicId,
@@ -507,6 +557,12 @@ export class TutorLessonService {
       return `[${source.label}] ${normalizeMathNotation(source.text).text}`
     })
   }
+}
+
+/** Fingerprint of the textbook passages a lesson is generated from. */
+function sourceTextHashOf(sources: TopicSource[]): string {
+  if (sources.length === 0) return ''
+  return fnv1a(sources.map((source) => `${source.label}\u0000${source.text}`).join('\u0001'))
 }
 
 /**

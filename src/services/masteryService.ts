@@ -19,9 +19,11 @@ export const FLASHCARD_TYPE = 'flashcard'
  */
 export class MasteryService {
   private repo: KnowledgeMasteryRepository
+  private db: AppDatabase
 
   constructor(db?: AppDatabase) {
-    this.repo = new KnowledgeMasteryRepository(db ?? getDb())
+    this.db = db ?? getDb()
+    this.repo = new KnowledgeMasteryRepository(this.db)
   }
 
   listByProject(projectId: string): Promise<KnowledgeMastery[]> {
@@ -39,7 +41,10 @@ export class MasteryService {
 
   /**
    * Add one observation (a quiz attempt, or a flashcard review) to a
-   * knowledge point and recompute its estimate.
+   * knowledge point and recompute its estimate. The read-modify-write runs in
+   * one transaction so two answers recorded at once cannot drop each other.
+   * An unverified observation (`isCorrect: null`) says nothing about mastery
+   * and is not stored, so it never pushes graded work out of the window.
    */
   async recordObservation(
     projectId: string,
@@ -48,25 +53,43 @@ export class MasteryService {
     observation: MasteryObservation,
   ): Promise<KnowledgeMastery> {
     const attempt = { projectId, knowledgePoint, ...(topicId ? { topicId } : {}) }
-    const existing = await this.repo.get(attempt.projectId, attempt.knowledgePoint)
-    const observations = [...(existing?.observations ?? []), observation].slice(-MAX_OBSERVATIONS)
-    const mastery = computeMastery(observations)
-    const graded = observations.filter((o) => o.isCorrect !== null)
-    const correct = graded.filter((o) => o.isCorrect).length
+    const row = await this.db.transaction('rw', this.db.knowledgeMastery, async () => {
+      const existing = await this.repo.get(attempt.projectId, attempt.knowledgePoint)
+      if (observation.isCorrect === null) return existing ?? null
+      const observations = [...(existing?.observations ?? []), observation].slice(-MAX_OBSERVATIONS)
+      const mastery = computeMastery(observations)
+      const graded = observations.filter((o) => o.isCorrect !== null)
+      const correct = graded.filter((o) => o.isCorrect).length
 
-    const row: KnowledgeMastery = {
-      id: masteryId(attempt.projectId, attempt.knowledgePoint),
-      projectId: attempt.projectId,
-      knowledgePoint: attempt.knowledgePoint,
-      ...(attempt.topicId ? { topicId: attempt.topicId } : {}),
-      mastery,
-      attempts: graded.length,
-      correct,
-      observations,
-      lastUpdated: Date.now(),
+      const next: KnowledgeMastery = {
+        id: masteryId(attempt.projectId, attempt.knowledgePoint),
+        projectId: attempt.projectId,
+        knowledgePoint: attempt.knowledgePoint,
+        ...(attempt.topicId ? { topicId: attempt.topicId } : {}),
+        mastery,
+        attempts: graded.length,
+        correct,
+        observations,
+        lastUpdated: Date.now(),
+      }
+      await this.repo.upsert(next)
+      return next
+    })
+    if (!row) {
+      // Nothing graded yet: an empty, unsaved estimate.
+      return {
+        id: masteryId(projectId, knowledgePoint),
+        projectId,
+        knowledgePoint,
+        ...(topicId ? { topicId } : {}),
+        mastery: computeMastery([]),
+        attempts: 0,
+        correct: 0,
+        observations: [],
+        lastUpdated: Date.now(),
+      }
     }
-    await this.repo.upsert(row)
-    logger.debug('Mastery updated', { kp: attempt.knowledgePoint, mastery: mastery.toFixed(3) })
+    logger.debug('Mastery updated', { kp: attempt.knowledgePoint, mastery: row.mastery.toFixed(3) })
     return row
   }
 
@@ -92,6 +115,7 @@ export class MasteryService {
         ...sorted.filter((a) => a.evaluation.disputed !== true).map(observationFromAttempt),
         ...reviews,
       ]
+        .filter((o) => o.isCorrect !== null)
         .sort((a, b) => a.at - b.at)
         .slice(-MAX_OBSERVATIONS)
       const graded = observations.filter((o) => o.isCorrect !== null)

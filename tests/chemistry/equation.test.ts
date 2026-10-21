@@ -102,3 +102,21 @@ describe('compareEquations', () => {
     expect(compareEquations('2H2O -> 2H2 + O2', water)).toMatchObject({ verdict: 'species' })
   })
 })
+
+describe('condensed structural formulas', () => {
+  it('treats different condensed spellings of one molecule as the same', () => {
+    const ethanol = reference('CH3CH2OH + 3O2 -> 2CO2 + 3H2O')
+    expect(compareEquations('C2H5OH + 3O2 -> 2CO2 + 3H2O', ethanol)).toEqual({ verdict: 'correct' })
+    expect(compareEquations('HOCH2CH3 + 3O2 -> 2CO2 + 3H2O', ethanol)).toEqual({ verdict: 'correct' })
+    const acetic = reference('CH3COOH + NaOH -> CH3COONa + H2O')
+    expect(compareEquations('CH3CO2H + NaOH -> CH3COONa + H2O', acetic)).toEqual({ verdict: 'correct' })
+  })
+
+  it('still flags a real isomer', () => {
+    const ethanol = reference('CH3CH2OH + 3O2 -> 2CO2 + 3H2O')
+    expect(compareEquations('CH3OCH3 + 3O2 -> 2CO2 + 3H2O', ethanol)).toMatchObject({
+      verdict: 'isomers',
+      species: ['CH3OCH3'],
+    })
+  })
+})

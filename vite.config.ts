@@ -32,6 +32,8 @@ export default defineConfig({
           'vendor-db': ['dexie'],
           'vendor-math': ['mathjs'],
           'vendor-pdf': ['pdfjs-dist'],
+          'vendor-katex': ['katex'],
+          'vendor-smiles': ['smiles-drawer'],
         },
       },
     },

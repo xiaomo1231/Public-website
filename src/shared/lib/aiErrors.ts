@@ -23,6 +23,8 @@ export function friendlyAIError(err: unknown): string {
         return t('friendlyError.rateLimited')
       case 'QUOTA_EXCEEDED':
         return t('friendlyError.quotaExceeded')
+      case 'ENDPOINT_NOT_FOUND':
+        return t('friendlyError.endpointNotFound')
       case 'CONTEXT_TOO_LONG':
         return t('friendlyError.contextTooLong')
       case 'OUTPUT_LIMIT':
@@ -39,7 +41,7 @@ export function friendlyAIError(err: unknown): string {
       case 'ABORTED':
         return t('friendlyError.cancelled')
       case 'INVALID_REQUEST':
-        return err.message || t('friendlyError.invalidRequest')
+        return ensureUseful(err.message, t('friendlyError.invalidRequest'))
       default:
         return ensureUseful(err.message, t('friendlyError.requestFailed'))
     }
@@ -108,10 +110,17 @@ export function friendlyTutorError(err: unknown): string {
   return friendlyAIError(err)
 }
 
+/** Raw markup from an error page (proxy / gateway HTML) is never shown. */
+const HTML_MARKUP = /<\s*(!doctype|html|head|body|title|h1|center|div|p|pre)\b/i
+/** Bare HTTP reason phrases tell the student nothing they can act on. */
+const BARE_REASON =
+  /^(?:(?:http\s*)?\d{3}\s*[:-]?\s*)?(?:not found|bad request|forbidden|unauthorized|error|unknown error|internal server error|method not allowed|bad gateway|service unavailable|gateway timeout)\.?$/i
+const MAX_SHOWN_CHARS = 300
+
 function ensureUseful(message: string | undefined, fallback: string): string {
   const trimmed = (message ?? '').trim()
-  if (trimmed.length >= 12) return trimmed
-  return fallback
+  if (trimmed.length < 12 || HTML_MARKUP.test(trimmed) || BARE_REASON.test(trimmed)) return fallback
+  return trimmed.length > MAX_SHOWN_CHARS ? `${trimmed.slice(0, MAX_SHOWN_CHARS)}…` : trimmed
 }
 
 export function isOffline(): boolean {

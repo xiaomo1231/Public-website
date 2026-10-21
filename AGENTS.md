@@ -51,14 +51,14 @@
 ```text
 ┌─ IndexedDB (Dexie) ─────────────┐  结构化元数据 + 学习数据 + 原始文件字节
 │                                 │  45 张表，Dexie v17
-├─ localStorage ──────────────────┤  仅 UI 语言镜像（避免首帧语言闪烁）
+├─ localStorage ──────────────────┤  UI 语言镜像（避免首帧语言闪烁）+ 符号键盘开合状态
 ├─ 浏览器内存 ────────────────────┤  仅当前任务文本 → 用户配置的 AI API
 └─────────────────────────────────┘
 ```
 
 - 原始文件字节存在 **IndexedDB 的 `documentBlobs` 表**（`bytes: ArrayBuffer`），不在 OPFS。
 - `src/infrastructure/opfs/opfs.ts` 是一个**未被接线的可选快速路径**（全项目无 import）；`Document.hasBlob` 的注释也写明「OPFS migration can come later」。不要以为文件已落 OPFS。
-- localStorage 只保存 UI 语言（`ai-learning:ui-language`）；外观偏好（明暗模式 + 配色主题）存在 `UserProfile`（IndexedDB）。
+- localStorage 只保存 UI 语言（`ai-learning:ui-language`）与符号键盘按模式的开合状态（`ai-learning:symbol-bar:<mode>`，仅本机偏好）；外观偏好（界面风格 + 明暗模式 + 配色主题）存在 `UserProfile`（IndexedDB）。
 
 ### 分层（铁律：UI 不直接碰 IndexedDB）
 
@@ -167,7 +167,7 @@ colorTheme: default | pinkAqua | warmOrange | academic
 - 填色且承载文字的表面（Button default / Badge default / Tooltip / 品牌标记）用 `--primary-strong`；`--primary` 留给 icon、链接、进度条、柔和状态、focus ring。
 - 主题切换是纯 presentation：**不触发 AI、不使 CourseAnalysis / TutorLesson / CourseContext 失效**。
 - 对比度由 `tests/themeContrast.test.ts` 从真实 CSS 计算并断言（风格 × 明暗 × 配色共 16 组；正文 ≥4.5:1，填色按钮 ≥3:1）。
-- 测验单选 / 多选支持键盘：A–F 或 1–6 选择，Enter 提交（焦点在输入框、按住修饰键、对话框内时不生效；`widgets/quiz/quizKeyboard.ts`）。
+- 测验单选 / 多选支持键盘：A–F 或 1–6 选择；焦点在未选中的选项上按 Enter / 空格是选择该项；焦点在已选中的选项上、或焦点不在按钮上时按 Enter 提交（焦点在输入框、按住修饰键、菜单或对话框内时不生效；`widgets/quiz/quizKeyboard.ts`）。
 
 ---
 
@@ -339,7 +339,7 @@ Topic
 - **生成**（`services/homeworkWalkthroughService.ts`，提示词 `homework-walkthrough/v1`，带科目画像；缓存版本 `subjectPromptVersion('homework-walkthrough/v1', subject)`）：每题一次请求（并发 2，单部分 240 s 时限；截断时输出预算翻倍至 ≤16k，`output-limit` 减半，限流 / 超时 / 不可用重试 2 次），再一次请求写开头与小结（只看各题题目、结论与正文开头）。每部分完成即 `putSection`（事务内读改写）；**已就绪的部分绝不被失败覆盖**；账号类错误（额度 / 鉴权）停止后续请求。不会自动生成：首次与更新都由学生点击。语言 = `walkthroughLanguage(questionLanguage, set.language)`（默认 `zh_terms`）。教授答案规则同复习讲解（已对上题号才用，「留给学生」不用）。
 - **freshness**（`planWalkthrough`，纯函数）：题目部分哈希 = 提示词版本 + 语言 + 题号 / 题面 / 指纹 / 来源 chunk / 已对上的教授答案；开头与小结的哈希 = 全部题目哈希。只有变化的题目 + 开头小结显示“可更新”；`insufficient` / `failed` / 缺失也算需要更新；退役题目的部分在下次生成后移除。
 - **RREF 本地核对**（`infrastructure/math/rref.ts` BigInt 精确分数；`entities/homework/walkthroughChecks.ts`）：线性代数科目或题面含增广 / 行阶梯 / RREF / 线性方程组等关键词时，模型额外返回 `linearSystems`（增广矩阵、最终 RREF、解的类型）；本地重算 RREF 并比较（忽略零行）与解的类型，不一致在该题下标出并显示正确 RREF。读不出的矩阵跳过，不报错误。
-- **划词提问**：讲解 `<article data-selection-context="walkthrough" data-walkthrough-project data-walkthrough-set>`，每部分 `<section data-walkthrough-section data-section-title>`。`SelectionTranslator` 在此范围内选「解释 / 提问」时不弹原来的贴边弹窗，而是 `openPassage()` 打开**浮动窗口**（`features/homework/floatingQAStore.ts` zustand：位置 / 大小 / 层级 / 最小化，最多同时 3 个，第 4 个把最靠后的收进右下角停靠栏；整窗始终在视口内；层级按排名 41–43，低于对话框 z-50）。问答走 `contextual-tutor/v3`（新增 `walkthrough` 语境：解法已在眼前，可完整解释并指出计算错误；`history` 带最近 6 轮）。
+- **划词提问**：讲解 `<article data-selection-context="walkthrough" data-walkthrough-project data-walkthrough-set>`，每部分 `<section data-walkthrough-section data-section-title>`。`SelectionTranslator` 在此范围内选「解释 / 提问」时不弹原来的贴边弹窗，而是 `openPassage()` 打开**浮动窗口**（`features/homework/floatingQAStore.ts` zustand：位置 / 大小 / 层级 / 最小化，最多同时 3 个，第 4 个把最靠后的收进右下角停靠栏；整窗始终在视口内；层级按排名 41–43，停靠栏 z-44，均低于对话框 z-50）。问答走 `contextual-tutor/v3`（新增 `walkthrough` 语境：解法已在眼前，可完整解释并指出计算错误；`history` 带最近 6 轮）。
 - **保存问答**（`WalkthroughNote`，Dexie v17 `walkthroughNotes`，索引 `[setId+updatedAt]`）：原文以 `TextAnchor`（文本 + 前后各 32 字，`shared/lib/textAnchor.ts`，与 `Range.toString()` 同口径）保存，不存位置；重新定位时按文本搜索，多处出现按前后文选最匹配。保存后追问自动追加；窗口拖动 / 调大小后记住位置。原文用 CSS Custom Highlight API（`walkthrough-note` / `walkthrough-flash`）标记，点击标记处（`caretPositionFromPoint`）重新打开；每部分下有本节问答芯片；「我的问答」对话框可搜索 / 打开 / 重命名 / 删除，找不到原文的标“原文已更新”。以“解释”开始的问答以原文命名。
 - **加入复习卡片**：每轮问答一张卡（`ReviewCardSource` 新增 `note`），问题很短时正面附原文，背面过长在段落处截断；按正面去重。
 - **打印 / 导出 PDF**：`WalkthroughPrint` 只在打印时把纯净副本挂到 `body` 下，`body.printing-walkthrough` 的打印样式隐藏其它内容并强制白底黑字；`afterprint` 后卸载。
@@ -363,7 +363,7 @@ Topic
 | `/projects/:id/documents/:did` | 文档详情 |
 | `/settings` | AI 设置 / 数据管理 |
 
-响应式：`≥lg` 三栏（主题 | 导师 | 公式符号）；`<lg` 主题+导师堆叠，公式面板走底部 Sheet。
+响应式（课时页）：**讲义风格** ≥1200px 为「页边目录（sticky）| ~680px 阅读栏 | 旁注（公式符号等，sticky）」三列，<1200px 目录在课时上方、旁注收进课时下方的折叠区；**精密实验室风格** 为一个细线面板，≥lg「目录 | 正文」，≥xl 再加右侧检查栏（248px），更窄时同样收进折叠区。旧的底部 Sheet 公式面板已移除。只做电脑与平板布局。
 
 ```text
 src/
@@ -418,8 +418,8 @@ docs/             architecture.md
 | 7e | 课时级数学可视化（线性/非线性 + 向量/图 + 线性变换/维恩图/特征值 + 教学区块放置） | 已交付（v0.2.6） |
 | 7f | 划词浮层定位修复（真实尺寸 flip/clamp + ResizeObserver/visualViewport） | 已交付（v0.2.6） |
 | 7g | 学习流程导航与连续性 + 无障碍 / 错误态 | 已交付（v0.2.8） |
-| 7h | Precision Lab 视觉方向（蓝图网格 + 仪表细节，四套配色） | 已交付（v0.2.8） |
-| 7i | 首页滚动修复 + 可交互函数图像（一次/二次/三次/正弦） | 已交付（v0.2.8） |
+| 7h | Precision Lab 视觉方向（蓝图网格 + 仪表细节，四套配色） | 已交付（v0.2.8）；**已被 7z.6 的「精密实验室」界面风格取代** |
+| 7i | 首页滚动修复 + 可交互函数图像（一次/二次/三次/正弦） | 已交付（v0.2.8）；**首页函数图像已在 7z.7 删除** |
 | 7j | 作业讲解（题目 / 提示 / 解法 / 问答 + 归档 / 恢复） | 已交付（v0.2.9） |
 | 7k | 作业讲解加固（识别可靠性 / 来源校验 / 进度 / 阅读原图）+ 项目文件管理 | 已交付（v0.3.1） |
 | 7l | 按幻灯片学习（PPT/PPTX 逐页导师，Dexie v13） | 已交付（v0.3.1） |
@@ -441,7 +441,11 @@ docs/             architecture.md
 | 7z.2 | 背单词板块：考试词书（ECDICT）、FSRS 调度、认读 / 拼写 / 填空 / 听写、课程词汇（AI 补释义）、易错词、统计、导入、导出（Anki / CSV / TXT） | 已交付（v0.6.0） |
 | 7z.3 | 作业完整讲解：整份作业的讲义式讲解（工具 / 逐题 / 小结）、线性代数 RREF 本地核对、划词提问浮动窗口（拖动 / 调大小 / 最小化 / 追问带上下文）、保存问答并按原文重新定位、加入复习卡片、打印 / 导出 PDF（Dexie v17） | 已交付（v0.7.0） |
 | 7z.4 | 全站审查修复：分块丢字、判分（小值容差 / 积分常数 / 中文判断题 / 续做）、掌握度重算、删除保护、锁定保留设置、课程分析增量 / 同名主题 / 中断恢复、流式收尾与非流式超时、导师竞态、图示计算、参考图片下载、未找到与错误页、CSV / Anki 导入 | 已交付（v0.7.0） |
-| 8 | Dashboard 强化 | 部分交付（v0.2.8：视觉与交互函数图；v0.3.1：构图与动效打磨；指标类未做） |
+| 7z.5 | 界面动效：统一缓动 / 时长变量、高频导航提速、「减少动态效果」只去位移 | 已提交（未发布） |
+| 7z.6 | 两种界面风格：讲义（默认）/ 精密实验室；风格 token 与配色分层、`lecture:` / `lab:` 变体、全站页面重排、测验键盘作答 | 已提交（未发布） |
+| 7z.7 | 界面验收修复：切换风格不重载、动画与滚动性能、测验键盘与读屏、表格与长文本、焦点与层级、删除首页函数图 | 已提交（未发布） |
+| 7z.8 | 全站审查修复（本轮）：路由级代码分割（页面按需加载）、死代码与无用文案清理、测试噪音与慢测试、文档同步 | 进行中（未发布） |
+| 8 | Dashboard 强化 | 部分交付（v0.2.8：视觉与交互函数图；v0.3.1：构图与动效打磨；指标类未做）；交互函数图已删除，视觉方向已被 7z.6 两种界面风格取代 |
 | 9 | PWA · a11y · 导入导出打磨 | 未开始 |
 
 **V0.7.0 已提交并发布**（tag `v0.7.0`，两个远程仓库各一份 Release + 源码压缩包）。本版包含：**作业完整讲解**（见 §6「作业完整讲解」：`homework-walkthrough/v1`、RREF 本地核对、`contextual-tutor/v3` 浮动问答窗口、`WalkthroughNote` 保存与按原文重新定位、加入复习卡片、打印 / 导出 PDF；新增 Dexie **v17** `homeworkWalkthroughs` / `walkthroughNotes`）；以及**全站审查修复**约 45 项（分块丢字需重新处理旧资料；判分、掌握度、删除保护、锁定、课程分析一致性与中断恢复、AI 流式 / 超时、导师竞态、图示计算、参考图片、路由错误页与未找到页、导入）。

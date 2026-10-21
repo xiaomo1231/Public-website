@@ -1,30 +1,65 @@
+import { Suspense, lazy, type ComponentType } from 'react'
 import { Navigate, type RouteObject } from 'react-router-dom'
 import { AppShell } from './layout/AppShell'
 import { LoginPage } from '@/pages/LoginPage'
 import { InvitePage } from '@/pages/InvitePage'
-import { DashboardPage } from '@/pages/DashboardPage'
-import { ProjectsPage } from '@/pages/ProjectsPage'
-import { ProjectDetailPage } from '@/pages/ProjectDetailPage'
-import { ProjectFilesPage } from '@/pages/ProjectFilesPage'
-import { DocumentDetailPage } from '@/pages/DocumentDetailPage'
-import { TutorPage } from '@/pages/TutorPage'
-import { SlideStudyPage } from '@/pages/SlideStudyPage'
-import { InteractiveTutorPage } from '@/pages/InteractiveTutorPage'
-import { ChatHistoryPage } from '@/pages/ChatHistoryPage'
-import { QuizLandingPage } from '@/pages/QuizLandingPage'
-import { QuizPage } from '@/pages/QuizPage'
-import { QuizResultPage } from '@/pages/QuizResultPage'
-import { PracticePage } from '@/pages/PracticePage'
-import { HomeworkLandingPage } from '@/pages/HomeworkLandingPage'
-import { HomeworkPage } from '@/pages/HomeworkPage'
-import { MasteryPage } from '@/pages/MasteryPage'
-import { MistakeBookPage } from '@/pages/MistakeBookPage'
-import { ReviewCardsPage } from '@/pages/ReviewCardsPage'
-import { SettingsPage } from '@/pages/SettingsPage'
-import { VocabPage } from '@/pages/VocabPage'
 import { RequireAuth } from './RequireAuth'
 import { NotFoundPage, RouteError } from './RouteError'
 import { ProjectScope } from './layout/ProjectScope'
+import { LoadingState } from '@/shared/ui/LoadingState'
+
+/**
+ * Pages load on demand so the first paint only ships the shell. Each lazy
+ * page gets its own Suspense boundary with the shared loading state, so the
+ * sidebar stays put while a page's chunk downloads.
+ */
+function lazyPage<M extends Record<K, ComponentType>, K extends keyof M & string>(
+  load: () => Promise<M>,
+  name: K,
+): ComponentType {
+  const Lazy = lazy(async (): Promise<{ default: ComponentType }> => ({
+    default: (await load())[name],
+  }))
+  function LazyPage(): JSX.Element {
+    return (
+      <Suspense fallback={<LoadingState />}>
+        <Lazy />
+      </Suspense>
+    )
+  }
+  LazyPage.displayName = `Lazy(${name})`
+  return LazyPage
+}
+
+const DashboardPage = lazyPage(() => import('@/pages/DashboardPage'), 'DashboardPage')
+const ProjectsPage = lazyPage(() => import('@/pages/ProjectsPage'), 'ProjectsPage')
+const ProjectDetailPage = lazyPage(() => import('@/pages/ProjectDetailPage'), 'ProjectDetailPage')
+const ProjectFilesPage = lazyPage(() => import('@/pages/ProjectFilesPage'), 'ProjectFilesPage')
+const DocumentDetailPage = lazyPage(
+  () => import('@/pages/DocumentDetailPage'),
+  'DocumentDetailPage',
+)
+const TutorPage = lazyPage(() => import('@/pages/TutorPage'), 'TutorPage')
+const SlideStudyPage = lazyPage(() => import('@/pages/SlideStudyPage'), 'SlideStudyPage')
+const InteractiveTutorPage = lazyPage(
+  () => import('@/pages/InteractiveTutorPage'),
+  'InteractiveTutorPage',
+)
+const ChatHistoryPage = lazyPage(() => import('@/pages/ChatHistoryPage'), 'ChatHistoryPage')
+const QuizLandingPage = lazyPage(() => import('@/pages/QuizLandingPage'), 'QuizLandingPage')
+const QuizPage = lazyPage(() => import('@/pages/QuizPage'), 'QuizPage')
+const QuizResultPage = lazyPage(() => import('@/pages/QuizResultPage'), 'QuizResultPage')
+const PracticePage = lazyPage(() => import('@/pages/PracticePage'), 'PracticePage')
+const HomeworkLandingPage = lazyPage(
+  () => import('@/pages/HomeworkLandingPage'),
+  'HomeworkLandingPage',
+)
+const HomeworkPage = lazyPage(() => import('@/pages/HomeworkPage'), 'HomeworkPage')
+const MasteryPage = lazyPage(() => import('@/pages/MasteryPage'), 'MasteryPage')
+const MistakeBookPage = lazyPage(() => import('@/pages/MistakeBookPage'), 'MistakeBookPage')
+const ReviewCardsPage = lazyPage(() => import('@/pages/ReviewCardsPage'), 'ReviewCardsPage')
+const SettingsPage = lazyPage(() => import('@/pages/SettingsPage'), 'SettingsPage')
+const VocabPage = lazyPage(() => import('@/pages/VocabPage'), 'VocabPage')
 
 /**
  * Every project sub-page sits under `ProjectScope`, which shows one

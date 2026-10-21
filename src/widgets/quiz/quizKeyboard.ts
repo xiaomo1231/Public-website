@@ -106,6 +106,8 @@ export function useQuizKeyboard(options: QuizKeyboardOptions): void {
       if (insideOverlay(target) || insideOverlay(document.activeElement)) return
 
       if (event.key === 'Enter') {
+        // A held-down Enter must not submit (or skip past) the next question.
+        if (event.repeat) return
         const row = optionRow(target)
         // Enter on an option picks it (native button click); only on the
         // already-chosen option does it submit.

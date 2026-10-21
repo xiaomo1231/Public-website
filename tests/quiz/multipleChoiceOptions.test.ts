@@ -86,26 +86,35 @@ describe('multiple-choice option validation', () => {
     expect(out[0]!.options?.map((o) => o.label)).toEqual(['3', '4', '5', '6'])
   })
 
-  it('trusts correctAnswer when it names an option', () => {
-    // Grading and the "revealed" UI both key off `correctAnswer`, so a stray
-    // `isCorrect` flag on another option does not change the answer.
+  it('drops a question whose answer text names a different option than the flag', () => {
+    // The answer text and the flag disagree: either could be the mistake, so
+    // the question is dropped (the batch tops the gap up) instead of guessed.
+    expect(
+      isRejected(
+        choice({
+          correctAnswer: '4',
+          options: [
+            { label: '3', isCorrect: false },
+            { label: '4', isCorrect: false },
+            { label: '5', isCorrect: true },
+            { label: '6', isCorrect: false },
+          ],
+        }),
+      ),
+    ).toBe(true)
+  })
+
+  it('stores the flagged option as the answer', () => {
+    const out = service().validateGenerated({ questions: [GOOD] } as unknown as QuizGenerationOutput, 1)
+    expect(out[0]!.correctAnswer).toBe(out[0]!.options!.find((o) => o.isCorrect)!.label)
+  })
+
+  it('leaves a missing knowledge point empty so the caller can use the topic', () => {
     const out = service().validateGenerated(
-      {
-        questions: [
-          choice({
-            correctAnswer: '4',
-            options: [
-              { label: '3', isCorrect: false },
-              { label: '4', isCorrect: false },
-              { label: '5', isCorrect: true },
-              { label: '6', isCorrect: false },
-            ],
-          }),
-        ],
-      } as unknown as QuizGenerationOutput,
+      { questions: [{ ...GOOD, knowledgePoint: '  ' }] } as unknown as QuizGenerationOutput,
       1,
     )
-    expect(out[0]!.correctAnswer).toBe('4')
+    expect(out[0]!.knowledgePoint).toBe('')
   })
 
   it('adopts the flagged option when correctAnswer names no option', () => {

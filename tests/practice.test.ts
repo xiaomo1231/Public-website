@@ -186,6 +186,34 @@ describe('PracticeService', () => {
     expect(progress).toEqual({ total: 4, completed: 2, correct: 1, needsReview: 1 })
   })
 
+  it('grades true/false by truth value, whatever words the key uses', async () => {
+    const set = await service.importDocument(documentId)
+    const tf = (await service.listQuestions(set.id))[1]!
+    await db.practiceQuestions.update(tf.id, { expectedAnswer: '正确' })
+    expect((await service.recordAttempt(tf.id, 'A')).isCorrect).toBe(true)
+    expect((await service.recordAttempt(tf.id, 'B')).isCorrect).toBe(false)
+
+    // No options at all: the page offers True / False buttons.
+    await db.practiceQuestions.update(tf.id, { expectedAnswer: 'T', options: [] })
+    expect((await service.recordAttempt(tf.id, 'true')).isCorrect).toBe(true)
+    expect((await service.recordAttempt(tf.id, 'false')).isCorrect).toBe(false)
+  })
+
+  it('does not count ungraded or disputed answers as right or wrong', async () => {
+    const set = await service.importDocument(documentId)
+    const questions = await service.listQuestions(set.id)
+    await service.recordAttempt(questions[0]!.id, 'A')
+    await service.recordAttempt(questions[3]!.id, 'because of the power rule')
+    const wrong = await service.recordAttempt(questions[1]!.id, 'B')
+    const stored = (await db.practiceAttempts.get(wrong.attemptId))!
+    await db.practiceAttempts.put({
+      ...stored,
+      evaluation: { isCorrect: false, method: 'exact', confidence: 1, disputed: true },
+    })
+
+    expect(await service.progress(set.id)).toEqual({ total: 4, completed: 3, correct: 1, needsReview: 0 })
+  })
+
   it('builds an evidence-based question-style profile', async () => {
     await service.importDocument(documentId)
     const context = await new CourseContextRepository(db).get(projectId)

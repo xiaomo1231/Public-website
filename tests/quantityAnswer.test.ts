@@ -78,3 +78,23 @@ describe('medical units', () => {
     expect(isValidUnit('mOsm/L')).toBe(true)
   })
 })
+
+describe('review fixes', () => {
+  it('reads superscript exponents in the number and the unit', () => {
+    expect(splitQuantity('1.2×10⁻³ m·s⁻¹')).toEqual({ value: 1.2e-3, unitText: 'm s^-1' })
+    expect(compareQuantity('1.2×10⁻³ m', '1.2', 'mm').isCorrect).toBe(true)
+  })
+
+  it('compares offset temperatures as absolute temperatures', () => {
+    expect(compareQuantity('273.15 K', '0', 'degC').isCorrect).toBe(true)
+    expect(compareQuantity('273 K', '0', 'degC').isCorrect).toBe(true)
+    expect(compareQuantity('32 °F', '0', 'degC').isCorrect).toBe(true)
+    expect(compareQuantity('5 ℃', '0', 'degC').isCorrect).toBe(false)
+    expect(compareQuantity('30 ℃', '25', 'degC').isCorrect).toBe(false)
+  })
+
+  it('accepts conversion noise around an expected 0', () => {
+    expect(compareQuantity('0 km/h', '0', 'm/s').isCorrect).toBe(true)
+    expect(compareQuantity('0.5 m/s', '0', 'm/s').isCorrect).toBe(false)
+  })
+})

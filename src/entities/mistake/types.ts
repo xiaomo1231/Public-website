@@ -117,6 +117,12 @@ export interface Mistake {
 
   createdAt: number
   updatedAt: number
+  /**
+   * When the latest wrong answer behind this mistake was given. `updatedAt`
+   * also moves on analysis or status changes, so recency uses this. Absent on
+   * rows recorded once and never merged (then `createdAt` is that time).
+   */
+  lastOccurredAt?: number
   resolvedAt?: number
   archivedAt?: number
 }
@@ -134,6 +140,7 @@ export interface AddMistakeInput {
   studentAnswer: string
   correctAnswer: string
   solution?: string
+  sourceRefs?: SourceReference[]
   mistakeType?: MistakeType
   attemptIds?: string[]
 }

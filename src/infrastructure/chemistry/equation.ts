@@ -246,7 +246,51 @@ function writtenStructure(text: string, drawnBond: boolean): string | undefined 
   }
   const elements = expanded.match(/[A-Z][a-z]?/g) ?? []
   const repeated = new Set(elements).size < elements.length
-  return drawnBond || repeated ? expanded : undefined
+  return drawnBond || repeated ? canonicalChain(expanded) : undefined
+}
+
+/**
+ * Linear condensed formulas written in different conventional ways get the
+ * same string: `C2H5OH` and `CH3CH2OH`, `CH3CO2H` and `CH3COOH`, `HOCH2CH3`
+ * and `CH3CH2OH`. Each heavy atom becomes one group carrying the hydrogens
+ * written after it (a leading H joins the first heavy atom), and the chain is
+ * read in whichever direction sorts first. Genuinely different connectivity
+ * (`CH3OCH3`) still gives a different string.
+ */
+function canonicalChain(text: string): string {
+  const expanded = text
+    // Straight-chain alkyl CnH(2n+1) → CH3(CH2)…: C2H5 → CH3CH2.
+    .replace(/C(\d+)H(\d+)(?![a-z\d])/g, (match, c: string, h: string) => {
+      const n = Number(c)
+      if (n < 2 || n > 10 || Number(h) !== 2 * n + 1) return match
+      return `CH3${'CH2'.repeat(n - 1)}`
+    })
+    // Carboxyl / ester written CO2: CO2H, CO2CH3 → COOH, COOCH3.
+    .replace(/CO2(?=[A-Z]|$)/g, 'COO')
+  const tokens = expanded.match(/[A-Z][a-z]?\d*/g) ?? []
+  const groups: Array<{ atom: string; h: number }> = []
+  let leadingH = 0
+  for (const token of tokens) {
+    const [, element, digits] = /^([A-Z][a-z]?)(\d*)$/.exec(token)!
+    const count = digits ? Number(digits) : 1
+    if (element === 'H') {
+      const last = groups[groups.length - 1]
+      if (last) last.h += count
+      else leadingH += count
+      continue
+    }
+    for (let i = 0; i < count; i++) groups.push({ atom: element!, h: 0 })
+    if (leadingH && groups.length === count) {
+      groups[0]!.h += leadingH
+      leadingH = 0
+    }
+  }
+  if (groups.length === 0) return text
+  const render = (list: typeof groups) =>
+    list.map(({ atom, h }) => `${atom}${h ? `H${h}` : ''}`).join('-')
+  const forward = render(groups)
+  const backward = render([...groups].reverse())
+  return forward <= backward ? forward : backward
 }
 
 function parseSides(left: string, right: string, arrow: string): ParseResult {

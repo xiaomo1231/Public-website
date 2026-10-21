@@ -313,7 +313,7 @@ describe('atomic associated-reference commit', () => {
     const beforeContext = (await seeded.contexts.get(seeded.project.id))!
 
     const spy = vi
-      .spyOn(db.table('practiceQuestions'), 'put')
+      .spyOn(db.table('practiceQuestions'), 'update')
       .mockRejectedValueOnce(new Error('simulated write failure'))
 
     await expect(

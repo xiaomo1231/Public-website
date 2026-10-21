@@ -1,7 +1,9 @@
 import { useCallback } from 'react'
-import type { UserTheme, UserUiStyle } from '@/entities/user/types'
+import { DEFAULT_UI_STYLE, type UserTheme, type UserUiStyle } from '@/entities/user/types'
 import { useAuthStore } from '@/features/auth/authStore'
 import { logger } from '@/infrastructure/logger/logger'
+import { toast } from '@/features/toast/toastStore'
+import { t } from '@/i18n'
 import { useThemeStore } from './themeStore'
 import { resolveColorTheme, type ColorThemeId } from './colorThemes'
 
@@ -62,6 +64,18 @@ export function useColorTheme(): {
   return { colorTheme, setColorTheme }
 }
 
+let uiStyleSaveSeq = 0
+let uiStyleSavesInFlight = 0
+
+/**
+ * True while an interface-style switch is still being saved. The profile then
+ * reports the value of an older save, so it must not be re-applied over the
+ * newer choice already on screen.
+ */
+export function isUiStyleSavePending(): boolean {
+  return uiStyleSavesInFlight > 0
+}
+
 export function useUiStyle(): {
   uiStyle: UserUiStyle
   setUiStyle: (style: UserUiStyle) => void
@@ -73,10 +87,21 @@ export function useUiStyle(): {
   const setUiStyle = useCallback(
     (next: UserUiStyle) => {
       applyUiStyle(next)
-      void persistUiStyle(next).catch((err: unknown) => {
-        logger.warn('Failed to persist interface style', { uiStyle: next })
-        logger.debug('Interface style persistence error', { error: String(err) })
-      })
+      const seq = ++uiStyleSaveSeq
+      uiStyleSavesInFlight += 1
+      void persistUiStyle(next)
+        .catch((err: unknown) => {
+          logger.warn('Failed to persist interface style', { uiStyle: next })
+          logger.debug('Interface style persistence error', { error: String(err) })
+          // Only the latest switch decides what is shown; an older failed save
+          // has already been superseded.
+          if (seq !== uiStyleSaveSeq) return
+          applyUiStyle(useAuthStore.getState().profile?.uiStyle ?? DEFAULT_UI_STYLE)
+          toast({ variant: 'error', title: t('theme.uiStyleSaveFailed') })
+        })
+        .finally(() => {
+          uiStyleSavesInFlight -= 1
+        })
     },
     [applyUiStyle, persistUiStyle],
   )

@@ -2,7 +2,7 @@ import 'fake-indexeddb/auto'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { AppDatabase, setDbForTesting } from '@/infrastructure/db/database'
 import { ProjectService } from '@/services/projectService'
-import { QuizService } from '@/services/quizService'
+import { QuizService, adaptiveHistory } from '@/services/quizService'
 import { MasteryService } from '@/services/masteryService'
 import { CourseAnalysisRepository } from '@/entities/courseAnalysis/repository'
 import { DocumentRepository } from '@/entities/document/repository'
@@ -117,6 +117,24 @@ describe('QuizService.generateQuiz', () => {
     expect(questions).toHaveLength(2)
     expect(questions[0]!.projectId).toBe(project.id)
     expect(questions[0]!.topicId).toBe(topicId)
+  })
+
+  it('fills a missing knowledge point from the topic material, not "General"', async () => {
+    const { project, topicId } = await seedProjectWithAnalysis(db)
+    const chatJSON = vi.fn().mockResolvedValue({
+      data: {
+        questions: [
+          { prompt: 'd/dx x^3 at x=1?', type: 'numeric', correctAnswer: '3', solution: '', difficulty: 'basic', hints: [] },
+          { prompt: 'd/dx x^2 at x=2?', type: 'numeric', correctAnswer: '4', solution: '', knowledgePoint: '', difficulty: 'basic', hints: [] },
+        ],
+      },
+      raw: { content: '{}', model: 'gpt-test' },
+    })
+    const svc = buildService(db, fakeAI(chatJSON))
+    const quiz = await svc.generateQuiz(project.id, { ...baseConfig, topicId, topicName: 'Derivatives' })
+    const points = (await svc.getQuestions(quiz.id)).map((q) => q.knowledgePoint)
+    expect(points).not.toContain('General')
+    expect(points.every((point) => point.length > 0)).toBe(true)
   })
 
   it('retries once then fails on malformed AI output', async () => {
@@ -460,5 +478,18 @@ describe('QuizService.generateMore', () => {
     expect(more.config.mode).toBe('weakness')
     expect(more.config.topicName).toMatch(/Chain Rule|Weakness/i)
     expect(more.config.focusKnowledgePoints).toEqual(['Chain Rule'])
+  })
+})
+
+describe('adaptiveHistory', () => {
+  it('treats a disputed judgement as unverified', () => {
+    const base = { projectId: 'p', questionId: 'q', knowledgePoint: 'K', questionType: 'numeric', difficulty: 'basic', userAnswer: 'x', hintsUsed: 0, createdAt: 1 }
+    const history = [
+      { ...base, id: 'a1', evaluation: { isCorrect: false, method: 'exact' as const, confidence: 1 } },
+      { ...base, id: 'a2', evaluation: { isCorrect: false, method: 'rubric_ai' as const, confidence: 1, disputed: true } },
+    ]
+    const { recentResults, streaks } = adaptiveHistory(history)
+    expect(recentResults.map((r) => r.isCorrect)).toEqual([false, null])
+    expect(streaks).toEqual({ consecutiveCorrect: 0, consecutiveWrong: 1 })
   })
 })

@@ -2,6 +2,7 @@ import { fnv1a } from '@/shared/lib/hash'
 import type { QuestionLanguage } from '@/entities/user/types'
 import type { SolutionKind } from '@/infrastructure/math/rref'
 import type { HomeworkQuestion, HomeworkSet } from './types'
+import { isDeferredProfessorAnswer } from './answerMatching'
 import type { TextAnchor } from '@/shared/lib/textAnchor'
 
 /**
@@ -85,6 +86,7 @@ export function questionSectionHash(
   promptVersion: string,
 ): string {
   const matched = question.answerStatus === 'matched'
+  const deferred = matched && isDeferredProfessorAnswer(question.answerText ?? '')
   return fnv1a(JSON.stringify({
     promptVersion,
     language,
@@ -94,6 +96,10 @@ export function questionSectionHash(
     sourceRefs: question.sourceRefs.map((ref) => ref.chunkId),
     answerStatus: question.answerStatus,
     answerText: matched ? question.answerText : undefined,
+    // The prompt also shows the question's existing worked solution (unless
+    // the professor's answer is left to the student); undefined keys drop out
+    // of the JSON, so questions without one keep their hash.
+    previousSolution: !deferred && question.solution ? question.solution : undefined,
   }))
 }
 

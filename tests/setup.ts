@@ -26,6 +26,39 @@ if (!('ResizeObserver' in globalThis)) {
   ;(globalThis as { ResizeObserver?: unknown }).ResizeObserver = ResizeObserverStub
 }
 
+// jsdom has no canvas backend: its getContext() prints a "Not implemented"
+// error for every call. Return null — what a browser returns for an
+// unsupported context — so callers (smiles-drawer, text measuring) take
+// their existing no-canvas fallback quietly.
+Object.defineProperty(HTMLCanvasElement.prototype, 'getContext', {
+  configurable: true,
+  writable: true,
+  value: () => null,
+})
+
+// floating-ui (Radix menus / popovers / tooltips) probes `:popover-open` and
+// `:modal` on every ancestor while positioning. jsdom's selector engine
+// (nwsapi) evaluates those pseudo-classes pathologically slowly — one
+// dropdown open took ~20 s. jsdom has no top layer, so answer `false`
+// directly, exactly what a browser says for an element that is not in it.
+const nativeMatches = Element.prototype.matches
+Object.defineProperty(Element.prototype, 'matches', {
+  configurable: true,
+  writable: true,
+  value(this: Element, selector: string): boolean {
+    if (selector === ':popover-open' || selector === ':modal') return false
+    return nativeMatches.call(this, selector)
+  },
+})
+
+// React Router v6 prints a "Future Flag Warning" from every test router.
+// They are about the future v7 upgrade, not test behaviour, so drop them.
+const nativeWarn = console.warn.bind(console)
+console.warn = (...args: unknown[]): void => {
+  if (typeof args[0] === 'string' && args[0].includes('React Router Future Flag Warning')) return
+  nativeWarn(...args)
+}
+
 // jsdom 25's Blob.prototype.arrayBuffer and .text are stubs that return
 // an empty buffer / empty string regardless of the underlying data.
 // Override both via FileReader so test behaviour matches real browsers.

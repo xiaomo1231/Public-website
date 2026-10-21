@@ -290,7 +290,11 @@ export class VocabService {
     const existing = await this.repo.getCard(key)
     const base = existing ?? newVocabCard(key, options.bookId ?? (await this.settings()).bookId ?? 'unknown', now)
     let next = rateVocabCard(base, rating, now)
-    if (options.correct === false) next = { ...next, mistakes: next.mistakes + 1, lastMistakeAt: now }
+    // Only a typed answer that was wrong ("forgot", rating 1) counts toward the
+    // mistake list; a near miss (one letter off, rating 2) does not.
+    if (options.correct === false && rating === 1) {
+      next = { ...next, mistakes: next.mistakes + 1, lastMistakeAt: now }
+    }
     await this.repo.putCard(next)
     await this.repo.addReview({
       id: crypto.randomUUID(),

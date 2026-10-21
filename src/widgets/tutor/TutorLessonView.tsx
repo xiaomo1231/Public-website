@@ -113,7 +113,13 @@ export function TutorLessonView({
             {(kicker || number) && (
               <p className="text-xs text-muted-foreground lecture:text-[13px] lecture:tracking-[0.14em] lecture:text-primary lab:font-mono lab:tracking-[0.04em] lab:text-primary">
                 {number ? <span className="hidden tabular-nums lab:inline">§ {number}</span> : null}
-                {kicker ? <span className="lab:hidden">{kicker}</span> : null}
+                {number && kicker ? (
+                  <span aria-hidden className="hidden lab:inline">
+                    {' '}
+                    ·{' '}
+                  </span>
+                ) : null}
+                {kicker ? <span>{kicker}</span> : null}
               </p>
             )}
             <h1 className="min-w-0 font-heading text-[32px] font-semibold leading-tight tracking-tight text-foreground lecture:text-[34px] lecture:font-bold lecture:leading-[1.35] lecture:tracking-normal lab:text-[26px] lab:leading-[1.3]">

@@ -14,6 +14,10 @@ import { LoadingState } from '@/shared/ui/LoadingState'
 import { ConfirmDialog } from '@/shared/ui/ConfirmDialog'
 import { DataManagementService, type DataInventory } from '@/services/dataManagementService'
 import { DeleteProjectDialog } from './DeleteProjectDialog'
+import { useSettingsStore } from '@/features/settings/settingsStore'
+import { SettingsService } from '@/services/settingsService'
+import { useProjectStore } from '@/features/project/projectStore'
+import { useAuthStore } from '@/features/auth/authStore'
 import { toast } from '@/features/toast/toastStore'
 import { isAppError } from '@/infrastructure/errors/AppError'
 import { formatBytes } from '@/shared/lib/format'
@@ -21,7 +25,26 @@ import { useTranslation } from '@/i18n'
 
 type ConfirmAction = 'delete-all' | 'clear-key' | null
 
-export function DataManagementPanel(): JSX.Element {
+/**
+ * Replace the settings store's copy with what is stored now. Done without the
+ * store's `load()` so the settings page does not swap to its loading state
+ * (and unmount this panel) mid-action.
+ */
+async function reloadSettingsStore(): Promise<void> {
+  const settings = await new SettingsService().get()
+  useSettingsStore.setState({ settings, loaded: true, error: null })
+}
+
+interface DataManagementPanelProps {
+  /**
+   * Called after the stored AI settings were cleared (alone or with all data),
+   * once the settings store holds the fresh values, so a page holding an
+   * edit draft can drop the old key instead of saving it back.
+   */
+  onSettingsCleared?: () => void
+}
+
+export function DataManagementPanel({ onSettingsCleared }: DataManagementPanelProps = {}): JSX.Element {
   const { t } = useTranslation()
   const navigate = useNavigate()
   const [inventory, setInventory] = useState<DataInventory | null>(null)
@@ -69,9 +92,16 @@ export function DataManagementPanel(): JSX.Element {
     setBusy(true)
     try {
       await new DataManagementService().deleteAll()
+      // Drop every in-memory copy of the wiped data: the decrypted key, the
+      // project list and the unlocked profile (which sends the app back to
+      // the invite gate).
+      useProjectStore.getState().reset()
+      await reloadSettingsStore()
+      onSettingsCleared?.()
       toast({ variant: 'success', title: t('data.allDeleted') })
       setConfirm(null)
       await refreshInventory()
+      await useAuthStore.getState().load()
     } catch (err) {
       toast({ variant: 'error', title: t('data.deleteFailed'), description: isAppError(err) ? err.message : (err as Error).message })
     } finally {
@@ -83,6 +113,8 @@ export function DataManagementPanel(): JSX.Element {
     setBusy(true)
     try {
       await new DataManagementService().clearAISettings()
+      await reloadSettingsStore()
+      onSettingsCleared?.()
       toast({ variant: 'success', title: t('data.settingsCleared') })
       setConfirm(null)
       await refreshInventory()

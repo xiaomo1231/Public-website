@@ -123,7 +123,21 @@ export interface IncrementalExecutionResult {
  * anything. Same principle as the tutor lesson cache: one effective input set
  * means one request, and later callers await the first result.
  */
-const inFlight = new Map<string, Promise<EnsureAnalyzedResult>>()
+interface InFlightRun {
+  promise: Promise<EnsureAnalyzedResult>
+  /** Progress listeners of every caller sharing this run. */
+  listeners: Set<(progress: DocumentAnalysisProgress) => void>
+  /** A caller asked for `force` while a non-forced pass was running. */
+  forceRequested: boolean
+}
+
+const inFlight = new Map<string, InFlightRun>()
+
+/**
+ * A shared run re-runs when material changed under it or a forced request
+ * arrived mid-run; bounded so a project edited continuously cannot loop.
+ */
+const MAX_ANALYSIS_PASSES = 3
 
 /** Test helper — drops any pending deduplication entry. */
 export function clearEnsureAnalyzedInFlightForTesting(): void {
@@ -294,14 +308,73 @@ export class CourseContentService {
     options: EnsureAnalyzedOptions = {},
   ): Promise<EnsureAnalyzedResult> {
     const existing = inFlight.get(projectId)
-    if (existing) return existing
+    if (existing) {
+      // Joiners share the run (and its progress). The run itself re-checks the
+      // material when it finishes, so a caller whose upload landed after it
+      // started still ends with an up-to-date analysis.
+      if (options.onProgress) existing.listeners.add(options.onProgress)
+      if (options.force) existing.forceRequested = true
+      return existing.promise
+    }
 
-    const run = this.runEnsureAnalyzed(projectId, options)
-    const tracked = run.finally(() => {
-      if (inFlight.get(projectId) === tracked) inFlight.delete(projectId)
+    const entry: InFlightRun = {
+      promise: Promise.resolve({ analyzed: false, reason: 'fresh' }),
+      listeners: new Set(options.onProgress ? [options.onProgress] : []),
+      forceRequested: false,
+    }
+    const tracked = this.runPasses(projectId, options, entry).finally(() => {
+      if (inFlight.get(projectId) === entry) inFlight.delete(projectId)
     })
-    inFlight.set(projectId, tracked)
+    entry.promise = tracked
+    inFlight.set(projectId, entry)
     return tracked
+  }
+
+  /**
+   * One shared run: analyse, then — if the material changed while it ran, or a
+   * caller forced a re-run during a non-forced pass — analyse once more.
+   */
+  private async runPasses(
+    projectId: string,
+    options: EnsureAnalyzedOptions,
+    entry: InFlightRun,
+  ): Promise<EnsureAnalyzedResult> {
+    let force = Boolean(options.force)
+    let result: EnsureAnalyzedResult = { analyzed: false, reason: 'fresh' }
+    for (let pass = 0; pass < MAX_ANALYSIS_PASSES; pass += 1) {
+      const startHash = await this.currentSourceHash(projectId)
+      entry.forceRequested = false
+      result = await this.runEnsureAnalyzed(projectId, {
+        ...options,
+        ...(force ? { force: true } : {}),
+        onProgress: (progress) => {
+          for (const listener of entry.listeners) listener(progress)
+        },
+      })
+      if (result.reason === 'no-provider' || result.reason === 'no-documents') return result
+      // A forced pass already re-read everything it could; another forced
+      // request arriving meanwhile is the same request (e.g. a double click).
+      const forcedAgain = entry.forceRequested && !force
+      const endHash = await this.currentSourceHash(projectId)
+      const materialChanged = startHash !== undefined && endHash !== undefined && endHash !== startHash
+      if (!forcedAgain && !materialChanged) return result
+      if (signalAborted(options.signal)) return result
+      logger.info('Course material changed during analysis; running once more', {
+        projectId,
+        forcedAgain,
+        materialChanged,
+      })
+      force = forcedAgain
+    }
+    return result
+  }
+
+  private async currentSourceHash(projectId: string): Promise<string | undefined> {
+    try {
+      return await this.content.computeSourceHash(projectId)
+    } catch {
+      return undefined
+    }
   }
 
   /**
@@ -753,6 +826,10 @@ export class CourseContentService {
       return { analyzed: false, reason: 'failed', error: message, cause: err }
     }
   }
+}
+
+function signalAborted(signal: AbortSignal | undefined): boolean {
+  return signal?.aborted === true
 }
 
 function isAbortError(err: unknown): boolean {

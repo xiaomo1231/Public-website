@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { ArrowLeft, GraduationCap, Pencil } from 'lucide-react'
 import { useProject, useProjects } from '@/features/project/useProjects'
@@ -16,6 +16,7 @@ import { ProjectFlowNav } from '@/widgets/project/ProjectFlowNav'
 import { CourseFigures } from '@/widgets/project/CourseFigures'
 import { useCourseMastery } from '@/widgets/dashboard/useCourseMastery'
 import { useHomeOverview } from '@/features/home/useHomeOverview'
+import { useDocumentsStore } from '@/features/documents/documentsStore'
 import { toast } from '@/features/toast/toastStore'
 import { formatDate, formatDateTime } from '@/shared/lib/utils'
 import { useTranslation } from '@/i18n'
@@ -34,8 +35,45 @@ export function ProjectDetailPage(): JSX.Element {
   // Read-only course summary (same counts as the homepage) and the mastery
   // estimate; neither triggers analysis or AI.
   const projectList = useMemo(() => (project ? [project] : []), [project])
-  const { overview } = useHomeOverview(projectList, projectList.length > 0)
+  const { overview, refresh: refreshOverview } = useHomeOverview(
+    projectList,
+    projectList.length > 0,
+  )
   const course = overview?.courses.find((c) => c.project.id === project?.id)
+  // Keep the figures and the "continue reading" link current while the
+  // student works on this page: uploads and processing update the documents
+  // store; the course analysis that follows has no event, so poll briefly
+  // after a document change and for as long as anything is still running.
+  const projectDocs = useDocumentsStore((s) => (project ? s.byProject[project.id] : undefined))
+  const [watchUntil, setWatchUntil] = useState(0)
+  useEffect(() => {
+    if (!projectDocs) return
+    refreshOverview()
+    setWatchUntil(Date.now() + 60_000)
+  }, [projectDocs, refreshOverview])
+  const busy =
+    course !== undefined &&
+    (course.materials.processing > 0 ||
+      course.analysis === 'pending' ||
+      course.analysis === 'analyzing')
+  useEffect(() => {
+    if (!busy && Date.now() >= watchUntil) return
+    const timer = window.setTimeout(refreshOverview, 4000)
+    return () => window.clearTimeout(timer)
+  }, [busy, watchUntil, overview, refreshOverview])
+  const shownTab = useRef(tab)
+  useEffect(() => {
+    if (shownTab.current === tab) return
+    shownTab.current = tab
+    refreshOverview()
+  }, [tab, refreshOverview])
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') refreshOverview()
+    }
+    document.addEventListener('visibilitychange', onVisible)
+    return () => document.removeEventListener('visibilitychange', onVisible)
+  }, [refreshOverview])
   const masteryIds = useMemo(() => (project ? [project.id] : []), [project])
   const mastery = useCourseMastery(masteryIds)
 

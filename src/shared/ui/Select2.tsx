@@ -9,7 +9,6 @@ import {
 import { cn } from '@/shared/lib/utils'
 
 export const Select = SelectPrimitive.Root
-export const SelectGroup = SelectPrimitive.Group
 export const SelectValue = SelectPrimitive.Value
 
 export const SelectTrigger = forwardRef<

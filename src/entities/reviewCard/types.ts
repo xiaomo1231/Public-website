@@ -65,11 +65,19 @@ export function scheduleReview(card: ReviewCard, grade: ReviewGrade, now: number
     if (grade === 'hard') {
       interval = Math.max(1, Math.round(interval * 1.2))
       ease = Math.max(MIN_EASE, ease - 0.15)
-    } else if (grade === 'good') {
-      interval = reps === 0 ? 1 : reps === 1 ? 3 : Math.round(interval * ease)
     } else {
-      interval = reps === 0 ? 3 : Math.round(Math.max(interval, 1) * ease * 1.3)
-      ease += 0.15
+      const good = reps === 0 ? 1 : reps === 1 ? 3 : Math.round(interval * ease)
+      if (grade === 'good') {
+        interval = good
+      } else {
+        // "Easy" always waits longer than "good" (on the second review both
+        // would otherwise round to 3 days).
+        interval = Math.max(
+          reps === 0 ? 3 : Math.round(Math.max(interval, 1) * ease * 1.3),
+          good + 1,
+        )
+        ease += 0.15
+      }
     }
     reps += 1
     dueIn = interval * DAY_MS

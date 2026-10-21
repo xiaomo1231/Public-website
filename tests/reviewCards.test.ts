@@ -81,6 +81,13 @@ describe('spaced-repetition schedule', () => {
     expect(p.hard).toBeLessThan(p.good)
     expect(p.good).toBeLessThan(p.easy)
   })
+
+  it('makes "easy" longer than "good" on the second review too', () => {
+    const second = scheduleReview(card(), 'good', NOW)
+    const p = previewIntervals(second, NOW)
+    expect(p.good).toBe(3 * DAY_MS)
+    expect(p.easy).toBeGreaterThanOrEqual(4 * DAY_MS)
+  })
 })
 
 describe('ReviewCardService', () => {

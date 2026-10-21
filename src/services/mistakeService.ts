@@ -16,9 +16,11 @@ import { t } from '@/i18n'
 
 export class MistakeService {
   private repo: MistakeRepository
+  private db: AppDatabase
 
   constructor(db?: AppDatabase) {
-    this.repo = new MistakeRepository(db ?? getDb())
+    this.db = db ?? getDb()
+    this.repo = new MistakeRepository(this.db)
   }
 
   list(projectId: string, filter?: MistakeFilter): Promise<Mistake[]> {
@@ -47,6 +49,7 @@ export class MistakeService {
         attemptCount: existing.attemptCount + 1,
         attemptIds: [...existing.attemptIds, attempt.id],
         studentAnswer: displayAnswer(question, attempt.userAnswer),
+        lastOccurredAt: attempt.createdAt,
         // A re-occurrence resets "understood" back to active.
         status: 'active',
         resolvedAt: undefined,
@@ -80,7 +83,8 @@ export class MistakeService {
   /**
    * Take one attempt back out of the mistake book (a disputed judgement): the
    * mistake is removed when that attempt was its only occurrence, otherwise
-   * just this occurrence is dropped.
+   * just this occurrence is dropped and the card shows the latest remaining
+   * wrong answer again (not the disputed one).
    */
   async removeAttempt(projectId: string, questionId: string, attemptId: string): Promise<void> {
     const existing = await this.repo.findByQuestion(projectId, questionId)
@@ -90,10 +94,60 @@ export class MistakeService {
       await this.repo.delete(existing.id)
       return
     }
+    const latest = await this.latestAttempt(remaining)
     await this.repo.update(existing.id, {
       attemptIds: remaining,
       attemptCount: Math.max(1, existing.attemptCount - 1),
+      ...(latest ? { studentAnswer: latest.studentAnswer, lastOccurredAt: latest.at } : {}),
+      ...(latest?.quizId ? { quizId: latest.quizId } : {}),
     })
+  }
+
+  /** The most recent of these attempts (quiz or practice), as the card shows it. */
+  private async latestAttempt(
+    ids: string[],
+  ): Promise<{ studentAnswer: string; quizId?: string; at: number } | null> {
+    try {
+      const [quizAttempts, practiceAttempts] = await Promise.all([
+        this.db.questionAttempts.bulkGet(ids),
+        this.db.practiceAttempts.bulkGet(ids),
+      ])
+      const candidates: Array<{
+        at: number
+        load: () => Promise<{ studentAnswer: string; quizId?: string }>
+      }> = []
+      for (const attempt of quizAttempts) {
+        if (!attempt) continue
+        candidates.push({
+          at: attempt.createdAt,
+          load: async () => {
+            const question = await this.db.questions.get(attempt.questionId)
+            return {
+              studentAnswer: question
+                ? displayAnswer(question, attempt.userAnswer)
+                : attempt.userAnswer,
+              ...(attempt.quizId ? { quizId: attempt.quizId } : {}),
+            }
+          },
+        })
+      }
+      for (const attempt of practiceAttempts) {
+        if (!attempt) continue
+        candidates.push({
+          at: attempt.submittedAt,
+          load: async () => ({ studentAnswer: attempt.userAnswer }),
+        })
+      }
+      if (candidates.length === 0) return null
+      candidates.sort((a, b) => b.at - a.at)
+      const newest = candidates[0]!
+      return { ...(await newest.load()), at: newest.at }
+    } catch (err) {
+      logger.warn('Could not read the remaining attempts of a mistake', {
+        error: (err as Error)?.message,
+      })
+      return null
+    }
   }
 
   async addManual(input: {

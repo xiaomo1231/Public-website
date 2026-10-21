@@ -6,14 +6,8 @@ import { version } from '../../../package.json'
  * IMPORTANT: never put secrets here. Use environment variables or local storage.
  */
 
-export const APP_NAME = 'AI Learning Platform'
 /** From package.json, so it always matches the release. */
 export const APP_VERSION: string = version
-
-export const DB_NAME = 'ai-learning-platform'
-
-export const MAX_PROJECT_NAME_LENGTH = 80
-export const MIN_PROJECT_NAME_LENGTH = 1
 
 export const DEFAULT_THEME = 'system' as const
 

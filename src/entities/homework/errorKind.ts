@@ -42,6 +42,7 @@ export function classifyHomeworkError(err: unknown): HomeworkErrorKind {
       case 'MISSING_API_KEY':
       case 'MISSING_BASE_URL':
       case 'MISSING_MODEL':
+      case 'ENDPOINT_NOT_FOUND': // a wrong base URL / model fails every request alike
         return 'auth'
       case 'PROVIDER_UNAVAILABLE':
         return 'unavailable'

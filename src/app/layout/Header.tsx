@@ -124,8 +124,11 @@ export function HeaderControls(): JSX.Element {
 
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button variant="ghost" size="sm">
-            <span className="grid h-7 w-7 place-items-center rounded-full bg-muted text-xs font-semibold uppercase">
+          <Button variant="ghost" size="sm" aria-label={profile?.name || t('header.account')}>
+            <span
+              aria-hidden
+              className="grid h-7 w-7 place-items-center rounded-full bg-muted text-xs font-semibold uppercase"
+            >
               {(profile?.name ? Array.from(profile.name)[0] : undefined) ?? 'S'}
             </span>
             <span className="hidden max-w-[8rem] truncate xl:inline">

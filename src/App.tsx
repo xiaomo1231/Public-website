@@ -7,6 +7,7 @@ import { useProjectStore } from '@/features/project/projectStore'
 import { useSettingsStore } from '@/features/settings/settingsStore'
 import { useThemeStore, initThemeListener } from '@/features/theme/themeStore'
 import { DEFAULT_UI_STYLE } from '@/entities/user/types'
+import { isUiStyleSavePending } from '@/features/theme/useAppearance'
 import { useI18nStore, initUILanguage } from '@/i18n'
 import { Toaster } from '@/shared/ui/Toast'
 import { SelectionTranslator } from '@/widgets/translation/SelectionTranslator'
@@ -44,9 +45,14 @@ export function App(): JSX.Element {
   }, [profile?.colorTheme, setColorTheme])
 
   // Interface style follows the profile too (absent → the default style)
+  // Only the stored style matters, not every other profile change; while a
+  // switch is still saving, the profile holds an older value — skip it.
+  const hasProfile = Boolean(profile)
+  const profileUiStyle = profile?.uiStyle
   useEffect(() => {
-    if (profile) setUiStyle(profile.uiStyle ?? DEFAULT_UI_STYLE)
-  }, [profile, setUiStyle])
+    if (!hasProfile || isUiStyleSavePending()) return
+    setUiStyle(profileUiStyle ?? DEFAULT_UI_STYLE)
+  }, [hasProfile, profileUiStyle, setUiStyle])
 
   // The persisted profile is authoritative once it has loaded
   useEffect(() => {

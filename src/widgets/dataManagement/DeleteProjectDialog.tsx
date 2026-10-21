@@ -13,6 +13,7 @@ import { Input } from '@/shared/ui/Input'
 import { Label } from '@/shared/ui/Label'
 import { Badge } from '@/shared/ui/Badge'
 import { TruncatedText } from '@/shared/ui/TruncatedText'
+import { useProjectStore } from '@/features/project/projectStore'
 import { DataManagementService } from '@/services/dataManagementService'
 import { ProjectService } from '@/services/projectService'
 import type { Project } from '@/entities/project/types'
@@ -91,6 +92,7 @@ export function DeleteProjectDialog({
     setBusy(true)
     try {
       await new DataManagementService().deleteProject(selected.id)
+      useProjectStore.getState().forget(selected.id)
       toast({ variant: 'success', title: t('deleteProject.deleted'), description: selected.name })
       onOpenChange(false)
       await onDeleted()

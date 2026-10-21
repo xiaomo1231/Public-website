@@ -166,3 +166,19 @@ describe('WeaknessService', () => {
     expect((await service.analyze(p2.id)).totalMistakes).toBe(0)
   })
 })
+
+describe('buildWeaknessAreas review fixes', () => {
+  it('treats a mastery row with no graded attempts as unknown', () => {
+    const [area] = buildWeaknessAreas([mistake('Limits')], [{ knowledgePoint: 'Limits', mastery: 0, attempts: 0 }])
+    expect(area!.mastery).toBeNull()
+    const [graded] = buildWeaknessAreas([mistake('Limits')], [{ knowledgePoint: 'Limits', mastery: 0, attempts: 2 }])
+    expect(area!.weaknessScore).toBeLessThan(graded!.weaknessScore)
+  })
+
+  it('counts recency from the latest wrong answer, not the creation time', () => {
+    const now = Date.now()
+    const old = now - 90 * 24 * 60 * 60 * 1000
+    const [area] = buildWeaknessAreas([{ ...mistake('Limits', { createdAt: old }), lastOccurredAt: now }], [])
+    expect(area!.recentMistakeCount).toBe(1)
+  })
+})

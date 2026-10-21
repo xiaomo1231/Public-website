@@ -1,4 +1,5 @@
 import { all, create, type Unit } from 'mathjs'
+import { superscriptsToCaret } from './superscripts'
 
 /**
  * Deterministic grading of a physical quantity: a number *with a unit*.
@@ -57,10 +58,7 @@ const mathUnit = (value: number | string, unitText?: string): Unit =>
 
 /** Typed / pasted unit notation → mathjs syntax. */
 export function normalizeUnitText(text: string): string {
-  return text
-    .replace(/[²]/g, '^2')
-    .replace(/[³]/g, '^3')
-    .replace(/[¹]/g, '^1')
+  return superscriptsToCaret(text, false)
     .replace(/⁻/g, '^-')
     .replace(/\^-\^?(\d)/g, '^-$1')
     .replace(/[·⋅•×]/g, ' ')
@@ -92,7 +90,8 @@ const NUMBER =
 
 /** Split "1.2 × 10^3 kPa" into 1200 and "kPa". */
 export function splitQuantity(input: string): { value: number; unitText: string } | null {
-  const match = NUMBER.exec(input.replace(/，/g, ',').trim())
+  // `1.2×10⁻³ m` → `1.2×10^-3 m` before the number is read.
+  const match = NUMBER.exec(superscriptsToCaret(input.replace(/，/g, ','), false).trim())
   if (!match) return null
   const mantissa = Number(match[1]!.replace(/[\s,]+/g, ''))
   if (!Number.isFinite(mantissa)) return null
@@ -130,9 +129,38 @@ export function compareQuantity(
 
   const target = normalizeUnitText(expectedUnit)
   const convertedValue = actual.toNumber(target)
-  const diff = Math.abs(convertedValue - expectedNumber)
-  const ok = diff <= REL_TOL * Math.max(Math.abs(expectedNumber), 1e-12)
+  const ok = isTemperature(expected)
+    ? temperatureClose(actual, expectedNumber, target)
+    : expectedNumber === 0
+      ? Math.abs(convertedValue) <= ZERO_FLOOR
+      : Math.abs(convertedValue - expectedNumber) <= REL_TOL * Math.abs(expectedNumber)
   return { outcome: ok ? 'correct' : 'wrong-value', isCorrect: ok, convertedValue }
+}
+
+/** An expected 0 accepts float noise from unit conversion, nothing more. */
+const ZERO_FLOOR = 1e-9
+/** Rounding 273.15 K to 273 K (or 0 °C to 32 °F) must still be accepted. */
+const TEMPERATURE_FLOOR_K = 0.5
+
+function isTemperature(unit: Unit): boolean {
+  return unit.equalBase(mathUnit(1, 'K'))
+}
+
+/**
+ * Celsius and Fahrenheit have an offset, so a relative tolerance on 0 °C would
+ * demand a bit-exact answer. Temperatures are compared as absolute values in
+ * K; the tolerance is 1% of the stated value taken as a temperature
+ * difference (25 °C → ±0.25 K), but never less than 0.5 K.
+ */
+function temperatureClose(actual: Unit, expectedNumber: number, target: string): boolean {
+  const actualK = actual.toNumber('K')
+  const expectedK = mathUnit(expectedNumber, target).toNumber('K')
+  const degreeInK = mathUnit(1, target).toNumber('K') - mathUnit(0, target).toNumber('K')
+  const tolerance = Math.max(
+    REL_TOL * Math.abs(expectedNumber) * Math.abs(degreeInK),
+    TEMPERATURE_FLOOR_K,
+  )
+  return Math.abs(actualK - expectedK) <= tolerance
 }
 
 /** How a typed quantity will be read, for a live preview under the field. */

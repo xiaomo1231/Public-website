@@ -47,6 +47,7 @@ export class MistakeRepository {
       studentAnswer: input.studentAnswer,
       correctAnswer: input.correctAnswer,
       ...(input.solution ? { solution: input.solution } : {}),
+      ...(input.sourceRefs?.length ? { sourceRefs: input.sourceRefs } : {}),
       mistakeType: input.mistakeType ?? 'unknown',
       analysisStatus: 'pending',
       status: 'active',

@@ -18,7 +18,7 @@ import type { Subject } from '../project/types'
 import type { PracticeQuestion } from '../practice/types'
 import type { CourseContext } from '../courseContext/types'
 import { logger } from '@/infrastructure/logger/logger'
-import { StorageError } from '@/infrastructure/errors/AppError'
+import { NotFoundError, StorageError } from '@/infrastructure/errors/AppError'
 import { t } from '@/i18n'
 
 /** Provenance recorded alongside a freshly written analysis. */
@@ -412,9 +412,13 @@ export class CourseAnalysisRepository {
           table('examples'),
           table('courseExercises'),
           table('prerequisites'),
+          table('projects'),
           ...(sideWrites ? [table('practiceQuestions'), table('courseContexts')] : []),
         ],
         async () => {
+          // The AI run can take minutes; a project deleted meanwhile must not
+          // get rows written back for it.
+          await this.assertProjectExists(projectId)
           await Promise.all([
             table('topics').where('projectId').equals(projectId).delete(),
             table('concepts').where('projectId').equals(projectId).delete(),
@@ -442,6 +446,7 @@ export class CourseAnalysisRepository {
         },
       )
     } catch (err) {
+      if (err instanceof NotFoundError) throw err
       logger.error('reseedProject failed; the previous analysis was kept', { projectId }, err)
       throw new StorageError(t('storage.failedToClearAnalysis'), err)
     }
@@ -494,9 +499,11 @@ export class CourseAnalysisRepository {
           table('examples'),
           table('courseExercises'),
           table('prerequisites'),
+          table('projects'),
           ...(sideWrites ? [table('practiceQuestions'), table('courseContexts')] : []),
         ],
         async () => {
+          await this.assertProjectExists(projectId)
           for (const update of updates) {
             await table('topics').put(update.topic)
           }
@@ -551,6 +558,7 @@ export class CourseAnalysisRepository {
         },
       )
     } catch (err) {
+      if (err instanceof NotFoundError) throw err
       logger.error('applyTopicUpdates failed; the previous topics were kept', { projectId }, err)
       throw new StorageError(t('storage.failedToClearAnalysis'), err)
     }
@@ -564,12 +572,32 @@ export class CourseAnalysisRepository {
    */
   private async writeSideWrites(sideWrites: AtomicSideWrites | undefined): Promise<void> {
     if (!sideWrites) return
+    // Practice rows were staged before a (possibly long) AI run. Apply only the
+    // relink fields, and only to rows that still exist and still cite the chunk
+    // the plan started from — never resurrect a deleted question or overwrite a
+    // rubric cache / edit written in the meantime.
+    const practice = this.db.table<PracticeQuestion, string>('practiceQuestions')
     for (const question of sideWrites.practiceQuestions ?? []) {
-      await this.db.table('practiceQuestions').put(question)
+      const current = await practice.get(question.id)
+      if (!current) continue
+      if (current.chunkId !== question.chunkId && current.chunkId !== question.previousChunkId) continue
+      await practice.update(question.id, {
+        chunkId: question.chunkId,
+        chunkFingerprint: question.chunkFingerprint,
+        previousChunkId: question.previousChunkId,
+        needsRelink: question.needsRelink,
+        relinkReason: question.relinkReason,
+      })
     }
     if (sideWrites.courseContext) {
       await this.db.table('courseContexts').put(sideWrites.courseContext)
     }
+  }
+
+  /** Inside a transaction that includes `projects`: abort when the project is gone. */
+  private async assertProjectExists(projectId: string): Promise<void> {
+    const project = await this.db.table('projects').get(projectId)
+    if (!project) throw new NotFoundError('Project', projectId)
   }
 
   private async applyDerivedCollection<T extends { id: string; projectId: string; topicIds: string[] }>(

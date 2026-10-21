@@ -54,9 +54,21 @@ export class WalkthroughNoteService {
   }
 
   async create(input: NewWalkthroughNote, now = Date.now()): Promise<WalkthroughNote> {
-    const set = await this.homework.getSet(input.setId)
-    if (!set) throw new NotFoundError('HomeworkSet', input.setId)
     if (input.turns.length === 0) throw new ValidationError(t('walkthroughQA.nothingToSave'))
+    // The set check and the write share one transaction, so a note can never
+    // be saved for an assignment deleted in between.
+    return this.db.transaction('rw', [this.db.homeworkSets, this.db.walkthroughNotes], async () => {
+      const set = await this.homework.getSet(input.setId)
+      if (!set) throw new NotFoundError('HomeworkSet', input.setId)
+      return this.repo.putNote(this.buildNote(set, input, now))
+    })
+  }
+
+  private buildNote(
+    set: { id: string; projectId: string },
+    input: NewWalkthroughNote,
+    now: number,
+  ): WalkthroughNote {
     const turns = input.turns.slice(-MAX_NOTE_TURNS)
     const quote = input.quote.slice(0, MAX_QUOTE)
     const note: WalkthroughNote = {
@@ -75,7 +87,7 @@ export class WalkthroughNoteService {
       createdAt: now,
       updatedAt: now,
     }
-    return this.repo.putNote(note)
+    return note
   }
 
   // Each change reads and writes inside one transaction, so a window move

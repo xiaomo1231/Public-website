@@ -126,3 +126,29 @@ describe('MasteryService', () => {
     expect(found).toBeDefined()
   })
 })
+
+describe('MasteryService review fixes', () => {
+  let db: AppDatabase
+  beforeEach(() => {
+    db = new AppDatabase()
+    setDbForTesting(db)
+  })
+
+  it('does not let unverified answers take up the observation window', async () => {
+    const p = await new ProjectService(db).create({ name: 'P', subject: 'cs' })
+    const svc = new MasteryService(db)
+    await svc.record(attempt(p.id, 'Limits', true))
+    for (let i = 0; i < 45; i++) await svc.record(attempt(p.id, 'Limits', null))
+    const row = await svc.get(p.id, 'Limits')
+    expect(row!.observations).toHaveLength(1)
+    expect(row!.attempts).toBe(1)
+  })
+
+  it('keeps every observation when answers are recorded at the same time', async () => {
+    const p = await new ProjectService(db).create({ name: 'P', subject: 'cs' })
+    const svc = new MasteryService(db)
+    await Promise.all(Array.from({ length: 6 }, (_, i) => svc.record(attempt(p.id, 'Series', i % 2 === 0))))
+    const row = await svc.get(p.id, 'Series')
+    expect(row!.observations).toHaveLength(6)
+  })
+})

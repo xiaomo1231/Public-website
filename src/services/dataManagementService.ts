@@ -130,6 +130,13 @@ export class DataManagementService {
     await db.table('documents').each((doc: { hasBlob?: boolean; sizeBytes?: number }) => {
       if (doc.hasBlob) blobBytes += doc.sizeBytes ?? 0
     })
+    // Page images kept from course files and cached reference images also
+    // occupy storage; count their bytes too.
+    for (const name of ['visualSourceImages', 'referenceImageBlobs']) {
+      await db.table(name).each((row: { bytes?: ArrayBuffer; sizeBytes?: number }) => {
+        blobBytes += row.bytes?.byteLength ?? row.sizeBytes ?? 0
+      })
+    }
     return {
       projects,
       documents,
@@ -248,6 +255,12 @@ export class DataManagementService {
 
     await this.db.transaction('rw', this.db.tables, async () => {
       await projectRepo.get(projectId)
+      // If the selected word book is this course's book, fall back to the default.
+      const courseBooks = await this.db.vocabBooks.where('projectId').equals(projectId).primaryKeys()
+      const profile = await this.db.user.get('singleton')
+      if (profile?.vocabBookId && courseBooks.includes(profile.vocabBookId)) {
+        await this.db.user.put({ ...profile, vocabBookId: '' })
+      }
       await docRepo.deleteByProject(projectId)
       await visualRepo.deleteByProject(projectId)
       await referenceRepo.deleteByProject(projectId)

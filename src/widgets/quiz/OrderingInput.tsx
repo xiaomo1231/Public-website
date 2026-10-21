@@ -1,4 +1,4 @@
-import { useEffect, useState, type DragEvent } from 'react'
+import { useMemo, useState, type DragEvent } from 'react'
 import { ArrowDown, ArrowUp, GripVertical } from 'lucide-react'
 import type { Question } from '@/entities/question/types'
 import { orderingItems, shuffledForDisplay } from '@/services/answerPreview'
@@ -15,21 +15,21 @@ export interface OrderingInputProps {
 
 /**
  * Put items in order by dragging or with the arrow buttons (keyboard and touch
- * friendly). The field starts from a stable shuffle — never the answer — and
+ * friendly). The list starts from a stable shuffle — never the answer — and
  * its value is the items joined by newlines, which is also what is graded and
- * shown in the results.
+ * shown in the results. The shuffle is only shown: the value stays empty until
+ * the student moves an item, so Enter or the submit button cannot hand in the
+ * untouched starting order.
  */
 export function OrderingInput({ question, value, onChange, disabled }: OrderingInputProps): JSX.Element {
   const { t } = useTranslation()
   const [dragIndex, setDragIndex] = useState<number | null>(null)
-  const items = value ? orderingItems(value) : []
-
-  // Start from the shuffled order so the answer field is never empty.
-  useEffect(() => {
-    if (value) return
+  const initial = useMemo(() => {
     const source = question.orderItems?.length ? question.orderItems : orderingItems(question.correctAnswer)
-    onChange(shuffledForDisplay(source, question.id).join('\n'))
-  }, [value, question, onChange])
+    return shuffledForDisplay(source, question.id)
+  }, [question])
+  const touched = Boolean(value)
+  const items = touched ? orderingItems(value) : initial
 
   function move(from: number, to: number) {
     if (disabled || to < 0 || to >= items.length || from === to) return
@@ -88,7 +88,10 @@ export function OrderingInput({ question, value, onChange, disabled }: OrderingI
           </li>
         ))}
       </ol>
-      <p className="text-xs text-muted-foreground">{t('answerInput.orderingHint')}</p>
+      <p className="text-xs text-muted-foreground">
+        {t('answerInput.orderingHint')}
+        {!touched && !disabled ? ` ${t('answerInput.orderingUntouched')}` : ''}
+      </p>
     </div>
   )
 }

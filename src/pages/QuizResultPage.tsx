@@ -88,7 +88,7 @@ export function QuizResultPage(): JSX.Element {
     void (async () => {
       try {
         const [q, qs, at] = await Promise.all([
-          service.getQuiz(quizId),
+          service.getQuiz(quizId, projectId),
           service.getQuestions(quizId),
           service.getAttempts(quizId),
         ])
@@ -105,7 +105,7 @@ export function QuizResultPage(): JSX.Element {
     return () => {
       cancelled = true
     }
-  }, [quizId, service])
+  }, [quizId, projectId, service])
 
   async function generateMore(mode: MoreMode) {
     if (!quizId || !projectId) return

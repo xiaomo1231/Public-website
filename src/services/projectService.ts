@@ -2,12 +2,15 @@ import type { AppDatabase } from '@/infrastructure/db/database'
 import { ProjectRepository } from '@/entities/project/repository'
 import type { CreateProjectInput, Project, UpdateProjectInput } from '@/entities/project/types'
 import { logger } from '@/infrastructure/logger/logger'
+import { DataManagementService } from './dataManagementService'
 
 export class ProjectService {
   private repo: ProjectRepository
+  private db?: AppDatabase
 
   constructor(db?: AppDatabase) {
     this.repo = new ProjectRepository(db)
+    this.db = db
   }
 
   list(): Promise<Project[]> {
@@ -31,8 +34,9 @@ export class ProjectService {
     return this.repo.update(id, patch)
   }
 
+  /** Delete the project and every row that belongs to it, in one transaction. */
   async delete(id: string): Promise<void> {
-    await this.repo.delete(id)
+    await new DataManagementService(this.db).deleteProject(id)
     logger.info('Project removed via service', { id })
   }
 

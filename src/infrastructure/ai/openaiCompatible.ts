@@ -12,6 +12,7 @@ import {
   AIProviderError,
   InvalidJSONError,
   ProviderUnavailableError,
+  RateLimitedError,
   TimeoutError,
   errorFromStatus,
 } from './errors'
@@ -91,6 +92,7 @@ export class OpenAICompatibleProvider implements AIProvider {
       }
       const json = await res.json().catch(() => null)
       if (!json) throw new AIProviderError(t('errors.aiNonJson'), 'INVALID_RESPONSE', res.status)
+      if (hasErrorPayload(json)) throw errorFromPayload(json, res.status)
       const choice = json.choices?.[0]
       const content = choice?.message?.content ?? choice?.delta?.content ?? ''
       const u = json.usage
@@ -149,12 +151,19 @@ export class OpenAICompatibleProvider implements AIProvider {
         return response
       }
       /** Handle one SSE event block; true once the stream says `[DONE]`. */
+      // Raw body kept only until the first SSE event: a provider that answers a
+      // stream request with a plain JSON body (often an error) sends no events.
+      let sawEvent = false
+      let raw = ''
       const handleBlock = (block: string): boolean => {
         const ev = parseBlock(block)
         if (!ev) return false
+        sawEvent = true
         if (ev.data === '[DONE]') return true
         const parsed = safeJSON(ev.data)
         if (!parsed) return false
+        // `data: {"error": …}` — the provider failed mid-stream.
+        if (hasErrorPayload(parsed)) throw errorFromPayload(parsed, res.status)
         const choice = parsed.choices?.[0]
         const delta = choice?.delta?.content ?? choice?.message?.content ?? ''
         if (delta) {
@@ -199,7 +208,9 @@ export class OpenAICompatibleProvider implements AIProvider {
           // Receiving data resets the inactivity window, so a long generation
           // is bounded by silence rather than by total elapsed time.
           budget.touch()
-          buffer += decoder.decode(value, { stream: true })
+          const text = decoder.decode(value, { stream: true })
+          if (!sawEvent && raw.length < MAX_RAW_BODY_CHARS) raw += text
+          buffer += text
           const events = buffer.split(/\r?\n\r?\n/)
           buffer = events.pop() ?? ''
           for (const block of events) {
@@ -209,9 +220,38 @@ export class OpenAICompatibleProvider implements AIProvider {
         // The stream ended: flush the decoder (a multi-byte character may be
         // split across the last chunk) and parse an event that was not
         // followed by a blank line.
-        buffer += decoder.decode()
+        const tail = decoder.decode()
+        if (!sawEvent) raw += tail
+        buffer += tail
         for (const block of buffer.split(/\r?\n\r?\n/)) {
           if (handleBlock(block)) return finish()
+        }
+        if (!sawEvent && raw.trim()) {
+          // Not an event stream: parse the body as one JSON response.
+          let json: unknown
+          try {
+            json = JSON.parse(raw)
+          } catch {
+            throw new AIProviderError(t('errors.aiNonJson'), 'INVALID_RESPONSE', res.status)
+          }
+          if (hasErrorPayload(json)) throw errorFromPayload(json, res.status)
+          const parsed = json as SSEParsed
+          const choice = parsed.choices?.[0]
+          const whole = choice?.message?.content ?? choice?.delta?.content ?? ''
+          if (whole) {
+            content += whole
+            onChunk({ delta: whole, done: false })
+          }
+          const u = parsed.usage
+          if (u) {
+            usage = {
+              promptTokens: u.prompt_tokens ?? 0,
+              completionTokens: u.completion_tokens ?? 0,
+              totalTokens: u.total_tokens ?? 0,
+            }
+          }
+          if (parsed.model) finalModel = parsed.model
+          if (typeof choice?.finish_reason === 'string') finalFinishReason = choice.finish_reason
         }
       } finally {
         try {
@@ -310,7 +350,7 @@ export class OpenAICompatibleProvider implements AIProvider {
       streaming: mode === 'stream',
       durationMs: Date.now() - startedAt,
       errorName: err instanceof Error ? err.name : typeof err,
-      errorMessage: err instanceof Error ? err.message : String(err),
+      errorMessage: sanitizeProviderText(err instanceof Error ? err.message : String(err)),
       code: err instanceof AIProviderError ? err.code : undefined,
       httpStatus: err instanceof AIProviderError ? err.status : undefined,
       aborted: budget.signal.aborted,
@@ -454,6 +494,9 @@ export function redactUrl(url: string): string {
   }
 }
 
+/** Cap on the raw body kept for the non-SSE fallback (a JSON body is small). */
+const MAX_RAW_BODY_CHARS = 2_000_000
+
 function parseBlock(block: string): { data: string } | null {
   const trimmed = block.trim()
   if (!trimmed) return null
@@ -490,18 +533,84 @@ function safeJSON(text: string): SSEParsed | null {
   }
 }
 
+/** Longest provider error text that is ever logged or shown. */
+const MAX_PROVIDER_ERROR_CHARS = 240
+
+/**
+ * Mask anything credential-like in provider-supplied text and cap its length.
+ * Providers sometimes echo the key (or a request header) back in an error, and
+ * that text reaches both the log and the UI.
+ */
+export function sanitizeProviderText(text: string): string {
+  const masked = text
+    .replace(/Bearer\s+[A-Za-z0-9._~+/=-]+/gi, 'Bearer [REDACTED]')
+    .replace(/sk-[A-Za-z0-9_-]{8,}/g, 'sk-[REDACTED]')
+    .replace(
+      /\b(api[_-]?key|access[_-]?key|secret|token|password|authorization)(["']?\s*[:=]\s*["']?)[^\s"',;&]{6,}/gi,
+      '$1$2[REDACTED]',
+    )
+    // Long opaque tokens mixing letters and digits (keys, signed ids).
+    .replace(/(?=[A-Za-z0-9_-]*\d)(?=[A-Za-z0-9_-]*[A-Za-z])\b[A-Za-z0-9_-]{32,}\b/g, '[REDACTED]')
+  return masked.length > MAX_PROVIDER_ERROR_CHARS
+    ? `${masked.slice(0, MAX_PROVIDER_ERROR_CHARS)}…`
+    : masked
+}
+
+/** Pull a human message out of a provider error payload (`{error:{message}}`, …). */
+function providerMessage(json: unknown, fallback: string): string {
+  const root = (json && typeof json === 'object' ? json : {}) as Record<string, unknown>
+  const error = root.error
+  const candidate =
+    error && typeof error === 'object'
+      ? (error as Record<string, unknown>).message
+      : (error ?? root.message)
+  return typeof candidate === 'string' && candidate.trim() ? candidate : fallback
+}
+
 async function safeReadError(res: Response): Promise<string | undefined> {
   try {
     const text = await res.text()
+    let message = text
     try {
-      const json = JSON.parse(text)
-      return json.error?.message ?? json.message ?? text
+      message = providerMessage(JSON.parse(text), text)
     } catch {
-      return text.slice(0, 240)
+      /* not JSON — keep the raw text */
     }
+    const clean = sanitizeProviderText(message.trim())
+    return clean || undefined
   } catch {
     return undefined
   }
+}
+
+/**
+ * A provider that fails *inside* a 200 response (an SSE `{"error":…}` event, or
+ * a JSON error body) — map it to the same typed errors as an HTTP failure.
+ */
+function errorFromPayload(json: unknown, httpStatus: number): AIProviderError {
+  const root = (json && typeof json === 'object' ? json : {}) as Record<string, unknown>
+  const error = (root.error && typeof root.error === 'object' ? root.error : root) as Record<
+    string,
+    unknown
+  >
+  const message = sanitizeProviderText(providerMessage(json, '').trim()) || undefined
+  const numeric = [error.status, error.code, error.http_status, root.status]
+    .map((value) => Number(value))
+    .find((value) => Number.isInteger(value) && value >= 400 && value < 600)
+  if (numeric !== undefined) return errorFromStatus(numeric, message)
+  const hint = `${String(error.type ?? '')} ${String(error.code ?? '')}`
+  if (/rate.?limit|too.?many/i.test(hint) && !/quota|insufficient|balance/i.test(hint)) {
+    return new RateLimitedError(message)
+  }
+  if (/auth|api.?key|permission/i.test(hint)) return errorFromStatus(401, message)
+  if (/server|overload|unavailable/i.test(hint)) return new ProviderUnavailableError(message)
+  return errorFromStatus(httpStatus >= 400 ? httpStatus : 400, message)
+}
+
+function hasErrorPayload(json: unknown): boolean {
+  if (!json || typeof json !== 'object') return false
+  const root = json as Record<string, unknown>
+  return root.error !== undefined && root.error !== null && !Array.isArray(root.choices)
 }
 
 /**

@@ -2,3 +2,5 @@ node_modules
 dist
 coverage
 *.min.js
+public/vocab
+.claude

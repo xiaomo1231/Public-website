@@ -292,4 +292,23 @@ describe('MistakeService + QuizService integration', () => {
     expect(rows[0]!.question).toBe('Derivative of x^2 at x=3')
     expect(rows[0]!.studentAnswer).toBe('5')
   })
+
+  it('shows the latest remaining wrong answer after a disputed occurrence is removed', async () => {
+    const service = new MistakeService(db)
+    const p = await new ProjectService(db).create({ name: 'P', subject: 'calculus' })
+    const [q] = await new QuestionRepository(db).addMany([
+      { projectId: p.id, knowledgePoint: 'Chain Rule', type: 'numeric', difficulty: 'basic', prompt: 'Q', correctAnswer: '1', hints: [] },
+    ])
+    const first = { ...makeAttempt(p.id, q!.id, false, { userAnswer: 'first wrong' }), createdAt: 1000 }
+    const second = { ...makeAttempt(p.id, q!.id, false, { userAnswer: 'disputed answer' }), createdAt: 2000 }
+    await db.questionAttempts.bulkAdd([first, second])
+    await service.recordFromAttempt(first, q!)
+    await service.recordFromAttempt(second, q!)
+    expect((await service.list(p.id))[0]!.studentAnswer).toBe('disputed answer')
+
+    await service.removeAttempt(p.id, q!.id, second.id)
+    const [row] = await service.list(p.id)
+    expect(row!.attemptIds).toEqual([first.id])
+    expect(row!.studentAnswer).toBe('first wrong')
+  })
 })

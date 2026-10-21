@@ -1,5 +1,6 @@
 import { OperatorNode, parse, rationalize, simplify, type MathNode } from 'mathjs'
 import { t } from '@/i18n'
+import { superscriptsToCaret } from './superscripts'
 
 /**
  * Deterministic mathematical-expression equivalence.
@@ -18,26 +19,10 @@ import { t } from '@/i18n'
  */
 export type EquivalenceResult = true | false | null
 
-const SUPERSCRIPTS: Record<string, string> = {
-  '⁰': '^0',
-  '¹': '^1',
-  '²': '^2',
-  '³': '^3',
-  '⁴': '^4',
-  '⁵': '^5',
-  '⁶': '^6',
-  '⁷': '^7',
-  '⁸': '^8',
-  '⁹': '^9',
-}
-
 /** Normalise a human-typed expression into mathjs-friendly syntax. */
 export function normalizeExpression(input: string): string {
-  let s = input.trim()
-  // Unicode superscripts → caret notation
-  for (const [sup, caret] of Object.entries(SUPERSCRIPTS)) {
-    s = s.split(sup).join(caret)
-  }
+  // Unicode superscripts → caret notation (`x⁻¹` → `x^(-1)`)
+  let s = superscriptsToCaret(input.trim())
   s = s
     .replace(/[×⋅∗]/g, '*')
     .replace(/[÷]/g, '/')
@@ -48,9 +33,47 @@ export function normalizeExpression(input: string): string {
     .replace(/≤/g, '<=')
     .replace(/≥/g, '>=')
     .replace(/≠/g, '!=')
+    // mathjs `log` is the natural logarithm
+    .replace(/\bln\s*\(/g, 'log(')
     .replace(/\s+/g, ' ')
     .trim()
-  return s
+  return absoluteBars(s)
+}
+
+const OPERAND_END = /[A-Za-z0-9_.)\]]/
+const OPERAND_START = /[A-Za-z0-9_.([]/
+
+/**
+ * `|x - 1|` → `abs(x - 1)`. Bars are paired left to right: a bar after an
+ * operand closes the innermost open bar, any other bar opens one. A bar that
+ * sits between two operands while one is open (`|a|b|c|`) could be read either
+ * way, so the input is returned unchanged rather than guessed.
+ */
+function absoluteBars(input: string): string {
+  if (!input.includes('|')) return input
+  let out = ''
+  let open = 0
+  for (let i = 0; i < input.length; i++) {
+    const ch = input[i]!
+    if (ch !== '|') {
+      out += ch
+      continue
+    }
+    const before = out.trimEnd().slice(-1)
+    const after = input
+      .slice(i + 1)
+      .trimStart()
+      .charAt(0)
+    if (open > 0 && OPERAND_END.test(before)) {
+      if (OPERAND_START.test(after) || after === '|') return input
+      out += ')'
+      open--
+    } else {
+      out += 'abs('
+      open++
+    }
+  }
+  return open === 0 ? out : input
 }
 
 /**
@@ -89,15 +112,22 @@ function trailingConstant(expr: string, letters: string): { expr: string; symbol
 function stripConstantsForCompare(
   user: string,
   expected: string,
-): { user: string; expected: string; stripped: boolean } {
+): { user: string; expected: string; stripped: boolean; antiderivative: boolean } {
   const reference = trailingConstant(expected, 'C')
   if (reference) {
     const own = trailingConstant(user, 'cCkK')
-    return { user: own ? own.expr : user, expected: reference.expr, stripped: true }
+    return {
+      user: own ? own.expr : user,
+      expected: reference.expr,
+      stripped: true,
+      antiderivative: true,
+    }
   }
   const own = trailingConstant(user, 'C')
-  if (own && !usesSymbol(expected, 'C')) return { user: own.expr, expected, stripped: true }
-  return { user, expected, stripped: false }
+  if (own && !usesSymbol(expected, 'C')) {
+    return { user: own.expr, expected, stripped: true, antiderivative: false }
+  }
+  return { user, expected, stripped: false, antiderivative: false }
 }
 
 /** Split an equation `lhs = rhs` into its two sides, if present. */
@@ -118,6 +148,23 @@ function approxEqual(a: number, b: number, relTol = 1e-6, absTol = 1e-9): boolea
   if (!Number.isFinite(a) || !Number.isFinite(b)) return a === b
   const diff = Math.abs(a - b)
   return diff <= absTol || diff <= relTol * Math.max(Math.abs(a), Math.abs(b))
+}
+
+/** Below this, a value compared with an exact 0 counts as floating-point noise. */
+const ZERO_FLOOR = 1e-12
+
+/**
+ * Purely relative comparison for plain numbers: `1.6e-19` and `3.2e-19` differ
+ * even though both are tiny. The absolute floor only applies when one side is
+ * exactly 0 (so `sin(pi)` still equals 0).
+ */
+function relativelyEqual(a: number, b: number, relTol = 1e-6): boolean {
+  if (Number.isNaN(a) || Number.isNaN(b)) return false
+  if (!Number.isFinite(a) || !Number.isFinite(b)) return a === b
+  if (a === b) return true
+  const diff = Math.abs(a - b)
+  if (a === 0 || b === 0) return diff <= ZERO_FLOOR
+  return diff <= relTol * Math.max(Math.abs(a), Math.abs(b))
 }
 
 const KNOWN_CONSTANTS = new Set(['pi', 'e', 'i', 'Infinity', 'true', 'false', 'null', 'NaN'])
@@ -179,7 +226,8 @@ function numericEqual(a: MathNode, b: MathNode, vars: string[], samples = 16): E
       if (typeof va !== 'number' || typeof vb !== 'number') continue
       if (Number.isNaN(va) || Number.isNaN(vb)) continue
       successes++
-      if (!approxEqual(va, vb)) return false
+      const same = vars.length === 0 ? relativelyEqual(va, vb) : approxEqual(va, vb)
+      if (!same) return false
     } catch {
       // Domain error at this sample (e.g. sqrt of negative); skip.
       continue
@@ -187,6 +235,45 @@ function numericEqual(a: MathNode, b: MathNode, vars: string[], samples = 16): E
   }
   if (successes === 0) return null
   return vars.length === 0 ? true : null
+}
+
+/**
+ * Antiderivatives may differ by a constant (`sin(x)^2/2` vs `-cos(x)^2/2`).
+ * true when `a - b` simplifies to a constant or takes the same value at every
+ * sample; false when the difference clearly varies; null when too few samples
+ * could be evaluated.
+ */
+function differByConstant(a: MathNode, b: MathNode, vars: string[]): EquivalenceResult {
+  try {
+    const diff = simplify(new OperatorNode('-', 'subtract', [a, b]))
+    if (freeVariables(diff).length === 0) {
+      const value = diff.evaluate()
+      if (typeof value === 'number' && Number.isFinite(value)) return true
+    }
+  } catch {
+    // Fall through to sampling.
+  }
+  const sampleValues = [-11, -5, -2, -1, -0.5, 0.25, 1, 2, 3, 5, 8, 13, 21, 34, 55, 89]
+  const diffs: Array<{ d: number; scale: number }> = []
+  for (let i = 0; i < sampleValues.length; i++) {
+    const scope: Record<string, number> = {}
+    for (const [index, v] of vars.entries()) {
+      scope[v] = sampleValues[(i + index * 5) % sampleValues.length]!
+    }
+    try {
+      const va = a.evaluate(scope)
+      const vb = b.evaluate(scope)
+      if (typeof va !== 'number' || typeof vb !== 'number') continue
+      if (!Number.isFinite(va) || !Number.isFinite(vb)) continue
+      diffs.push({ d: va - vb, scale: Math.max(Math.abs(va), Math.abs(vb), 1) })
+    } catch {
+      continue
+    }
+  }
+  if (diffs.length < 4) return null
+  const first = diffs[0]!.d
+  const constant = diffs.every(({ d, scale }) => Math.abs(d - first) <= 1e-6 * scale)
+  return constant ? true : false
 }
 
 /** Compare two already-parsed nodes. */
@@ -271,7 +358,14 @@ export function compareMath(userAnswer: string, expectedAnswer: string): MathCom
   try {
     const ua = parse(userForCompare)
     const ea = parse(expectedForCompare)
-    const equivalent = nodesEquivalent(ua, ea)
+    let equivalent = nodesEquivalent(ua, ea)
+    if (equivalent !== true && constants.antiderivative) {
+      const vars = Array.from(new Set([...freeVariables(ua), ...freeVariables(ea)]))
+      const shifted = differByConstant(ua, ea, vars)
+      // A varying difference is only decisive when sampling also said "different".
+      equivalent =
+        shifted === true ? true : equivalent === false && shifted === false ? false : null
+    }
     const out: MathComparison = { equivalent, normalizedUser: userNorm, normalizedExpected: expectedNorm }
     if (constantNote) out.note = constantNote
     if (equivalent === null) out.note = t('evalNote.unverified')
@@ -315,11 +409,11 @@ export function numericEquivalent(userAnswer: string, expectedAnswer: string, re
   if (u === e) return true
   const diff = Math.abs(u - e)
   // Purely relative (like `compareQuantity`): a small expected value such as
-  // 1.8e-5 must not accept 0. The tiny absolute floor only absorbs float noise.
-  return diff <= Math.max(relTol * Math.abs(e), NUMERIC_ABS_FLOOR)
+  // 1.8e-5 must not accept 0, and 1.6e-19 must not accept 3.2e-19. The tiny
+  // absolute floor only absorbs float noise around an expected 0.
+  if (e === 0) return diff <= ZERO_FLOOR
+  return diff <= relTol * Math.abs(e)
 }
-
-const NUMERIC_ABS_FLOOR = 1e-12
 
 /** How a typed expression will be read, for a live preview under the field. */
 export type ExpressionPreview =

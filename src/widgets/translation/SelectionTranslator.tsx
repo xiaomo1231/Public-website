@@ -79,9 +79,26 @@ function translateFor(position: Pick<PopupPosition, 'left' | 'top'>): string {
   return `translate3d(${position.left}px, ${position.top}px, 0)`
 }
 
-/** Identity of a selected range, to ignore repeated events for the same selection. */
+const nodeIds = new WeakMap<Node, number>()
+let nextNodeId = 1
+
+/** A stable per-node number, so equal text in different places gets different keys. */
+function nodeId(node: Node): number {
+  let id = nodeIds.get(node)
+  if (id === undefined) {
+    id = nextNodeId++
+    nodeIds.set(node, id)
+  }
+  return id
+}
+
+/**
+ * Identity of a selected range, to ignore repeated events for the same
+ * selection. Includes the boundary nodes: selecting the same text elsewhere
+ * must re-anchor the popup.
+ */
 function selectionKey(range: Range, text: string): string {
-  return `${range.startOffset}:${range.endOffset}:${text}`
+  return `${nodeId(range.startContainer)}:${range.startOffset}:${nodeId(range.endContainer)}:${range.endOffset}:${text}`
 }
 
 /** The current visual viewport, falling back to the layout viewport. */

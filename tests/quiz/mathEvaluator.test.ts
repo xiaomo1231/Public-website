@@ -186,3 +186,38 @@ describe('helpers', () => {
     expect(splitEquation('no equals')).toBeNull()
   })
 })
+
+describe('review fixes', () => {
+  it('accepts antiderivatives that differ by a constant when the reference has + C', () => {
+    expect(compareMath('sin(x)^2/2 + C', '-cos(x)^2/2 + C').equivalent).toBe(true)
+    expect(compareMath('x^2/2 + 5', 'x^2/2 + C').equivalent).toBe(true)
+    // A real difference in the variable part is still wrong.
+    expect(compareMath('x^3/3 + C', 'x^2/2 + C').equivalent).toBe(false)
+    // Without + C in the reference a shifted answer stays wrong.
+    expect(compareMath('x^2 + 1', 'x^2').equivalent).toBe(false)
+  })
+
+  it('reads superscript signs as one exponent', () => {
+    expect(normalizeExpression('x⁻¹')).toBe('x^(-1)')
+    expect(normalizeExpression('1.2×10⁻³')).toBe('1.2*10^(-3)')
+    expect(compareMath('x⁻¹', '1/x').equivalent).toBe(true)
+    expect(compareMath('1.2×10⁻³', '0.0012').equivalent).toBe(true)
+  })
+
+  it('reads ln as the natural log and |…| as abs', () => {
+    expect(normalizeExpression('ln(x) + |x - 1|')).toBe('log(x) + abs(x - 1)')
+    expect(normalizeExpression('||x|-1|')).toBe('abs(abs(x)-1)')
+    expect(compareMath('ln(e^2)', '2').equivalent).toBe(true)
+    expect(compareMath('|-3|', '3').equivalent).toBe(true)
+    // Ambiguous bars are left as typed (not guessed).
+    expect(normalizeExpression('|a|b|c|')).toBe('|a|b|c|')
+  })
+
+  it('compares plain numbers relatively, even when tiny', () => {
+    expect(compareMath('1.6e-19', '3.2e-19').equivalent).toBe(false)
+    expect(compareMath('1.6e-19', '1.6e-19 * 1').equivalent).toBe(true)
+    expect(compareMath('sin(pi)', '0').equivalent).toBe(true)
+    expect(numericEquivalent('1.6e-19', '3.2e-19')).toBe(false)
+    expect(numericEquivalent('1.6e-19', '1.605e-19')).toBe(true)
+  })
+})

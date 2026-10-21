@@ -6,19 +6,29 @@
 >
 > Only facts verified by the code and tests are stated here. Planned work is
 > marked **(planned)** and is not implemented.
+>
+> The storage / appearance facts below are current as of **V0.7.0** plus the
+> unreleased interface-style work. Feature sections from V0.3.9 onward
+> (subject profiles, science / medical figures, review cards, vocabulary,
+> homework walkthrough) are documented only in `AGENTS.md` §5–§9, which is the
+> authoritative project memory.
 
-## Current implementation (V0.3.4)
+## Current implementation (V0.7.0 storage facts; feature sections up to V0.3.4)
 
 ### Storage — current truth
 
 - **All structured data and raw file bytes live in IndexedDB (Dexie)**, schema
-  **v11**, **33 tables**. Raw file bytes are stored in `documentBlobs.bytes`
+  **v17**, **45 tables**. Raw file bytes are stored in `documentBlobs.bytes`
   (`ArrayBuffer`).
 - `src/infrastructure/opfs/opfs.ts` is an **unwired optional fast path** (no
   import anywhere in the project); it is **not** the current storage. The Phase 0
   OPFS diagram further down is historical.
-- `localStorage` holds only the UI-language mirror (`ai-learning:ui-language`).
-  Appearance preferences (mode + color theme) live in `UserProfile`.
+- `localStorage` holds only the UI-language mirror (`ai-learning:ui-language`)
+  and the per-mode symbol-keyboard open state (`ai-learning:symbol-bar:<mode>`).
+  Appearance preferences live in `UserProfile` as three independent
+  dimensions: mode (`theme`: light / dark / system), color theme
+  (`colorTheme`) and interface style (`uiStyle`: `lecture` default / `lab`).
+  None of them invalidates AI caches.
 
 ### Layers
 

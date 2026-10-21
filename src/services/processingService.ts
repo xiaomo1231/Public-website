@@ -71,6 +71,13 @@ const defaultPageImageRenderer: PageImageRenderer = async (input) => {
 /** A page whose extracted text is shorter than this is treated as figure-dominant. */
 const FIGURE_PAGE_MAX_CHARS = 40
 
+/** Sentinel: the document vanished before its results were committed. */
+class DocumentDeletedDuringProcessing extends AppError {
+  constructor() {
+    super('Document was deleted during processing', 'DOCUMENT_DELETED')
+  }
+}
+
 export class ProcessingService {
   private db: AppDatabase
   private documents: DocumentRepository
@@ -193,6 +200,9 @@ export class ProcessingService {
         this.db.documents,
         this.db.processingJobs,
       ], async () => {
+        // The document may have been deleted while it was being extracted.
+        // Writing now would leave orphan chunks / figures / structure behind.
+        if (!(await this.db.documents.get(document.id))) throw new DocumentDeletedDuringProcessing()
         await this.chunks.deleteByDocument(document.id)
         await this.chunks.addPrepared(storedChunks)
         if (prepared) {
@@ -218,6 +228,13 @@ export class ProcessingService {
       onProgress?.({ stage: 'done', progress: 100 })
       logger.info('Document processed', { id: document.id, chunks: newChunks.length })
     } catch (err) {
+      if (err instanceof DocumentDeletedDuringProcessing) {
+        // Nothing was written (the transaction aborted); there is no document
+        // left to mark as failed.
+        logger.info('Document deleted during processing; results discarded', { id: document.id })
+        await this.jobs.update(jobId, { stage: 'failed', progress: 100, errorMessage: err.message, finishedAt: Date.now() }).catch(() => undefined)
+        return
+      }
       // The commit is one transaction, so a full quota leaves the previous
       // chunks in place; tell the user what to do instead of a raw DOM error.
       const quotaFull = isQuotaError(err)

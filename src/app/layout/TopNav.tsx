@@ -17,11 +17,18 @@ export function TopNav(): JSX.Element {
   // so the bar never overlaps content and a backdrop blur would cost for nothing.
   return (
     <header className="flex h-14 shrink-0 items-center gap-4 border-b bg-background px-4 sm:px-6 lg:px-8">
-      <NavLink to="/dashboard" className="focus-ring flex shrink-0 items-center gap-2.5 rounded-md">
+      <NavLink
+        to="/dashboard"
+        aria-label={t('app.name')}
+        className="focus-ring flex shrink-0 items-center gap-2.5 rounded-md"
+      >
         <span aria-hidden className="font-heading text-lg font-bold leading-none text-foreground">
           学
         </span>
-        <span className="hidden whitespace-nowrap text-sm font-semibold text-foreground lg:inline">
+        <span
+          aria-hidden
+          className="hidden whitespace-nowrap text-sm font-semibold text-foreground lg:inline"
+        >
           {t('app.name')}
         </span>
       </NavLink>

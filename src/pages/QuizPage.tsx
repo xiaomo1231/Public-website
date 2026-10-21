@@ -44,7 +44,7 @@ export function QuizPage(): JSX.Element {
     let cancelled = false
     void (async () => {
       try {
-        const q = await service.getQuiz(quizId)
+        const q = await service.getQuiz(quizId, projectId)
         const qs = await service.getQuestions(quizId)
         const attempts = q.status === 'completed' ? [] : await service.getAttempts(quizId)
         if (cancelled) return
@@ -199,10 +199,11 @@ export function QuizPage(): JSX.Element {
                   key={question.id}
                   className={cn(
                     'h-1 transition-colors duration-200 ease-out',
-                    i === index && !answeredIds.has(question.id)
+                    // Answered is neutral: the tick shows progress, not correctness.
+                    i === index
                       ? 'bg-primary'
                       : answeredIds.has(question.id)
-                        ? 'bg-emerald-600 dark:bg-emerald-500'
+                        ? 'bg-foreground/60'
                         : 'bg-border',
                   )}
                 />

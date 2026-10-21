@@ -1,16 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { cn, clamp, formatDate, formatDateTime, relativeTime } from '@/shared/lib/utils'
+import { cn, formatDate, formatDateTime, relativeTime } from '@/shared/lib/utils'
 
 describe('utils', () => {
   it('cn merges tailwind classes with conflicts resolved', () => {
     expect(cn('p-2', 'p-4')).toBe('p-4')
     expect(cn('text-sm', 'font-bold')).toBe('text-sm font-bold')
-  })
-
-  it('clamp keeps value within bounds', () => {
-    expect(clamp(5, 0, 10)).toBe(5)
-    expect(clamp(-1, 0, 10)).toBe(0)
-    expect(clamp(11, 0, 10)).toBe(10)
   })
 
   it('formats dates for the given locale', () => {

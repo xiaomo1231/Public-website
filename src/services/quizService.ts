@@ -191,6 +191,27 @@ function normalizeOptionSet(value: unknown): Array<{ label: string; isCorrect: b
   return options.length >= 2 && options.length <= 6 ? options : null
 }
 
+/**
+ * The adaptive model's view of a quiz's attempts. A disputed judgement no
+ * longer counts, so it reads as unverified (null) and moves nothing.
+ */
+export function adaptiveHistory(history: QuestionAttempt[]): {
+  recentResults: Array<{ isCorrect: boolean | null; difficulty: DifficultyLevel }>
+  streaks: { consecutiveCorrect: number; consecutiveWrong: number }
+} {
+  const counted = (a: QuestionAttempt) => (a.evaluation.disputed ? null : a.evaluation.isCorrect)
+  return {
+    recentResults: history.map((a) => ({
+      isCorrect: counted(a),
+      difficulty: a.difficulty as DifficultyLevel,
+    })),
+    streaks: history.reduce(
+      (acc, a) => nextStreaks(counted(a), acc.consecutiveCorrect, acc.consecutiveWrong),
+      { consecutiveCorrect: 0, consecutiveWrong: 0 },
+    ),
+  }
+}
+
 /** How much of a chunk to show when the model's quote cannot be verified. */
 const SOURCE_EXCERPT_CHARS = 320
 
@@ -284,9 +305,15 @@ export class QuizService {
     this.ai = deps.ai
   }
 
-  async getQuiz(id: string): Promise<Quiz> {
+  /**
+   * Load a quiz. With `projectId`, a quiz from another course is reported
+   * as not found, so a URL cannot open one project's quiz under another.
+   */
+  async getQuiz(id: string, projectId?: string): Promise<Quiz> {
     const quiz = await this.quizzes.get(id)
-    if (!quiz) throw new AppError(t('errors.quizNotFound'), 'NOT_FOUND')
+    if (!quiz || (projectId !== undefined && quiz.projectId !== projectId)) {
+      throw new AppError(t('errors.quizNotFound'), 'NOT_FOUND')
+    }
     return quiz
   }
 
@@ -423,7 +450,8 @@ export class QuizService {
           return {
           projectId,
           ...(topicId ? { topicId } : {}),
-          knowledgePoint: q.knowledgePoint || fallbackPoint || topicName,
+          knowledgePoint:
+            q.knowledgePoint || fallbackPoint || topic?.name || config.topicName || 'General',
           // The question's own (validated) type: a dropped question must never
           // shift the types of the ones after it.
           type: q.type,
@@ -688,13 +716,21 @@ export class QuizService {
           continue
         }
         options = parsed
-        // Grading matches `correctAnswer` against an option, so it must name
-        // one. If the model only flagged an option, adopt that label.
-        if (!parsed.some((o) => o.label === correctAnswer)) {
-          const flagged = parsed.find((o) => o.isCorrect)
-          if (!flagged) continue
-          correctAnswer = flagged.label
+        // The stored answer is the option flagged correct (exactly one, see
+        // normalizeChoiceOptions). When the model's answer text names a
+        // *different* option, the two disagree and the question is dropped
+        // rather than guessing which one is right.
+        const flagged = parsed.find((o) => o.isCorrect)
+        if (!flagged) continue
+        if (
+          correctAnswer &&
+          correctAnswer !== flagged.label &&
+          parsed.some((o) => o.label === correctAnswer)
+        ) {
+          logger.debug('Dropped a choice question whose answer text and flagged option disagree')
+          continue
         }
+        correctAnswer = flagged.label
       }
 
       // Numeric: a unit is kept only when it is a real, convertible unit and
@@ -801,7 +837,9 @@ export class QuizService {
         ...(matchItems ? { matchItems } : {}),
         ...(blanks ? { blanks } : {}),
         solution: typeof q.solution === 'string' ? q.solution : '',
-        knowledgePoint: typeof q.knowledgePoint === 'string' && q.knowledgePoint.trim() ? q.knowledgePoint.trim() : 'General',
+        // Empty when the model gave none: the caller resolves it from the
+        // question's group / topic, with 'General' only as the last resort.
+        knowledgePoint: typeof q.knowledgePoint === 'string' ? q.knowledgePoint.trim() : '',
         difficulty: (q.difficulty ?? 'basic') as DifficultyLevel,
         hints: Array.isArray(q.hints) ? q.hints.filter((h): h is string => typeof h === 'string') : [],
         // Citation hints from the model — resolved against local chunks later.
@@ -914,14 +952,7 @@ export class QuizService {
 
     // Adaptive adjustment for the *next* question.
     const history = await this.attempts.listByQuiz(quizId)
-    const recentResults = history.map((a) => ({
-      isCorrect: a.evaluation.isCorrect,
-      difficulty: a.difficulty as DifficultyLevel,
-    }))
-    const streaks = history.reduce(
-      (acc, a) => nextStreaks(a.evaluation.isCorrect, acc.consecutiveCorrect, acc.consecutiveWrong),
-      { consecutiveCorrect: 0, consecutiveWrong: 0 },
-    )
+    const { recentResults, streaks } = adaptiveHistory(history)
     const masteryRow = await this.mastery.get(quiz.projectId, question.knowledgePoint)
     const decision = decideNextDifficulty({
       currentDifficulty: question.difficulty,

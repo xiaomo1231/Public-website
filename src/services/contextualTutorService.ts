@@ -40,7 +40,7 @@ export interface ContextualTutorAnswer {
 const inFlight = new Map<string, Promise<ContextualTutorAnswer>>()
 
 function keyOf(input: ContextualTutorInput): string {
-  return [input.projectId, input.topicId ?? '', input.contextKind ?? 'lesson', input.selectedText, input.surroundingContext, fnv1a(JSON.stringify(input.history ?? [])), input.question].join('\u0000')
+  return [input.projectId, input.topicId ?? '', input.contextKind ?? 'lesson', input.language, input.topicTitle ?? '', input.sectionHeading ?? '', input.selectedText, input.surroundingContext, fnv1a(JSON.stringify(input.history ?? [])), input.question].join('\u0000')
 }
 
 /**

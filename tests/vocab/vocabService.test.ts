@@ -96,6 +96,12 @@ describe('daily session', () => {
     expect(await service.mistakes()).toEqual([])
   })
 
+  it('does not put a near miss (one letter off, rated 2) on the mistake list', async () => {
+    await service.grade('abandon', 3, 'learn', { now: NOW, bookId: 'exam:cet4' })
+    await service.grade('abandon', 2, 'spell', { now: NOW + DAY, correct: false })
+    expect(await service.mistakes()).toEqual([])
+  })
+
   it('reports the streak, today’s work and the coming due dates', async () => {
     await service.updateSettings({ bookId: 'exam:cet4' })
     await service.grade('abandon', 3, 'learn', { now: NOW - DAY * 2 })

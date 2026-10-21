@@ -184,7 +184,7 @@ function KeyboardHint({ keys }: { keys: string }): JSX.Element {
   )
 }
 
-export function EvaluationBox({ evaluation }: { evaluation: QuestionEvaluation }): JSX.Element {
+function EvaluationBox({ evaluation }: { evaluation: QuestionEvaluation }): JSX.Element {
   const { t } = useTranslation()
   const isCorrect = evaluation.isCorrect
   const tone =

@@ -61,7 +61,7 @@ export function CourseFigures({
           },
           {
             label: t('projectDetail.fig.mastery'),
-            value: mastery ? mastery.average.toFixed(2) : null,
+            value: mastery ? `${Math.round(mastery.average * 100)}%` : null,
             sub: masterySub,
             ratio: mastery?.average,
           },

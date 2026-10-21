@@ -13,6 +13,7 @@ export type AIErrorCode =
   | 'AUTH_FAILED'
   | 'RATE_LIMITED'
   | 'QUOTA_EXCEEDED'
+  | 'ENDPOINT_NOT_FOUND'
   | 'CONTEXT_TOO_LONG'
   | 'OUTPUT_LIMIT'
   | 'TIMEOUT'
@@ -65,6 +66,16 @@ export class TimeoutError extends AIProviderError {
 export class QuotaExceededError extends AIProviderError {
   constructor(message = t('errors.aiQuotaExceeded')) {
     super(message, 'QUOTA_EXCEEDED', 429)
+  }
+}
+
+/**
+ * HTTP 404: the base URL points at the wrong path, or the model does not
+ * exist. A configuration problem — retrying cannot help.
+ */
+export class EndpointNotFoundError extends AIProviderError {
+  constructor(message = t('errors.aiEndpointNotFound')) {
+    super(message, 'ENDPOINT_NOT_FOUND', 404)
   }
 }
 
@@ -147,11 +158,18 @@ export function errorFromStatus(status: number, message?: string): AIProviderErr
     return QUOTA_HINTS.test(text) ? new QuotaExceededError(text) : new RateLimitedError(text)
   }
   if (status === 408) return new TimeoutError(0)
+  // 402 Payment Required is always an exhausted account.
+  if (status === 402) return new QuotaExceededError(message ? text : undefined)
+  // The provider's own 404 body is usually an HTML page or a bare "Not Found";
+  // the typed message tells the student what to check instead.
+  if (status === 404) return new EndpointNotFoundError()
   // 4xx request errors carry the provider's explanation; classify the ones the
   // caller can actually act on instead of a blanket "invalid request".
   if (status >= 400 && status < 500) {
     if (CONTEXT_HINTS.test(text)) return new ContextTooLongError(text)
     if (OUTPUT_LIMIT_HINTS.test(text)) return new OutputLimitError(text)
+    // Some providers report an empty balance as 400 / 403-ish request errors.
+    if (QUOTA_HINTS.test(text)) return new QuotaExceededError(text)
     return new AIProviderError(text, 'INVALID_REQUEST', status)
   }
   if (status >= 500) return new ProviderUnavailableError(text)

@@ -176,7 +176,13 @@ export class DocumentService {
       async () => {
         const work = await this.studentWorkFor(id)
         if (work.homeworkAnswers > 0 || work.practiceAttempts > 0) {
-          throw new AppError(t('files.deleteBlockedBody'), 'FILE_IN_USE')
+          const described = [
+            work.homeworkAnswers > 0 ? t('files.deleteBlockedHomework') : null,
+            work.practiceAttempts > 0 ? t('files.deleteBlockedPractice') : null,
+          ]
+            .filter(Boolean)
+            .join(' · ')
+          throw new AppError(t('files.deleteBlockedBody', { work: described }), 'FILE_IN_USE')
         }
         await this.homework.deleteByDocument(id)
         await this.practice.deleteByDocument(id)

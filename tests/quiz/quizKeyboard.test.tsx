@@ -199,3 +199,35 @@ describe('quiz keyboard', () => {
     expect(screen.queryByTestId('quiz-keyboard-hint')).toBeNull()
   })
 })
+
+describe('ordering and held keys', () => {
+  const steps = ['Transcription', 'mRNA processing', 'Export', 'Translation']
+  const ordering = () =>
+    question({ type: 'ordering', options: undefined, correctAnswer: steps.join('\n'), orderItems: steps })
+
+  it('does not submit the untouched starting order', () => {
+    const onSubmit = vi.fn()
+    const onChange = vi.fn()
+    render(<Harness q={ordering()} onSubmit={onSubmit} onChange={onChange} />)
+    // The shuffled list is shown, but nothing is answered until an item moves.
+    expect(onChange).not.toHaveBeenCalled()
+    fireEvent.keyDown(document.body, { key: 'Enter' })
+    expect(onSubmit).not.toHaveBeenCalled()
+    expect(screen.getByRole('button', { name: /submit/i })).toBeDisabled()
+
+    fireEvent.click(screen.getAllByRole('button', { name: /down/i })[0]!)
+    expect(onChange).toHaveBeenCalledTimes(1)
+    fireEvent.keyDown(document.body, { key: 'Enter' })
+    expect(onSubmit).toHaveBeenCalledTimes(1)
+  })
+
+  it('ignores a held-down (repeating) Enter', () => {
+    const onSubmit = vi.fn()
+    render(<Harness q={question()} onSubmit={onSubmit} />)
+    fireEvent.keyDown(document.body, { key: 'a' })
+    fireEvent.keyDown(document.body, { key: 'Enter', repeat: true })
+    expect(onSubmit).not.toHaveBeenCalled()
+    fireEvent.keyDown(document.body, { key: 'Enter' })
+    expect(onSubmit).toHaveBeenCalledTimes(1)
+  })
+})

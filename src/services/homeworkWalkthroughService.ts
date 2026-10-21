@@ -39,6 +39,8 @@ const SECTION_CONCURRENCY = 2
 const SECTION_DEADLINE_MS = 240_000
 const SECTION_OUTPUT_CEILING = 8_192
 const SECTION_OUTPUT_MAX = 16_384
+/** Hard cap on paid requests for one section (budget changes + transient retries). */
+const SECTION_MAX_ATTEMPTS = 6
 const MAX_TRANSIENT_RETRIES = 2
 const RETRY_BASE_DELAY_MS = 700
 /** How much of each question the opening / summary request sees. */
@@ -417,7 +419,14 @@ async function requestSectionJSON(ai: AIService, messages: ChatMessage[]): Promi
     min: 2_048,
   })
   let retries = 0
+  let attempts = 0
+  // Lowest budget the provider rejected as too large: never ask for it (or
+  // more) again, so truncated / output-limit cannot ping-pong forever.
+  let rejectedBudget = Infinity
+  const tried = new Set<number>()
   for (;;) {
+    attempts += 1
+    tried.add(budget)
     const controller = new AbortController()
     const timer = setTimeout(() => controller.abort(), SECTION_DEADLINE_MS)
     try {
@@ -426,13 +435,15 @@ async function requestSectionJSON(ai: AIService, messages: ChatMessage[]): Promi
     } catch (err) {
       const failure = controller.signal.aborted ? new AITimeoutError(SECTION_DEADLINE_MS) : err
       const kind = classifyHomeworkError(failure)
+      if (attempts >= SECTION_MAX_ATTEMPTS) throw failure
       if (kind === 'truncated') {
-        const next = Math.min(userCap, SECTION_OUTPUT_MAX, budget * 2)
-        if (next <= budget) throw failure
+        const next = Math.min(userCap, SECTION_OUTPUT_MAX, budget * 2, rejectedBudget - 1)
+        if (next <= budget || tried.has(next)) throw failure
         budget = next
       } else if (kind === 'output-limit') {
+        rejectedBudget = Math.min(rejectedBudget, budget)
         const next = Math.max(Math.min(MIN_OUTPUT_TOKENS, userCap), Math.floor(budget / 2))
-        if (next >= budget) throw failure
+        if (next >= budget || tried.has(next)) throw failure
         budget = next
       } else if (isRetryableHomeworkError(kind) && retries < MAX_TRANSIENT_RETRIES) {
         retries += 1

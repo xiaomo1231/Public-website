@@ -643,7 +643,7 @@ function CourseTable({
                   <td className={cell}>
                     {estimate ? (
                       <span className="flex items-center gap-2.5">
-                        <span className="font-mono">{estimate.average.toFixed(2)}</span>
+                        <span className="font-mono">{Math.round(estimate.average * 100)}%</span>
                         <MiniBar value={estimate.average} className="w-16" />
                       </span>
                     ) : (

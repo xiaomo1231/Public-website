@@ -42,6 +42,33 @@ export function isVerbatimEvidence(evidence: string, answer: string): boolean {
   return key.length >= 2 && evidenceKey(answer).includes(key)
 }
 
+const CJK = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]/gu
+const WORD = /[\p{L}\p{N}]+/gu
+
+/**
+ * How much a quote says: each CJK character counts 1, each other word
+ * (letters / digits) counts 2. So 4 counts as "4 CJK characters or 2 words".
+ */
+function evidenceWeight(text: string): number {
+  const normalized = text.normalize('NFKC')
+  const cjk = normalized.match(CJK)?.length ?? 0
+  const words = normalized.replace(CJK, ' ').match(WORD)?.length ?? 0
+  return cjk + 2 * words
+}
+
+/** A quote must say something: ≥4 CJK characters or ≥2 words. */
+const MIN_EVIDENCE_WEIGHT = 4
+
+/**
+ * A quote long enough to show the point: at least 4 CJK characters or 2
+ * words, but never more than the point itself needs (the point "ATP" is
+ * covered by the quote "ATP").
+ */
+export function isMeaningfulEvidence(evidence: string, pointText: string): boolean {
+  const needed = Math.min(MIN_EVIDENCE_WEIGHT, Math.max(1, evidenceWeight(pointText)))
+  return evidenceWeight(evidence) >= needed
+}
+
 function contentLength(text: string): number {
   return text.replace(/\s+/g, '').length
 }
@@ -69,12 +96,21 @@ export function buildRubricEvaluation(
     decisions.set(raw.id, { covered: raw.covered === true, ...(evidence ? { evidence } : {}) })
   }
 
+  // One quote earns at most one point: the same words cannot be counted twice.
+  const usedQuotes = new Set<string>()
   const results: RubricPointResult[] = rubric.map((point) => {
     const decision = decisions.get(point.id)
-    // Credit needs a claim AND a quote that is really in the answer.
+    // Credit needs a claim AND a meaningful quote that is really in the
+    // answer and has not already earned another point.
+    const quoteKey = decision?.evidence ? evidenceKey(decision.evidence) : ''
     const covered = Boolean(
-      decision?.covered && decision.evidence && isVerbatimEvidence(decision.evidence, answer),
+      decision?.covered &&
+      decision.evidence &&
+      isVerbatimEvidence(decision.evidence, answer) &&
+      isMeaningfulEvidence(decision.evidence, point.text) &&
+      !usedQuotes.has(quoteKey),
     )
+    if (covered) usedQuotes.add(quoteKey)
     return {
       pointId: point.id,
       text: point.text,

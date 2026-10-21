@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { Link } from 'react-router-dom'
 import { BookOpen, FolderOpen, Mic, NotebookPen, type LucideIcon } from 'lucide-react'
 import { DocumentList } from '@/widgets/documents/DocumentList'
 import { DocumentUploadDialog } from '@/widgets/documents/DocumentUploadDialog'
@@ -208,10 +208,4 @@ export function ProjectDocumentsTab({ projectId }: { projectId: string }): JSX.E
       />
     </div>
   )
-}
-
-export function ProjectDocumentsRoute(): JSX.Element {
-  const { id } = useParams<{ id: string }>()
-  if (!id) return <div />
-  return <ProjectDocumentsTab projectId={id} />
 }

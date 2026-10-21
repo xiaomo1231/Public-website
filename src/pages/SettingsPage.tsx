@@ -109,6 +109,15 @@ export function SettingsPage(): JSX.Element {
     }
   }
 
+  /** The stored settings were cleared elsewhere on the page: drop the old draft. */
+  function onSettingsCleared() {
+    const fresh = useSettingsStore.getState().settings
+    if (fresh) setDraft(fresh)
+    setShowKey(false)
+    setTestResult(null)
+    setDirty(false)
+  }
+
   async function testConnection() {
     if (!draft) return
     setTesting(true)
@@ -414,7 +423,7 @@ export function SettingsPage(): JSX.Element {
           </Card>
 
           <div className="lecture:pt-8">
-            <DataManagementPanel />
+            <DataManagementPanel onSettingsCleared={onSettingsCleared} />
           </div>
           {/* Lets a bug report say which release it came from. */}
           <p className="text-center text-xs text-muted-foreground lecture:pt-6 lab:font-mono lab:text-[11px]">

@@ -103,6 +103,35 @@ describe('scoring points', () => {
   })
 })
 
+describe('evidence quality', () => {
+  it('needs a meaningful quote, bounded by how long the point is', () => {
+    const answer = '导数表示瞬时变化率，ATP 是能量货币。The slope of the tangent line.'
+    const rubric = [
+      { id: 'a', text: '导数是瞬时变化率' },
+      { id: 'b', text: 'ATP' },
+      { id: 'c', text: 'Geometrically it is the slope of the tangent line.' },
+    ]
+    const tooShort = buildRubricEvaluation(question({ rubric }), answer, {
+      points: [
+        { id: 'a', covered: true, evidence: '导数' }, // 2 CJK characters
+        { id: 'b', covered: true, evidence: 'ATP' }, // as long as the point itself
+        { id: 'c', covered: true, evidence: 'slope' }, // one word
+      ],
+    })
+    expect(tooShort.rubric!.map((point) => point.covered)).toEqual([false, true, false])
+  })
+
+  it('does not let one quote earn two points', () => {
+    const evaluation = buildRubricEvaluation(question({ rubric: RUBRIC.slice(0, 2) }), ANSWER, {
+      points: [
+        { id: 'p1', covered: true, evidence: 'how fast a function changes at one instant' },
+        { id: 'p2', covered: true, evidence: 'How fast a function changes at one instant.' },
+      ],
+    })
+    expect(evaluation.score).toEqual({ earned: 1, total: 2 })
+  })
+})
+
 describe('ShortAnswerGrader', () => {
   const ai = (chatJSON: ReturnType<typeof vi.fn>) => ({ chatJSON }) as unknown as AIService
 

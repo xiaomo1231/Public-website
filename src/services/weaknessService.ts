@@ -80,9 +80,13 @@ export function buildWeaknessAreas(
   const areas: WeaknessArea[] = []
   for (const [knowledgePoint, list] of byKp) {
     const activeMistakeCount = list.filter((m) => m.status === 'active').length
-    const recentMistakeCount = list.filter((m) => now - m.createdAt <= RECENT_WINDOW_MS).length
+    // Recency follows the latest wrong answer, not when the card was created.
+    const recentMistakeCount = list.filter(
+      (m) => now - (m.lastOccurredAt ?? m.createdAt) <= RECENT_WINDOW_MS,
+    ).length
     const masteryRow = masteryByKp.get(knowledgePoint)
-    const mastery = masteryRow ? masteryRow.mastery : null
+    // A row with no graded attempts is no estimate at all: treat it as unknown.
+    const mastery = masteryRow && masteryRow.attempts > 0 ? masteryRow.mastery : null
 
     const mistakeWeight = list.length / maxMistakes
     const activeWeight = activeMistakeCount / Math.max(1, list.length)

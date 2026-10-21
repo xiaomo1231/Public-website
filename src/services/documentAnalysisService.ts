@@ -6,7 +6,10 @@ import { CourseAnalysisRepository } from '@/entities/courseAnalysis/repository'
 import type { AtomicSideWrites } from '@/entities/courseAnalysis/repository'
 import { COURSE_ANALYSIS_SCHEMA_VERSION } from '@/entities/courseAnalysis/types'
 import { CourseContentRepository } from '@/entities/courseContent/repository'
-import { computeAnalysisSourceHash, toSourceDocumentFingerprint } from '@/entities/courseContent/sourceHash'
+import {
+  computeAnalysisSourceHash,
+  toSourceDocumentFingerprint,
+} from '@/entities/courseContent/sourceHash'
 import {
   buildCandidateChunkLabel,
   chunkFingerprintMap,
@@ -94,12 +97,28 @@ export class DocumentAnalysisService {
   private content: CourseContentRepository
   private ai: AIService
 
-  constructor(deps: DocumentAnalysisServiceOptions & { db?: AppDatabase; documents?: DocumentRepository; chunks?: ChunkRepository; analyses?: CourseAnalysisRepository; content?: CourseContentRepository; projects: ProjectService }) {
+  constructor(
+    deps: DocumentAnalysisServiceOptions & {
+      db?: AppDatabase
+      documents?: DocumentRepository
+      chunks?: ChunkRepository
+      analyses?: CourseAnalysisRepository
+      content?: CourseContentRepository
+      projects: ProjectService
+    },
+  ) {
     this.db = deps.db ?? getDb()
     this.documents = deps.documents ?? new DocumentRepository(this.db)
     this.chunks = deps.chunks ?? new ChunkRepository(this.db)
     this.analyses = deps.analyses ?? new CourseAnalysisRepository(this.db)
-    this.content = deps.content ?? new CourseContentRepository({ db: this.db, analyses: this.analyses, chunks: this.chunks, documents: this.documents })
+    this.content =
+      deps.content ??
+      new CourseContentRepository({
+        db: this.db,
+        analyses: this.analyses,
+        chunks: this.chunks,
+        documents: this.documents,
+      })
     this.projects = deps.projects
     this.ai = deps.ai
   }
@@ -108,7 +127,14 @@ export class DocumentAnalysisService {
    * Analyze all processed documents in a project, extracting structured
    * knowledge. Re-runs overwrite the previous analysis.
    */
-  async analyzeProject(projectId: string, options: { onProgress?: AnalysisProgressListener; signal?: AbortSignal; sideWrites?: AtomicSideWrites } = {}): Promise<CourseAnalysisRepository> {
+  async analyzeProject(
+    projectId: string,
+    options: {
+      onProgress?: AnalysisProgressListener
+      signal?: AbortSignal
+      sideWrites?: AtomicSideWrites
+    } = {},
+  ): Promise<CourseAnalysisRepository> {
     // Also verifies the project exists. The subject is read here, from the
     // project itself, so every path (manual or automatic) analyses with it.
     const { subject } = await this.projects.get(projectId)
@@ -171,13 +197,24 @@ export class DocumentAnalysisService {
       return text
     }
     const planned = planAnalysisSegments(
-      analysisDocs.map((doc, index) => ({ id: doc.id, name: doc.name, chunks: chunkLists[index]! })),
+      analysisDocs.map((doc, index) => ({
+        id: doc.id,
+        name: doc.name,
+        chunks: chunkLists[index]!,
+      })),
       format,
     )
     const segments: AnalysisSegment[] =
       planned.length > 0
         ? planned
-        : [{ documents: analysisDocs.map((doc) => ({ id: doc.id, name: doc.name, chunks: [] })), label: '', chapterIds: [], chars: 0 }]
+        : [
+            {
+              documents: analysisDocs.map((doc) => ({ id: doc.id, name: doc.name, chunks: [] })),
+              label: '',
+              chapterIds: [],
+              chars: 0,
+            },
+          ]
     logger.debug('Analysis input planned', {
       projectId,
       chunks: analysisChunks.length,
@@ -201,23 +238,24 @@ export class DocumentAnalysisService {
     // `onProgress`. Only when nothing usable exists is an 'analyzing' row
     // written, and the next run simply replaces it.
     const keepReadyRow = seed?.status === 'ready'
-    if (!keepReadyRow) await this.analyses.upsert({
-      id: analysisId,
-      projectId,
-      status: 'analyzing',
-      language,
-      progress: 30,
-      documentIds: analysisDocs.map((d) => d.id),
-      topicCount: seed?.topicCount ?? 0,
-      formulaCount: seed?.formulaCount ?? 0,
-      symbolCount: seed?.symbolCount ?? 0,
-      startedAt,
-      promptVersion,
-      sourceHash,
-      schemaVersion: COURSE_ANALYSIS_SCHEMA_VERSION,
-      derivedFromStructureVersion,
-      derivedFromStructureHash,
-    })
+    if (!keepReadyRow)
+      await this.analyses.upsert({
+        id: analysisId,
+        projectId,
+        status: 'analyzing',
+        language,
+        progress: 30,
+        documentIds: analysisDocs.map((d) => d.id),
+        topicCount: seed?.topicCount ?? 0,
+        formulaCount: seed?.formulaCount ?? 0,
+        symbolCount: seed?.symbolCount ?? 0,
+        startedAt,
+        promptVersion,
+        sourceHash,
+        schemaVersion: COURSE_ANALYSIS_SCHEMA_VERSION,
+        derivedFromStructureVersion,
+        derivedFromStructureHash,
+      })
 
     let output: DocumentAnalysisOutput
     try {
@@ -254,23 +292,28 @@ export class DocumentAnalysisService {
           error: err instanceof Error ? err.message : String(err),
         })
       } else {
-        await this.analyses.upsert({
-          id: analysisId,
-          projectId,
-          status: 'failed',
-          language,
-          progress: 60,
-          documentIds: analysisDocs.map((d) => d.id),
-          topicCount: 0,
-          formulaCount: 0,
-          symbolCount: 0,
-          startedAt,
-          promptVersion,
-          sourceHash,
-          schemaVersion: COURSE_ANALYSIS_SCHEMA_VERSION,
-          derivedFromStructureVersion,
-          derivedFromStructureHash,
-          errorMessage: err instanceof Error ? err.message : t('errors.analysisFailed'),
+        // Record the failure only while the project still exists: a project
+        // deleted during the run must not get an analysis row back.
+        await this.db.transaction('rw', this.db.projects, this.db.courseAnalyses, async () => {
+          if (!(await this.db.projects.get(projectId))) return
+          await this.analyses.upsert({
+            id: analysisId,
+            projectId,
+            status: 'failed',
+            language,
+            progress: 60,
+            documentIds: analysisDocs.map((d) => d.id),
+            topicCount: 0,
+            formulaCount: 0,
+            symbolCount: 0,
+            startedAt,
+            promptVersion,
+            sourceHash,
+            schemaVersion: COURSE_ANALYSIS_SCHEMA_VERSION,
+            derivedFromStructureVersion,
+            derivedFromStructureHash,
+            errorMessage: err instanceof Error ? err.message : t('errors.analysisFailed'),
+          })
         })
       }
       throw err
@@ -284,7 +327,10 @@ export class DocumentAnalysisService {
     const candidateChunks = analysisChunks.filter((chunk) => chunk.text.trim().length > 0)
 
     const previousTopics = await this.analyses.listTopics(projectId)
-    const chunkTokens = analysisChunks.map((chunk) => ({ chunk, tokens: new Set(tokenize(chunk.text)) }))
+    const chunkTokens = analysisChunks.map((chunk) => ({
+      chunk,
+      tokens: new Set(tokenize(chunk.text)),
+    }))
     const position = new Map(analysisChunks.map((chunk, index) => [chunk.id, { chunk, index }]))
     const rawDrafts = output.topics.map((topic, idx) => {
       // A topic sits where its earliest source passage is; word overlap is
@@ -485,20 +531,30 @@ export class DocumentAnalysisService {
             [
               {
                 role: 'system',
-                content: prompts.subjectProfile.withSubject(prompts.documentAnalyzer.buildSystemPrompt(), context.subject),
+                content: prompts.subjectProfile.withSubject(
+                  prompts.documentAnalyzer.buildSystemPrompt(),
+                  context.subject,
+                ),
               },
               {
                 role: 'user',
                 content: prompts.documentAnalyzer.buildUserPrompt({
                   documentName:
-                    total === 1 ? context.documentNames.join(', ') : segment.documents.map((d) => d.name).join(', '),
+                    total === 1
+                      ? context.documentNames.join(', ')
+                      : segment.documents.map((d) => d.name).join(', '),
                   documentText: segmentText(segment, format),
                   language: context.language,
                   ...(total > 1 ? { part: { index: index + 1, total, label: segment.label } } : {}),
                 }),
               },
             ],
-            { projectId: context.projectId, part: index + 1, parts: total, ...(context.signal ? { signal: context.signal } : {}) },
+            {
+              projectId: context.projectId,
+              part: index + 1,
+              parts: total,
+              ...(context.signal ? { signal: context.signal } : {}),
+            },
           )
         } catch (err) {
           // Stop handing out parts; the run fails as a whole.
@@ -570,7 +626,10 @@ export class DocumentAnalysisService {
     // the user "analysis complete: 0 topics".
     if (parsedRecord && !ANALYSIS_COLLECTION_KEYS.some((key) => key in parsedRecord)) {
       const found = Object.keys(parsedRecord).slice(0, 8).join(', ')
-      throw new AppError(t('errors.analysisSchemaMismatch', { keys: found || '(none)' }), 'MALFORMED_ANALYSIS')
+      throw new AppError(
+        t('errors.analysisSchemaMismatch', { keys: found || '(none)' }),
+        'MALFORMED_ANALYSIS',
+      )
     }
 
     // Validate + sanitise before anything reaches the database.
@@ -656,8 +715,13 @@ export function collapseSameNameTopics<T extends TopicDraft>(
       const refKeys = new Set(kept.sourceRefs.map(courseRefKey))
       drafts[at] = {
         ...kept,
-        rawSourceChunkIds: [...new Set([...(kept.rawSourceChunkIds ?? []), ...(topic.rawSourceChunkIds ?? [])])],
-        sourceRefs: [...kept.sourceRefs, ...topic.sourceRefs.filter((ref) => !refKeys.has(courseRefKey(ref)))],
+        rawSourceChunkIds: [
+          ...new Set([...(kept.rawSourceChunkIds ?? []), ...(topic.rawSourceChunkIds ?? [])]),
+        ],
+        sourceRefs: [
+          ...kept.sourceRefs,
+          ...topic.sourceRefs.filter((ref) => !refKeys.has(courseRefKey(ref))),
+        ],
       }
       if (!aliases.has(topic.name)) aliases.set(topic.name, at)
       continue
@@ -665,7 +729,8 @@ export function collapseSameNameTopics<T extends TopicDraft>(
     const label =
       [topic.chapterNumber, topic.chapterTitle].filter(Boolean).join(' ') || `${drafts.length + 1}`
     let name = `${topic.name} · ${label}`
-    for (let n = 2; used.has(normalizeTopicName(name) || name); n++) name = `${topic.name} · ${label} (${n})`
+    for (let n = 2; used.has(normalizeTopicName(name) || name); n++)
+      name = `${topic.name} · ${label} (${n})`
     used.add(normalizeTopicName(name) || name)
     byKey.set(normalizeTopicName(name) || name, drafts.length)
     // The original spelling keeps pointing at the first topic of that name.
@@ -676,7 +741,13 @@ export function collapseSameNameTopics<T extends TopicDraft>(
 }
 
 function courseRefKey(ref: CourseSourceRef): string {
-  return [ref.documentId, ref.page ?? '', ref.slideNumber ?? '', ref.section ?? '', ref.quote ?? ''].join('|')
+  return [
+    ref.documentId,
+    ref.page ?? '',
+    ref.slideNumber ?? '',
+    ref.section ?? '',
+    ref.quote ?? '',
+  ].join('|')
 }
 
 /** The textbook position of one chunk — the model never gets to renumber the book. */
@@ -713,7 +784,16 @@ function bestStructureRef(
   return structureOf(best.chunk)
 }
 
-function normalizeSourceRefs(refs: Array<{ documentName: string; page?: number; slideNumber?: number; section?: string; quote?: string }>, docs: Array<{ id: string; name: string }>): CourseSourceRef[] {
+function normalizeSourceRefs(
+  refs: Array<{
+    documentName: string
+    page?: number
+    slideNumber?: number
+    section?: string
+    quote?: string
+  }>,
+  docs: Array<{ id: string; name: string }>,
+): CourseSourceRef[] {
   if (!refs) return []
   return refs
     .map((r) => ({

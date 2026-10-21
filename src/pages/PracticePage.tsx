@@ -59,6 +59,18 @@ function QuestionCard({
   }
 
   const isChoice = question.type === 'single_choice' || question.type === 'true_false'
+  // Each choice submits its letter; a true/false question imported without
+  // options still gets True / False buttons, which submit "true" / "false".
+  const choices: Array<{ id: string; key: string; label: string; value: string }> =
+    question.type === 'true_false' && question.options.length === 0
+      ? [
+          { id: 'true', key: 'A', label: t('answerInput.true'), value: 'true' },
+          { id: 'false', key: 'B', label: t('answerInput.false'), value: 'false' },
+        ]
+      : question.options.map((option, index) => {
+          const letter = String.fromCharCode(65 + index)
+          return { id: option.id, key: letter, label: option.label, value: letter }
+        })
   const visual: TutorVisual | null = question.visualSourceId
     ? {
         id: question.visualSourceId,
@@ -107,14 +119,14 @@ function QuestionCard({
 
         {isChoice ? (
           <ul className={optionListClass}>
-            {question.options.map((option, index) => {
-              const label = String.fromCharCode(65 + index)
-              const selected = answer === label
+            {choices.map((option) => {
+              const label = option.key
+              const selected = answer === option.value
               return (
                 <li key={option.id}>
                   <button
                     type="button"
-                    onClick={() => setAnswer(label)}
+                    onClick={() => setAnswer(option.value)}
                     className={cn(optionRowClass({ selected }), 'items-start')}
                     aria-pressed={selected}
                   >
