@@ -36,7 +36,7 @@ const ACTION_KEYS = {
 
 function StepButton({ label, onClick, disabled, children }: { label: string; onClick: () => void; disabled?: boolean; children: ReactNode }): JSX.Element {
   return (
-    <button type="button" aria-label={label} title={label} onClick={onClick} disabled={disabled} className="focus-ring grid h-8 w-8 place-items-center rounded-md border border-border/80 hover:bg-accent disabled:opacity-40">
+    <button type="button" aria-label={label} title={label} onClick={onClick} disabled={disabled} className="focus-ring grid h-8 w-8 place-items-center rounded-md border border-border/80 transition-[color,background-color,border-color,transform] duration-press ease-out motion-safe:active:scale-[0.97] hover:bg-accent disabled:opacity-40">
       {children}
     </button>
   )

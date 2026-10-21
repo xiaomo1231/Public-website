@@ -3,6 +3,9 @@ import type { Config } from 'tailwindcss'
 export default {
   content: ['./index.html', './src/**/*.{ts,tsx}'],
   darkMode: 'class',
+  // `hover:` / `group-hover:` only apply on devices that really hover, so a
+  // tap on a tablet never leaves a stuck hover state.
+  future: { hoverOnlyWhenSupported: true },
   theme: {
     extend: {
       colors: {
@@ -135,20 +138,33 @@ export default {
           '50%': { translate: '0 -5px' },
         },
       },
+      /*
+       * Curves come from the motion tokens in globals.css. `ease-out` is the
+       * strong UI curve; exits use it too (never ease-in, which delays the
+       * moment the user is watching).
+       */
+      transitionTimingFunction: {
+        out: 'var(--ease-out)',
+        'in-out-strong': 'var(--ease-in-out)',
+        drawer: 'var(--ease-drawer)',
+      },
+      transitionDuration: {
+        press: 'var(--duration-press)',
+      },
       animation: {
         // Short, one-shot entrances used sparingly (sections, tab panels).
-        rise: 'rise 0.45s cubic-bezier(0.22, 1, 0.36, 1) both',
-        fade: 'fade 0.22s ease-out both',
-        'fade-out': 'fade-out 0.18s ease-in both',
+        rise: 'rise 0.3s var(--ease-out) both',
+        fade: 'fade 0.2s var(--ease-out) both',
+        'fade-out': 'fade-out 0.18s var(--ease-out) both',
         // `backwards`, not `both`: once finished it lets go, so hover
         // transforms on the element keep working.
-        'tab-in': 'tab-in 0.32s cubic-bezier(0.22, 1, 0.36, 1) backwards',
-        'dialog-in': 'dialog-in 0.28s cubic-bezier(0.22, 1, 0.36, 1) both',
-        'dialog-out': 'dialog-out 0.16s ease-in both',
-        'pop-in': 'pop-in 0.18s cubic-bezier(0.22, 1, 0.36, 1) both',
-        'pop-out': 'pop-out 0.12s ease-in both',
-        'toast-in': 'toast-in 0.42s cubic-bezier(0.22, 1, 0.36, 1) both',
-        'toast-out': 'toast-out 0.2s ease-in both',
+        'tab-in': 'tab-in 0.25s var(--ease-out) backwards',
+        'dialog-in': 'dialog-in var(--duration-modal) var(--ease-out) both',
+        'dialog-out': 'dialog-out 0.16s var(--ease-out) both',
+        'pop-in': 'pop-in var(--duration-pop) var(--ease-out) both',
+        'pop-out': 'pop-out 0.12s var(--ease-out) both',
+        'toast-in': 'toast-in 260ms var(--ease-out) both',
+        'toast-out': 'toast-out 180ms var(--ease-out) both',
         float: 'float 4.5s ease-in-out infinite',
       },
       fontFamily: {

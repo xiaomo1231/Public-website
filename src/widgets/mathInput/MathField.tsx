@@ -262,7 +262,7 @@ export function MathField({
                 onClick={() => insert(item)}
                 title={t('symbolBar.inserts', { text: item.insert })}
                 aria-label={t('symbolBar.inserts', { text: item.insert })}
-                className="focus-ring inline-flex h-8 min-w-8 items-center justify-center rounded-md border border-border/70 bg-card px-2 text-sm text-foreground transition-colors hover:border-primary/40 hover:bg-accent"
+                className="focus-ring inline-flex h-8 min-w-8 items-center justify-center rounded-md border border-border/70 bg-card px-2 text-sm text-foreground transition-[color,background-color,border-color,transform] duration-press ease-out motion-safe:active:scale-[0.97] hover:border-primary/40 hover:bg-accent"
               >
                 {item.glyph}
               </button>

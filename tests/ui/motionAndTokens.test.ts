@@ -6,7 +6,8 @@ import { describe, expect, it } from 'vitest'
  * Guards the visual-refresh infrastructure:
  *  - every colour theme defines the semantic tokens in both light and dark;
  *  - the decorative motion (graph draw, brand sheen, progress reveal) is declared;
- *  - `prefers-reduced-motion: reduce` switches the decorative motion off.
+ *  - `prefers-reduced-motion: reduce` removes movement (entrances fade,
+ *    decorative motion stops) without killing every transition.
  *
  * These are structural guarantees read from the real `globals.css`, so a future
  * edit that drops a token or forgets the reduced-motion override fails here.
@@ -113,22 +114,27 @@ describe('decorative motion', () => {
     expect(css).toMatch(/\.brand-mark[\s\S]*hsl\(var\(--primary-strong\)/)
   })
 
-  it('turns the decorative motion off under prefers-reduced-motion', () => {
+  it('removes movement under prefers-reduced-motion, keeping gentle fades', () => {
     const media = /@media \(prefers-reduced-motion: reduce\)\s*\{([\s\S]*?)\n\}/.exec(css)
     expect(media, 'missing reduced-motion media block').not.toBeNull()
     const body = media![1]!
     for (const selector of [
       '.animate-rise',
-      '.animate-fade',
+      '.animate-dialog-in',
+      '.animate-pop-in',
+      '.animate-toast-in',
       '.progress-reveal',
       '.graph-draw',
       '.animate-tab-in',
       '.animate-float',
       '.stagger-in > *',
     ]) {
-      expect(body, `${selector} not disabled`).toContain(selector)
+      expect(body, `${selector} not handled`).toContain(selector)
     }
     expect(body).toContain('animation: none !important')
+    expect(body).toContain('animation: reduced-fade-in')
+    // Reduced motion means fewer, gentler animations, not a global kill switch.
+    expect(body).not.toMatch(/transition-duration:\s*0\.001ms/)
   })
 })
 

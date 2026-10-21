@@ -34,6 +34,19 @@
     --radius-3xl: 1.5rem;
 
     /*
+     * Motion tokens. UI motion stays at or under 300ms and uses the strong
+     * ease-out for entrances and exits (never ease-in). JS animations use the
+     * same curve via `shared/lib/motion.ts`.
+     */
+    --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+    --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+    --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
+    --duration-press: 140ms;
+    --duration-pop: 180ms;
+    --duration-ui: 200ms;
+    --duration-modal: 280ms;
+
+    /*
      * Color-theme tokens.
      *
      * These alias the semantic tokens above, so the default palette needs no
@@ -399,9 +412,9 @@
   }
   .slide-indicator[data-animate='true'] {
     transition:
-      transform 420ms cubic-bezier(0.22, 1, 0.36, 1),
-      width 420ms cubic-bezier(0.22, 1, 0.36, 1),
-      height 420ms cubic-bezier(0.22, 1, 0.36, 1);
+      transform var(--duration-ui) var(--ease-out),
+      width var(--duration-ui) var(--ease-out),
+      height var(--duration-ui) var(--ease-out);
   }
 
   /*
@@ -410,22 +423,22 @@
    * when done, so hover lifts keep working afterwards.
    */
   .stagger-in > * {
-    animation: stagger-rise 0.5s cubic-bezier(0.22, 1, 0.36, 1) backwards;
+    animation: stagger-rise 250ms var(--ease-out) backwards;
   }
   .stagger-in > :nth-child(2) {
-    animation-delay: 60ms;
+    animation-delay: 40ms;
   }
   .stagger-in > :nth-child(3) {
-    animation-delay: 120ms;
+    animation-delay: 80ms;
   }
   .stagger-in > :nth-child(4) {
-    animation-delay: 180ms;
+    animation-delay: 120ms;
   }
   .stagger-in > :nth-child(5) {
-    animation-delay: 240ms;
+    animation-delay: 160ms;
   }
   .stagger-in > :nth-child(n + 6) {
-    animation-delay: 300ms;
+    animation-delay: 200ms;
   }
 
   /* A quiet divider for lists that should not become a stack of cards. */
@@ -435,7 +448,7 @@
 
   /* Progress fill reveals once on mount; the value itself stays authoritative. */
   .progress-reveal {
-    animation: progress-reveal 0.9s cubic-bezier(0.22, 1, 0.36, 1) both;
+    animation: progress-reveal 0.9s var(--ease-out) both;
   }
 
   /*
@@ -465,11 +478,6 @@
     border: 1px solid hsl(var(--border) / 0.45);
     box-shadow: var(--shadow-lift);
   }
-  .sidebar-link {
-    transition:
-      transform 200ms ease,
-      background-color 200ms ease;
-  }
   .sidebar-link--active {
     box-shadow: 0 4px 14px -8px hsl(var(--primary) / 0.4);
   }
@@ -483,7 +491,7 @@
   .graph-draw {
     stroke-dasharray: var(--graph-len, 600);
     stroke-dashoffset: var(--graph-len, 600);
-    animation: graph-draw 1.6s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+    animation: graph-draw 1.6s var(--ease-out) forwards;
   }
   /*
    * A brief ring on a value that just changed (function switch / reset). It is
@@ -497,17 +505,30 @@
       border-radius: var(--radius-3xl);
     }
   }
-  @media (prefers-reduced-motion: no-preference) {
-    .sidebar-link:hover {
-      transform: translateX(3px);
-    }
-  }
 }
 
 /* The plotted line draws itself in once, then stays put. */
 @keyframes graph-draw {
   to {
     stroke-dashoffset: 0;
+  }
+}
+
+/* Opacity-only stand-ins for entrances / exits under reduced motion. */
+@keyframes reduced-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes reduced-fade-out {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
   }
 }
 
@@ -554,33 +575,50 @@
 }
 
 /*
- * Motion safety net: honour the OS "reduce motion" preference for every
- * transition and animation in the app, including ones added by libraries.
- * Decorative entrance animations are also defined with `motion-safe:` in
- * Tailwind, but this guarantees the preference is never ignored — and the
- * explicitly-listed decorative effects are switched off entirely (not merely
- * sped up) so nothing is left mid-animation.
+ * Reduced motion: fewer, gentler animations, not none. Movement goes away
+ * (entrances become a short fade, transform transitions stop, decorative
+ * loops stop); colour / opacity transitions and the box-shadow
+ * `value-flash` stay, because they explain state without moving anything.
  */
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
   *::after {
-    animation-duration: 0.001ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.001ms !important;
     scroll-behavior: auto !important;
   }
 
+  /* Entrances that travel or scale become a plain fade. */
   .animate-rise,
-  .animate-fade,
   .animate-tab-in,
-  .animate-float,
+  .animate-dialog-in,
+  .animate-pop-in,
+  .animate-toast-in,
   .stagger-in > *,
+  .floating-qa-enter {
+    animation: reduced-fade-in 200ms var(--ease-out) both !important;
+  }
+  .animate-dialog-out,
+  .animate-pop-out,
+  .animate-toast-out {
+    animation: reduced-fade-out 160ms var(--ease-out) both !important;
+  }
+
+  /* Purely decorative motion is switched off. */
+  .animate-float,
   .progress-reveal,
   .progress-indeterminate,
-  .graph-draw,
-  .value-flash {
+  .graph-draw {
     animation: none !important;
+  }
+
+  /* Transforms snap; colour and opacity keep their transitions. */
+  .transition,
+  .transition-all,
+  .transition-transform,
+  [class*='transition-['],
+  .slide-indicator[data-animate='true'] {
+    transition-property: color, background-color, border-color, outline-color, text-decoration-color,
+      fill, stroke, opacity, box-shadow !important;
   }
 
   /* Keep the plotted line fully drawn when its animation is switched off. */

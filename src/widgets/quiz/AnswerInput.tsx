@@ -185,7 +185,7 @@ function MultipleChoiceInput({
             disabled={disabled}
             onClick={() => onChange(option.id)}
             className={cn(
-              'flex w-full items-center gap-3 rounded-lg border px-3 py-2 text-left text-sm transition-colors',
+              'flex w-full items-center gap-3 rounded-lg border px-3 py-2 text-left text-sm transition-[color,background-color,border-color,transform] duration-press ease-out motion-safe:active:scale-[0.98]',
               selected ? 'border-foreground/40 bg-accent' : 'hover:bg-accent/50',
               revealed && isCorrect && 'border-emerald-500/60 bg-emerald-50/50 dark:bg-emerald-950/20',
               revealed && selected && !isCorrect && 'border-destructive/60 bg-destructive/5',
@@ -249,7 +249,7 @@ function TrueFalseInput({
               onChange(o.value)
             }}
             className={cn(
-              'flex-1 rounded-lg border px-4 py-2 text-sm transition-colors',
+              'flex-1 rounded-lg border px-4 py-2 text-sm transition-[color,background-color,border-color,transform] duration-press ease-out motion-safe:active:scale-[0.98]',
               selected ? 'border-foreground/40 bg-accent' : 'hover:bg-accent/50',
               isCorrect && 'border-emerald-500/60 bg-emerald-50/50 dark:bg-emerald-950/20',
               revealed && selected && !isCorrect && 'border-destructive/60 bg-destructive/5',

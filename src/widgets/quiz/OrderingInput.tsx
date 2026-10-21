@@ -71,7 +71,7 @@ export function OrderingInput({ question, value, onChange, disabled }: OrderingI
                 onClick={() => move(index, index - 1)}
                 disabled={disabled || index === 0}
                 aria-label={t('answerInput.moveUp', { item })}
-                className="focus-ring grid h-7 w-7 place-items-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-30"
+                className="focus-ring grid h-7 w-7 place-items-center rounded-md text-muted-foreground transition-[color,background-color,border-color,transform] duration-press ease-out motion-safe:active:scale-[0.97] hover:bg-accent hover:text-foreground disabled:opacity-30"
               >
                 <ArrowUp className="h-3.5 w-3.5" />
               </button>
@@ -80,7 +80,7 @@ export function OrderingInput({ question, value, onChange, disabled }: OrderingI
                 onClick={() => move(index, index + 1)}
                 disabled={disabled || index === items.length - 1}
                 aria-label={t('answerInput.moveDown', { item })}
-                className="focus-ring grid h-7 w-7 place-items-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-30"
+                className="focus-ring grid h-7 w-7 place-items-center rounded-md text-muted-foreground transition-[color,background-color,border-color,transform] duration-press ease-out motion-safe:active:scale-[0.97] hover:bg-accent hover:text-foreground disabled:opacity-30"
               >
                 <ArrowDown className="h-3.5 w-3.5" />
               </button>

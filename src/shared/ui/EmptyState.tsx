@@ -26,7 +26,7 @@ export function EmptyState({
       {icon && (
         <div
           aria-hidden
-          className="grid h-16 w-16 place-items-center rounded-xl border border-border/70 bg-theme-primary-soft text-foreground motion-safe:animate-float [&_svg]:h-7 [&_svg]:w-7"
+          className="grid h-16 w-16 place-items-center rounded-xl border border-border/70 bg-theme-primary-soft text-foreground [&_svg]:h-7 [&_svg]:w-7"
         >
           {icon}
         </div>

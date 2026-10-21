@@ -3,6 +3,7 @@ import { Outlet, useMatches } from 'react-router-dom'
 import { Sidebar } from './Sidebar'
 import { Header } from './Header'
 import { cn } from '@/shared/lib/utils'
+import { EASE_OUT, prefersReducedMotion } from '@/shared/lib/motion'
 import { useTranslation } from '@/i18n'
 
 export function AppShell(): JSX.Element {
@@ -19,7 +20,8 @@ export function AppShell(): JSX.Element {
    * Page transition. Plays when the matched route changes (a different page),
    * not when only its params do (next slide, next topic), and never remounts
    * the page — it is a Web Animation on the wrapper, so page state is
-   * untouched. Skipped under reduced motion and where WAAPI is missing.
+   * untouched. A short opacity-only fade (no travel), so frequent navigation
+   * stays calm. Skipped under reduced motion and where WAAPI is missing.
    */
   const matches = useMatches()
   const routeId = matches[matches.length - 1]?.id
@@ -30,14 +32,8 @@ export function AppShell(): JSX.Element {
     previousRouteId.current = routeId
     const el = pageRef.current
     if (!el || typeof el.animate !== 'function') return
-    if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return
-    el.animate(
-      [
-        { opacity: 0, transform: 'translateY(10px)' },
-        { opacity: 1, transform: 'translateY(0)' },
-      ],
-      { duration: 320, easing: 'cubic-bezier(0.22, 1, 0.36, 1)' },
-    )
+    if (prefersReducedMotion()) return
+    el.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 150, easing: EASE_OUT })
   }, [routeId])
 
   /*
@@ -141,7 +137,7 @@ export function AppShell(): JSX.Element {
           ref={drawerPanelRef}
           tabIndex={-1}
           className={cn(
-            'absolute inset-y-0 left-0 outline-none transition-transform duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]',
+            'absolute inset-y-0 left-0 outline-none transition-transform duration-300 ease-out',
             mobileNavOpen ? 'translate-x-0' : '-translate-x-full',
           )}
         >

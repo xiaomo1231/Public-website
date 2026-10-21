@@ -1,7 +1,7 @@
 import { cva, type VariantProps } from 'class-variance-authority'
 
 export const buttonVariants = cva(
-  'inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-full text-sm font-medium transition-colors motion-safe:transition-[transform,background-color,box-shadow,color,border-color] motion-safe:duration-200 motion-safe:hover:-translate-y-0.5 motion-safe:active:translate-y-0 motion-safe:active:scale-[0.96] focus-ring disabled:pointer-events-none disabled:opacity-50 [&_svg]:size-4 [&_svg]:shrink-0 [&_svg.lucide-arrow-right]:transition-transform [&_svg.lucide-arrow-right]:duration-200 motion-safe:[&:hover_svg.lucide-arrow-right]:translate-x-0.5',
+  'inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-full text-sm font-medium transition-[background-color,box-shadow,color,border-color,transform] duration-press ease-out motion-safe:active:scale-[0.97] focus-ring disabled:pointer-events-none disabled:opacity-50 [&_svg]:size-4 [&_svg]:shrink-0 [&_svg.lucide-arrow-right]:transition-transform [&_svg.lucide-arrow-right]:duration-200 motion-safe:[@media(hover:hover)_and_(pointer:fine)]:[&:hover_svg.lucide-arrow-right]:translate-x-0.5',
   {
     variants: {
       variant: {

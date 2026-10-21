@@ -95,7 +95,7 @@ export function Sidebar({ onNavigate, onCollapse }: SidebarProps): JSX.Element {
               onClick={onNavigate}
               data-active={active}
               className={cn(
-                'sidebar-link focus-ring group relative flex items-center gap-3 rounded-xl px-3 py-3 text-sm font-medium transition-colors',
+                'sidebar-link focus-ring group relative flex items-center gap-3 rounded-xl px-3 py-3 text-sm font-medium transition-colors duration-200',
                 active
                   ? 'sidebar-link--active bg-theme-primary-soft text-foreground group-data-[indicator=ready]/nav:bg-transparent group-data-[indicator=ready]/nav:shadow-none'
                   : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground',
@@ -110,10 +110,10 @@ export function Sidebar({ onNavigate, onCollapse }: SidebarProps): JSX.Element {
               <span
                 aria-hidden
                 className={cn(
-                  'grid h-7 w-7 shrink-0 place-items-center rounded-lg transition-[color,background-color,box-shadow,transform] duration-300',
+                  'grid h-7 w-7 shrink-0 place-items-center rounded-lg transition-[color,background-color,box-shadow] duration-200',
                   active
                     ? 'bg-card text-foreground shadow-soft'
-                    : 'text-muted-foreground group-hover:text-accent-foreground motion-safe:group-hover:-rotate-6 motion-safe:group-hover:scale-110',
+                    : 'text-muted-foreground group-hover:text-accent-foreground',
                 )}
               >
                 <Icon className="h-4 w-4" />

@@ -6,6 +6,7 @@ import { t } from '@/i18n'
 import {
   clampRect,
   DEFAULT_WINDOW_SIZE,
+  enterOriginNear,
   rectNearAnchor,
   useFloatingQA,
   type FloatingPassage,
@@ -36,7 +37,8 @@ export function openPassage(
   start: 'explain' | 'ask',
   anchor: { left: number; top: number; width: number; height: number },
 ): string {
-  return useFloatingQA.getState().open({ passage, turns: [], rect: rectNearAnchor(anchor), start })
+  const rect = rectNearAnchor(anchor)
+  return useFloatingQA.getState().open({ passage, turns: [], rect, start, enterOrigin: enterOriginNear(rect, anchor) })
 }
 
 /** Bring a saved note back, in the window it already has or where it was left. */

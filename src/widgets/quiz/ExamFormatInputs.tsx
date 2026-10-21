@@ -38,7 +38,7 @@ export function MultipleSelectInput({ question, value, onChange, disabled, revea
             disabled={disabled}
             onClick={() => toggle(option.id)}
             className={cn(
-              'flex w-full items-center gap-3 rounded-lg border px-3 py-2 text-left text-sm transition-colors',
+              'flex w-full items-center gap-3 rounded-lg border px-3 py-2 text-left text-sm transition-[color,background-color,border-color,transform] duration-press ease-out motion-safe:active:scale-[0.98]',
               selected ? 'border-foreground/40 bg-accent' : 'hover:bg-accent/50',
               revealed && option.isCorrect && 'border-emerald-500/60 bg-emerald-50/50 dark:bg-emerald-950/20',
               revealed && selected && !option.isCorrect && 'border-destructive/60 bg-destructive/5',
@@ -102,7 +102,7 @@ export function MatchingInput({ question, value, onChange, disabled, revealed }:
                   disabled={disabled}
                   onClick={() => pick(itemIndex, option.id)}
                   className={cn(
-                    'focus-ring grid h-8 w-9 place-items-center rounded-md border text-sm font-semibold transition-colors',
+                    'focus-ring grid h-8 w-9 place-items-center rounded-md border text-sm font-semibold transition-[color,background-color,border-color,transform] duration-press ease-out motion-safe:active:scale-[0.97]',
                     selected ? 'border-foreground bg-foreground text-background' : 'border-border/80 hover:bg-accent',
                     right && 'border-emerald-500 ring-2 ring-emerald-500/40',
                     revealed && selected && !right && 'border-destructive bg-destructive text-destructive-foreground',

@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
+import { flushSync } from 'react-dom'
 import {
   Bookmark,
   BookmarkCheck,
@@ -23,6 +24,7 @@ import {
 } from '@/features/homework/floatingQA'
 import { friendlyAIError } from '@/shared/lib/aiErrors'
 import { cn } from '@/shared/lib/utils'
+import { EASE_OUT, prefersReducedMotion } from '@/shared/lib/motion'
 import { useTranslation } from '@/i18n'
 import { revealPassage } from './passage'
 
@@ -67,7 +69,7 @@ export function FloatingQALayer({ setId }: { setId: string }): JSX.Element {
           {minimized.map((window) => (
             <div
               key={window.id}
-              className="flex items-center gap-1 rounded-full border bg-card py-1 pl-3 pr-1 text-xs shadow-lg"
+              className="flex animate-pop-in items-center gap-1 rounded-full border bg-card py-1 pl-3 pr-1 text-xs shadow-lg"
             >
               <button
                 type="button"
@@ -106,6 +108,12 @@ function windowTitle(window: FloatingQAWindow, t: T): string {
   return quote ? `“${quote.length > 28 ? `${quote.slice(0, 27)}…` : quote}”` : t('walkthroughQA.title')
 }
 
+/**
+ * Windows that have played their opening animation. A window unmounts while
+ * minimised, so this keeps a restore or a raise from replaying it.
+ */
+const enteredWindows = new Set<string>()
+
 function FloatingQAWindowView({ win, layer }: { win: FloatingQAWindow; layer: number }): JSX.Element {
   const { t } = useTranslation()
   const { focus, close, setMinimized, setRect } = useFloatingQA.getState()
@@ -114,6 +122,32 @@ function FloatingQAWindowView({ win, layer }: { win: FloatingQAWindow; layer: nu
   const [busyAction, setBusyAction] = useState<'save' | 'cards' | null>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
+  const rootRef = useRef<HTMLDivElement>(null)
+
+  // Opening: grow in from the side nearest the selection, once per window.
+  useLayoutEffect(() => {
+    const element = rootRef.current
+    if (enteredWindows.has(win.id)) return
+    enteredWindows.add(win.id)
+    if (!element || typeof element.animate !== 'function') return
+    const reduced = prefersReducedMotion()
+    element.style.transformOrigin = win.enterOrigin ?? 'center top'
+    element.animate(
+      reduced
+        ? [{ opacity: 0 }, { opacity: 1 }]
+        : [
+            { opacity: 0, transform: 'scale(0.96)' },
+            { opacity: 1, transform: 'scale(1)' },
+          ],
+      { duration: 200, easing: EASE_OUT },
+    )
+    // Once per window.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+  useEffect(() => () => {
+    // Forget a closed window (a minimised one is still in the store).
+    if (!useFloatingQA.getState().windows.some((window) => window.id === win.id)) enteredWindows.delete(win.id)
+  }, [win.id])
 
   // "Explain" asks at once; "Ask" waits for the learner.
   useEffect(() => {
@@ -132,12 +166,24 @@ function FloatingQAWindowView({ win, layer }: { win: FloatingQAWindow; layer: nu
     if (element) element.scrollTop = element.scrollHeight
   }, [win.turns.length, win.pending])
 
+  /*
+   * Drag and resize. A move only writes a transform to the window while the
+   * pointer is down and commits the final place to the store on release, so
+   * dragging re-renders nothing. A resize must reflow anyway; it commits at
+   * most once per animation frame.
+   */
   function startGesture(event: ReactPointerEvent, kind: 'move' | 'resize'): void {
     if (event.button !== 0) return
     event.preventDefault()
     event.stopPropagation()
     focus(win.id)
     const origin = { x: event.clientX, y: event.clientY, rect: win.rect }
+    let latest = origin.rect
+    let frame = 0
+    const commitResize = (): void => {
+      frame = 0
+      setRect(win.id, latest)
+    }
     // Listen on the window: the pointer may leave the handle while dragging.
     const onMove = (move: PointerEvent): void => {
       if (move.buttons === 0) {
@@ -146,19 +192,27 @@ function FloatingQAWindowView({ win, layer }: { win: FloatingQAWindow; layer: nu
       }
       const dx = move.clientX - origin.x
       const dy = move.clientY - origin.y
-      setRect(
-        win.id,
-        clampRect(
-          kind === 'move'
-            ? { ...origin.rect, x: origin.rect.x + dx, y: origin.rect.y + dy }
-            : { ...origin.rect, width: origin.rect.width + dx, height: origin.rect.height + dy },
-        ),
+      latest = clampRect(
+        kind === 'move'
+          ? { ...origin.rect, x: origin.rect.x + dx, y: origin.rect.y + dy }
+          : { ...origin.rect, width: origin.rect.width + dx, height: origin.rect.height + dy },
       )
+      if (kind === 'move') {
+        const element = rootRef.current
+        if (element) element.style.transform = `translate(${latest.x - origin.rect.x}px, ${latest.y - origin.rect.y}px)`
+      } else if (!frame) {
+        frame = requestAnimationFrame(commitResize)
+      }
     }
     function onUp(): void {
       window.removeEventListener('pointermove', onMove)
       window.removeEventListener('pointerup', onUp)
       window.removeEventListener('pointercancel', onUp)
+      if (frame) cancelAnimationFrame(frame)
+      frame = 0
+      // Commit before dropping the transform, so the window never jumps back.
+      flushSync(() => setRect(win.id, latest))
+      if (rootRef.current) rootRef.current.style.transform = ''
       void persistWindowRect(win.id)
     }
     window.addEventListener('pointermove', onMove)
@@ -214,6 +268,7 @@ function FloatingQAWindowView({ win, layer }: { win: FloatingQAWindow; layer: nu
 
   return (
     <div
+      ref={rootRef}
       role="dialog"
       aria-label={title}
       data-floating-qa

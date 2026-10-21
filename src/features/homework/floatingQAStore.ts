@@ -40,6 +40,11 @@ export interface FloatingQAWindow {
   minimized: boolean
   /** `explain` sends the explain question as soon as the window opens. */
   start?: 'explain' | 'ask'
+  /**
+   * CSS transform-origin the opening animation grows from: the window edge
+   * nearest the selection it was opened beside. Presentation only.
+   */
+  enterOrigin?: string
 }
 
 export const MAX_OPEN_WINDOWS = 3
@@ -66,6 +71,22 @@ export function rectNearAnchor(anchor: { left: number; top: number; width: numbe
   const right = anchor.left + anchor.width + 16
   const x = right + width + MARGIN <= window.innerWidth ? right : anchor.left - width - 16
   return clampRect({ x, y: anchor.top - 40, width, height })
+}
+
+/**
+ * Where a window opened beside a selection grows from: its left edge when it
+ * sits to the right of the selection, its right edge when it sits to the
+ * left, otherwise its top. The vertical position follows the selection.
+ */
+export function enterOriginNear(
+  rect: NoteWindowRect,
+  anchor: { left: number; top: number; width: number; height: number },
+): string {
+  const center = anchor.left + anchor.width / 2
+  const y = Math.round(Math.min(Math.max(anchor.top + anchor.height / 2 - rect.y, 0), rect.height))
+  if (rect.x >= center) return `left ${y}px`
+  if (rect.x + rect.width <= center) return `right ${y}px`
+  return 'center top'
 }
 
 interface FloatingQAState {

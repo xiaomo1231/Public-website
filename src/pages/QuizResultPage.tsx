@@ -172,14 +172,15 @@ export function QuizResultPage(): JSX.Element {
         }
       />
       <PageContent className="space-y-6">
-        <Card>
+        {/* The result moment: the score card rises in once, its bar sweeps to the score. */}
+        <Card className="animate-rise">
           <CardContent className="grid gap-6 p-6 sm:grid-cols-[160px_1fr] sm:items-center">
             <div className="text-center">
               <div className="text-4xl font-semibold tabular-nums">{score.percentage}%</div>
               <div className="text-xs text-muted-foreground">{t('quizResult.score')}</div>
             </div>
             <div className="space-y-3">
-              <Progress value={score.percentage} />
+              <Progress value={score.percentage} reveal />
               <div className="flex flex-wrap gap-4 text-sm">
                 <span className="flex items-center gap-1 text-emerald-600">
                   <CheckCircle2 className="h-4 w-4" /> {t('quizResult.correct', { count: score.correct })}
