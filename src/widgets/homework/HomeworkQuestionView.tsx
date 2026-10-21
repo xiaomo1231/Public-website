@@ -456,7 +456,7 @@ export function HomeworkQuestionView({
                   {t('homework.answer.extractedTextCaveat')}
                 </p>
                 <RichText
-                  text={question.answerText}
+                  text={formatHomeworkQuestion(question.answerText)}
                   format="markdown"
                   paragraphClassName="whitespace-pre-wrap text-[15px] leading-relaxed"
                 />

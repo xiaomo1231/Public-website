@@ -26,6 +26,16 @@ describe('homework reading', () => {
     expect(formatHomeworkQuestion('R\n3. A new numbered item')).toContain('R\n3.')
   })
 
+  it('joins vector subscripts and restores a space lost before a vector', () => {
+    const answer =
+      'v⃗₁ = (2, 1, 0),⃗ v₂ = (0, 1, 0). Solution: The vectorv⃗₁ lies in the xy-plane. Sincev⃗₁ has'
+    const formatted = formatHomeworkQuestion(answer)
+    expect(formatted).not.toContain('⃗')
+    expect(formatted).toContain('$\\vec{v}_{1}$ = (2, 1, 0),$\\vec{v}_{2}$ = (0, 1, 0)')
+    expect(formatted).toContain('The vector $\\vec{v}_{1}$ lies')
+    expect(formatted).toContain('Since $\\vec{v}_{1}$ has')
+  })
+
   it('splits a long multipart question for bounded generation', () => {
     const parts = splitHomeworkSubparts('For each subset decide: (a) x = 1 (b) x = 2')
     expect(parts).toHaveLength(2)

@@ -12,6 +12,7 @@ import {
   Wand2,
 } from 'lucide-react'
 import type { HomeworkQuestion, HomeworkSet } from '@/entities/homework/types'
+import { formatHomeworkQuestion } from '@/entities/homework/formatQuestion'
 import type { AnswerEntry, AnswerLine } from '@/entities/homework/answerMatching'
 import {
   isDeferredProfessorAnswer,
@@ -404,7 +405,9 @@ export function HomeworkAnswerDialog({
 
   const ready = documentStatus === 'ready'
   const answerLabel = (entry: AnswerEntry, index: number): string => {
-    const head = entry.text.replace(/\s+/g, ' ').slice(0, 60)
+    // Plain-text label: drop the PDF combining vector arrow, which most fonts
+    // draw as an empty box on its own.
+    const head = entry.text.replace(/⃗/g, '').replace(/\s+/g, ' ').slice(0, 60)
     return `${entry.number ? `#${entry.number} ` : `#${index + 1} `}${head}`
   }
 
@@ -682,10 +685,15 @@ export function HomeworkAnswerDialog({
                             {String(position + 1).padStart(2, '0')}
                           </span>
                           <div className="min-w-0 flex-1 space-y-2">
-                            <p className="line-clamp-2 text-sm text-foreground">
-                              {question.number ? `${question.number}. ` : ''}
-                              {question.prompt}
-                            </p>
+                            {/* Typeset like the question page, clipped to about two lines. */}
+                            <RichText
+                              text={formatHomeworkQuestion(
+                                `${question.number ? `${question.number}. ` : ''}${question.prompt}`,
+                              )}
+                              format="markdown"
+                              className="max-h-[3.25rem] overflow-hidden text-foreground [&>*]:mb-0"
+                              paragraphClassName="text-sm leading-relaxed"
+                            />
                             <div className="flex flex-wrap items-center gap-2">
                               <Select
                                 value={value === undefined ? NONE : String(value)}
@@ -761,8 +769,8 @@ export function HomeworkAnswerDialog({
                                   {t('homework.answer.preview')} · {pageLabel(preview)}
                                 </p>
                                 <RichText
-                                  text={preview.text}
-                                  format="plain"
+                                  text={formatHomeworkQuestion(preview.text)}
+                                  format="markdown"
                                   className="max-h-40 overflow-y-auto"
                                   paragraphClassName="text-sm leading-relaxed"
                                 />
