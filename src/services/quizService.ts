@@ -67,6 +67,7 @@ import { AppError } from '@/infrastructure/errors/AppError'
 import { t } from '@/i18n'
 import { loadProjectSubjectContext } from './projectSubject'
 import { ShortAnswerGrader } from './shortAnswerGrader'
+import { OralExamService } from './oralExamService'
 import { checkBlanksWithAi } from './fillBlankChecker'
 import { projectTargetLanguage } from './projectTargetLanguage'
 import { imbalances, parseEquation } from '@/infrastructure/chemistry/equation'
@@ -429,6 +430,17 @@ export class QuizService {
     // Verify the project exists before touching any project-scoped data, so an
     // unknown id fails as "not found" rather than as a misleading domain error.
     if (this.projects) await this.projects.get(projectId)
+    // Oral-exam rehearsal: drawn topics with follow-ups, stored as short answers.
+    if (config.mode === 'oral') {
+      return new OralExamService({
+        ai: this.ai,
+        db: this.db,
+        questions: this.questions,
+        quizzes: this.quizzes,
+        analyses: this.analyses,
+        chunks: this.chunks,
+      }).generate(projectId, config, options)
+    }
 
     const analysis = await this.analyses.getByProject(projectId)
     if (!analysis || analysis.status !== 'ready') {

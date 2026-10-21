@@ -83,6 +83,14 @@ describe('ExamTopicsPanel', () => {
     expect(quiz.getAttribute('href')).toBe(
       `/projects/${projectId}/quiz?examDoc=${documentId}&examScope=s1&examTopic=e1`,
     )
+    // 「口试练习」 links preselect the oral-exam rehearsal for the topic / the list.
+    const oral = within(row).getByRole('link', { name: 'Oral exam practice: Shoulder joint' })
+    expect(oral.getAttribute('href')).toBe(
+      `/projects/${projectId}/quiz?examDoc=${documentId}&examScope=s1&examTopic=e1&oral=1`,
+    )
+    expect(screen.getByRole('link', { name: 'Oral exam practice' }).getAttribute('href')).toBe(
+      `/projects/${projectId}/quiz?examDoc=${documentId}&examScope=s1&oral=1`,
+    )
     // Nothing covered yet: practice and mastery read "—".
     expect(within(row).getAllByText('—')).toHaveLength(2)
   })

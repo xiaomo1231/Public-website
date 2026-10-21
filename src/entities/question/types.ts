@@ -69,6 +69,19 @@ export interface RubricPoint {
 
 export type QuestionOrigin = 'ai_without_source'
 
+/**
+ * Oral-exam rehearsal: a drawn topic is one main question ("Describe …",
+ * graded by its 6–10 scoring points) and its follow-up questions, all stored
+ * as ordinary short answers that share `group`. Absent on every other question.
+ */
+export interface OralQuestionInfo {
+  /** Shared by the main question and its follow-ups. */
+  group: string
+  role: 'main' | 'follow_up'
+  /** The drawn topic as the syllabus / course names it. */
+  topic: string
+}
+
 export interface QuestionOption {
   id: string
   label: string
@@ -127,6 +140,8 @@ export interface Question {
    * labelled as AI-generated. Absent for every other question.
    */
   origin?: QuestionOrigin
+  /** Oral-exam rehearsal only: which drawn topic it belongs to and its role. */
+  oral?: OralQuestionInfo
   /** Prompt version that produced this question. */
   promptVersion: string
   createdAt: number
@@ -152,6 +167,7 @@ export interface NewQuestionInput {
   hints?: string[]
   sourceRefs?: SourceReference[]
   origin?: QuestionOrigin
+  oral?: OralQuestionInfo
   promptVersion?: string
 }
 

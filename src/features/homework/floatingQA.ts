@@ -10,6 +10,7 @@ import {
   rectNearAnchor,
   useFloatingQA,
   type FloatingPassage,
+  type FloatingQAWindow,
 } from './floatingQAStore'
 
 /**
@@ -31,6 +32,18 @@ export function notifyNoteChanges(): void {
 }
 
 const notes = () => new WalkthroughNoteService()
+
+/** A window's name: its saved title, else the quoted passage. */
+export function windowTitle(
+  window: Pick<FloatingQAWindow, 'title' | 'passage'>,
+  translate: typeof t = t,
+): string {
+  if (window.title) return window.title
+  const quote = window.passage.quote.replace(/\s+/g, ' ').trim()
+  return quote
+    ? `“${quote.length > 28 ? `${quote.slice(0, 27)}…` : quote}”`
+    : translate('walkthroughQA.title')
+}
 
 export function openPassage(
   passage: FloatingPassage,

@@ -71,6 +71,7 @@ export class QuestionRepository {
         hints: input.hints ?? [],
         sourceRefs: input.sourceRefs ?? [],
         ...(input.origin ? { origin: input.origin } : {}),
+        ...(input.oral ? { oral: input.oral } : {}),
         promptVersion: input.promptVersion ?? 'v1',
         createdAt: now,
       }

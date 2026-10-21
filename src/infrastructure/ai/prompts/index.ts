@@ -34,6 +34,10 @@ import * as ExamTopicMatchV1 from './exam-topic-match/v1'
 import * as VocabGlossV2 from './vocab-gloss/v2'
 import * as VocabListSplitV1 from './vocab-list-split/v1'
 import * as PhraseExtractV1 from './phrase-extract/v1'
+import * as InterviewScenarioV1 from './interview-scenario/v1'
+import * as InterviewPatientV1 from './interview-patient/v1'
+import * as InterviewSummaryCheckV1 from './interview-summary-check/v1'
+import * as OralExamV1 from './oral-exam/v1'
 
 export const PROMPT_VERSIONS = {
   documentAnalyzer: 'v2',
@@ -66,6 +70,10 @@ export const PROMPT_VERSIONS = {
   vocabGloss: 'v2',
   vocabListSplit: 'v1',
   phraseExtract: 'v1',
+  interviewScenario: 'v1',
+  interviewPatient: 'v1',
+  interviewSummaryCheck: 'v1',
+  oralExam: 'v1',
 } as const
 
 export const prompts = {
@@ -100,6 +108,10 @@ export const prompts = {
   vocabGloss: VocabGlossV2,
   vocabListSplit: VocabListSplitV1,
   phraseExtract: PhraseExtractV1,
+  interviewScenario: InterviewScenarioV1,
+  interviewPatient: InterviewPatientV1,
+  interviewSummaryCheck: InterviewSummaryCheckV1,
+  oralExam: OralExamV1,
 } as const
 
 export type { DocumentAnalyzerInput, DocumentAnalysisOutput } from './document-analyzer/v2'

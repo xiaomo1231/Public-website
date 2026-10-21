@@ -32,7 +32,7 @@ const COURSE_FIGURES =
   'When the course material includes a figure for this topic, refer the student to it instead of describing it from memory.'
 
 /** Medical safety limits, shared by medicine (both exam styles) and language courses. */
-const MEDICAL_BOUNDARIES = [
+export const MEDICAL_BOUNDARIES = [
   'This is education, not medical care: never diagnose the student or anyone they describe, and never give treatment or dosage advice for a real person; if the student describes their own symptoms, suggest seeing a doctor.',
   'Reference ranges and drug doses in examples are illustrative and vary by laboratory, guideline and patient — say so when you use them.',
 ]

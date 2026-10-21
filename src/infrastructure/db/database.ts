@@ -36,6 +36,7 @@ import type { KnowledgeMastery } from '@/entities/knowledgeMastery/types'
 import type { Mistake } from '@/entities/mistake/types'
 import { logger } from '../logger/logger'
 import type { VocabBook, VocabCard, VocabEntry, VocabReview } from '@/entities/vocab/types'
+import type { InterviewSession } from '@/entities/interview/types'
 
 /**
  * Single Dexie database for the entire app. Versioned schema lives here;
@@ -96,6 +97,8 @@ export class AppDatabase extends Dexie {
   vocabBooks!: EntityTable<VocabBook, 'id'>
   vocabEntries!: EntityTable<VocabEntry, 'id'>
   vocabReviews!: EntityTable<VocabReview, 'id'>
+  /** Simulated patient interviews (language courses). */
+  interviewSessions!: EntityTable<InterviewSession, 'id'>
   /** Detected textbook chapter/section hierarchy (structural source of truth). */
   courseStructures!: EntityTable<CourseStructure, 'id'>
   courseStructureNodes!: EntityTable<CourseStructureNode, 'id'>
@@ -747,6 +750,63 @@ export class AppDatabase extends Dexie {
       vocabReviews: 'id, word, at',
       homeworkWalkthroughs: 'id, projectId, setId',
       walkthroughNotes: 'id, projectId, setId, updatedAt, [setId+updatedAt]',
+    })
+
+    // Simulated patient interviews for language courses. Additive only.
+    this.version(18).stores({
+      projects: 'id, name, subject, createdAt, updatedAt',
+      user: 'id',
+      settings: 'id, updatedAt',
+      inviteKeys: 'code, usedAt',
+      cryptoKeys: 'id',
+      documents:
+        'id, projectId, type, status, materialType, name, uploadedAt, processedAt, [projectId+status], [projectId+type], [projectId+materialType]',
+      documentBlobs: 'id, projectId',
+      chunks:
+        'id, documentId, projectId, order, chapterId, sectionId, [documentId+order], [projectId+documentId], [projectId+chapterId]',
+      processingJobs: 'id, documentId, projectId, stage, updatedAt, [projectId+updatedAt]',
+      courseAnalyses: 'id, projectId, status, finishedAt',
+      topics: 'id, projectId, order',
+      concepts: 'id, projectId, name',
+      formulas: 'id, projectId, name',
+      symbols: 'id, projectId, symbol',
+      examples: 'id, projectId',
+      courseExercises: 'id, projectId, difficulty',
+      prerequisites: 'id, projectId',
+      tutorSessions: 'id, projectId, status, updatedAt, [projectId+updatedAt]',
+      tutorLessons: 'id, projectId, topicId, generatedAt, [projectId+topicId+language]',
+      visualSources:
+        'id, projectId, documentId, pageNumber, createdAt, [documentId+pageNumber], [projectId+documentId]',
+      visualSourceImages: 'id, projectId',
+      courseContexts: 'id, projectId',
+      practiceSets: 'id, projectId, documentId, createdAt, [projectId+documentId]',
+      practiceQuestions: 'id, projectId, setId, topicId, status, [setId+status]',
+      practiceAttempts: 'id, projectId, questionId, setId, submittedAt, [projectId+setId]',
+      courseStructures: 'id, projectId, sourceDocumentId, [projectId+sourceDocumentId]',
+      courseStructureNodes: 'id, structureId, projectId, parentId, order, [structureId+order]',
+      translations: 'id, projectId, createdAt, [projectId+createdAt]',
+      questions:
+        'id, projectId, topicId, knowledgePoint, type, difficulty, createdAt, [projectId+topicId], [projectId+knowledgePoint]',
+      questionAttempts:
+        'id, projectId, questionId, quizId, topicId, knowledgePoint, createdAt, [projectId+createdAt], [quizId+createdAt]',
+      quizzes: 'id, projectId, status, startedAt, [projectId+startedAt]',
+      knowledgeMastery: 'id, projectId, knowledgePoint, [projectId+knowledgePoint]',
+      mistakes:
+        'id, projectId, questionId, quizId, knowledgePoint, mistakeType, status, source, createdAt, [projectId+status], [projectId+knowledgePoint]',
+      homeworkSets: 'id, projectId, documentId, createdAt, [projectId+documentId]',
+      homeworkQuestions: 'id, projectId, setId, order, [setId+order]',
+      referenceImages: 'id, projectId, topicId, createdAt, [projectId+topicId]',
+      referenceImageBlobs: 'id, projectId',
+      reviewCards: 'id, projectId, topicId, due, createdAt, [projectId+due]',
+      slideLessons:
+        'id, projectId, documentId, slideNumber, updatedAt, [projectId+documentId], [projectId+documentId+slideNumber+language]',
+      vocabCards: 'word, due, state, addedAt',
+      vocabBooks: 'id, kind, projectId',
+      vocabEntries: 'id, bookId, word, projectId, [bookId+word]',
+      vocabReviews: 'id, word, at',
+      homeworkWalkthroughs: 'id, projectId, setId',
+      walkthroughNotes: 'id, projectId, setId, updatedAt, [setId+updatedAt]',
+      interviewSessions: 'id, projectId, [projectId+updatedAt]',
     })
   }
 }

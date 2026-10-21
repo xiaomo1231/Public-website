@@ -13,9 +13,14 @@ export interface QuizConfig {
    *  mixed      — everything in the project
    *  weakness   — aggregated weak knowledge points
    *  review     — a review session built from recent mistakes
+   *  oral       — oral-exam rehearsal: `count` topics (1–5) drawn at random
+   *               from the exam scope / the topic / the course, each one main
+   *               question with follow-ups (see `OralQuestionInfo`)
    */
-  mode: 'topic' | 'mixed' | 'weakness' | 'review'
+  mode: 'topic' | 'mixed' | 'weakness' | 'review' | 'oral'
   count: number
+  /** Oral mode only: the answer countdown per drawn topic. */
+  oral?: OralExamSettings
   difficulty: QuizDifficulty
   types: QuestionType[]
   /** Restrict retrieval to a textbook chapter/section (course structure). */
@@ -35,6 +40,15 @@ export interface QuizConfig {
    */
   examScope?: ExamScopeSelection
 }
+
+export interface OralExamSettings {
+  /** Seconds for the main answer; absent = no countdown. */
+  timerSeconds?: number
+}
+
+/** Topics drawn per oral rehearsal, and the default countdown. */
+export const ORAL_MAX_TOPICS = 5
+export const ORAL_DEFAULT_TIMER_SECONDS = 180
 
 export interface ExamScopeSelection {
   /** The syllabus document. */

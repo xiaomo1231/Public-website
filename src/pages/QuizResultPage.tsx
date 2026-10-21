@@ -24,6 +24,7 @@ import { Progress } from '@/shared/ui/Progress'
 import { PageContainer, PageContent, PageHeader } from '@/shared/ui/Page'
 import { buildOfflineQuizService, buildAIServices } from '@/services/aiServices'
 import { QuestionSource } from '@/widgets/quiz/QuestionSource'
+import { OralTopicScores } from '@/widgets/quiz/OralTopicScores'
 import { ProjectFlowNav } from '@/widgets/project/ProjectFlowNav'
 import type { Quiz } from '@/entities/quiz/types'
 import {
@@ -304,6 +305,10 @@ export function QuizResultPage(): JSX.Element {
             </div>
           </CardContent>
         </Card>
+
+        {quiz.config.mode === 'oral' && (
+          <OralTopicScores questions={questions} attempts={attempts} />
+        )}
 
         {score.weakKnowledgePoints.length > 0 && (
           <Card className="border-amber-500/30">

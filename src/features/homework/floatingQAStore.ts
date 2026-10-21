@@ -9,6 +9,12 @@ import type { TextAnchor } from '@/shared/lib/textAnchor'
  * until the learner saves them (they then mirror a stored note and every new
  * turn is saved too). At most three are open at a time; opening a fourth tucks
  * the one at the back into the dock.
+ *
+ * A window can also shrink to a small card (`compact`) or be tucked into the
+ * text (`tucked`: no window at all — the passage is marked and hovering it
+ * shows the conversation). Cards do not count toward the three full windows
+ * (they are small), but at most six show at once; tucked conversations take no
+ * screen space and are not limited.
  */
 
 export interface FloatingPassage {
@@ -23,6 +29,18 @@ export interface FloatingPassage {
   anchor: TextAnchor
   surrounding: string
   language: 'zh' | 'en'
+}
+
+/** A window shrunk to a card. */
+export interface CompactCard {
+  /**
+   * Pinned: viewport coordinates (`position: fixed`), the card stays put while
+   * the page scrolls. Not pinned: coordinates in the walkthrough's card layer,
+   * so the card scrolls with the text.
+   */
+  x: number
+  y: number
+  pinned: boolean
 }
 
 export interface FloatingQAWindow {
@@ -45,13 +63,28 @@ export interface FloatingQAWindow {
    * nearest the selection it was opened beside. Presentation only.
    */
   enterOrigin?: string
+  /** Shown as a small card instead of the full window. */
+  compact?: CompactCard
+  /** Tucked into the text: no window, the passage is marked instead. */
+  tucked?: boolean
+}
+
+export type FloatingQAMode = 'full' | 'compact' | 'tucked' | 'minimized'
+
+export function windowMode(window: FloatingQAWindow): FloatingQAMode {
+  if (window.minimized) return 'minimized'
+  if (window.tucked) return 'tucked'
+  return window.compact ? 'compact' : 'full'
 }
 
 export const MAX_OPEN_WINDOWS = 3
+export const MAX_COMPACT_CARDS = 6
 export const DEFAULT_WINDOW_SIZE = { width: 400, height: 460 }
+export const CARD_SIZE = { width: 280, height: 140 }
 const MIN_WIDTH = 300
 const MIN_HEIGHT = 220
 const MARGIN = 12
+const LAYER_MARGIN = 4
 
 /** Keep the whole window inside the viewport, so its input is never hidden. */
 export function clampRect(
@@ -72,6 +105,43 @@ export function clampRect(
     x: Math.min(Math.max(rect.x, MARGIN), Math.max(MARGIN, viewport.width - width - MARGIN)),
     y: Math.min(Math.max(rect.y, MARGIN), Math.max(MARGIN, viewport.height - height - MARGIN)),
   }
+}
+
+/**
+ * Keep a card inside `bounds`: the viewport when pinned, the card layer (the
+ * walkthrough's content box) when it follows the page.
+ */
+export function clampCard(
+  card: CompactCard,
+  bounds: { width: number; height: number },
+): CompactCard {
+  const margin = card.pinned ? MARGIN : LAYER_MARGIN
+  return {
+    ...card,
+    x: Math.min(
+      Math.max(card.x, margin),
+      Math.max(margin, bounds.width - CARD_SIZE.width - margin),
+    ),
+    y: Math.min(
+      Math.max(card.y, margin),
+      Math.max(margin, bounds.height - CARD_SIZE.height - margin),
+    ),
+  }
+}
+
+/**
+ * Pin a card to the screen or attach it to the page without it moving on
+ * screen. `layer` is the card layer's current viewport position.
+ */
+export function convertCardPin(
+  card: CompactCard,
+  pinned: boolean,
+  layer: { left: number; top: number },
+): CompactCard {
+  if (card.pinned === pinned) return card
+  return pinned
+    ? { x: card.x + layer.left, y: card.y + layer.top, pinned }
+    : { x: card.x - layer.left, y: card.y - layer.top, pinned }
 }
 
 /** Beside the selection: to its right when there is room, else to its left. */
@@ -106,9 +176,22 @@ export function enterOriginNear(
 interface FloatingQAState {
   windows: FloatingQAWindow[]
   nextZ: number
+  /** Whether the last card was pinned; new cards start the same way (this visit only). */
+  cardPinned: boolean
   open: (window: Omit<FloatingQAWindow, 'id' | 'z' | 'minimized'>) => string
   close: (id: string) => void
+  /** Bring to the front as a full window (from a card, the text or the dock). */
   focus: (id: string) => void
+  /** Bring to the front without changing how it is shown. */
+  raise: (id: string) => void
+  /** Shrink to a card. */
+  compact: (id: string, card: CompactCard) => void
+  /** Move a card, or pin / unpin it. */
+  setCard: (id: string, card: CompactCard) => void
+  /** Back to the full window, optionally at a new place. */
+  expand: (id: string, rect?: NoteWindowRect) => void
+  /** Tuck into the text. */
+  tuck: (id: string) => void
   setMinimized: (id: string, minimized: boolean) => void
   setRect: (id: string, rect: NoteWindowRect) => void
   update: (id: string, patch: Partial<Omit<FloatingQAWindow, 'id'>>) => void
@@ -119,20 +202,39 @@ function sameRect(a: NoteWindowRect, b: NoteWindowRect): boolean {
   return a.x === b.x && a.y === b.y && a.width === b.width && a.height === b.height
 }
 
-/** Minimise the windows furthest back until at most `MAX_OPEN_WINDOWS` show. */
+function backmost(windows: FloatingQAWindow[], mode: FloatingQAMode, keep: number): string[] {
+  const shown = windows.filter((window) => windowMode(window) === mode).sort((a, b) => a.z - b.z)
+  return shown.slice(0, Math.max(0, shown.length - keep)).map((window) => window.id)
+}
+
+/**
+ * Minimise the windows furthest back until at most `MAX_OPEN_WINDOWS` full
+ * windows and `MAX_COMPACT_CARDS` cards show. A docked card comes back from
+ * the dock as a full window.
+ */
 function enforceLimit(windows: FloatingQAWindow[]): FloatingQAWindow[] {
-  const open = windows.filter((window) => !window.minimized).sort((a, b) => a.z - b.z)
-  const excess = new Set(
-    open.slice(0, Math.max(0, open.length - MAX_OPEN_WINDOWS)).map((window) => window.id),
-  )
-  return excess.size
-    ? windows.map((window) => (excess.has(window.id) ? { ...window, minimized: true } : window))
-    : windows
+  const excess = new Set([
+    ...backmost(windows, 'full', MAX_OPEN_WINDOWS),
+    ...backmost(windows, 'compact', MAX_COMPACT_CARDS),
+  ])
+  if (excess.size === 0) return windows
+  return windows.map((window) => {
+    if (!excess.has(window.id)) return window
+    const { compact: _compact, ...rest } = window
+    return { ...rest, minimized: true }
+  })
+}
+
+/** Shown as the full window. */
+function asFull(window: FloatingQAWindow): FloatingQAWindow {
+  const { compact: _compact, ...rest } = window
+  return { ...rest, minimized: false, tucked: false }
 }
 
 export const useFloatingQA = create<FloatingQAState>((set) => ({
   windows: [],
   nextZ: 1,
+  cardPinned: true,
   open: (input) => {
     const id = crypto.randomUUID()
     set((state) => ({
@@ -144,28 +246,77 @@ export const useFloatingQA = create<FloatingQAState>((set) => ({
   close: (id) => set((state) => ({ windows: state.windows.filter((window) => window.id !== id) })),
   focus: (id) =>
     set((state) => {
-      // Already the open window in front: nothing to change (no re-render).
+      // Already the full window in front: nothing to change (no re-render).
       const target = state.windows.find((window) => window.id === id)
-      if (target && !target.minimized && state.windows.every((window) => window.z <= target.z))
+      if (
+        !target ||
+        (windowMode(target) === 'full' && state.windows.every((window) => window.z <= target.z))
+      )
         return state
       return {
         nextZ: state.nextZ + 1,
         windows: enforceLimit(
           state.windows.map((window) =>
-            window.id === id ? { ...window, z: state.nextZ, minimized: false } : window,
+            window.id === id ? { ...asFull(window), z: state.nextZ } : window,
           ),
         ),
       }
     }),
-  setMinimized: (id, minimized) =>
+  raise: (id) =>
+    set((state) => {
+      const target = state.windows.find((window) => window.id === id)
+      if (!target || state.windows.every((window) => window.z <= target.z)) return state
+      return {
+        nextZ: state.nextZ + 1,
+        windows: state.windows.map((window) =>
+          window.id === id ? { ...window, z: state.nextZ } : window,
+        ),
+      }
+    }),
+  compact: (id, card) =>
+    set((state) => ({
+      nextZ: state.nextZ + 1,
+      cardPinned: card.pinned,
+      windows: enforceLimit(
+        state.windows.map((window) =>
+          window.id === id ? { ...asFull(window), compact: card, z: state.nextZ } : window,
+        ),
+      ),
+    })),
+  setCard: (id, card) =>
+    set((state) => ({
+      cardPinned: card.pinned,
+      windows: state.windows.map((window) =>
+        window.id === id && window.compact ? { ...window, compact: card } : window,
+      ),
+    })),
+  expand: (id, rect) =>
     set((state) => ({
       nextZ: state.nextZ + 1,
       windows: enforceLimit(
         state.windows.map((window) =>
           window.id === id
-            ? { ...window, minimized, ...(minimized ? {} : { z: state.nextZ }) }
+            ? { ...asFull(window), ...(rect ? { rect } : {}), z: state.nextZ }
             : window,
         ),
+      ),
+    })),
+  tuck: (id) =>
+    set((state) => ({
+      windows: state.windows.map((window) =>
+        window.id === id ? { ...asFull(window), tucked: true } : window,
+      ),
+    })),
+  setMinimized: (id, minimized) =>
+    set((state) => ({
+      nextZ: state.nextZ + 1,
+      windows: enforceLimit(
+        state.windows.map((window) => {
+          if (window.id !== id) return window
+          if (!minimized) return { ...asFull(window), z: state.nextZ }
+          const { compact: _compact, ...rest } = window
+          return { ...rest, minimized: true, tucked: false }
+        }),
       ),
     })),
   setRect: (id, rect) =>

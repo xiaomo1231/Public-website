@@ -1,7 +1,14 @@
 import { useEffect, useState } from 'react'
-import { Loader2, Sparkles } from 'lucide-react'
+import { useSearchParams } from 'react-router-dom'
+import { Loader2, Mic, Sparkles } from 'lucide-react'
 import type { CourseAnalysis, Topic } from '@/entities/courseAnalysis/types'
-import type { QuizConfig, QuizDifficulty } from '@/entities/quiz/types'
+import {
+  ORAL_DEFAULT_TIMER_SECONDS,
+  ORAL_MAX_TOPICS,
+  type QuizConfig,
+  type QuizDifficulty,
+} from '@/entities/quiz/types'
+import { SyllabusService } from '@/services/syllabusService'
 import type { QuestionType } from '@/entities/question/types'
 import {
   QUESTION_TYPE_LABEL_KEYS,
@@ -80,6 +87,26 @@ export function QuizConfigDialog({
   useEffect(() => {
     if (subject) setTypes(defaultQuestionTypes(subject, targetLanguage))
   }, [subject, targetLanguage])
+  // Oral-exam rehearsal: offered for medicine and for any course with a
+  // syllabus; preselected by the exam-topic list's 「口试练习」 link (`?oral=1`).
+  const [params] = useSearchParams()
+  const [oral, setOral] = useState(params.get('oral') === '1')
+  const [oralCount, setOralCount] = useState(params.get('examTopic') ? 1 : 3)
+  const [oralTimer, setOralTimer] = useState(true)
+  const [hasSyllabus, setHasSyllabus] = useState(false)
+  useEffect(() => {
+    let cancelled = false
+    void new SyllabusService()
+      .listSyllabi(projectId)
+      .then((rows) => {
+        if (!cancelled) setHasSyllabus(rows.some((row) => row.data.scopes.length > 0))
+      })
+      .catch(() => undefined)
+    return () => {
+      cancelled = true
+    }
+  }, [projectId])
+  const oralOffered = subject === 'medicine' || hasSyllabus || oral
   const [loading, setLoading] = useState(true)
   // The saved preference; changing it here saves it for every later quiz.
   const { profile, setQuestionLanguage } = useAuth()
@@ -118,6 +145,22 @@ export function QuizConfigDialog({
 
   function handleStart() {
     const topic = topics.find((item) => item.id === topicId)
+    if (oral) {
+      onStart({
+        mode: 'oral',
+        count: oralCount,
+        difficulty,
+        types: ['short_answer'],
+        questionLanguage,
+        oral: oralTimer ? { timerSeconds: ORAL_DEFAULT_TIMER_SECONDS } : {},
+        ...(examScope
+          ? { topicName: examScope.label, examScope: examScope.selection }
+          : topic
+            ? { topicId: topic.id, topicName: topic.name }
+            : {}),
+      })
+      return
+    }
     const config: QuizConfig = {
       mode: topicId === '__mixed__' ? 'mixed' : 'topic',
       count,
@@ -188,7 +231,7 @@ export function QuizConfigDialog({
             </Select>
           </div>
 
-          <div className="space-y-2">
+          <div className={cn('space-y-2', oral && 'hidden')}>
             <Label htmlFor="quiz-count">{t('quizConfig.questionCount')}</Label>
             <Input
               id="quiz-count"
@@ -203,6 +246,61 @@ export function QuizConfigDialog({
         </div>
 
         <ExamScopePicker projectId={projectId} value={examScope} onChange={setExamScope} />
+
+        {oralOffered && (
+          <div className="space-y-3 border-t pt-4">
+            <label className="flex cursor-pointer items-start gap-3 text-sm">
+              <input
+                type="checkbox"
+                className="focus-ring mt-0.5 h-4 w-4 shrink-0 accent-primary"
+                checked={oral}
+                onChange={(event) => setOral(event.target.checked)}
+              />
+              <span>
+                <span className="flex items-center gap-1.5 font-medium">
+                  <Mic className="h-4 w-4" aria-hidden />
+                  {t('oral.config.toggle')}
+                </span>
+                <span className="block text-xs text-muted-foreground">{t('oral.config.hint')}</span>
+              </span>
+            </label>
+            {oral && (
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="oral-count">{t('oral.config.topicCount')}</Label>
+                  <Input
+                    id="oral-count"
+                    type="number"
+                    min={1}
+                    max={ORAL_MAX_TOPICS}
+                    value={oralCount}
+                    disabled={topicId !== '__mixed__' && examScope === null}
+                    onChange={(e) =>
+                      setOralCount(
+                        Math.max(1, Math.min(ORAL_MAX_TOPICS, Number(e.target.value) || 1)),
+                      )
+                    }
+                  />
+                  <p className="text-xs text-muted-foreground">{t('oral.config.topicCountHint')}</p>
+                </div>
+                <label className="flex cursor-pointer items-start gap-3 self-center text-sm">
+                  <input
+                    type="checkbox"
+                    className="focus-ring mt-0.5 h-4 w-4 shrink-0 accent-primary"
+                    checked={oralTimer}
+                    onChange={(event) => setOralTimer(event.target.checked)}
+                  />
+                  <span>
+                    {t('oral.config.timer', { minutes: ORAL_DEFAULT_TIMER_SECONDS / 60 })}
+                    <span className="block text-xs text-muted-foreground">
+                      {t('oral.config.timerHint')}
+                    </span>
+                  </span>
+                </label>
+              </div>
+            )}
+          </div>
+        )}
 
         <div className="space-y-2">
           <Label htmlFor="quiz-language">{t('quizConfig.questionLanguage')}</Label>
@@ -243,7 +341,7 @@ export function QuizConfigDialog({
           )}
         </div>
 
-        <div className="space-y-2">
+        <div className={cn('space-y-2', oral && 'hidden')}>
           <Label>{t('quizConfig.questionTypes')}</Label>
           <div className="flex flex-wrap gap-2">
             {availableTypes.map((type) => {
@@ -280,7 +378,11 @@ export function QuizConfigDialog({
 
         <Button onClick={handleStart} disabled={busy} className="w-full sm:w-auto">
           {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
-          {busy ? t('quizConfig.generating') : t('quizConfig.title')}
+          {busy
+            ? t('quizConfig.generating')
+            : oral
+              ? t('oral.config.start')
+              : t('quizConfig.title')}
         </Button>
       </CardContent>
     </Card>

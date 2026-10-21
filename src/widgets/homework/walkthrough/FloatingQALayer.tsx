@@ -7,25 +7,36 @@ import {
   useState,
   type PointerEvent as ReactPointerEvent,
 } from 'react'
-import { flushSync } from 'react-dom'
+import { createPortal, flushSync } from 'react-dom'
 import {
   Bookmark,
   BookmarkCheck,
   GripHorizontal,
   Layers,
+  Link2,
   Loader2,
+  Maximize2,
   MessageCircleQuestion,
+  Minimize2,
   Minus,
+  Pin,
+  PinOff,
   Send,
   X,
 } from 'lucide-react'
 import { Button } from '@/shared/ui/Button'
+import { TooltipProvider, TooltipWrapper } from '@/shared/ui/Tooltip'
 import { Textarea } from '@/shared/ui/Textarea'
 import { RichText } from '@/shared/ui/RichText'
 import { toast } from '@/features/toast/toastStore'
 import {
+  CARD_SIZE,
+  clampCard,
   clampRect,
+  convertCardPin,
   useFloatingQA,
+  windowMode,
+  type CompactCard,
   type FloatingQAWindow,
 } from '@/features/homework/floatingQAStore'
 import {
@@ -33,6 +44,7 @@ import {
   askInWindow,
   persistWindowRect,
   saveWindow,
+  windowTitle,
 } from '@/features/homework/floatingQA'
 import { friendlyAIError } from '@/shared/lib/aiErrors'
 import { cn } from '@/shared/lib/utils'
@@ -41,8 +53,26 @@ import { useTranslation } from '@/i18n'
 import type { WalkthroughNoteTurn } from '@/entities/homework/walkthrough'
 import { revealPassage } from './passage'
 
-/** The floating question windows of one assignment, plus the dock of minimised ones. */
-export function FloatingQALayer({ setId }: { setId: string }): JSX.Element {
+function viewport(): { width: number; height: number } {
+  return { width: window.innerWidth, height: window.innerHeight }
+}
+
+function layerBounds(layer: HTMLElement): { width: number; height: number } {
+  return { width: layer.clientWidth, height: layer.clientHeight }
+}
+
+/**
+ * The floating question windows of one assignment, its cards and the dock of
+ * minimised ones. `cardLayer` is the walkthrough's card layer: cards that
+ * follow the page are rendered inside it, positioned in its coordinates.
+ */
+export function FloatingQALayer({
+  setId,
+  cardLayer = null,
+}: {
+  setId: string
+  cardLayer?: HTMLElement | null
+}): JSX.Element {
   const { t } = useTranslation()
   // Select the stable array; a filtered copy would be a new value every render.
   const all = useFloatingQA((state) => state.windows)
@@ -58,16 +88,27 @@ export function FloatingQALayer({ setId }: { setId: string }): JSX.Element {
   useEffect(() => {
     function onResize(): void {
       const store = useFloatingQA.getState()
-      for (const window of store.windows) store.setRect(window.id, clampRect(window.rect))
+      for (const window of store.windows) {
+        store.setRect(window.id, clampRect(window.rect))
+        if (window.compact?.pinned) {
+          const card = clampCard(window.compact, viewport())
+          if (card.x !== window.compact.x || card.y !== window.compact.y)
+            store.setCard(window.id, card)
+        }
+      }
     }
     window.addEventListener('resize', onResize)
     return () => window.removeEventListener('resize', onResize)
   }, [])
 
+  const cards = windows.filter((window) => windowMode(window) === 'compact')
+  const pinnedCards = cards.filter((window) => window.compact!.pinned || !cardLayer)
+  const attachedCards = cards.filter((window) => !window.compact!.pinned && cardLayer)
+
   return (
-    <>
+    <TooltipProvider delayDuration={300}>
       {windows
-        .filter((window) => !window.minimized)
+        .filter((window) => windowMode(window) === 'full')
         .map((window, _, open) => (
           // Keep DOM order stable (a moved node would drop pointer capture
           // mid-drag); stack by rank so windows stay below dialogs (z-50).
@@ -75,8 +116,34 @@ export function FloatingQALayer({ setId }: { setId: string }): JSX.Element {
             key={window.id}
             win={window}
             layer={41 + open.filter((other) => other.z < window.z).length}
+            cardLayer={cardLayer}
           />
         ))}
+      {/* Pinned cards stack below the full windows (35-40). */}
+      {pinnedCards.map((window) => (
+        <CompactCardView
+          key={window.id}
+          win={window}
+          layer={35 + pinnedCards.filter((other) => other.z < window.z).length}
+          cardLayer={cardLayer}
+          attached={false}
+        />
+      ))}
+      {/* Cards that follow the page live in the walkthrough's card layer. */}
+      {cardLayer &&
+        attachedCards.length > 0 &&
+        createPortal(
+          attachedCards.map((window) => (
+            <CompactCardView
+              key={window.id}
+              win={window}
+              layer={1 + attachedCards.filter((other) => other.z < window.z).length}
+              cardLayer={cardLayer}
+              attached
+            />
+          )),
+          cardLayer,
+        )}
       {minimized.length > 0 && (
         // Above the windows (41–43) so they can never cover the chips, below
         // dialogs (z-50).
@@ -122,18 +189,8 @@ export function FloatingQALayer({ setId }: { setId: string }): JSX.Element {
           ))}
         </div>
       )}
-    </>
+    </TooltipProvider>
   )
-}
-
-type T = ReturnType<typeof useTranslation>['t']
-
-function windowTitle(window: FloatingQAWindow, t: T): string {
-  if (window.title) return window.title
-  const quote = window.passage.quote.replace(/\s+/g, ' ').trim()
-  return quote
-    ? `“${quote.length > 28 ? `${quote.slice(0, 27)}…` : quote}”`
-    : t('walkthroughQA.title')
 }
 
 /**
@@ -144,6 +201,35 @@ const enteredWindows = new Set<string>()
 
 /** Where focus goes back to when a window closes: what was focused when it opened. */
 const returnFocusTargets = new Map<string, HTMLElement>()
+
+function focusArticle(setId: string): void {
+  document
+    .querySelector<HTMLElement>(
+      `[data-selection-context="walkthrough"][data-walkthrough-set="${CSS.escape(setId)}"]`,
+    )
+    ?.focus({ preventScroll: true })
+}
+
+/**
+ * After tucking a conversation into the text, focus its chip under the
+ * section (the keyboard way back to it), or the article.
+ */
+function focusTuckedChip(win: FloatingQAWindow): void {
+  const chip =
+    document.querySelector<HTMLElement>(`[data-tucked-chip="${CSS.escape(win.id)}"]`) ??
+    (win.noteId
+      ? document.querySelector<HTMLElement>(`[data-note-chip="${CSS.escape(win.noteId)}"]`)
+      : null)
+  if (chip) chip.focus({ preventScroll: true })
+  else focusArticle(win.passage.setId)
+}
+
+/** Move focus to a window's dock chip after it was minimised. */
+function focusDockChip(id: string): void {
+  document
+    .querySelector<HTMLElement>(`[data-dock-chip="${CSS.escape(id)}"]`)
+    ?.focus({ preventScroll: true })
+}
 
 /**
  * After closing a window, focus what was focused before it opened, or the
@@ -161,11 +247,7 @@ function returnFocusAfterClose(id: string, setId: string): void {
     previous.focus({ preventScroll: true })
     return
   }
-  document
-    .querySelector<HTMLElement>(
-      `[data-selection-context="walkthrough"][data-walkthrough-set="${CSS.escape(setId)}"]`,
-    )
-    ?.focus({ preventScroll: true })
+  focusArticle(setId)
 }
 
 /** The conversation so far; only re-renders when a turn is added. */
@@ -194,12 +276,14 @@ const TurnList = memo(function TurnList({ turns }: { turns: WalkthroughNoteTurn[
 const FloatingQAWindowView = memo(function FloatingQAWindowView({
   win,
   layer,
+  cardLayer,
 }: {
   win: FloatingQAWindow
   layer: number
+  cardLayer: HTMLElement | null
 }): JSX.Element {
   const { t } = useTranslation()
-  const { focus, close, setMinimized, setRect } = useFloatingQA.getState()
+  const { focus, close, setMinimized, setRect, compact, tuck } = useFloatingQA.getState()
   const [input, setInput] = useState('')
   const [confirmClose, setConfirmClose] = useState(false)
   const [busyAction, setBusyAction] = useState<'save' | 'cards' | null>(null)
@@ -373,9 +457,32 @@ const FloatingQAWindowView = memo(function FloatingQAWindowView({
   /** Minimise into the dock and move focus to this window's dock chip. */
   function minimize(): void {
     flushSync(() => setMinimized(win.id, true))
+    focusDockChip(win.id)
+  }
+
+  /**
+   * Shrink to a card where the window is. It starts pinned or following the
+   * page like the last card did (pinned at first, like a window).
+   */
+  function shrink(): void {
+    const pinnedCard: CompactCard = { x: win.rect.x, y: win.rect.y, pinned: true }
+    const card =
+      !useFloatingQA.getState().cardPinned && cardLayer
+        ? clampCard(
+            convertCardPin(pinnedCard, false, cardLayer.getBoundingClientRect()),
+            layerBounds(cardLayer),
+          )
+        : clampCard(pinnedCard, viewport())
+    flushSync(() => compact(win.id, card))
     document
-      .querySelector<HTMLElement>(`[data-dock-chip="${CSS.escape(win.id)}"]`)
+      .querySelector<HTMLElement>(`[data-qa-card="${CSS.escape(win.id)}"]`)
       ?.focus({ preventScroll: true })
+  }
+
+  /** Hide the window; the passage is marked and shows the answer on hover. */
+  function tuckIntoText(): void {
+    flushSync(() => tuck(win.id))
+    focusTuckedChip(win)
   }
 
   const saved = Boolean(win.noteId)
@@ -421,6 +528,30 @@ const FloatingQAWindowView = memo(function FloatingQAWindowView({
             {t('walkthroughQA.savedBadge')}
           </span>
         )}
+        <TooltipWrapper content={t('walkthroughQA.tuckHint')}>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7"
+            aria-label={t('walkthroughQA.tuck')}
+            onPointerDown={(event) => event.stopPropagation()}
+            onClick={tuckIntoText}
+          >
+            <Link2 className="h-3.5 w-3.5" />
+          </Button>
+        </TooltipWrapper>
+        <TooltipWrapper content={t('walkthroughQA.compactHint')}>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7"
+            aria-label={t('walkthroughQA.compact')}
+            onPointerDown={(event) => event.stopPropagation()}
+            onClick={shrink}
+          >
+            <Minimize2 className="h-3.5 w-3.5" />
+          </Button>
+        </TooltipWrapper>
         <Button
           variant="ghost"
           size="icon"
@@ -579,6 +710,218 @@ const FloatingQAWindowView = memo(function FloatingQAWindowView({
           'bg-[linear-gradient(135deg,transparent_50%,hsl(var(--muted-foreground)/0.45)_50%,transparent_60%,transparent_70%,hsl(var(--muted-foreground)/0.45)_70%,transparent_80%)]',
         )}
       />
+    </div>
+  )
+})
+
+/** Cards that have played their opening animation (pinning re-mounts a card). */
+const shownCards = new Set<string>()
+
+/**
+ * A window shrunk to a card: its title and the start of the latest answer.
+ * Drag it anywhere; click it (or Expand) to get the full window back. A pinned
+ * card is fixed to the screen; one that follows the page sits in the
+ * walkthrough's card layer and scrolls with the text.
+ */
+const CompactCardView = memo(function CompactCardView({
+  win,
+  layer,
+  cardLayer,
+  attached,
+}: {
+  win: FloatingQAWindow
+  layer: number
+  cardLayer: HTMLElement | null
+  attached: boolean
+}): JSX.Element {
+  const { t } = useTranslation()
+  const { raise, setCard, expand, setMinimized, tuck } = useFloatingQA.getState()
+  const rootRef = useRef<HTMLDivElement>(null)
+  const [firstShow] = useState(() => !shownCards.has(win.id))
+  const card = win.compact!
+  const title = windowTitle(win, t)
+  const latest = win.turns[win.turns.length - 1]
+
+  useEffect(() => {
+    shownCards.add(win.id)
+    return () => {
+      // Forget the card once it is no longer one (expanded, tucked, closed).
+      if (
+        !useFloatingQA.getState().windows.some((window) => window.id === win.id && window.compact)
+      )
+        shownCards.delete(win.id)
+    }
+  }, [win.id])
+
+  function bounds(pinned: boolean): { width: number; height: number } {
+    return !pinned && cardLayer ? layerBounds(cardLayer) : viewport()
+  }
+
+  /** Back to the full window (its previous size) where the card is on screen. */
+  function expandNow(): void {
+    let { x, y } = card
+    if (attached && cardLayer) {
+      const origin = cardLayer.getBoundingClientRect()
+      x += origin.left
+      y += origin.top
+    }
+    flushSync(() => expand(win.id, clampRect({ ...win.rect, x, y })))
+  }
+
+  /** Pin to the screen or follow the page, without the card moving on screen. */
+  function togglePin(): void {
+    if (!cardLayer) return
+    const next = convertCardPin(card, !card.pinned, cardLayer.getBoundingClientRect())
+    // The card moves between the fixed layer and the card layer: keep focus.
+    flushSync(() => setCard(win.id, clampCard(next, bounds(next.pinned))))
+    document
+      .querySelector<HTMLElement>(`[data-qa-card="${CSS.escape(win.id)}"] [data-pin-toggle]`)
+      ?.focus({ preventScroll: true })
+  }
+
+  function tuckIntoText(): void {
+    flushSync(() => tuck(win.id))
+    focusTuckedChip(win)
+  }
+
+  function minimize(): void {
+    flushSync(() => setMinimized(win.id, true))
+    focusDockChip(win.id)
+  }
+
+  /**
+   * Drag, or click to expand. Like the window, a drag only writes a transform
+   * until release; a press that barely moves is a click.
+   */
+  function startDrag(event: ReactPointerEvent<HTMLDivElement>): void {
+    if (event.button !== 0 || (event.target as HTMLElement).closest('button')) return
+    event.preventDefault()
+    raise(win.id)
+    const origin = { x: event.clientX, y: event.clientY }
+    const start = card
+    let latestCard = start
+    let moved = false
+    const onMove = (move: PointerEvent): void => {
+      if (move.buttons === 0) {
+        finish(false)
+        return
+      }
+      const dx = move.clientX - origin.x
+      const dy = move.clientY - origin.y
+      if (!moved && Math.hypot(dx, dy) < 4) return
+      moved = true
+      latestCard = clampCard({ ...start, x: start.x + dx, y: start.y + dy }, bounds(start.pinned))
+      if (rootRef.current)
+        rootRef.current.style.transform = `translate(${latestCard.x - start.x}px, ${latestCard.y - start.y}px)`
+    }
+    const onUp = (): void => finish(true)
+    const onCancel = (): void => finish(false)
+    function finish(released: boolean): void {
+      window.removeEventListener('pointermove', onMove)
+      window.removeEventListener('pointerup', onUp)
+      window.removeEventListener('pointercancel', onCancel)
+      if (!moved) {
+        if (released) expandNow()
+        return
+      }
+      flushSync(() => setCard(win.id, latestCard))
+      if (rootRef.current) rootRef.current.style.transform = ''
+    }
+    window.addEventListener('pointermove', onMove)
+    window.addEventListener('pointerup', onUp)
+    window.addEventListener('pointercancel', onCancel)
+  }
+
+  return (
+    <div
+      ref={rootRef}
+      role="group"
+      aria-label={t('walkthroughQA.card', { title })}
+      tabIndex={-1}
+      data-floating-qa
+      data-qa-card={win.id}
+      data-attached={attached ? '' : undefined}
+      onPointerDown={startDrag}
+      onKeyDown={(event) => {
+        if (event.key === 'Escape') {
+          event.stopPropagation()
+          minimize()
+        }
+      }}
+      style={{
+        left: card.x,
+        top: card.y,
+        width: CARD_SIZE.width,
+        maxHeight: CARD_SIZE.height,
+        zIndex: layer,
+      }}
+      className={cn(
+        attached ? 'pointer-events-auto absolute' : 'fixed',
+        'flex cursor-grab touch-none select-none flex-col overflow-hidden rounded-xl border bg-card text-card-foreground shadow-lg outline-none focus-visible:ring-2 focus-visible:ring-ring active:cursor-grabbing',
+        'lecture:rounded-2xl lecture:border-input lecture:shadow-lift lab:rounded-none lab:border-input lab:shadow-lift',
+        firstShow && 'animate-pop-in',
+      )}
+    >
+      <div className="flex items-center gap-1 border-b py-1 pl-2.5 pr-1 lecture:border-b-0 lab:bg-background">
+        <MessageCircleQuestion className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden />
+        <span
+          className="min-w-0 flex-1 truncate text-xs font-medium lecture:font-heading lecture:font-bold lab:font-mono lab:text-[11px]"
+          title={title}
+        >
+          {title}
+        </span>
+        {cardLayer && (
+          <TooltipWrapper
+            content={card.pinned ? t('walkthroughQA.pinHint') : t('walkthroughQA.followHint')}
+          >
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-6 w-6"
+              data-pin-toggle
+              aria-label={t('walkthroughQA.pin')}
+              aria-pressed={card.pinned}
+              onClick={togglePin}
+            >
+              {card.pinned ? <Pin className="h-3 w-3" /> : <PinOff className="h-3 w-3" />}
+            </Button>
+          </TooltipWrapper>
+        )}
+        <TooltipWrapper content={t('walkthroughQA.tuckHint')}>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-6 w-6"
+            aria-label={t('walkthroughQA.tuck')}
+            onClick={tuckIntoText}
+          >
+            <Link2 className="h-3 w-3" />
+          </Button>
+        </TooltipWrapper>
+        <Button variant="ghost" size="sm" className="h-6 gap-1 px-1.5 text-xs" onClick={expandNow}>
+          <Maximize2 className="h-3 w-3" aria-hidden />
+          {t('walkthroughQA.expand')}
+        </Button>
+      </div>
+      <div className="min-h-0 flex-1 overflow-hidden px-2.5 py-1.5 [mask-image:linear-gradient(to_bottom,black_65%,transparent)]">
+        {win.pending ? (
+          <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+            <Loader2 className="h-3 w-3 animate-spin" aria-hidden />
+            {t('contextual.thinking')}
+          </p>
+        ) : latest ? (
+          <RichText
+            text={latest.answer}
+            format="markdown"
+            className="space-y-1"
+            paragraphClassName="text-[13px] leading-[1.55]"
+          />
+        ) : (
+          <p className="text-xs text-muted-foreground">
+            {win.error ? t('contextual.failed') : t('walkthroughQA.noAnswer')}
+          </p>
+        )}
+      </div>
     </div>
   )
 })

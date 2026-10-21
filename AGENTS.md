@@ -50,7 +50,7 @@
 
 ```text
 ┌─ IndexedDB (Dexie) ─────────────┐  结构化元数据 + 学习数据 + 原始文件字节
-│                                 │  45 张表，Dexie v17
+│                                 │  46 张表，Dexie v18
 ├─ localStorage ──────────────────┤  UI 语言镜像（避免首帧语言闪烁）+ 符号键盘开合状态
 ├─ 浏览器内存 ────────────────────┤  仅当前任务文本 → 用户配置的 AI API
 └─────────────────────────────────┘
@@ -111,10 +111,12 @@ Dexie
 - **外语课 `language` + 目标语言**（`Project.targetLanguage`，小写 BCP-47 主标签 `de` / `hu` / …，只在 `subject === 'language'` 时生效）：用于国际学生的医学德语 / 医学匈牙利语等语言课。画像要求：讲解用用户选择的「讲解与题目语言」（`UserProfile.questionLanguage`），目标语言的词与例句原样且拼写精确（重音、大小写），德语名词带冠词与复数，匈牙利语按词根 + 后缀切分并标元音和谐；医患对话只是沟通练习，沿用医学安全边界；不出科学图。科目推断 `inferCourse(name)` 先判语言课再判医学（German / Deutsch / 德语 → `de`，Hungarian / magyar / 匈牙利语 → `hu`；单独的 "Medical Terminology" 仍归医学）。缓存版本后缀 `:language-<lang>`。
 - **医学考试体系**（`Project.examStyle: 'domestic' | 'international'`，每门课单独设，新建 / 编辑课程时只对医学显示）：未设置时按课程已处理资料的主要语言自动判断（以非中文为主 → `international`，中文或尚无资料 → `domestic`），手动选择优先。`international`：英文 + 拉丁解剖学名（Terminologia Anatomica），人名命名映射到解剖学名，题型为结构辨认、口试式完整描述（组成 / 毗邻 / 神经 / 血供 / 淋巴 / 发育）与英文选择题，不出名词解释 / 简答 / 论述；版本后缀 `:medicine-intl`。`domestic` 与以前逐字相同（已有缓存不失效）。科目上下文统一由 `services/projectSubject.ts` 的 `loadProjectSubjectContext()`（`{ subject, targetLanguage?, examStyle? }`）读取，`withSubject` / `subjectPromptVersion` 接受该上下文。
 - **外语课练习提示词**：`quiz-generator/v7` 在 v6 上只对外语课（`withSubject` 前由 `buildSystemPrompt({ languageDrills: { targetLanguage } })` 追加）描述 `article_gender`（仅德语）与 `paradigm_table`，其它科目的 system / user 提示与 v6 逐字相同（v6 保留）。`vocab-list-split/v1`（课本词表拆分为 term / gloss / article / plural / lesson）、`phrase-extract/v1`（对话短语 prompt / phrase / kind / sourceChunkId），均用 `untrustedContentWrapper` + `securityFooter`，输出都经本地校验后才展示、确认后才落库。
+- **模拟问诊提示词**（仅外语课）：`interview-scenario/v1`（`extract` 从课本摘抄情景卡 / `generate` 根据课程对话写一个 A1/A2 练习情景）、`interview-patient/v1`（AI 扮演病人只按情景卡回答，同一次调用对学生这句做必问问题分类 + 可选语言提示）、`interview-summary-check/v1`（英语总结逐条信息核对 + 交流估计）。三者都用 `untrustedContentWrapper` + `securityFooter`，并附医学安全边界（`subject-profile/v1` 导出 `MEDICAL_BOUNDARIES`）；不缓存，无版本折叠。
 - 画像可带 `boundaries`（渲染为 `Boundaries (always apply):`，每次都追加）：目前只有**医学**使用——这是教育不是医疗，不对真实个人做诊断、不给治疗或剂量建议，遇到个人健康问题建议就医；例题中的参考值与剂量仅为示意。医学画像中英（拉丁）术语并列、解剖学姿势、FDI 牙位、名词解释 / 简答 / 论述的答题格式。科目推断：解剖 / 组织胚胎 / 生理学 / 病理 / 药理 / 口腔 / 牙等归为医学（在生物之前判断；“医用化学 / 医用物理 / 医用高数”仍归化学 / 物理 / 微积分，“植物生理学”仍归生物）。
 - 画像可带**仅课时用**的 `lesson` 指引，只有 `withSubject(..., { forLesson: true })`（导师课时）才追加：化学/生物要求把可画成图的事实写明（分子名+分子式、各状态能量、滴定浓度/体积/Kₐ、亲本基因型、家系、DNA 序列），并在课程资料有图时引导学生看原图。
 - 带缓存/可比对的产物把科目画像折进版本：`subjectPromptVersion(base, subject)` = `<base>+subject-profile/v1:<subject>`，某科画像修改时在 `PROFILE_REVISIONS` 里给**该科**加修订号（追加 `.rN`；当前化学 `.r3`、生物 `.r2`、概率统计 `.r2`、物理 `.r2`、微积分 `.r2`、计算机 `.r2`——均已按大学深度改写或补充课时指引），只让该科的缓存失效（CourseAnalysis、增量 Topic、TutorLesson、SlideLesson、作业复习讲解与检查答案），不会让其它科目全部重生成。
 - **课程大纲提示词**：`syllabus-topics/v1`（本地解析到的考点 < 5 时由学生手动触发；只许逐字摘抄文档里的考点，`readAiSyllabus` 把每条与文档文本（合并空白后）做子串核对，找不到的丢弃，绝不改写或补全）；`exam-topic-match/v1`（闭集匹配：课程主题以短 id `t1…` 给出，`readAiMatches` 只保留列表内的 id、每个考点 ≤3 个，空结果保留本地匹配）。两者都用 `untrustedContentWrapper` + `securityFooter`，不缓存、不加科目画像。
+- **口试提示词 `oral-exam/v1`**：为一个抽到的题目写考官提问、Markdown 参考提纲、6–10 条得分点（按该类题目完整描述应有的结构：解剖为 组成 / 毗邻 / 运动或功能 / 作用肌 / 神经 / 血供 / 静脉与淋巴 / 发育 / 临床，不适用的跳过；每条以类别加冒号开头）与 2 个追问（各带简短参考答案与 1–3 条得分点），`sources` 只能引用 `[chunk:…]` 标签中的 id。带科目画像（含 `medicine-intl`）；考点文本、课程主题与资料均用 `untrustedContentWrapper` + `securityFooter`；不缓存。
 
 ### 安全模型
 
@@ -145,6 +147,7 @@ Dexie
 | 复习         | `ReviewCard`（复习卡片 / 间隔重复，Dexie v15）                                                                                |
 | 单词         | `VocabCard` `VocabBook` `VocabEntry` `VocabReview`（背单词，Dexie v16；**进度全局、不带 projectId**，课程词书带 `projectId`） |
 | 作业完整讲解 | `HomeworkWalkthrough`（每份作业 × 语言一行，分部分缓存）`WalkthroughNote`（保存的划词问答，Dexie v17）                        |
+| 模拟问诊     | `InterviewSession`（外语课口试问诊：情景卡 + 对话 + 英语总结 + 结果，Dexie v18 `interviewSessions`）                          |
 | 错误         | `Mistake`                                                                                                                     |
 
 关键约定：
@@ -311,6 +314,7 @@ Topic
 - **教授练习题与交互导师的简答题**（第二期）复用同一判分器：练习题从教授参考答案经 `rubric-extractor/v1` 拆出得分点（按 答案+prompt 版本 哈希缓存在题目上），作答写入错题本 / 掌握度并支持异议（`PracticeService.disputeAttempt`）；导师出题 `tutor/v2-question` 可出带得分点的简答题，覆盖率 60–99% 或无法核对时难度不调整。
 - **简答题（`short_answer`）按得分点计分**：出题时生成参考答案 + 2–6 条得分点（`Question.rubric`）。判分 `services/shortAnswerGrader.ts` + `short-answer-check/v1`：AI 逐条判断是否答到（同义、等价表述都算），答到必须**逐字摘出学生原话**作为证据，本地校验证据确实出现在答案里，否则该点不算；得分 = 答到点数 / 总点数（3/5 → 60%），由本地计算，从不采用 AI 的整体结论。空答案不调用 AI；未配置 AI 或核对失败 ⇒ 不计分（展示得分点与参考答案）。
 - 简答题计分：测验百分比 = Σ得分 / 已判题数（简答题按 `earned/total` 计入，`QuizScore.points`）；只有全部答到才算“正确”，其余进入错题本；掌握度按得分比例、**半权重**计入（`observationFromAttempt`）。学生可点“我不同意这个判定”（`QuizService.disputeAttempt`）：该次作答保留展示但不再计分，同时移出错题本、重建该知识点掌握度、已完成测验重新算分。
+- **口试练习（`QuizConfig.mode === 'oral'`，`services/oralExamService.ts`）**：`QuizService.generateQuiz` 遇到 oral 模式转交 `OralExamService`。`count` = 抽取题目数（1–5，`ORAL_MAX_TOPICS`）：有 `examScope` 时从 `planExamScopeEntries`（全部条目）随机抽取（单个考点则只有它；未匹配考点仍只在 `includeUnmatched` 时入选），否则为所选课程主题，再否则从全部课程主题随机抽取。每个题目一次 `oral-exam/v1` 请求（来源 = 匹配主题的已校验来源分块 + 概念关键词，每题 ≤6 段，不用全书填充；未匹配考点不给资料），失败或不合格重试 1 次，仍失败则跳过该题目，全部失败才报错。校验 `validateOralItem`：主问题 4–10 条互不相同的得分点（多于 10 条截断，少于 4 条丢弃），追问须有题目 + 参考答案 + 1–3 条得分点（多于 3 条截断）、不得重复主问题，最多 2 个；`sources` 经 `resolveSourceReferences` 只保留本次提供的分块，未匹配考点一律 `sourceRefs: []` + `origin: 'ai_without_source'`。**存储方式（最小侵入）**：主问题与追问都是普通 `short_answer` 题（`correctAnswer` = 参考提纲 / 参考答案，`rubric` = 得分点），用可选的 `Question.oral = { group, role: 'main' | 'follow_up', topic }` 关联（未升 Dexie），因此作答、判分（`ShortAnswerGrader`）、错题本、半权重掌握度、异议、结果页全部沿用。主题与知识点：匹配到的课程主题 → `topicId` + 主题名；未匹配 → 考点原文（考点清单的练习数 / 掌握度据此自动统计）。语言：医学 `international` 一律英文（`oralLanguage`），否则同测验题目语言。`QuizConfig.oral.timerSeconds`（默认 180，可不设）。界面：考点清单每行与清单标题的「口试练习」链接带 `oral=1` 预选测验设置中的口试选项（医学课或有大纲的课程显示，选中后隐藏题数与题型）；测验页 `widgets/quiz/OralExamSession.tsx` 只显示考官提问、可关闭的倒计时、大输入框 + 浏览器语音输入（国际医学课 `en-US`，否则按界面语言）；主问题 → 逐个追问 → 本题反馈（得分点答到 / 未答到、参考提纲、作答原文中用 `<mark>` 标出得分证据 `shared/lib/evidenceHighlight.ts`、异议按钮）。结果页 `OralTopicScores` 按题目显示 得分点合计 / 总数（含追问，未判 / 已异议的不计）；纯函数在 `entities/question/oral.ts`（`oralGroups` / `oralTopicScores` / `oralResumePoint` / `oralNextStep`）。
 - **出题分批与补题**（`QuizService.generateInBatches`）：每批最多 5 道，输出上限 = max(用户设置, 1024 + 900 × 题数)，封顶 8192；后续批次附“避免重复”。题目按**自身题型**对应计划位（不再按位置套用计划题型，丢题不会让后面的题型错位）；未选的题型丢弃；成功请求中缺少的题最多再补 2 轮（整批失败只在 `generateWithRetry` 内重试 2 次）；测验标题按实际题数。取材：`loadQuizCandidates` 一次读出全部候选段落，`pickQuizSnippets` 选取（主题的已校验来源分块优先，再每个知识点一段，其余在全书均匀抽取）。主题测验为单组，片段数 = clamp(题数 + 3, 8, 24)，题多时各批分到不同片段。**混合复习按主题分组**（`planGroups`）：主题数 ≤ 题数时全部主题，否则随机抽题数个主题；题目轮流分到各组，每批只拿到本批题目所属主题的知识点（每主题 ≤3）与来源段落（每主题 ≤3，不用全书填充），题目记录各自的 `topicId`。
 - **选项随机顺序**：保存前在本地打乱 `multiple_choice` / `multiple_select` / `matching` 的选项（`shared/lib/shuffle.ts`，判分按选项文字，不受影响）；AI 导师单选同样打乱。单选题若正确项长度 > 1.6 × 最长干扰项且多 ≥12 字，或选项重复，丢弃并补题。旧题不变。
 - **题目语言**（`UserProfile.questionLanguage`：`zh_terms` 默认 / `source` 跟随教材 / `en`）：测验配置里选择并保存，`QuizConfig.questionLanguage` 可覆盖；服务端缺省读用户偏好（`quizLanguage()`）。错题分析与交互导师（`InteractiveTutorPage`）用 `resolveContentLanguage()` 换算为 zh / en / 教材语言；课时阅读页仍保留自己的语言切换，不受影响。
@@ -358,6 +362,15 @@ Topic
 - **导入课本词表**（`services/textbookWordList.ts`；外语课文件菜单「导入课本词表」与背单词「课程词汇」中的同名按钮）：文档分块按章节（`chapterId`）切成 ≤12000 字的部分，只发看起来像词表的部分（词表标题、≥3 个德语“der X,”条目或短行为主；都不像时全发），并发 2 调 `vocab-list-split/v1`。`validateWordListItems`：term 须按整词出现在该部分原文（重音一致、大小写不敏感），释义非空，冠词须为 der/die/das（非德语不得带冠词）且不与原文词表矛盾，“der Kopf” 形式的 term 拆出冠词，不在原文的复数只丢复数，按 `wordKey` 去重，记录所在行作 `context`。确认对话框按课次分组、释义可改、可取消勾选、每页 100 行。`merge` 写入项目课程词书（不存在则新建，`language` = 目标语言），按 `wordKey`（再按忽略大小写）合并：已有的更新释义 / 冠词 / 复数 / 课次，确认的释义 `glossBy: 'user'`；单事务。`VocabEntry` 新增可选 `article` / `plural` / `lesson`，`WordView.grammar`（`grammarLine` → “der Kopf, die Köpfe”）在单词复习揭晓后与词表中显示。
 - 词根词缀提示（`rootHints`）只作联想，至少留 3 个字母的词干才提示。朗读用浏览器 `speechSynthesis`（`shared/lib/speech.ts`），不可用时听写模式退回拼写。
 
+### 模拟问诊（外语课口试，`/projects/:id/interview`）
+
+- **场景**：Semmelweis 匈牙利语 / 德语医学语言课的口试是病人问诊——老师按情景卡扮演病人，学生用目标语言问必问问题（姓名年龄、主诉、从何时、部位、程度、加重因素、伴随症状…），听懂回答后用英语向医生总结。匈牙利语课计分：问题 7 + 信息 10 + 交流 3 = 20 分。
+- **数据**（Dexie **v18** `interviewSessions`，索引 `id, projectId, [projectId+updatedAt]`）：`InterviewSession` = `scenario`（`title`、`facts[{id, fact, englishGloss?, questionId?, sourceChunkId?}]`、`questions[{id, label（目标语言）, englishGloss}]`、`source: textbook | generated`、`sourceChunkIds`、`page?`）+ `examMode` + `turns[{role: student | patient, text, at, coveredQuestionIds?, correction?}]` + `summary` + `results?` + `status: interviewing | summarizing | graded`。随项目删除（同一事务）、纳入导出 / 恢复。类型与纯函数在 `entities/interview/types.ts`（`askedQuestionIds`、`courseScaleScore`、`speechLocaleFor`），仓库 `entities/interview/repository.ts`。
+- **情景**（`services/interviewService.ts`）：「从课本提取情景」——`selectScenarioChunks` 按 `scenarioScore`（“Name, age” / 主诉 / Patient 标签 / 编号列表 / 对话）挑分块，≤8000 字一批、最多 8 批；`validateTextbookScenarios`（`services/interviewValidation.ts`）：每条信息须（`evidenceKey` 规范化后）出现在其 `sourceChunkId` 分块中，每个问题的 `label` 或 `englishGloss` 须出现在其分块中（课本常只印英文问题清单），否则丢弃；剩不到 3 条信息 / 2 个问题的情景丢弃；本地重新编号 q1… / f1…。学生从列表里选。没有情景时「生成一个练习情景」：用课程对话分块（无则前几块）写 A1/A2 情景，标为 `generated`（无出处，界面注明“AI 生成”）；必问问题默认取本次提取到的第一个课本情景，否则取最近一次课本情景会话的清单。
+- **问诊**：学生输入或语音输入（`useSpeechInput(speechLocaleFor(targetLanguage))`，如 hu-HU / de-DE）+ `LetterBar`；每句一次 `interview-patient/v1` 调用，`readPatientTurn` 校验：回复非空、`coveredQuestionIds` 只保留闭集内 id（去重、按清单顺序）、`correction` 可选。回复不可用 ⇒ 抛错、**这一轮不落库**。病人回复可朗读（`speak(text, targetLanguage)`，可开自动朗读；本机无该语言语音时提示）。侧栏清单显示已问 / 未问；**考试模式**在评分前隐藏清单与语言提示。
+- **评分**：结束问诊后写英语总结；`interview-summary-check/v1` 对每条信息给出是否听懂 + 逐字引用总结原文；`buildInterviewResults` 本地校验（`isVerbatimEvidence` + `isMeaningfulEvidence`，同一引文只算一条），问题数 = 学生各轮 `coveredQuestionIds` 的并集；交流 = AI 估计（0–3 取整夹紧，一行说明，`estimate: true`，界面标“估计值”）。清单正好 7 题时另显示课程 20 分制（信息按 10 分折算）。结果卡列出听懂的信息（附原话）、可能需要再听的信息、语言提示；「把没问到的问题加入短语卡」→ `ReviewCardService.addMany`（source `phrase`，正面英文释义、背面目标语言问句，按正面去重）。
+- **会话列表**：继续 / 查看 / 删除（确认对话框）。导航 `ProjectFlowNav` 的「模拟问诊」只对 `language` 课程显示（`flowItemsFor(subject)`）。
+
 ### 作业完整讲解（作业页「完整讲解」标签）
 
 - **结构**：`HomeworkWalkthrough`（id = `<setId>:<language>`，Dexie v17 `homeworkWalkthroughs`）按部分存 `sections`：`overview`（必须掌握的工具）、每题 `q:<questionId>`（`conclusion` + Markdown `body` + 可选 `checks`）、`summary`（小结 + `suggestions`）。标题在渲染时按 UI 语言生成，不存。
@@ -366,6 +379,7 @@ Topic
 - **RREF 本地核对**（`infrastructure/math/rref.ts` BigInt 精确分数；`entities/homework/walkthroughChecks.ts`）：线性代数科目或题面含增广 / 行阶梯 / RREF / 线性方程组等关键词时，模型额外返回 `linearSystems`（增广矩阵、最终 RREF、解的类型）；本地重算 RREF 并比较（忽略零行）与解的类型，不一致在该题下标出并显示正确 RREF。读不出的矩阵跳过，不报错误。
 - **划词提问**：讲解 `<article data-selection-context="walkthrough" data-walkthrough-project data-walkthrough-set>`，每部分 `<section data-walkthrough-section data-section-title>`。`SelectionTranslator` 在此范围内选「解释 / 提问」时不弹原来的贴边弹窗，而是 `openPassage()` 打开**浮动窗口**（`features/homework/floatingQAStore.ts` zustand：位置 / 大小 / 层级 / 最小化，最多同时 3 个，第 4 个把最靠后的收进右下角停靠栏；整窗始终在视口内；层级按排名 41–43，停靠栏 z-44，均低于对话框 z-50）。问答走 `contextual-tutor/v3`（新增 `walkthrough` 语境：解法已在眼前，可完整解释并指出计算错误；`history` 带最近 6 轮）。
 - **保存问答**（`WalkthroughNote`，Dexie v17 `walkthroughNotes`，索引 `[setId+updatedAt]`）：原文以 `TextAnchor`（文本 + 前后各 32 字，`shared/lib/textAnchor.ts`，与 `Range.toString()` 同口径）保存，不存位置；重新定位时按文本搜索，多处出现按前后文选最匹配。保存后追问自动追加；窗口拖动 / 调大小后记住位置。原文用 CSS Custom Highlight API（`walkthrough-note` / `walkthrough-flash`）标记，点击标记处（`caretPositionFromPoint`）重新打开；每部分下有本节问答芯片；「我的问答」对话框可搜索 / 打开 / 重命名 / 删除，找不到原文的标“原文已更新”。以“解释”开始的问答以原文命名。
+- **窗口的三种形态**（`floatingQAStore`：`compact?: CompactCard` / `tucked?: boolean`，`windowMode()` = full | compact | tucked | minimized）：标题栏「缩成小卡片」「收进原文」。**小卡片**（`CompactCardView`，280 px，最高 140 px）：标题 + 最新回答开头，拖动 / 点击展开（`expand` 回到原尺寸、放在卡片当前位置）；不计入 3 个完整窗口，最多 6 张（`MAX_COMPACT_CARDS`），超出的最靠后一张进停靠栏；`pinned` 时 `position: fixed`（视口坐标，层级 35–40，低于完整窗口），否则渲染进讲解里的 `data-walkthrough-card-layer`（`absolute inset-0`，内容坐标，随页面滚动，不监听滚动）；切换用纯函数 `convertCardPin`（按卡片层的视口位置换算，不跳），`clampCard` 分别夹在视口 / 卡片层内；`cardPinned` 记住本次访问上次的选择（默认固定）。**收进原文**：窗口不渲染，原文用 `walkthrough-link`（虚线下划线，priority 1，高于 `walkthrough-note`）标记；文章 `pointermove`（rAF 节流）经 `caretAt` + `hitPassage` / `pointInPassage`（`isPointInRange` + 行框校验）命中后，`usePassageHover`（进 150 ms / 出 200 ms，悬停在卡片上保持，Esc 关闭）显示 `PassageHoverCard`（portal、z-45、`computeSelectionPopupPosition` 定位于所在行，最新问答最高 320 px 可滚动，「展开窗口」+「保存」或「复习卡片」）；已保存问答的 `walkthrough-note` 标记同样悬停显示。点击标记打开完整窗口。未保存的收进原文问答在本节问答芯片里有虚线芯片（`data-tucked-chip`）作为键盘入口；只存在于本次访问的 store 中。
 - **加入复习卡片**：每轮问答一张卡（`ReviewCardSource` 新增 `note`），问题很短时正面附原文，背面过长在段落处截断；按正面去重。
 - **打印 / 导出 PDF**：`WalkthroughPrint` 只在打印时把纯净副本挂到 `body` 下，`body.printing-walkthrough` 的打印样式隐藏其它内容并强制白底黑字；`afterprint` 后卸载。
 - **删除与导出**：两表随作业删除（`deleteAssignment` / 删除作业文件 / 删除项目，均在同一事务）、纳入导出；**保存过的问答计入学生作业**（`studentWorkFor`），有问答的作业文件不能被直接删除。
@@ -384,6 +398,7 @@ Topic
 | `/projects/:id/quiz` `/quiz/:quizId` `/result` | 测验                           |
 | `/projects/:id/mastery` `/mistakes`            | 掌握度 / 错题本                |
 | `/projects/:id/cards`                          | 复习卡片（间隔重复）           |
+| `/projects/:id/interview` `/interview/:sid`    | 模拟问诊（仅外语课）           |
 | `/vocab`                                       | 背单词（全局，侧栏「单词」）   |
 | `/projects/:id/documents/:did`                 | 文档详情                       |
 | `/settings`                                    | AI 设置 / 数据管理             |

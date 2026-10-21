@@ -8,6 +8,7 @@ import {
   Link2,
   ListChecks,
   Loader2,
+  Mic,
   Pencil,
   Plus,
   RefreshCw,
@@ -433,11 +434,13 @@ function ScopeView({
   const [merging, setMerging] = useState<string[] | null>(null)
   const [draft, setDraft] = useState('')
   const covered = scope.topics.filter((item) => coverage.get(item.id)?.covered).length
-  const quizHref = (examTopicId?: string) =>
+  const quizHref = (examTopicId?: string, oral = false) =>
     `/projects/${projectId}/quiz?${new URLSearchParams({
       examDoc: document.id,
       examScope: scope.id,
       ...(examTopicId ? { examTopic: examTopicId } : {}),
+      // Oral-exam rehearsal preselected in the quiz setup.
+      ...(oral ? { oral: '1' } : {}),
     }).toString()}`
 
   // Group labels are shown once, above the first topic of each group.
@@ -469,6 +472,12 @@ function ScopeView({
             <Link to={quizHref()}>
               <ListChecks className="h-4 w-4" />
               {t('syllabus.quizScope')}
+            </Link>
+          </Button>
+          <Button asChild variant="outline" size="sm">
+            <Link to={quizHref(undefined, true)}>
+              <Mic className="h-4 w-4" />
+              {t('syllabus.oralScope')}
             </Link>
           </Button>
           {canAiMatch && (
@@ -686,6 +695,14 @@ function ScopeView({
                           )}
                           <Button asChild variant="ghost" size="sm">
                             <Link to={quizHref(item.id)}>{t('syllabus.quizTopic')}</Link>
+                          </Button>
+                          <Button asChild variant="ghost" size="sm">
+                            <Link
+                              to={quizHref(item.id, true)}
+                              aria-label={t('syllabus.oralTopicLabel', { text: item.text })}
+                            >
+                              {t('syllabus.oralTopic')}
+                            </Link>
                           </Button>
                           <Button
                             variant="ghost"

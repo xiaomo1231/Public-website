@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useRef, useState, type MouseEvent } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from 'react'
 import {
   AlertTriangle,
   BookOpenText,
+  Link2,
   Loader2,
   MessageSquareText,
   Printer,
@@ -20,7 +21,8 @@ import { formatHomeworkQuestion } from '@/entities/homework/formatQuestion'
 import { useHomeworkService } from '@/features/homework/useHomeworkService'
 import { questionLabel } from '@/services/homeworkWalkthroughService'
 import { useWalkthrough } from '@/features/homework/useWalkthrough'
-import { openNote } from '@/features/homework/floatingQA'
+import { openNote, windowTitle } from '@/features/homework/floatingQA'
+import { useFloatingQA, type FloatingQAWindow } from '@/features/homework/floatingQAStore'
 import { toast } from '@/features/toast/toastStore'
 import { Badge } from '@/shared/ui/Badge'
 import { Button } from '@/shared/ui/Button'
@@ -36,7 +38,16 @@ import { useTranslation, type TranslationKey } from '@/i18n'
 import { FloatingQALayer } from './FloatingQALayer'
 import { WalkthroughNotesDialog } from './WalkthroughNotesDialog'
 import { WalkthroughPrint, type PrintableSection } from './WalkthroughPrint'
-import { caretAt, locatePassages, markPassages, revealPassage } from './passage'
+import { PassageHoverCard, type PassageHoverSubject } from './PassageHoverCard'
+import { usePassageHover, type PassageHoverTarget } from './usePassageHover'
+import {
+  caretAt,
+  hitPassage,
+  locatePassages,
+  markPassages,
+  passageRectAt,
+  revealPassage,
+} from './passage'
 
 type T = ReturnType<typeof useTranslation>['t']
 
@@ -72,6 +83,16 @@ export function HomeworkWalkthroughPanel({
   const [printing, setPrinting] = useState(false)
   const [located, setLocated] = useState<ReadonlySet<string>>(new Set())
   const noteRanges = useRef(new Map<string, Range>())
+  /** Passages of conversations tucked into the text, by window id. */
+  const linkRanges = useRef(new Map<string, Range>())
+  /** Where cards that follow the page are placed (scrolls with the text). */
+  const [cardLayer, setCardLayer] = useState<HTMLDivElement | null>(null)
+  const allWindows = useFloatingQA((store) => store.windows)
+  const tucked = useMemo(
+    () => allWindows.filter((window) => window.passage.setId === set.id && window.tucked),
+    [allWindows, set.id],
+  )
+  const tuckedKey = tucked.map((window) => window.id).join('|')
   const running = Boolean(progress)
   const qaLanguage = uiLanguage === 'zh-CN' ? 'zh' : 'en'
 
@@ -115,23 +136,83 @@ export function HomeworkWalkthroughPanel({
     return () => markPassages('walkthrough-note', [])
   }, [notes, textKey, revealed])
 
+  // Mark the passages of tucked conversations (a dashed link, above note marks).
+  useEffect(() => {
+    if (!revealed) return
+    const ids = new Set(tuckedKey ? tuckedKey.split('|') : [])
+    const ranges = locatePassages(
+      useFloatingQA
+        .getState()
+        .windows.filter((window) => ids.has(window.id))
+        .map((window) => ({
+          id: window.id,
+          sectionId: window.passage.sectionId,
+          anchor: window.passage.anchor,
+        })),
+    )
+    linkRanges.current = ranges
+    markPassages('walkthrough-link', [...ranges.values()], 1)
+    return () => markPassages('walkthrough-link', [])
+  }, [tuckedKey, textKey, revealed])
+
+  /** Marked passages in hit-test order: tucked conversations, then saved notes. */
+  const markedPassages = useCallback((): [string, Range][] => {
+    const tuckedNotes = new Set(
+      useFloatingQA
+        .getState()
+        .windows.filter((window) => window.tucked && window.noteId)
+        .map((window) => window.noteId),
+    )
+    return [
+      ...[...linkRanges.current].map(([id, range]): [string, Range] => [`w:${id}`, range]),
+      ...[...noteRanges.current]
+        .filter(([id]) => !tuckedNotes.has(id))
+        .map(([id, range]): [string, Range] => [`n:${id}`, range]),
+    ]
+  }, [])
+
+  const resolveHover = useCallback(
+    (point: { x: number; y: number }): PassageHoverTarget | null => {
+      const candidates = markedPassages()
+      if (candidates.length === 0) return null
+      const key = hitPassage(candidates, caretAt(point.x, point.y), point)
+      const range = key ? candidates.find(([candidate]) => candidate === key)?.[1] : undefined
+      return key && range ? { key, anchor: passageRectAt(range, point) } : null
+    },
+    [markedPassages],
+  )
+  const passageHover = usePassageHover(resolveHover)
+
+  /** Open a marked passage's conversation as a full window. */
+  function openMarked(key: string): void {
+    const id = key.slice(2)
+    if (key.startsWith('w:')) {
+      useFloatingQA.getState().focus(id)
+      return
+    }
+    const note = notes.find((item) => item.id === id)
+    if (note) openNote(note, set.title, qaLanguage)
+  }
+
   function onArticleClick(event: MouseEvent): void {
     const selection = window.getSelection()
     if (selection && !selection.isCollapsed) return
-    const caret = caretAt(event.clientX, event.clientY)
-    if (!caret) return
-    for (const [noteId, range] of noteRanges.current) {
-      try {
-        if (range.isPointInRange(caret.node, caret.offset)) {
-          const note = notes.find((item) => item.id === noteId)
-          if (note) openNote(note, set.title, qaLanguage)
-          return
-        }
-      } catch {
-        /* a node from another document: not ours */
-      }
-    }
+    const point = { x: event.clientX, y: event.clientY }
+    const key = hitPassage(markedPassages(), caretAt(point.x, point.y), point)
+    if (!key) return
+    passageHover.close()
+    openMarked(key)
   }
+
+  const hoverSubject: PassageHoverSubject | null = (() => {
+    const key = passageHover.hover?.key
+    if (!key) return null
+    const id = key.slice(2)
+    if (key.startsWith('w:'))
+      return tucked.some((window) => window.id === id) ? { kind: 'window', windowId: id } : null
+    const note = notes.find((item) => item.id === id)
+    return note ? { kind: 'note', note } : null
+  })()
 
   async function run(force: boolean): Promise<void> {
     const result = await generate(force)
@@ -335,7 +416,7 @@ export function HomeworkWalkthroughPanel({
           </nav>
 
           <Card className="min-w-0 lecture:rounded-none lecture:border-0 lecture:bg-transparent lecture:shadow-none">
-            <CardContent className="p-5 lecture:mx-auto lecture:max-w-[680px] lecture:px-0 sm:p-8 sm:lecture:px-0 lab:sm:px-9">
+            <CardContent className="relative p-5 lecture:mx-auto lecture:max-w-[680px] lecture:px-0 sm:p-8 sm:lecture:px-0 lab:sm:px-9">
               <p className="mb-6 text-xs text-muted-foreground lab:font-mono lab:text-[11px]">
                 {t('homework.walkthrough.selectHint')}
               </p>
@@ -345,6 +426,7 @@ export function HomeworkWalkthroughPanel({
                 data-walkthrough-set={set.id}
                 data-selection-title={set.title}
                 onClick={onArticleClick}
+                {...passageHover.articleHandlers}
                 // Focus returns here when a question window closes.
                 tabIndex={-1}
                 className="space-y-12 outline-none lab:space-y-10"
@@ -360,16 +442,41 @@ export function HomeworkWalkthroughPanel({
                     marker={sectionMarker(entry, labels)}
                     running={progress?.running.includes(entry.id) ?? false}
                     notes={notes.filter((note) => note.sectionId === entry.id)}
+                    tucked={tucked.filter(
+                      (window) => window.passage.sectionId === entry.id && !window.noteId,
+                    )}
                     onOpenNote={(note) => openNote(note, set.title, qaLanguage)}
+                    // Fills only the missing / outdated parts, like the toolbar button.
+                    {...(running ? {} : { onGenerate: () => void run(false) })}
                   />
                 ))}
               </article>
+              {/* Cards that follow the page are placed here, in content coordinates. */}
+              <div
+                ref={setCardLayer}
+                data-walkthrough-card-layer={set.id}
+                data-print-hidden
+                className="pointer-events-none absolute inset-0"
+              />
             </CardContent>
           </Card>
         </div>
       )}
 
-      <FloatingQALayer setId={set.id} />
+      <FloatingQALayer setId={set.id} cardLayer={cardLayer} />
+
+      {passageHover.hover && hoverSubject && (
+        <PassageHoverCard
+          subject={hoverSubject}
+          anchor={passageHover.hover.anchor}
+          onExpand={() => {
+            const key = passageHover.hover?.key
+            passageHover.close()
+            if (key) openMarked(key)
+          }}
+          {...passageHover.cardHandlers}
+        />
+      )}
 
       <WalkthroughNotesDialog
         open={notesOpen}
@@ -427,7 +534,11 @@ interface SectionViewProps {
   marker: string
   running: boolean
   notes: WalkthroughNote[]
+  /** Unsaved conversations tucked into this section's text. */
+  tucked: FloatingQAWindow[]
   onOpenNote: (note: WalkthroughNote) => void
+  /** Generate the missing or outdated parts; absent while a run is in progress. */
+  onGenerate?: () => void
 }
 
 function WalkthroughSectionView({
@@ -436,7 +547,9 @@ function WalkthroughSectionView({
   marker,
   running,
   notes,
+  tucked,
   onOpenNote,
+  onGenerate,
 }: SectionViewProps): JSX.Element {
   const { t } = useTranslation()
   const section = entry.section
@@ -473,11 +586,29 @@ function WalkthroughSectionView({
       {entry.question && <QuestionPrompt question={entry.question} />}
 
       {!section ? (
-        <p className="text-sm text-muted-foreground">{t('homework.walkthrough.notYet')}</p>
+        <div className="flex flex-wrap items-center gap-3">
+          <p className="text-sm text-muted-foreground">
+            {running ? t('homework.walkthrough.writing') : t('homework.walkthrough.notYetHint')}
+          </p>
+          {onGenerate && !running && (
+            <Button variant="outline" size="sm" onClick={onGenerate}>
+              <RefreshCw className="h-4 w-4" aria-hidden />
+              {t('homework.walkthrough.generateMissing')}
+            </Button>
+          )}
+        </div>
       ) : section.status === 'failed' ? (
-        <p className="text-sm text-destructive">
-          {t('homework.walkthrough.sectionFailed', { reason: section.error ?? '' })}
-        </p>
+        <div className="flex flex-wrap items-center gap-3">
+          <p className="text-sm text-destructive">
+            {t('homework.walkthrough.sectionFailed', { reason: section.error ?? '' })}
+          </p>
+          {onGenerate && !running && (
+            <Button variant="outline" size="sm" onClick={onGenerate}>
+              <RefreshCw className="h-4 w-4" aria-hidden />
+              {t('homework.walkthrough.generateMissing')}
+            </Button>
+          )}
+        </div>
       ) : section.status === 'insufficient' ? (
         <p className="text-sm text-muted-foreground">
           {t('homework.walkthrough.insufficient', { reason: section.error ?? '' })}
@@ -524,19 +655,34 @@ function WalkthroughSectionView({
         </>
       )}
 
-      {notes.length > 0 && (
+      {(notes.length > 0 || tucked.length > 0) && (
         <div className="flex flex-wrap items-center gap-1.5 pt-1" data-print-hidden>
           <span className="text-xs text-muted-foreground">{t('walkthroughQA.inSection')}</span>
           {notes.map((note) => (
             <button
               key={note.id}
               type="button"
+              data-note-chip={note.id}
               onClick={() => onOpenNote(note)}
               className="focus-ring inline-flex max-w-[16rem] items-center gap-1 truncate rounded-full border px-2.5 py-0.5 text-xs transition-colors duration-150 hover:bg-muted lab:rounded-sm"
               title={note.title}
             >
               <MessageSquareText className="h-3 w-3 shrink-0" aria-hidden />
               <span className="truncate">{note.title}</span>
+            </button>
+          ))}
+          {/* Tucked conversations: the keyboard way to what the passage hover shows. */}
+          {tucked.map((window) => (
+            <button
+              key={window.id}
+              type="button"
+              data-tucked-chip={window.id}
+              onClick={() => useFloatingQA.getState().focus(window.id)}
+              className="focus-ring inline-flex max-w-[16rem] items-center gap-1 truncate rounded-full border border-dashed border-primary/60 px-2.5 py-0.5 text-xs transition-colors duration-150 hover:bg-muted lab:rounded-sm"
+              title={`${t('walkthroughQA.tucked')} · ${windowTitle(window, t)}`}
+            >
+              <Link2 className="h-3 w-3 shrink-0" aria-hidden />
+              <span className="truncate">{windowTitle(window, t)}</span>
             </button>
           ))}
         </div>

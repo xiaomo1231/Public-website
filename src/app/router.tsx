@@ -58,6 +58,7 @@ const HomeworkPage = lazyPage(() => import('@/pages/HomeworkPage'), 'HomeworkPag
 const MasteryPage = lazyPage(() => import('@/pages/MasteryPage'), 'MasteryPage')
 const MistakeBookPage = lazyPage(() => import('@/pages/MistakeBookPage'), 'MistakeBookPage')
 const ReviewCardsPage = lazyPage(() => import('@/pages/ReviewCardsPage'), 'ReviewCardsPage')
+const InterviewPage = lazyPage(() => import('@/pages/InterviewPage'), 'InterviewPage')
 const SettingsPage = lazyPage(() => import('@/pages/SettingsPage'), 'SettingsPage')
 const VocabPage = lazyPage(() => import('@/pages/VocabPage'), 'VocabPage')
 
@@ -84,6 +85,8 @@ const projectPages: RouteObject[] = [
   { path: 'projects/:id/mastery', element: <MasteryPage /> },
   { path: 'projects/:id/mistakes', element: <MistakeBookPage /> },
   { path: 'projects/:id/cards', element: <ReviewCardsPage /> },
+  { path: 'projects/:id/interview', element: <InterviewPage /> },
+  { path: 'projects/:id/interview/:sessionId', element: <InterviewPage /> },
   { path: 'projects/:id/documents/:did', element: <DocumentDetailPage /> },
 ]
 

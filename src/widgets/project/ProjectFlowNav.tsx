@@ -10,14 +10,26 @@ import {
   Layers,
   Home,
   ListChecks,
+  Stethoscope,
   type LucideIcon,
 } from 'lucide-react'
 import { cn } from '@/shared/lib/utils'
 import { useSlidingIndicator, type IndicatorRect } from '@/shared/lib/useSlidingIndicator'
 import { useTranslation, type TranslationKey } from '@/i18n'
+import { useProjectStore } from '@/features/project/projectStore'
+import { isFlowSectionShown } from './flowSections'
 
 export type ProjectFlowSection =
-  'home' | 'files' | 'homework' | 'tutor' | 'quiz' | 'mistakes' | 'cards' | 'mastery' | 'history'
+  | 'home'
+  | 'files'
+  | 'homework'
+  | 'tutor'
+  | 'quiz'
+  | 'interview'
+  | 'mistakes'
+  | 'cards'
+  | 'mastery'
+  | 'history'
 
 interface FlowItem {
   key: ProjectFlowSection
@@ -60,6 +72,12 @@ const ITEMS: FlowItem[] = [
     path: (id) => `/projects/${id}/quiz`,
   },
   {
+    key: 'interview',
+    labelKey: 'projectNav.interview',
+    icon: Stethoscope,
+    path: (id) => `/projects/${id}/interview`,
+  },
+  {
     key: 'mistakes',
     labelKey: 'projectNav.mistakes',
     icon: BookX,
@@ -100,6 +118,9 @@ export interface ProjectFlowNavProps {
 
 export function ProjectFlowNav({ projectId, active, className }: ProjectFlowNavProps): JSX.Element {
   const { t } = useTranslation()
+  const subject = useProjectStore(
+    (state) => state.projects.find((project) => project.id === projectId)?.subject,
+  )
   const activeRef = useRef<HTMLAnchorElement>(null)
   const indicator = useSlidingIndicator<HTMLElement>('[aria-current="page"]', {
     initialRect: lastIndicator.get(projectId) ?? null,
@@ -138,7 +159,7 @@ export function ProjectFlowNav({ projectId, active, className }: ProjectFlowNavP
         )}
         style={indicator.style}
       />
-      {ITEMS.map((item) => {
+      {ITEMS.filter((item) => isFlowSectionShown(item.key, subject)).map((item) => {
         const isActive = item.key === active
         const Icon = item.icon
         return (

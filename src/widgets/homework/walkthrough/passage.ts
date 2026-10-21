@@ -71,11 +71,17 @@ function highlights(): HighlightRegistry | null {
     : null
 }
 
-export function markPassages(name: string, ranges: readonly Range[]): void {
+/** `priority` decides which mark shows where two overlap (higher wins). */
+export function markPassages(name: string, ranges: readonly Range[], priority = 0): void {
   const registry = highlights()
   if (!registry) return
-  if (ranges.length === 0) registry.delete(name)
-  else registry.set(name, new Highlight(...ranges))
+  if (ranges.length === 0) {
+    registry.delete(name)
+    return
+  }
+  const highlight = new Highlight(...ranges)
+  highlight.priority = priority
+  registry.set(name, highlight)
 }
 
 let flashTimer: ReturnType<typeof setTimeout> | undefined
@@ -104,4 +110,67 @@ export function caretAt(x: number, y: number): { node: Node; offset: number } | 
   if (position) return { node: position.offsetNode, offset: position.offset }
   const range = doc.caretRangeFromPoint?.(x, y)
   return range ? { node: range.startContainer, offset: range.startOffset } : null
+}
+
+/**
+ * Whether a point is over a range's text: the caret under the point is inside
+ * the range and, where the browser reports line boxes, the point is on one of
+ * them (`caretPositionFromPoint` snaps to the nearest text even beside a line).
+ */
+export function pointInPassage(
+  range: Range,
+  caret: { node: Node; offset: number },
+  point: { x: number; y: number },
+  slack = 2,
+): boolean {
+  try {
+    if (!range.isPointInRange(caret.node, caret.offset)) return false
+  } catch {
+    // A node from another document: not ours.
+    return false
+  }
+  const rects = typeof range.getClientRects === 'function' ? range.getClientRects() : null
+  if (!rects || rects.length === 0) return true
+  for (const rect of Array.from(rects)) {
+    if (
+      point.x >= rect.left - slack &&
+      point.x <= rect.right + slack &&
+      point.y >= rect.top - slack &&
+      point.y <= rect.bottom + slack
+    )
+      return true
+  }
+  return false
+}
+
+/** The first passage (in the order given) under a point, or null. */
+export function hitPassage<K>(
+  candidates: Iterable<readonly [K, Range]>,
+  caret: { node: Node; offset: number } | null,
+  point: { x: number; y: number },
+): K | null {
+  if (!caret) return null
+  for (const [key, range] of candidates) if (pointInPassage(range, caret, point)) return key
+  return null
+}
+
+/** Where to anchor a card for a passage: the line under the point, else the whole passage. */
+export function passageRectAt(
+  range: Range,
+  point: { x: number; y: number },
+): { left: number; top: number; width: number; height: number } {
+  const rects = typeof range.getClientRects === 'function' ? Array.from(range.getClientRects()) : []
+  const line = rects.find((rect) => point.y >= rect.top - 2 && point.y <= rect.bottom + 2)
+  const box =
+    line ??
+    (typeof range.getBoundingClientRect === 'function'
+      ? range.getBoundingClientRect()
+      : { left: point.x, top: point.y, width: 0, height: 0 })
+  const finite = (value: number): number => (Number.isFinite(value) ? value : 0)
+  return {
+    left: finite(box.left),
+    top: finite(box.top),
+    width: finite(box.width),
+    height: finite(box.height),
+  }
 }
