@@ -218,7 +218,7 @@ export function ProjectDetailPage(): JSX.Element {
         onOpenChange={setRenameOpen}
         project={project}
         onRename={handleRename}
-        onChangeSubject={(subject) => update({ subject })}
+        onChangeSubject={(subject, details) => update({ subject, ...details })}
       />
     </PageContainer>
   )

@@ -1,4 +1,5 @@
 import type { AppDatabase } from '@/infrastructure/db/database'
+import { loadSubjectContext } from '@/entities/project/subjectContext'
 import { getDb } from '@/infrastructure/db/database'
 import { DocumentRepository } from '@/entities/document/repository'
 import { ChunkRepository } from '@/entities/chunk/repository'
@@ -137,7 +138,8 @@ export class DocumentAnalysisService {
   ): Promise<CourseAnalysisRepository> {
     // Also verifies the project exists. The subject is read here, from the
     // project itself, so every path (manual or automatic) analyses with it.
-    const { subject } = await this.projects.get(projectId)
+    await this.projects.get(projectId)
+    const subject = await loadSubjectContext(this.db, projectId)
     const { onProgress } = options
     onProgress?.({ stage: 'collecting', progress: 5, message: t('stage.collecting') })
 

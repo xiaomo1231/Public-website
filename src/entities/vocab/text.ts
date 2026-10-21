@@ -1,4 +1,11 @@
 import type { DictEntry, ExportFormat, WordContext } from './types'
+import {
+  compareTargetText,
+  isEnglish,
+  isNearTarget,
+  primaryLanguage,
+  type TargetComparison,
+} from '@/shared/lib/language'
 
 /**
  * Pure text helpers for vocabulary: word forms, picking course terms out of
@@ -6,13 +13,35 @@ import type { DictEntry, ExportFormat, WordContext } from './types'
  * root / affix hints. No storage, no AI.
  */
 
-const WORD = /^[a-z][a-z'-]*[a-z]$|^[a-z]$/
+/**
+ * Letters of the alphabetic scripts word lists are written in (Latin with
+ * every accent, Greek, Cyrillic). Chinese and Japanese are meanings, not words.
+ */
+const L = String.raw`\p{Script=Latin}\p{Script=Greek}\p{Script=Cyrillic}`
+/** A single word: letters (with their combining marks), inner ' and -. */
+const WORD = new RegExp(String.raw`^[${L}][${L}\p{M}'-]*[${L}\p{M}]$|^[${L}]$`, 'u')
+/** Words in running text. */
+const WORD_IN_TEXT = new RegExp(String.raw`[${L}][${L}\p{M}'’-]*[${L}\p{M}]|[${L}]`, 'gu')
+/** One entry of a word list: a word or a short phrase ("die Ärztin"). */
+const ENTRY = String.raw`[${L}](?:[${L}\p{M}' -]*[${L}\p{M}])?`
+/** The same, as short as possible (before a separator and a meaning). */
+const ENTRY_LAZY = String.raw`[${L}](?:[${L}\p{M}' -]*?[${L}\p{M}])??`
 /** Byte-order mark: Excel needs it to read UTF-8 CSV; imports may start with it. */
 const BOM = String.fromCharCode(0xfeff)
 const BOM_AT_START = new RegExp(`^${BOM}`)
 
 export function normalizeWord(text: string): string {
   return text.normalize('NFKC').trim().toLowerCase().replace(/[’‘`]/g, "'")
+}
+
+/**
+ * The key a word is stored and scheduled under. English words are
+ * lower-cased (as always); other languages keep their case, since German
+ * nouns are capitalised (`Arzt`, not `arzt`).
+ */
+export function wordKey(text: string, language?: string): string {
+  if (isEnglish(language)) return normalizeWord(text)
+  return text.normalize('NFKC').trim().replace(/\s+/g, ' ').replace(/[’‘`]/g, "'")
 }
 
 /** Every inflected form → its headword, from the dictionary's word forms. */
@@ -69,6 +98,20 @@ const STOPWORDS = new Set(
   ),
 )
 
+/** Function words of the other course languages (added to the English list). */
+const STOPWORDS_BY_LANGUAGE: Record<string, Set<string>> = {
+  de: new Set(
+    'aber alle allem allen aller alles also auch auf aus bei beim bin bist bitte dann darf darum dass dein deine deinem deinen deiner dem den denn der des dich die dies diese diesem diesen dieser dir doch dort durch eine einem einen einer eines euch euer eure für gegen haben habe hast hat hatte hatten heute hier ihm ihn ihnen ihr ihre ihrem ihren ihrer immer jetzt kann kein keine keinem keinen keiner können machen mein meine meinem meinen meiner mich mir mit muss nach nein nicht noch nur oder ohne schon sehr sein seine seinem seinen seiner seit sich sie sind über und uns unser unsere unter viel vom von vor wann warum was weil welche welcher welches wenn werde werden wer wie wieder wird wir woher wohin zum zur zwei'.split(
+      ' ',
+    ),
+  ),
+  hu: new Set(
+    'akkor amely amelyek amikor annak arra azok azon azonban azt aztán azért csak egyik egyes elég ennek erre ezek ezen ezért hogy hogyan igen ilyen itt kell kérem lesz mert miért mikor milyen minden mint mivel most nagyon nekem neki nekünk nem nincs olyan pedig szerint tehát talán vagy vagyok vagyunk valami van vannak vele volt voltak'.split(
+      ' ',
+    ),
+  ),
+}
+
 export interface TermSource {
   text: string
   page?: number
@@ -82,10 +125,69 @@ export interface TermCandidate {
   context: WordContext
 }
 
+/** A line reduced for comparison across pages: case, spacing and numbers ignored. */
+function lineKey(line: string): string {
+  return line.normalize('NFC').trim().replace(/\s+/g, ' ').replace(/\d+/g, '#').toLowerCase()
+}
+
+/**
+ * The material without its running headers and footers: lines (numbers
+ * aside) found on at least half of a document's pages, when it has four
+ * pages or more. A university name in every page header would otherwise be
+ * among the most frequent "terms" of the course.
+ */
+export function dropRunningLines(sources: TermSource[]): TermSource[] {
+  const pagesByDocument = new Map<string, Map<string, Set<string>>>()
+  sources.forEach((source, i) => {
+    const document = source.documentName ?? ''
+    const page = source.page !== undefined ? String(source.page) : `#${i}`
+    const pages = pagesByDocument.get(document) ?? new Map<string, Set<string>>()
+    const lines = pages.get(page) ?? new Set<string>()
+    for (const line of source.text.split(/\r?\n/)) {
+      const key = lineKey(line)
+      if (/\p{L}.*\p{L}/u.test(key)) lines.add(key)
+    }
+    pages.set(page, lines)
+    pagesByDocument.set(document, pages)
+  })
+  const running = new Map<string, Set<string>>()
+  for (const [document, pages] of pagesByDocument) {
+    if (pages.size < 4) continue
+    const counts = new Map<string, number>()
+    for (const lines of pages.values())
+      for (const line of lines) counts.set(line, (counts.get(line) ?? 0) + 1)
+    const threshold = Math.max(3, Math.ceil(pages.size / 2))
+    const repeated = new Set([...counts].filter(([, n]) => n >= threshold).map(([line]) => line))
+    if (repeated.size) running.set(document, repeated)
+  }
+  if (running.size === 0) return sources
+  return sources.map((source) => {
+    const repeated = running.get(source.documentName ?? '')
+    if (!repeated) return source
+    const text = source.text
+      .split(/\r?\n/)
+      .filter((line) => !repeated.has(lineKey(line)))
+      .join('\n')
+    return { ...source, text }
+  })
+}
+
+interface FoundTerm extends TermCandidate {
+  order: number
+  /** Written forms seen: how often, and how often not at a sentence start. */
+  forms: Map<string, { count: number; inner: number }>
+}
+
 /**
  * Words of the course material a student is likely not to know yet: not
  * common, not a stopword, at least four letters, merged over their forms.
- * Each keeps the first sentence it appears in. Most frequent first.
+ * Each keeps the first sentence it appears in. Most frequent first. Running
+ * headers and footers are left out.
+ *
+ * English words are lower-cased and merged onto their headword. Words of
+ * another `language` (German, Hungarian, …) keep their written case — the
+ * form seen inside sentences wins over a capital at a sentence start — and
+ * are not lemmatised.
  */
 export function extractCourseTerms(
   sources: TermSource[],
@@ -93,33 +195,54 @@ export function extractCourseTerms(
     isCommon: (word: string) => boolean
     lemma: (token: string) => string
     limit: number
+    /** BCP-47 language of the material; English when absent. */
+    language?: string
   },
 ): TermCandidate[] {
-  const found = new Map<string, TermCandidate & { order: number }>()
+  const english = isEnglish(options.language)
+  const extra = STOPWORDS_BY_LANGUAGE[primaryLanguage(options.language) ?? ''] ?? new Set()
+  const isStopword = (word: string) => STOPWORDS.has(word) || extra.has(word)
+  const found = new Map<string, FoundTerm>()
   let order = 0
-  for (const source of sources) {
+  for (const source of dropRunningLines(sources)) {
     for (const sentence of splitSentences(source.text)) {
-      for (const raw of sentence.match(/[A-Za-z][A-Za-z'-]*[A-Za-z]/g) ?? []) {
-        if (raw.length < 4 || /^[A-Z]{2,}$/.test(raw)) continue
-        const token = normalizeWord(raw).replace(/'s$/, '')
-        if (!WORD.test(token) || STOPWORDS.has(token)) continue
-        const word = options.lemma(token)
-        if (
-          word.length < 4 ||
-          STOPWORDS.has(word) ||
-          options.isCommon(word) ||
-          options.isCommon(token)
-        )
-          continue
+      let index = 0
+      for (const raw of sentence.match(WORD_IN_TEXT) ?? []) {
+        const initial = index++ === 0
+        if ([...raw].length < 4 || /^\p{Lu}{2,}$/u.test(raw)) continue
+        let word: string
+        let surface: string
+        if (english) {
+          const token = normalizeWord(raw).replace(/'s$/, '')
+          if (!WORD.test(token) || isStopword(token)) continue
+          word = options.lemma(token)
+          if (
+            [...word].length < 4 ||
+            isStopword(word) ||
+            options.isCommon(word) ||
+            options.isCommon(token)
+          )
+            continue
+          surface = word
+        } else {
+          surface = wordKey(raw, options.language)
+          word = surface.toLowerCase()
+          if (!WORD.test(surface) || isStopword(word) || options.isCommon(surface)) continue
+        }
         const existing = found.get(word)
         if (existing) {
           existing.occurrences++
+          const form = existing.forms.get(surface) ?? { count: 0, inner: 0 }
+          form.count++
+          if (!initial) form.inner++
+          existing.forms.set(surface, form)
           continue
         }
         found.set(word, {
           word,
           occurrences: 1,
           order: order++,
+          forms: new Map([[surface, { count: 1, inner: initial ? 0 : 1 }]]),
           context: {
             text: sentence.length > 240 ? `${sentence.slice(0, 240)}…` : sentence,
             ...(source.page !== undefined ? { page: source.page } : {}),
@@ -130,18 +253,36 @@ export function extractCourseTerms(
       }
     }
   }
-  // A plural that never appears in its singular form still collapses onto it
-  // when the singular appears too (bursae / bursa excepted: irregular).
-  for (const [word, candidate] of found) {
-    if (word.endsWith('s') && !word.endsWith('ss') && found.has(word.slice(0, -1))) {
-      found.get(word.slice(0, -1))!.occurrences += candidate.occurrences
-      found.delete(word)
+  if (english) {
+    // A plural that never appears in its singular form still collapses onto it
+    // when the singular appears too (bursae / bursa excepted: irregular).
+    for (const [word, candidate] of found) {
+      if (word.endsWith('s') && !word.endsWith('ss') && found.has(word.slice(0, -1))) {
+        found.get(word.slice(0, -1))!.occurrences += candidate.occurrences
+        found.delete(word)
+      }
     }
   }
   return [...found.values()]
     .sort((a, b) => b.occurrences - a.occurrences || a.order - b.order)
     .slice(0, options.limit)
-    .map(({ order: _order, ...candidate }) => candidate)
+    .map(({ order: _order, forms, ...candidate }) => ({
+      ...candidate,
+      word: english ? candidate.word : writtenForm(forms),
+    }))
+}
+
+/**
+ * The written form of a non-English word: the one seen most often inside a
+ * sentence (a capital at a sentence start says nothing), else the most
+ * frequent; the first seen on a tie.
+ */
+function writtenForm(forms: Map<string, { count: number; inner: number }>): string {
+  const list = [...forms]
+  const inner = list.filter(([, form]) => form.inner > 0)
+  const pool = inner.length ? inner : list
+  const score = (form: { count: number; inner: number }) => (inner.length ? form.inner : form.count)
+  return pool.reduce((best, item) => (score(item[1]) > score(best[1]) ? item : best))[0]
 }
 
 /** Distance of two short strings (insertions, deletions, substitutions). */
@@ -159,86 +300,161 @@ function editDistance(a: string, b: string): number {
   return row[b.length]!
 }
 
-/** A typed spelling: right, or wrong but off by one letter (a slip worth pointing out). */
-export function checkSpelling(
-  input: string,
-  word: string,
-): { correct: boolean; nearMiss: boolean } {
-  const given = normalizeWord(input)
-  const target = normalizeWord(word)
-  if (given === target) return { correct: true, nearMiss: false }
-  return { correct: false, nearMiss: given.length > 0 && editDistance(given, target) === 1 }
+/** A typed spelling checked against the word. */
+export interface SpellingResult {
+  correct: boolean
+  /**
+   * Close but not right: one letter off, or (other languages) right apart
+   * from accents, capitalisation or a spelling variant. Rated "hard".
+   */
+  nearMiss: boolean
+  /** Other languages: how the spelling differs (`exact` when correct). */
+  outcome?: TargetComparison
 }
+
+/**
+ * A typed spelling: right, or wrong but off by one letter (a slip worth
+ * pointing out). English ignores case, as always. Other languages are strict:
+ * a missing accent (fájdalom), a lower-case German noun (Arzt) or ss for ß
+ * is a near miss, not a correct answer.
+ */
+export function checkSpelling(input: string, word: string, language?: string): SpellingResult {
+  if (isEnglish(language)) {
+    const given = normalizeWord(input)
+    const target = normalizeWord(word)
+    if (given === target) return { correct: true, nearMiss: false }
+    return { correct: false, nearMiss: given.length > 0 && editDistance(given, target) === 1 }
+  }
+  const outcome = compareTargetText(word, input, language)
+  if (outcome === 'exact') return { correct: true, nearMiss: false, outcome }
+  if (isNearTarget(outcome)) return { correct: false, nearMiss: true, outcome }
+  const given = wordKey(input, language)
+  const target = wordKey(word, language)
+  return {
+    correct: false,
+    nearMiss: given.length > 0 && editDistance(given, target) === 1,
+    outcome,
+  }
+}
+
+const escapeRegExp = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 
 /**
  * The example sentence with the word blanked out, and the form that was
  * blanked (the sentence may use a plural or a past tense). Null when the word
- * does not appear in the sentence.
+ * does not appear in the sentence. Words of another language are matched as
+ * written (plus any listed forms), without English endings.
  */
 export function clozeOf(
   sentence: string,
   word: string,
   forms: string[] = [],
+  language?: string,
 ): { text: string; answer: string } | null {
-  const regular = [
-    `${word}s`,
-    `${word}es`,
-    `${word}d`,
-    `${word}ed`,
-    `${word}ing`,
-    ...(word.endsWith('e') ? [`${word.slice(0, -1)}ing`] : []),
-    ...(word.endsWith('y') ? [`${word.slice(0, -1)}ies`, `${word.slice(0, -1)}ied`] : []),
-  ]
+  const regular = isEnglish(language)
+    ? [
+        `${word}s`,
+        `${word}es`,
+        `${word}d`,
+        `${word}ed`,
+        `${word}ing`,
+        ...(word.endsWith('e') ? [`${word.slice(0, -1)}ing`] : []),
+        ...(word.endsWith('y') ? [`${word.slice(0, -1)}ies`, `${word.slice(0, -1)}ied`] : []),
+      ]
+    : []
   const variants = [...new Set([word, ...forms, ...regular].filter(Boolean))].sort(
     (a, b) => b.length - a.length,
   )
+  const text = sentence.normalize('NFC')
   for (const variant of variants) {
-    const pattern = new RegExp(`\\b${variant.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i')
-    const found = pattern.exec(sentence)
-    if (found) return { text: sentence.replace(pattern, '_____'), answer: found[0] }
+    // Letters of any script count as part of a word (`\b` only knows ASCII).
+    const pattern = new RegExp(
+      `(?<![\\p{L}\\p{M}])${escapeRegExp(variant.normalize('NFC'))}(?![\\p{L}\\p{M}])`,
+      'iu',
+    )
+    const found = pattern.exec(text)
+    if (found) return { text: text.replace(pattern, '_____'), answer: found[0] }
   }
   return null
 }
 
+/** Articles written before a noun in a word list ("der Arzt", "a fej"). */
+const ARTICLES: Record<string, Set<string>> = {
+  de: new Set(['der', 'die', 'das', 'ein', 'eine']),
+  hu: new Set(['a', 'az', 'egy']),
+}
+
 /**
  * Parse a pasted or uploaded word list: one word per line, optionally followed
- * by its meaning after a tab, a comma, a colon or a space before non-Latin
- * text. A header line ("word,…") is skipped.
+ * by its meaning after a tab, a comma, a colon, an equals sign, a spaced dash
+ * ("die Ärztin – female doctor") or a space before non-Latin text. A header
+ * line ("word,…") is skipped.
+ *
+ * In a list of another `language`, words keep their case and a plain English
+ * meaning may follow after a space ("fájdalom pain"); a leading article stays
+ * with its noun ("der Arzt physician").
  */
-export function parseWordList(text: string): {
+export function parseWordList(
+  text: string,
+  options: { language?: string } = {},
+): {
   words: Array<{ word: string; meaning?: string }>
   skipped: number
 } {
+  const { language } = options
+  const english = isEnglish(language)
+  const articles = ARTICLES[primaryLanguage(language) ?? ''] ?? new Set<string>()
   const words: Array<{ word: string; meaning?: string }> = []
   const seen = new Set<string>()
   let skipped = 0
   const body = text.replace(BOM_AT_START, '')
+  const entryOnly = new RegExp(`^${ENTRY}$`, 'u')
 
   /** Add one entry; false when the word part is not a word. */
   const accept = (rawWord: string, rawMeaning?: string): boolean => {
-    const trimmed = rawWord.trim()
-    if (!/^([A-Za-z][A-Za-z' -]*[A-Za-z]|[A-Za-z])$/.test(trimmed)) return false
-    const word = normalizeWord(trimmed)
-    if (word === 'word' || seen.has(word)) return true
+    const trimmed = rawWord.normalize('NFC').trim()
+    if (!entryOnly.test(trimmed)) return false
+    const word = wordKey(trimmed, language)
+    if (word.toLowerCase() === 'word' || seen.has(word)) return true
     seen.add(word)
     const meaning = rawMeaning?.trim()
     words.push({ word, ...(meaning ? { meaning } : {}) })
     return true
   }
 
-  /** One free-form line: word, then optionally tab / comma / colon / space + meaning. */
+  const separated = new RegExp(
+    String.raw`^(${ENTRY_LAZY})\s*(?:[\t,:：=]\s*|\s[–—-]\s+|\s+(?=[^\x00-\x7f\p{Script=Latin}\p{Script=Greek}\p{Script=Cyrillic}]))(.*)$`,
+    'u',
+  )
+
+  /** Other languages: "fájdalom pain", "der Arzt physician" (an English meaning after a space). */
+  const spaced = (line: string): [string, string] | null => {
+    const tokens = line.split(/\s+/)
+    const take = articles.has(tokens[0]!.toLowerCase()) ? 2 : 1
+    if (tokens.length <= take) return null
+    const meaning = tokens.slice(take).join(' ')
+    // Only a plain (ASCII) gloss that does not go on in the same language:
+    // "fáj a fejem" is one phrase, not "fáj" + "a fejem".
+    if (/[^\x20-\x7e]/.test(meaning) || articles.has(tokens[take]!.toLowerCase())) return null
+    return [tokens.slice(0, take).join(' '), meaning]
+  }
+
+  /** One free-form line: word, then optionally a separator + meaning. */
   const acceptLine = (rawLine: string) => {
-    const line = rawLine.trim()
+    const line = rawLine.normalize('NFC').trim()
     if (!line) return
-    const match =
-      /^([A-Za-z][A-Za-z' -]*?[A-Za-z]|[A-Za-z])\s*(?:[\t,:：]\s*|\s+(?=[^\x20-\x7e]))(.*)$/.exec(
-        line,
-      ) ?? /^([A-Za-z][A-Za-z' -]*[A-Za-z]|[A-Za-z])$/.exec(line)
-    if (!match) {
-      skipped++
+    const match = separated.exec(line)
+    if (match) {
+      accept(match[1]!, match[2]?.replace(/^["']|["']$/g, ''))
       return
     }
-    accept(match[1]!, match[2]?.replace(/^["']|["']$/g, ''))
+    if (entryOnly.test(line) && (english || !spaced(line))) {
+      accept(line)
+      return
+    }
+    const pair = english ? null : spaced(line)
+    if (pair && accept(pair[0], pair[1])) return
+    skipped++
   }
 
   const lines = body.split(/\r?\n/)

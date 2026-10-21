@@ -27,11 +27,11 @@ import {
 } from '@/entities/homework/walkthrough'
 import { WalkthroughRepository } from '@/entities/homework/walkthroughRepository'
 import type { HomeworkQuestion, HomeworkSet } from '@/entities/homework/types'
-import type { Subject } from '@/entities/project/types'
+import type { SubjectContext } from '@/entities/project/types'
 import { friendlyAIError } from '@/shared/lib/aiErrors'
 import { t } from '@/i18n'
 import { HomeworkService } from './homeworkService'
-import { loadProjectSubject } from './projectSubject'
+import { loadProjectSubjectContext } from './projectSubject'
 
 /** Sections prepared at once (rate-limit safe). */
 const SECTION_CONCURRENCY = 2
@@ -131,7 +131,7 @@ export class HomeworkWalkthroughService {
     const questions = (await this.sets.listQuestions(setId)).filter((question) => !question.retired)
     const profile = await new UserRepository(this.db).get().catch(() => undefined)
     const language = walkthroughLanguage(profile?.questionLanguage, set.language)
-    const subject = await loadProjectSubject(set.projectId, this.db)
+    const subject = await loadProjectSubjectContext(set.projectId, this.db)
     const promptVersion = prompts.subjectProfile.subjectPromptVersion(
       `homework-walkthrough/${prompts.homeworkWalkthrough.VERSION}`,
       subject,
@@ -177,7 +177,7 @@ export class HomeworkWalkthroughService {
     const state = await this.state(setId)
     if (state.questions.length === 0)
       throw new AppError(t('homework.walkthrough.noQuestions'), 'VALIDATION_ERROR')
-    const subject = await loadProjectSubject(state.set.projectId, this.db)
+    const subject = await loadProjectSubjectContext(state.set.projectId, this.db)
     const base = {
       id: walkthroughId(setId, state.language),
       projectId: state.set.projectId,
@@ -268,7 +268,7 @@ export class HomeworkWalkthroughService {
     entry: WalkthroughPlanEntry,
     label: string,
     language: WalkthroughLanguage,
-    subject: Subject | undefined,
+    subject: SubjectContext | undefined,
   ): Promise<WalkthroughSection> {
     const question = entry.question!
     const deferred =
@@ -277,7 +277,8 @@ export class HomeworkWalkthroughService {
       question.answerStatus === 'matched' && !deferred && (question.answerText ?? '').trim()
         ? question.answerText
         : undefined
-    const linearSystems = subject === 'linear_algebra' || involvesRowReduction(question.prompt)
+    const linearSystems =
+      subject?.subject === 'linear_algebra' || involvesRowReduction(question.prompt)
     const messages: ChatMessage[] = [
       {
         role: 'system',
@@ -336,7 +337,7 @@ export class HomeworkWalkthroughService {
     setId: string,
     state: WalkthroughState,
     labels: ReadonlyMap<string, string>,
-    subject: Subject | undefined,
+    subject: SubjectContext | undefined,
   ): Promise<WalkthroughSection[] | null> {
     const stored = await this.repo.get(walkthroughId(setId, state.language))
     const byId = new Map((stored?.sections ?? []).map((section) => [section.id, section]))

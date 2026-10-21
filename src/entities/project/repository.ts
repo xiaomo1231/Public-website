@@ -1,5 +1,11 @@
 import type { AppDatabase } from '@/infrastructure/db/database'
-import type { CreateProjectInput, Project, UpdateProjectInput } from './types'
+import {
+  EXAM_STYLES,
+  normalizeLanguageTag,
+  type CreateProjectInput,
+  type Project,
+  type UpdateProjectInput,
+} from './types'
 import { getDb } from '@/infrastructure/db/database'
 import { NotFoundError, StorageError, ValidationError } from '@/infrastructure/errors/AppError'
 import { logger } from '@/infrastructure/logger/logger'
@@ -45,6 +51,10 @@ export class ProjectRepository {
       createdAt: now,
       updatedAt: now,
     }
+    const targetLanguage = normalizeLanguageTag(input.targetLanguage)
+    if (targetLanguage) project.targetLanguage = targetLanguage
+    if (input.examStyle && EXAM_STYLES.includes(input.examStyle))
+      project.examStyle = input.examStyle
     if (input.description !== undefined) project.description = input.description.trim()
 
     await this.db.projects.add(project)
@@ -61,6 +71,15 @@ export class ProjectRepository {
       next.name = name
     }
     if (patch.subject !== undefined) next.subject = patch.subject
+    if (patch.targetLanguage !== undefined) {
+      const tag = normalizeLanguageTag(patch.targetLanguage)
+      if (tag) next.targetLanguage = tag
+      else delete next.targetLanguage
+    }
+    if (patch.examStyle !== undefined) {
+      if (patch.examStyle && EXAM_STYLES.includes(patch.examStyle)) next.examStyle = patch.examStyle
+      else delete next.examStyle
+    }
     if (patch.description !== undefined) next.description = patch.description.trim()
 
     await this.db.projects.put(next)

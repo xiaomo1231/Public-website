@@ -1,3 +1,4 @@
+import { targetLanguageOf } from '@/shared/lib/language'
 import { useEffect, useState } from 'react'
 import { Check, X } from 'lucide-react'
 import { optionLetter, type Question } from '@/entities/question/types'
@@ -37,6 +38,7 @@ export function AnswerInput({
   const { t } = useTranslation()
   const { project } = useProject(question.projectId)
   const subject = project?.subject
+  const language = targetLanguageOf(project)
   if (question.type === 'multiple_choice') {
     return (
       <MultipleChoiceInput
@@ -67,6 +69,7 @@ export function AnswerInput({
         <MathField
           mode="quantity"
           subject={subject}
+          language={language}
           value={value}
           onChange={onChange}
           placeholder={t('answerInput.quantityPlaceholder')}
@@ -122,6 +125,7 @@ export function AnswerInput({
         value={value}
         onChange={onChange}
         disabled={disabled}
+        language={language}
         {...(onSubmit ? { onSubmit } : {})}
       />
     )
@@ -137,6 +141,7 @@ export function AnswerInput({
         <MathField
           mode="chemistry"
           subject={subject}
+          language={language}
           value={value}
           onChange={onChange}
           placeholder={t('answerInput.chemEquationPlaceholder')}
@@ -156,6 +161,7 @@ export function AnswerInput({
           multiline
           rows={6}
           subject={subject}
+          language={language}
           value={value}
           onChange={onChange}
           placeholder={t('answerInput.shortAnswerPlaceholder')}
@@ -173,6 +179,7 @@ export function AnswerInput({
       <MathField
         mode="number"
         subject={subject}
+        language={language}
         value={value}
         onChange={onChange}
         placeholder={t('answerInput.numberPlaceholder')}
@@ -187,6 +194,7 @@ export function AnswerInput({
         <MathField
           mode="expression"
           subject={subject}
+          language={language}
           value={value}
           onChange={onChange}
           placeholder={t('answerInput.expressionPlaceholder')}
@@ -203,6 +211,7 @@ export function AnswerInput({
     <MathField
       mode="text"
       subject={subject}
+      language={language}
       multiline
       value={value}
       onChange={onChange}

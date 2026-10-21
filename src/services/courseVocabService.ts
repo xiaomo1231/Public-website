@@ -4,7 +4,7 @@ import { VocabRepository } from '@/entities/vocab/repository'
 import { DocumentRepository } from '@/entities/document/repository'
 import { ChunkRepository } from '@/entities/chunk/repository'
 import { selectAnalysisDocuments } from '@/entities/courseContent/sourceHash'
-import type { VocabBook, VocabEntry } from '@/entities/vocab/types'
+import type { DictEntry, VocabBook, VocabEntry } from '@/entities/vocab/types'
 import { extractCourseTerms, lemmaOf, type TermSource } from '@/entities/vocab/text'
 import { loadCommonWords } from '@/infrastructure/vocab/wordData'
 import { prompts } from '@/infrastructure/ai/prompts'
@@ -13,6 +13,8 @@ import { AppError } from '@/infrastructure/errors/AppError'
 import type { AIService } from './aiService'
 import type { ProjectService } from './projectService'
 import { loadProjectSubject } from './projectSubject'
+import { projectTargetLanguage } from './projectTargetLanguage'
+import { isEnglish } from '@/shared/lib/language'
 import { vocabIndex } from './vocabService'
 import { t } from '@/i18n'
 
@@ -32,9 +34,12 @@ export interface CourseVocabResult {
 }
 
 /**
- * A course's own vocabulary: the uncommon words of its English material,
- * each with the sentence and page it was found on. Meanings come from the
- * dictionary, otherwise from the student's AI (cached in the entry).
+ * A course's own vocabulary: the uncommon words of its material, each with
+ * the sentence and page it was found on. For English material meanings come
+ * from the dictionary, otherwise from the student's AI (cached in the entry).
+ * A course taught in another language (`Project.targetLanguage`) gets a book
+ * in that language: words as written, no English dictionary, word lists or
+ * lemmatisation, meanings from the AI only.
  */
 export class CourseVocabService {
   private repo: VocabRepository
@@ -78,7 +83,14 @@ export class CourseVocabService {
       }
     }
 
-    const [{ byWord, lemmas }, common] = await Promise.all([vocabIndex(), loadCommonWords()])
+    const targetLanguage = await projectTargetLanguage(projectId)
+    const language = isEnglish(targetLanguage) ? undefined : targetLanguage
+    const [{ byWord, lemmas }, common] = language
+      ? [
+          { byWord: new Map<string, DictEntry>(), lemmas: new Map<string, string>() },
+          new Set<string>(),
+        ]
+      : await Promise.all([vocabIndex(), loadCommonWords()])
     // Words from school-level and CET-4 lists count as known to a university student.
     const basic = (word: string) => {
       const entry = byWord.get(word)
@@ -91,6 +103,7 @@ export class CourseVocabService {
       isCommon: (word) => common.has(word) || basic(word),
       lemma: (token) => lemmaOf(token, lemmas, known),
       limit: COURSE_TERM_LIMIT,
+      ...(language ? { language } : {}),
     })
 
     let book = await this.repo.findCourseBook(projectId)
@@ -99,19 +112,22 @@ export class CourseVocabService {
       kind: 'course',
       name: project.name,
       projectId,
+      ...(language ? { language } : {}),
       createdAt: book?.createdAt ?? now,
       updatedAt: now,
     }
     // Every entry of the book after this run, by word: earlier ones (counts
-    // refreshed when found again) plus the new ones.
+    // refreshed when found again) plus the new ones. Words of another
+    // language are matched regardless of case (the written form wins once).
+    const termKey = (word: string) => (language ? word.toLowerCase() : word)
     const byTerm = new Map(
-      (await this.repo.listEntries(book.id)).map((entry) => [entry.word, entry]),
+      (await this.repo.listEntries(book.id)).map((entry) => [termKey(entry.word), entry]),
     )
     const fresh = new Set<string>()
     for (const [i, candidate] of candidates.entries()) {
-      const before = byTerm.get(candidate.word)
+      const before = byTerm.get(termKey(candidate.word))
       if (before) {
-        byTerm.set(candidate.word, {
+        byTerm.set(termKey(candidate.word), {
           ...before,
           occurrences: candidate.occurrences,
           context: before.context ?? candidate.context,
@@ -121,7 +137,7 @@ export class CourseVocabService {
       const entry = byWord.get(candidate.word)
       const id = crypto.randomUUID()
       fresh.add(id)
-      byTerm.set(candidate.word, {
+      byTerm.set(termKey(candidate.word), {
         id,
         bookId: book.id,
         projectId,
@@ -139,6 +155,7 @@ export class CourseVocabService {
     const { glossed, dropped } = await this.gloss(
       entries,
       await loadProjectSubject(projectId),
+      language,
       options.signal,
     )
     const kept = entries.filter((entry) => !dropped.has(entry.id))
@@ -161,6 +178,7 @@ export class CourseVocabService {
   private async gloss(
     entries: VocabEntry[],
     subject: string | undefined,
+    language: string | undefined,
     signal?: AbortSignal,
   ): Promise<{ glossed: number; dropped: Set<string> }> {
     const dropped = new Set<string>()
@@ -173,11 +191,17 @@ export class CourseVocabService {
       try {
         const { data } = await this.ai.chatJSON<unknown>(
           [
-            { role: 'system', content: prompts.vocabGloss.buildSystemPrompt() },
+            {
+              role: 'system',
+              content: prompts.vocabGloss.buildSystemPrompt(
+                language ? { targetLanguage: language } : {},
+              ),
+            },
             {
               role: 'user',
               content: prompts.vocabGloss.buildUserPrompt({
                 ...(subject ? { subject } : {}),
+                ...(language ? { targetLanguage: language } : {}),
                 terms: batch.map((entry) => ({
                   word: entry.word,
                   sentence: entry.context?.text ?? '',

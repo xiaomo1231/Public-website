@@ -57,6 +57,12 @@ export interface VocabBook {
   name: string
   /** Course books only. */
   projectId?: string
+  /**
+   * BCP-47 primary language of the words ('de', 'hu', …); English when
+   * absent. Words of other languages keep their case and are not looked up in
+   * the (English) dictionary.
+   */
+  language?: string
   createdAt: number
   updatedAt: number
 }
@@ -74,7 +80,7 @@ export interface VocabEntry {
   id: string
   bookId: string
   projectId?: string
-  /** Lower-case headword (lemma). */
+  /** Headword: lower-case (lemma) for English, as written for other languages. */
   word: string
   phonetic?: string
   meanings: string[]
@@ -102,7 +108,7 @@ export type CardState = 0 | 1 | 2 | 3
 
 /** Spaced-repetition progress of one word (an FSRS card plus bookkeeping). */
 export interface VocabCard {
-  /** Lower-case headword; the primary key. */
+  /** Headword; the primary key (lower-case for English, as written otherwise). */
   word: string
   due: number
   stability: number
@@ -158,6 +164,8 @@ export interface SessionItem {
   view: WordView
   kind: 'new' | 'review'
   mode: VocabMode
+  /** Language of the word's book, when not English. */
+  language?: string
 }
 
 export type ExportFormat = 'anki' | 'csv' | 'txt'

@@ -1,4 +1,5 @@
 import type { AppDatabase } from '@/infrastructure/db/database'
+import { loadSubjectContext } from '@/entities/project/subjectContext'
 import { getDb } from '@/infrastructure/db/database'
 import type {
   Concept,
@@ -14,7 +15,6 @@ import type {
 import { COURSE_ANALYSIS_SCHEMA_VERSION } from './types'
 import type { DifficultyLevel } from '@/infrastructure/ai/prompts/types'
 import { prompts } from '@/infrastructure/ai/prompts'
-import type { Subject } from '../project/types'
 import type { PracticeQuestion } from '../practice/types'
 import type { CourseContext } from '../courseContext/types'
 import { logger } from '@/infrastructure/logger/logger'
@@ -290,8 +290,7 @@ export class CourseAnalysisRepository {
       meta.promptVersion ??
       prompts.subjectProfile.subjectPromptVersion(
         prompts.documentAnalyzer.VERSION,
-        (await this.db.table<{ id: string; subject?: Subject }, string>('projects').get(projectId))
-          ?.subject,
+        await loadSubjectContext(this.db, projectId),
       )
 
     const usedIds = new Set<string>()

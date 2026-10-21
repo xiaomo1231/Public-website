@@ -1,4 +1,5 @@
 import type { AppDatabase } from '@/infrastructure/db/database'
+import { loadSubjectContext } from '@/entities/project/subjectContext'
 import { getDb } from '@/infrastructure/db/database'
 import { CourseAnalysisRepository } from '../courseAnalysis/repository'
 import type {
@@ -16,7 +17,6 @@ import { CourseStructureRepository } from '../courseStructure/repository'
 import type { CourseStructure, CourseStructureNode } from '../courseStructure/types'
 import { DocumentRepository } from '../document/repository'
 import { ChunkRepository } from '../chunk/repository'
-import { ProjectRepository } from '../project/repository'
 import type { DocumentChunk } from '../chunk/types'
 import { prompts } from '@/infrastructure/ai/prompts'
 import {
@@ -74,18 +74,18 @@ export class CourseContentRepository {
   private structures: CourseStructureRepository
   private documents: DocumentRepository
   private chunks: ChunkRepository
-  private projects: ProjectRepository
+  private db: AppDatabase
   /** Fixed expectation (tests); otherwise derived per project, see below. */
   private promptVersionOverride: string | undefined
   private expectedSchemaVersion: string
 
   constructor(deps: CourseContentRepositoryDeps = {}) {
     const db = deps.db ?? getDb()
+    this.db = db
     this.analyses = deps.analyses ?? new CourseAnalysisRepository(db)
     this.structures = deps.structures ?? new CourseStructureRepository(db)
     this.documents = deps.documents ?? new DocumentRepository(db)
     this.chunks = deps.chunks ?? new ChunkRepository(db)
-    this.projects = new ProjectRepository(db)
     this.promptVersionOverride = deps.promptVersion
     this.expectedSchemaVersion = deps.schemaVersion ?? COURSE_ANALYSIS_SCHEMA_VERSION
   }
@@ -259,10 +259,8 @@ export class CourseContentRepository {
    */
   private async expectedPromptVersion(projectId: string): Promise<string> {
     if (this.promptVersionOverride) return this.promptVersionOverride
-    const subject = await this.projects
-      .get(projectId)
-      .then((project) => project.subject)
-      .catch(() => undefined)
+    // Subject plus its variant (target language, medicine exam style).
+    const subject = await loadSubjectContext(this.db, projectId).catch(() => undefined)
     return prompts.subjectProfile.subjectPromptVersion(prompts.documentAnalyzer.VERSION, subject)
   }
 

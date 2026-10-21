@@ -40,6 +40,8 @@ const GROUP_LABEL_KEYS: Record<SymbolGroupId, TranslationKey> = {
   chemistry: 'symbolGroup.chemistry',
   biology: 'symbolGroup.biology',
   medicine: 'symbolGroup.medicine',
+  de: 'symbolGroup.de',
+  hu: 'symbolGroup.hu',
   chemEquation: 'symbolGroup.chemEquation',
   operators: 'symbolGroup.operators',
   functions: 'symbolGroup.functions',
@@ -82,6 +84,8 @@ export interface MathFieldProps {
   onChange: (value: string) => void
   /** Course subject; orders the text-mode symbol groups. */
   subject?: string
+  /** Course language (BCP-47); its letters (ä ö ü ß, á ő ű …) come first in text mode. */
+  language?: string
   multiline?: boolean
   rows?: number
   placeholder?: string
@@ -112,6 +116,7 @@ export function MathField({
   value,
   onChange,
   subject,
+  language,
   multiline = false,
   rows = 3,
   placeholder,
@@ -130,7 +135,7 @@ export function MathField({
   /** Caret to restore once the inserted text has been written to the field. */
   const pendingSelection = useRef<{ start: number; end: number } | null>(null)
   const panelId = useId()
-  const groups = symbolGroupsFor(mode, subject)
+  const groups = symbolGroupsFor(mode, subject, language)
   const [open, setOpen] = useState(() => readOpen(mode))
   const [groupId, setGroupId] = useState<SymbolGroupId>(groups[0]!.id)
   const activeGroup = groups.find((group) => group.id === groupId) ?? groups[0]!

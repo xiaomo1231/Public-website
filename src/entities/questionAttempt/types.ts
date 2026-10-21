@@ -74,7 +74,17 @@ export interface BlankResult {
   correct: boolean
   /** Accepted by the AI as an equivalent term (not in the accepted list). */
   byAi?: boolean
+  /**
+   * Course taught in another language: right apart from accents, capitals
+   * or a spelling variant (ß → ss). Not accepted; earns half the blank.
+   */
+  spelling?: NearSpelling
+  /** With `spelling`: the accepted form the answer should have been. */
+  expectedForm?: string
 }
+
+/** How a nearly right spelling differs from the expected form. */
+export type NearSpelling = 'accent' | 'case' | 'variant'
 
 export interface RubricPointResult {
   pointId: string

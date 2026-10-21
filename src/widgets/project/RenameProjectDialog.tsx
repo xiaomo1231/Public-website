@@ -14,6 +14,8 @@ import { Label } from '@/shared/ui/Label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/shared/ui/Select2'
 import { SUBJECT_LABEL_KEYS, type Project, type Subject } from '@/entities/project/types'
 import { useTranslation, type TranslationKey } from '@/i18n'
+import { SubjectDetailsFields } from './SubjectDetailsFields'
+import { subjectDetailsFor, type ExamStyleChoice, type SubjectDetails } from './subjectDetails'
 
 const SUBJECT_OPTIONS = Object.entries(SUBJECT_LABEL_KEYS) as [Subject, TranslationKey][]
 
@@ -26,7 +28,7 @@ export interface RenameProjectDialogProps {
    * When provided, the dialog edits the subject too ("Edit project"). The
    * subject steers every AI prompt for the course, so it must stay editable.
    */
-  onChangeSubject?: (subject: Subject) => Promise<void>
+  onChangeSubject?: (subject: Subject, details: SubjectDetails) => Promise<void>
 }
 
 /**
@@ -46,6 +48,8 @@ export function RenameProjectDialog({
   const subjectId = useId()
   const [name, setName] = useState(project.name)
   const [subject, setSubject] = useState<Subject>(project.subject)
+  const [targetLanguage, setTargetLanguage] = useState(project.targetLanguage ?? '')
+  const [examStyle, setExamStyle] = useState<ExamStyleChoice>(project.examStyle ?? 'auto')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -54,14 +58,22 @@ export function RenameProjectDialog({
     if (open) {
       setName(project.name)
       setSubject(project.subject)
+      setTargetLanguage(project.targetLanguage ?? '')
+      setExamStyle(project.examStyle ?? 'auto')
       setError(null)
       setBusy(false)
     }
-  }, [open, project.name, project.subject])
+  }, [open, project.name, project.subject, project.targetLanguage, project.examStyle])
 
   const trimmed = name.trim()
   const nameChanged = trimmed !== project.name
-  const subjectChanged = Boolean(onChangeSubject) && subject !== project.subject
+  const details = subjectDetailsFor(subject, targetLanguage, examStyle)
+  const subjectChanged =
+    Boolean(onChangeSubject) &&
+    (subject !== project.subject ||
+      details.targetLanguage !==
+        (subject === 'language' ? (project.targetLanguage ?? null) : null) ||
+      details.examStyle !== (subject === 'medicine' ? (project.examStyle ?? null) : null))
   const canSubmit = trimmed.length > 0 && (nameChanged || subjectChanged) && !busy
 
   async function submit(e: React.FormEvent) {
@@ -71,7 +83,7 @@ export function RenameProjectDialog({
     setError(null)
     try {
       if (nameChanged) await onRename(trimmed)
-      if (subjectChanged) await onChangeSubject?.(subject)
+      if (subjectChanged) await onChangeSubject?.(subject, details)
       onOpenChange(false)
     } catch (err) {
       setError(err instanceof Error ? err.message : t('renameProject.failed'))
@@ -141,6 +153,17 @@ export function RenameProjectDialog({
               </Select>
               <p className="text-xs text-muted-foreground">{t('renameProject.subjectHint')}</p>
             </div>
+          )}
+
+          {onChangeSubject && (
+            <SubjectDetailsFields
+              subject={subject}
+              targetLanguage={targetLanguage}
+              onTargetLanguageChange={setTargetLanguage}
+              examStyle={examStyle}
+              onExamStyleChange={setExamStyle}
+              disabled={busy}
+            />
           )}
 
           <DialogFooter>

@@ -46,8 +46,8 @@ import {
 import { AppError, isAppError } from '@/infrastructure/errors/AppError'
 import { logger } from '@/infrastructure/logger/logger'
 import { t } from '@/i18n'
-import type { Subject } from '@/entities/project/types'
-import { loadProjectSubject } from './projectSubject'
+import type { SubjectContext } from '@/entities/project/types'
+import { loadProjectSubjectContext } from './projectSubject'
 import { getDb, type AppDatabase } from '@/infrastructure/db/database'
 
 /** How a re-analysis would have to be run. */
@@ -509,7 +509,8 @@ export class CourseContentService {
       relinkedTopics.push(next)
     }
 
-    const subject = regeneratableOps.length > 0 ? await loadProjectSubject(projectId) : undefined
+    const subject =
+      regeneratableOps.length > 0 ? await loadProjectSubjectContext(projectId) : undefined
     for (const op of regeneratableOps) {
       const topic = topicById.get(op.id)
       if (!topic) {
@@ -629,7 +630,7 @@ export class CourseContentService {
     candidateChunks: DocumentChunk[],
     ai: AIService,
     language: 'zh' | 'en' | 'mixed',
-    subject: Subject | undefined,
+    subject: SubjectContext | undefined,
     signal?: AbortSignal,
   ) {
     const chapterLabel = [topic.chapterNumber, topic.chapterTitle].filter(Boolean).join(' — ')

@@ -1,3 +1,4 @@
+import { useRef } from 'react'
 import { Check, X } from 'lucide-react'
 import { optionLetter, type Question } from '@/entities/question/types'
 import { Input } from '@/shared/ui/Input'
@@ -9,6 +10,7 @@ import {
   optionRowClass,
 } from './optionStyles'
 import { toggleOptionValue } from './quizKeyboard'
+import { LetterBar } from '@/widgets/mathInput/LetterBar'
 import { useTranslation } from '@/i18n'
 
 interface InputProps {
@@ -150,15 +152,22 @@ export function MatchingInput({
   )
 }
 
-/** Fill-blank: one field per ____ in the prompt. Value: answers joined by newlines. */
+/**
+ * Fill-blank: one field per ____ in the prompt. Value: answers joined by
+ * newlines. A course taught in German or Hungarian (`language`) gets a row of
+ * its letters, typed into the blank last focused.
+ */
 export function FillBlankInput({
   question,
   value,
   onChange,
   disabled,
   onSubmit,
-}: InputProps & { onSubmit?: () => void }): JSX.Element {
+  language,
+}: InputProps & { onSubmit?: () => void; language?: string }): JSX.Element {
   const { t } = useTranslation()
+  const fields = useRef<Array<HTMLInputElement | null>>([])
+  const focused = useRef(0)
   const count = question.blanks?.length ?? 1
   const answers = Array.from({ length: count }, (_, i) => value.split('\n')[i] ?? '')
   const set = (i: number, text: string) => {
@@ -174,8 +183,14 @@ export function FillBlankInput({
             {t('answerInput.blankLabel', { n: i + 1 })}
           </span>
           <Input
+            ref={(node) => {
+              fields.current[i] = node
+            }}
             value={answer}
             disabled={disabled}
+            onFocus={() => {
+              focused.current = i
+            }}
             onChange={(event) => set(i, event.target.value)}
             onKeyDown={(event) => {
               if (event.key === 'Enter' && onSubmit && i === count - 1) {
@@ -187,6 +202,14 @@ export function FillBlankInput({
           />
         </label>
       ))}
+      {!disabled && (
+        <LetterBar
+          language={language}
+          field={() => fields.current[focused.current] ?? null}
+          value={() => answers[focused.current] ?? ''}
+          onChange={(text) => set(focused.current, text)}
+        />
+      )}
       <p className="text-xs text-muted-foreground">{t('answerInput.fillBlankHint')}</p>
     </div>
   )

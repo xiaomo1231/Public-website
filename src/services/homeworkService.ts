@@ -92,8 +92,8 @@ import {
   isRetryableHomeworkError,
   type HomeworkErrorKind,
 } from '@/entities/homework/errorKind'
-import { loadProjectSubject } from './projectSubject'
-import type { Subject } from '@/entities/project/types'
+import { loadProjectSubjectContext } from './projectSubject'
+import type { SubjectInput } from '@/entities/project/types'
 
 /** Hard cap on questions extracted from one assignment. */
 const MAX_QUESTIONS = 50
@@ -245,7 +245,7 @@ export class HomeworkService {
     }
     // The check prompt plus the course subject profile; a subject change makes
     // a stored check stale.
-    const subject = await loadProjectSubject(question.projectId, this.db)
+    const subject = await loadProjectSubjectContext(question.projectId, this.db)
     const checkVersion = prompts.subjectProfile.subjectPromptVersion(
       prompts.homeworkAnswerCheck.VERSION,
       subject,
@@ -345,7 +345,7 @@ export class HomeworkService {
     const set = await this.homework.getSet(question.setId)
     if (!set || set.projectId !== question.projectId)
       throw new AppError(t('homework.questionMissing'), 'NOT_FOUND')
-    const subject = await loadProjectSubject(question.projectId, this.db)
+    const subject = await loadProjectSubjectContext(question.projectId, this.db)
     const reviewVersion = prompts.subjectProfile.subjectPromptVersion(
       prompts.homeworkReview.VERSION,
       subject,
@@ -373,7 +373,7 @@ export class HomeworkService {
     language: 'zh' | 'en',
     inputHash: string,
     promptVersion: string,
-    subject: Subject | undefined,
+    subject: SubjectInput,
   ): Promise<HomeworkReviewGuide> {
     const ai = this.requireAI()
     const deferredAnswer =
@@ -1069,7 +1069,7 @@ export class HomeworkService {
         role: 'system',
         content: prompts.subjectProfile.withSubject(
           prompts.homeworkQa.buildSystemPrompt(),
-          await loadProjectSubject(question.projectId, this.db),
+          await loadProjectSubjectContext(question.projectId, this.db),
         ),
       },
       {
@@ -1649,7 +1649,7 @@ export class HomeworkService {
     try {
       const ai = this.requireAI()
       const sourceText = await this.sourceText(question)
-      const subject = await loadProjectSubject(question.projectId, this.db)
+      const subject = await loadProjectSubjectContext(question.projectId, this.db)
       let content: { hints: string[]; solution: string }
       try {
         content = normalizeQuestionContent(
@@ -1752,7 +1752,7 @@ export class HomeworkService {
     try {
       const ai = this.requireAI()
       const sourceText = await this.sourceText(question)
-      const subject = await loadProjectSubject(question.projectId, this.db)
+      const subject = await loadProjectSubjectContext(question.projectId, this.db)
       let content: { hints: string[]; solution: string }
       try {
         content = normalizeQuestionContent(
@@ -1934,7 +1934,7 @@ async function requestHomeworkQuestionJSON(
   question: string,
   sourceText: string,
   language: 'zh' | 'en',
-  subject: Subject | undefined,
+  subject: SubjectInput,
   mode: HomeworkQuestionMode,
   maxAttempts = 6,
   professorAnswer?: string,
@@ -2014,7 +2014,7 @@ async function prepareHomeworkQuestion(
   question: string,
   sourceText: string,
   language: 'zh' | 'en',
-  subject: Subject | undefined,
+  subject: SubjectInput,
 ): Promise<{ hints: string[]; solution: string }> {
   try {
     return normalizeQuestionContent(
@@ -2031,7 +2031,7 @@ async function prepareHomeworkQuestionInStages(
   question: string,
   sourceText: string,
   language: 'zh' | 'en',
-  subject: Subject | undefined,
+  subject: SubjectInput,
   professorAnswer?: string,
   signal?: AbortSignal,
 ): Promise<{ hints: string[]; solution: string }> {

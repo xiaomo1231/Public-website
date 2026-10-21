@@ -52,7 +52,7 @@ import { AppError } from '@/infrastructure/errors/AppError'
 import { logger } from '@/infrastructure/logger/logger'
 import { t } from '@/i18n'
 import { fnv1a } from '@/shared/lib/hash'
-import { loadProjectSubject } from './projectSubject'
+import { loadProjectSubjectContext } from './projectSubject'
 
 const MAX_LESSON_SOURCES = 8
 /** Notes / transcript excerpts pulled in alongside the textbook for a topic. */
@@ -230,10 +230,10 @@ export class TutorLessonService {
 
     // The lesson prompt plus the course's subject profile: changing either
     // (including the project's subject) invalidates the cached lesson.
-    const subject = await loadProjectSubject(input.projectId, this.db)
+    const subjectContext = await loadProjectSubjectContext(input.projectId, this.db)
     const promptVersion = prompts.subjectProfile.subjectPromptVersion(
       prompts.tutorLesson.VERSION,
-      subject,
+      subjectContext,
     )
     // The hash must include the notes/transcript context this topic would use,
     // otherwise a stored lesson could never match.
@@ -289,10 +289,11 @@ export class TutorLessonService {
   ): Promise<TutorLessonResult> {
     const topic = await this.analyses.getTopic(input.topicId)
     if (!topic) throw new AppError(t('errors.topicNotFound'), 'NOT_FOUND')
-    const subject = await loadProjectSubject(input.projectId, this.db)
+    const subjectContext = await loadProjectSubjectContext(input.projectId, this.db)
+    const subject = subjectContext?.subject
     const promptVersion = prompts.subjectProfile.subjectPromptVersion(
       prompts.tutorLesson.VERSION,
-      subject,
+      subjectContext,
     )
 
     const sources = await collectTopicSources(
@@ -324,7 +325,7 @@ export class TutorLessonService {
         role: 'system',
         content: prompts.subjectProfile.withSubject(
           prompts.tutorLesson.buildSystemPrompt(),
-          subject,
+          subjectContext,
           {
             forLesson: true,
           },
@@ -465,6 +466,8 @@ export class TutorLessonService {
     topic: Pick<Topic, 'name' | 'description'>,
     subject: Subject | undefined,
   ): Promise<TutorVisualization[]> {
+    // Language courses teach words and dialogues: no figures to compute.
+    if (subject === 'language') return []
     const science = prompts.visualizationGenerator.scienceFiguresFor(subject)
     const worthAsking =
       hasGraphableMath(content) ||

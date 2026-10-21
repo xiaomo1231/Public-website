@@ -35,9 +35,11 @@ import {
   normalizeWord,
   parseWordList,
   rootHints,
+  wordKey,
   type ExportRow,
   type RootEntry,
 } from '@/entities/vocab/text'
+import { isEnglish, primaryLanguage } from '@/shared/lib/language'
 import { loadDictionary, loadRoots } from '@/infrastructure/vocab/wordData'
 import { ValidationError } from '@/infrastructure/errors/AppError'
 import { t, type TranslationKey } from '@/i18n'
@@ -54,6 +56,8 @@ export interface BookSummary {
   name: string
   nameKey?: TranslationKey
   projectId?: string
+  /** Stored books in another language than English. */
+  language?: string
   wordCount: number
   learned: number
 }
@@ -179,6 +183,7 @@ export class VocabService {
             kind: book.kind,
             name: book.name,
             ...(book.projectId ? { projectId: book.projectId } : {}),
+            ...(!isEnglish(book.language) ? { language: book.language } : {}),
             wordCount: words.length,
             learned: words.filter((entry) => learned.has(entry.word)).length,
           }
@@ -196,13 +201,31 @@ export class VocabService {
     }
     const entries = await this.repo.listEntries(bookId)
     const book = await this.repo.getBook(bookId)
+    const language = book?.language
     const ordered =
       book?.kind === 'course'
         ? entries.sort(
             (a, b) => (b.occurrences ?? 0) - (a.occurrences ?? 0) || a.createdAt - b.createdAt,
           )
         : entries.sort((a, b) => a.createdAt - b.createdAt)
-    return Promise.all(ordered.map((entry) => this.viewOfStored(entry)))
+    return Promise.all(ordered.map((entry) => this.viewOfStored(entry, language)))
+  }
+
+  /** Language of a book when it is not English (exam books are English). */
+  async bookLanguage(bookId: string | null | undefined): Promise<string | undefined> {
+    if (!bookId || examTagOf(bookId)) return undefined
+    const language = (await this.repo.getBook(bookId))?.language
+    return isEnglish(language) ? undefined : language
+  }
+
+  /** Book id → language, for the stored books not in English. */
+  private async languages(): Promise<Map<string, string>> {
+    const books = await this.repo.listBooks()
+    return new Map(
+      books
+        .filter((book) => !isEnglish(book.language))
+        .map((book) => [book.id, book.language!] as const),
+    )
   }
 
   async bookEntries(bookId: string): Promise<VocabEntry[]> {
@@ -220,8 +243,21 @@ export class VocabService {
     await this.repo.deleteEntry(id)
   }
 
-  /** A stored word as shown: the dictionary's phonetic and meanings unless the book has its own. */
-  private async viewOfStored(entry: VocabEntry): Promise<WordView> {
+  /**
+   * A stored word as shown: the dictionary's phonetic and meanings unless the
+   * book has its own. Words of another language are never looked up in the
+   * (English) dictionary.
+   */
+  private async viewOfStored(entry: VocabEntry, language?: string): Promise<WordView> {
+    if (!isEnglish(language)) {
+      return {
+        word: entry.word,
+        phonetic: entry.phonetic ?? '',
+        meanings: entry.meanings,
+        tags: [],
+        ...(entry.context ? { context: entry.context } : {}),
+      }
+    }
     const { byWord } = await vocabIndex()
     const known = byWord.get(entry.word)
     return {
@@ -234,20 +270,37 @@ export class VocabService {
     }
   }
 
-  /** Everything known about a word: dictionary entry, course context, progress, root hints. */
-  async details(word: string): Promise<WordDetails> {
-    const key = normalizeWord(word)
+  /**
+   * Everything known about a word: dictionary entry, course context, progress,
+   * root hints (English only: the roots are English and Latin affixes).
+   */
+  async details(word: string, language?: string): Promise<WordDetails> {
+    const key = wordKey(word, language)
+    const english = isEnglish(language)
     const [view, card, roots] = await Promise.all([
-      this.view(key),
+      this.view(key, language),
       this.repo.getCard(key),
-      loadRoots().catch(() => []),
+      english ? loadRoots().catch(() => []) : Promise.resolve([]),
     ])
-    return { view, ...(card ? { card } : {}), roots: rootHints(key, roots) }
+    return { view, ...(card ? { card } : {}), roots: english ? rootHints(key, roots) : [] }
   }
 
-  /** The view of any word: the dictionary, enriched by a course sentence when there is one. */
-  async view(word: string): Promise<WordView> {
-    const key = normalizeWord(word)
+  /**
+   * The view of any word: the dictionary, enriched by a course sentence when
+   * there is one. A word of another `language` comes from its books only.
+   */
+  async view(word: string, language?: string): Promise<WordView> {
+    const key = wordKey(word, language)
+    if (!isEnglish(language)) {
+      const stored = await this.repo.entriesForWord(key)
+      const pick =
+        stored.find((entry) => entry.meanings.length && entry.context) ??
+        stored.find((entry) => entry.meanings.length) ??
+        stored.find((entry) => entry.context) ??
+        stored[0]
+      if (pick) return this.viewOfStored(pick, language)
+      return { word: key, phonetic: '', meanings: [], tags: [] }
+    }
     const [{ byWord }, stored] = await Promise.all([vocabIndex(), this.repo.entriesForWord(key)])
     const withContext = stored.find((entry) => entry.context) ?? stored[0]
     const known = byWord.get(key)
@@ -270,24 +323,33 @@ export class VocabService {
    */
   async session(now = Date.now()): Promise<SessionItem[]> {
     const settings = await this.settings()
-    const [due, cards] = await Promise.all([
+    const [due, cards, languages] = await Promise.all([
       this.repo.dueCards(now, MAX_SESSION_REVIEWS),
       this.repo.listCards(),
+      this.languages(),
     ])
     const items: SessionItem[] = []
     for (const card of due) {
-      const view = await this.view(card.word)
-      items.push({ view, kind: 'review', mode: this.reviewMode(card, view, settings) })
+      const language = languages.get(card.bookId)
+      const view = await this.view(card.word, language)
+      items.push({
+        view,
+        kind: 'review',
+        mode: this.reviewMode(card, view, settings, language),
+        ...(language ? { language } : {}),
+      })
     }
     if (settings.bookId) {
       const newToday = cards.filter((card) => card.addedAt >= startOfDay(now)).length
       const room = Math.max(0, settings.dailyNew - newToday)
       if (room > 0) {
+        const language = languages.get(settings.bookId)
         const known = new Set(cards.map((card) => card.word))
         const fresh = (await this.bookWords(settings.bookId))
-          .filter((view) => !known.has(normalizeWord(view.word)))
+          .filter((view) => !known.has(wordKey(view.word, language)))
           .slice(0, room)
-        for (const view of fresh) items.push({ view, kind: 'new', mode: 'learn' })
+        for (const view of fresh)
+          items.push({ view, kind: 'new', mode: 'learn', ...(language ? { language } : {}) })
       }
     }
     return items
@@ -295,14 +357,19 @@ export class VocabService {
 
   /** Spelling practice of the words misspelled before, most recent first. */
   async mistakeSession(): Promise<SessionItem[]> {
-    const cards = (await this.repo.listCards()).filter((card) => card.mistakes > 0)
+    const [all, languages] = await Promise.all([this.repo.listCards(), this.languages()])
+    const cards = all.filter((card) => card.mistakes > 0)
     cards.sort((a, b) => (b.lastMistakeAt ?? 0) - (a.lastMistakeAt ?? 0))
     return Promise.all(
-      cards.map(async (card) => ({
-        view: await this.view(card.word),
-        kind: 'review' as const,
-        mode: 'spell' as const,
-      })),
+      cards.map(async (card): Promise<SessionItem> => {
+        const language = languages.get(card.bookId)
+        return {
+          view: await this.view(card.word, language),
+          kind: 'review',
+          mode: 'spell',
+          ...(language ? { language } : {}),
+        }
+      }),
     )
   }
 
@@ -311,12 +378,20 @@ export class VocabService {
    * settled ones rotate through spelling, the course sentence with a blank,
    * and dictation. A fixed preference wins.
    */
-  reviewMode(card: VocabCard, view: WordView, settings: VocabSettings): VocabMode {
+  reviewMode(
+    card: VocabCard,
+    view: WordView,
+    settings: VocabSettings,
+    language?: string,
+  ): VocabMode {
     if (settings.reviewMode !== 'auto') return settings.reviewMode
     if (isLearning(card) || card.reps < 2) return 'recognize'
     const cycle: VocabMode[] = ['spell', 'cloze', 'dictation']
     const pick = cycle[card.reps % cycle.length]!
-    if (pick === 'cloze' && !(view.context && clozeOf(view.context.text, view.word, view.forms)))
+    if (
+      pick === 'cloze' &&
+      !(view.context && clozeOf(view.context.text, view.word, view.forms, language))
+    )
       return 'spell'
     return pick
   }
@@ -326,10 +401,10 @@ export class VocabService {
     word: string,
     rating: VocabRating,
     mode: VocabMode,
-    options: { correct?: boolean; bookId?: string; now?: number } = {},
+    options: { correct?: boolean; bookId?: string; now?: number; language?: string } = {},
   ): Promise<VocabCard> {
     const now = options.now ?? Date.now()
-    const key = normalizeWord(word)
+    const key = wordKey(word, options.language)
     const existing = await this.repo.getCard(key)
     const base =
       existing ??
@@ -353,22 +428,33 @@ export class VocabService {
   }
 
   /** Time each rating would postpone the word (a new word previews from scratch). */
-  async previewIntervals(word: string, now = Date.now()): Promise<Record<VocabRating, number>> {
-    const key = normalizeWord(word)
+  async previewIntervals(
+    word: string,
+    now = Date.now(),
+    language?: string,
+  ): Promise<Record<VocabRating, number>> {
+    const key = wordKey(word, language)
     const card = (await this.repo.getCard(key)) ?? newVocabCard(key, 'preview', now)
     return previewVocabIntervals(card, now)
   }
 
   /** Take a word off the mistake list (it stays in the review schedule). */
   async clearMistakes(word: string): Promise<void> {
-    const card = await this.repo.getCard(normalizeWord(word))
+    // The word as stored (other languages keep their case), else lower-cased (English).
+    const card = (await this.repo.getCard(word)) ?? (await this.repo.getCard(normalizeWord(word)))
     if (card) await this.repo.putCard({ ...card, mistakes: 0 })
   }
 
   async mistakes(): Promise<Array<{ view: WordView; card: VocabCard }>> {
-    const cards = (await this.repo.listCards()).filter((card) => card.mistakes > 0)
+    const [all, languages] = await Promise.all([this.repo.listCards(), this.languages()])
+    const cards = all.filter((card) => card.mistakes > 0)
     cards.sort((a, b) => b.mistakes - a.mistakes || (b.lastMistakeAt ?? 0) - (a.lastMistakeAt ?? 0))
-    return Promise.all(cards.map(async (card) => ({ view: await this.view(card.word), card })))
+    return Promise.all(
+      cards.map(async (card) => ({
+        view: await this.view(card.word, languages.get(card.bookId)),
+        card,
+      })),
+    )
   }
 
   async stats(now = Date.now()): Promise<VocabStats> {
@@ -406,26 +492,34 @@ export class VocabService {
 
   /**
    * A custom book from a pasted or uploaded list ("word" or "word<TAB>meaning"
-   * per line). Words without a meaning take the dictionary's.
+   * per line). English words without a meaning take the dictionary's; a list
+   * in another `language` (BCP-47) keeps its words as written and has only
+   * the meanings it brings.
    */
   async importList(
     name: string,
     text: string,
     now = Date.now(),
+    language?: string,
   ): Promise<{ book: VocabBook; added: number; skipped: number; withoutMeaning: number }> {
-    const { words, skipped } = parseWordList(text)
+    const english = isEnglish(language)
+    const { words, skipped } = parseWordList(text, english ? {} : { language })
     if (words.length === 0) throw new ValidationError(t('vocab.importEmpty'))
-    const { byWord, lemmas } = await vocabIndex()
+    const { byWord, lemmas } = english
+      ? await vocabIndex()
+      : { byWord: new Map<string, DictEntry>(), lemmas: new Map<string, string>() }
     const book: VocabBook = {
       id: crypto.randomUUID(),
       kind: 'custom',
       name: name.trim() || t('vocab.importDefaultName'),
+      ...(english ? {} : { language: primaryLanguage(language)! }),
       createdAt: now,
       updatedAt: now,
     }
     let withoutMeaning = 0
     const entries: VocabEntry[] = words.map(({ word, meaning }, i) => {
-      const lemma = byWord.has(word) ? word : lemmaOf(word, lemmas, (w) => byWord.has(w))
+      const lemma =
+        !english || byWord.has(word) ? word : lemmaOf(word, lemmas, (w) => byWord.has(w))
       const known = byWord.get(lemma) ?? byWord.get(word)
       const meanings = meaning ? [meaning] : (known?.meanings ?? [])
       if (meanings.length === 0) withoutMeaning++
@@ -456,11 +550,12 @@ export class VocabService {
     let views: WordView[]
     let label: string
     if (target === 'learned' || target === 'mistakes') {
-      const cards = (await this.repo.listCards()).filter(
-        (card) => target === 'learned' || card.mistakes > 0,
-      )
+      const [all, languages] = await Promise.all([this.repo.listCards(), this.languages()])
+      const cards = all.filter((card) => target === 'learned' || card.mistakes > 0)
       cards.sort((a, b) => a.addedAt - b.addedAt)
-      views = await Promise.all(cards.map((card) => this.view(card.word)))
+      views = await Promise.all(
+        cards.map((card) => this.view(card.word, languages.get(card.bookId))),
+      )
       label = target === 'learned' ? 'learned' : 'mistakes'
     } else {
       views = await this.bookWords(target.bookId)

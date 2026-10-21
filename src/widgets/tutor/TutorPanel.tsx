@@ -1,3 +1,4 @@
+import { targetLanguageOf } from '@/shared/lib/language'
 import { useEffect, useState } from 'react'
 import {
   CheckCircle2,
@@ -294,6 +295,7 @@ export function TutorPanel(props: TutorPanelProps): JSX.Element {
                     : 'text'
               }
               subject={project?.subject}
+              language={targetLanguageOf(project)}
               multiline={lastQuestion.type !== 'math_expr' && lastQuestion.type !== 'numeric'}
               rows={4}
               inputClassName="text-[16px] leading-[1.7]"

@@ -1,6 +1,6 @@
 import type { Question } from '@/entities/question/types'
 import type { QuestionEvaluation, RubricPointResult } from '@/entities/questionAttempt/types'
-import type { Subject } from '@/entities/project/types'
+import type { SubjectInput } from '@/entities/project/types'
 import type { ShortAnswerCheckOutput } from '@/infrastructure/ai/prompts/short-answer-check/v1'
 import { prompts } from '@/infrastructure/ai/prompts'
 import type { ChatMessage } from '@/infrastructure/ai/types'
@@ -184,7 +184,11 @@ export function unverifiedShortAnswer(
 export class ShortAnswerGrader {
   constructor(private readonly ai: AIService) {}
 
-  async grade(question: Question, answer: string, subject?: Subject): Promise<QuestionEvaluation> {
+  async grade(
+    question: Question,
+    answer: string,
+    subject?: SubjectInput,
+  ): Promise<QuestionEvaluation> {
     if (!question.rubric?.length) {
       return unverifiedShortAnswer(question, answer, t('shortAnswer.noRubric'))
     }

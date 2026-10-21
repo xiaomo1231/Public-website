@@ -6,7 +6,7 @@ import { normalizeMathNotation } from '@/infrastructure/files/mathNotation'
 import { AppError } from '@/infrastructure/errors/AppError'
 import { logger } from '@/infrastructure/logger/logger'
 import { t } from '@/i18n'
-import { loadProjectSubject } from './projectSubject'
+import { loadProjectSubjectContext } from './projectSubject'
 import { fnv1a } from '@/shared/lib/hash'
 import type {
   ContextualTutorKind,
@@ -87,7 +87,7 @@ export class ContextualTutorService {
         role: 'system',
         content: prompts.subjectProfile.withSubject(
           prompts.contextualTutor.buildSystemPrompt(input.contextKind),
-          await loadProjectSubject(input.projectId),
+          await loadProjectSubjectContext(input.projectId),
         ),
       },
       {

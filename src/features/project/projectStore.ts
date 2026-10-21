@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import type { Project } from '@/entities/project/types'
+import type { Project, UpdateProjectInput } from '@/entities/project/types'
 import { ProjectService } from '@/services/projectService'
 import { logger } from '@/infrastructure/logger/logger'
 import { t } from '@/i18n'
@@ -20,7 +20,7 @@ interface ProjectStoreActions {
     description?: string
   }) => Promise<Project>
   rename: (id: string, name: string) => Promise<void>
-  update: (id: string, patch: Partial<Project>) => Promise<void>
+  update: (id: string, patch: UpdateProjectInput) => Promise<void>
   remove: (id: string) => Promise<void>
   /** Drop a project already deleted elsewhere (e.g. Settings → Data) from the list. */
   forget: (id: string) => void

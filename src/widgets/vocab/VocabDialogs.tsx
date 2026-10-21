@@ -19,7 +19,9 @@ import {
 import { Input } from '@/shared/ui/Input'
 import { Label } from '@/shared/ui/Label'
 import { Textarea } from '@/shared/ui/Textarea'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/shared/ui/Select2'
 import { downloadText } from '@/shared/lib/download'
+import { primaryLanguage } from '@/shared/lib/language'
 import type { ExportFormat, VocabEntry, WordView } from '@/entities/vocab/types'
 import type { VocabService } from '@/services/vocabService'
 import { toast } from '@/features/toast/toastStore'
@@ -82,6 +84,20 @@ export function ExportMenu({
   )
 }
 
+/** Languages offered for an imported list; "other" takes a typed code. */
+const IMPORT_LANGUAGES: Array<{ value: string; labelKey: TranslationKey }> = [
+  { value: 'en', labelKey: 'vocab.language.en' },
+  { value: 'de', labelKey: 'vocab.language.de' },
+  { value: 'hu', labelKey: 'vocab.language.hu' },
+  { value: 'other', labelKey: 'vocab.language.other' },
+]
+
+const IMPORT_PLACEHOLDERS: Record<string, string> = {
+  en: 'abandon\nphysiology\tn. 生理学\nglenoid, 关节盂',
+  de: 'der Arzt – physician\ndie Ärztin, 女医生\ndie Übelkeit\tnausea',
+  hu: 'fájdalom pain\na fej – head\nszédülés, 头晕',
+}
+
 /** Paste or upload a word list as a custom book. */
 export function ImportDialog({
   open,
@@ -97,14 +113,21 @@ export function ImportDialog({
   const { t } = useTranslation()
   const [name, setName] = useState('')
   const [text, setText] = useState('')
+  const [choice, setChoice] = useState('en')
+  const [otherCode, setOtherCode] = useState('')
   const [busy, setBusy] = useState(false)
 
   useEffect(() => {
     if (open) {
       setName('')
       setText('')
+      setChoice('en')
+      setOtherCode('')
     }
   }, [open])
+
+  const language = choice === 'other' ? primaryLanguage(otherCode) : choice
+  const languageMissing = choice === 'other' && !language
 
   const readFile = async (file: File | undefined) => {
     if (!file) return
@@ -115,7 +138,7 @@ export function ImportDialog({
   const submit = async () => {
     setBusy(true)
     try {
-      const result = await service.importList(name, text)
+      const result = await service.importList(name, text, Date.now(), language)
       toast({
         variant: 'success',
         title: t('vocab.imported', { count: result.added }),
@@ -159,13 +182,42 @@ export function ImportDialog({
             />
           </div>
           <div className="space-y-1.5">
+            <Label htmlFor="vocab-import-language">{t('vocab.importLanguage')}</Label>
+            <div className="flex gap-2">
+              <Select value={choice} onValueChange={setChoice}>
+                <SelectTrigger id="vocab-import-language" className="w-44">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {IMPORT_LANGUAGES.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {t(option.labelKey)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {choice === 'other' && (
+                <Input
+                  value={otherCode}
+                  onChange={(event) => setOtherCode(event.target.value)}
+                  placeholder={t('vocab.language.codePlaceholder')}
+                  aria-label={t('vocab.language.code')}
+                  className="w-40"
+                />
+              )}
+            </div>
+            {language !== 'en' && !languageMissing && (
+              <p className="text-xs text-muted-foreground">{t('vocab.importLanguageHint')}</p>
+            )}
+          </div>
+          <div className="space-y-1.5">
             <Label htmlFor="vocab-import-text">{t('vocab.importWords')}</Label>
             <Textarea
               id="vocab-import-text"
               rows={8}
               value={text}
               onChange={(event) => setText(event.target.value)}
-              placeholder={'abandon\nphysiology\tn. 生理学\nglenoid, 关节盂'}
+              placeholder={IMPORT_PLACEHOLDERS[language ?? ''] ?? IMPORT_PLACEHOLDERS.en}
               className="font-mono text-sm"
             />
           </div>
@@ -184,7 +236,7 @@ export function ImportDialog({
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={busy}>
             {t('common.cancel')}
           </Button>
-          <Button onClick={() => void submit()} disabled={busy || !text.trim()}>
+          <Button onClick={() => void submit()} disabled={busy || !text.trim() || languageMissing}>
             {busy && <Loader2 className="h-4 w-4 animate-spin" />}
             {t('vocab.importButton')}
           </Button>

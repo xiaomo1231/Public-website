@@ -11,7 +11,7 @@
  * it in with `subjectPromptVersion`, so changing a profile (or a project's
  * subject) invalidates exactly what was generated under the old one.
  */
-import type { Subject } from '@/entities/project/types'
+import type { Subject, SubjectContext, SubjectInput } from '@/entities/project/types'
 
 export const VERSION = 'subject-profile/v1' as const
 
@@ -31,7 +31,13 @@ interface SubjectProfile {
 const COURSE_FIGURES =
   'When the course material includes a figure for this topic, refer the student to it instead of describing it from memory.'
 
-const PROFILES: Record<Exclude<Subject, 'other'>, SubjectProfile> = {
+/** Medical safety limits, shared by medicine (both exam styles) and language courses. */
+const MEDICAL_BOUNDARIES = [
+  'This is education, not medical care: never diagnose the student or anyone they describe, and never give treatment or dosage advice for a real person; if the student describes their own symptoms, suggest seeing a doctor.',
+  'Reference ranges and drug doses in examples are illustrative and vary by laboratory, guideline and patient — say so when you use them.',
+]
+
+const PROFILES: Record<Exclude<Subject, 'other' | 'language'>, SubjectProfile> = {
   calculus: {
     name: 'Calculus / mathematical analysis',
     notation: [
@@ -228,10 +234,7 @@ const PROFILES: Record<Exclude<Subject, 'other'>, SubjectProfile> = {
       "For anatomy give relations as a table (a muscle's origin, insertion, action, innervation and blood supply); trace sensory and motor pathways neuron by neuron with the level of each decussation; for embryology and tooth eruption give a timeline with ages.",
       'Anatomy and histology are learnt from images: refer the student to the course figures by page rather than describing them from memory.',
     ],
-    boundaries: [
-      'This is education, not medical care: never diagnose the student or anyone they describe, and never give treatment or dosage advice for a real person; if the student describes their own symptoms, suggest seeing a doctor.',
-      'Reference ranges and drug doses in examples are illustrative and vary by laboratory, guideline and patient — say so when you use them.',
-    ],
+    boundaries: MEDICAL_BOUNDARIES,
   },
   cs: {
     name: 'Computer science (university level: data structures, algorithms, systems, theory)',
@@ -289,6 +292,150 @@ const PROFILES: Record<Exclude<Subject, 'other'>, SubjectProfile> = {
   },
 }
 
+/**
+ * Medicine for an English-taught programme (e.g. a Central European medical
+ * school): English + Latin terminology and that programme's exam formats. The
+ * domestic profile above is unchanged, so its cached output stays valid.
+ */
+const MEDICINE_INTERNATIONAL: SubjectProfile = {
+  ...PROFILES.medicine,
+  name: `${PROFILES.medicine.name}, in an English-taught programme (international exam style)`,
+  notation: [
+    'Use English anatomical and medical terms with the Latin name alongside (Terminologia Anatomica / Histologica / Embryologica), e.g. deltoid muscle (musculus deltoideus), and map eponyms to their anatomical names (Eustachian tube → pharyngotympanic tube, tuba auditiva). Do not add Chinese equivalents unless you are responding in Chinese; then explain in Chinese but keep the English and Latin names as the terms to learn. Define abbreviations on first use (ACh, GFR, CO).',
+    ...PROFILES.medicine.notation.slice(1),
+  ],
+  reasoning: PROFILES.medicine.reasoning.map((line) =>
+    line.replace('position and relations (毗邻)', 'position and relations (topography)'),
+  ),
+  answers: [
+    'Follow the exam formats of English-taught medical programmes: structure identification on a specimen, model or image ("identify / name the structure": give the English and Latin name and the features that identify it); a full oral-exam style description of a structure in a fixed order (parts and features, position and relations, innervation, blood supply, venous and lymphatic drainage, development, clinical relevance); and single- or multiple-choice questions (MCQ) in English. Compare easily confused structures in a table.',
+  ],
+  pitfalls: [
+    ...PROFILES.medicine.pitfalls,
+    'mixing up the English and Latin names, or using an eponym where the anatomical name is expected',
+  ],
+  lesson: [
+    ...(PROFILES.medicine.lesson ?? []),
+    'For a structure that is examined by identification, list the features that tell it apart from its neighbours, and end with the full description in exam order.',
+  ],
+}
+
+/** English names (with the endonym) of languages a course may teach. */
+const LANGUAGE_NAMES: Record<string, string> = {
+  de: 'German (Deutsch)',
+  hu: 'Hungarian (magyar)',
+  en: 'English',
+  fr: 'French (français)',
+  es: 'Spanish (español)',
+  it: 'Italian (italiano)',
+  pt: 'Portuguese (português)',
+  la: 'Latin (latina)',
+  ru: 'Russian (русский)',
+  pl: 'Polish (polski)',
+  cs: 'Czech (čeština)',
+  sk: 'Slovak (slovenčina)',
+  ro: 'Romanian (română)',
+  nl: 'Dutch (Nederlands)',
+  sv: 'Swedish (svenska)',
+  ja: 'Japanese (日本語)',
+  ko: 'Korean (한국어)',
+  zh: 'Chinese (中文)',
+}
+
+/** English name of a language tag for prompts; unknown tags are named by their code. */
+export function targetLanguageName(tag: string): string {
+  const known = LANGUAGE_NAMES[tag]
+  if (known) return known
+  try {
+    const name = new Intl.DisplayNames(['en'], { type: 'language' }).of(tag)
+    if (name && name !== tag) return `${name} (${tag})`
+  } catch {
+    // Unsupported tag or no Intl.DisplayNames: fall through.
+  }
+  return `the language with code "${tag}"`
+}
+
+/** Profile of a foreign-language course; the target language comes from the project. */
+function languageProfile(targetLanguage: string | undefined): SubjectProfile {
+  const full = targetLanguage ? targetLanguageName(targetLanguage) : undefined
+  const short = full ? full.replace(/ \(.*\)$/, '') : 'the target language'
+  const german = targetLanguage === 'de'
+  const hungarian = targetLanguage === 'hu'
+  const tableNotes = german
+    ? ' such as article and plural'
+    : hungarian
+      ? ' such as segmentation and vowel-harmony class'
+      : ''
+  return {
+    name: full
+      ? `Foreign-language course — the language being learnt is ${full}, often its medical / professional register`
+      : 'Foreign-language course (the language being learnt is the one the course material teaches), often its medical / professional register',
+    notation: [
+      `Explain in the language these instructions ask you to respond in (the student's explanation language), not in ${short}. Every ${short} word, phrase and example sentence stays in ${short}, spelled exactly as in the course material — diacritics, capitalisation and punctuation included — never transliterated, anglicised or stripped of accents.`,
+      `Give a translation of each ${short} item in the explanation language the first time it appears. Where these instructions ask for key terms in English alongside the explanation, the terms to learn are the ${short} ones: give the ${short} term (English may follow it).`,
+      ...(german
+        ? [
+            'German: give every noun with its definite article and plural (der Kopf, die Köpfe; die Niere, die Nieren; das Herz, die Herzen), capitalise nouns, and give irregular verb forms when they matter (wehtun — es tut weh — hat wehgetan). Use the formal Sie in doctor–patient talk unless the material does otherwise.',
+          ]
+        : []),
+      ...(hungarian
+        ? [
+            'Hungarian: segment words into root + suffixes with plus signs (nyak+am+ban "in my neck", fáj+ik), name the vowel-harmony class of the stem (back, front unrounded or front rounded) and pick suffix variants by it (-ban / -ben, -hoz / -hez / -höz). Short and long vowels are different letters (o / ó, ö / ő, u / ú, ü / ű). Use the formal Ön / maga forms in doctor–patient talk unless the material does otherwise.',
+          ]
+        : []),
+      'Pronunciation hints only where a learner is likely to stumble, in a simple respelling or IPA — not for every word.',
+    ],
+    reasoning: [
+      'Teach through use: vocabulary in a phrase or sentence first, then the grammar pattern behind it, then practice. Group vocabulary by theme (body parts, symptoms, history taking, instructions to the patient).',
+      'Present grammar as patterns with a small table (case endings, conjugation, word order), contrasting with English where it helps.',
+      `Doctor–patient dialogues are communication practice: model the phrases a doctor uses (greeting, asking about the complaint, history, instructions) in the register the course uses, in ${short}.`,
+    ],
+    answers: [
+      'Exercise formats: gap-fill, matching (word ↔ meaning, question ↔ answer), translation in both directions, dialogue completion, and word or sentence ordering.',
+      `When an answer is in ${short}, the reference answer is the exact ${short} string (diacritics, capitalisation${german ? ', article' : ''}); list any genuine variants the material accepts instead of loosening the spelling.`,
+    ],
+    pitfalls: [
+      'missing or wrong diacritics',
+      ...(german
+        ? [
+            'wrong article / gender or plural',
+            'verb position (second in main clauses, last in subordinate clauses)',
+          ]
+        : []),
+      ...(hungarian
+        ? [
+            'a suffix variant that breaks vowel harmony',
+            'short vs long vowels',
+            'the wrong case ending for location or direction (-ban / -ba / -ból)',
+          ]
+        : []),
+      'false friends and word-for-word translation of English phrases',
+      'informal instead of formal address with a patient',
+    ],
+    lesson: [
+      `Build the lesson around one communicative task (e.g. introducing yourself, asking where it hurts): a vocabulary table (${short} | translation | notes${tableNotes}), a short model dialogue, the grammar point it uses, then a few practice items.`,
+      "Use the course material's own wording and examples; never introduce a different spelling of a word the material uses.",
+    ],
+    boundaries: [
+      `Dialogues and case scenarios are language practice. ${MEDICAL_BOUNDARIES[0]}`,
+      MEDICAL_BOUNDARIES[1]!,
+    ],
+  }
+}
+
+function toContext(input: SubjectInput): SubjectContext | undefined {
+  if (!input) return undefined
+  return typeof input === 'string' ? { subject: input } : input
+}
+
+function profileFor(context: SubjectContext): SubjectProfile | undefined {
+  const { subject } = context
+  if (subject === 'other') return undefined
+  if (subject === 'language') return languageProfile(context.targetLanguage)
+  if (subject === 'medicine' && context.examStyle === 'international') return MEDICINE_INTERNATIONAL
+  return PROFILES[subject]
+}
+
 export interface SubjectBlockOptions {
   /** A teaching lesson: also include the subject's lesson guidance. */
   forLesson?: boolean
@@ -296,11 +443,12 @@ export interface SubjectBlockOptions {
 
 /** The block appended to a system prompt, or '' for subject "other". */
 export function buildSubjectBlock(
-  subject: Subject | undefined,
+  subject: SubjectInput,
   options: SubjectBlockOptions = {},
 ): string {
-  if (!subject || subject === 'other') return ''
-  const profile = PROFILES[subject]
+  const context = toContext(subject)
+  const profile = context && profileFor(context)
+  if (!profile) return ''
   const list = (items: string[]) => items.map((item) => `  - ${item}`).join('\n')
   const lesson =
     options.forLesson && profile.lesson?.length ? ['In this lesson:', list(profile.lesson)] : []
@@ -322,7 +470,7 @@ export function buildSubjectBlock(
 /** Append the subject block to a system prompt. */
 export function withSubject(
   systemPrompt: string,
-  subject: Subject | undefined,
+  subject: SubjectInput,
   options: SubjectBlockOptions = {},
 ): string {
   const block = buildSubjectBlock(subject, options)
@@ -352,14 +500,31 @@ const PROFILE_REVISIONS: Partial<Record<Subject, number>> = {
   calculus: 2,
   // r2: university depth (recurrences, invariants) and traceable inputs.
   cs: 2,
+  // r1: new (foreign-language courses); the target language is part of the key.
+  language: 1,
 }
 
 /**
  * The version string to store / compare for output generated with a subject
  * block: the base prompt version plus this profile version and the subject.
  */
-export function subjectPromptVersion(baseVersion: string, subject: Subject | undefined): string {
-  const key = subject ?? 'other'
-  const revision = subject ? (PROFILE_REVISIONS[subject] ?? 1) : 1
-  return `${baseVersion}+${VERSION}:${key}${revision > 1 ? `.r${revision}` : ''}`
+export function subjectPromptVersion(baseVersion: string, subject: SubjectInput): string {
+  const context = toContext(subject)
+  const revision = context ? (PROFILE_REVISIONS[context.subject] ?? 1) : 1
+  return `${baseVersion}+${VERSION}:${subjectVersionKey(context)}${revision > 1 ? `.r${revision}` : ''}`
+}
+
+/**
+ * The subject part of a version key. Variants get their own key so switching
+ * them invalidates exactly that course's output: `language-de` (the target
+ * language) and `medicine-intl` (international exam style). Domestic medicine
+ * keeps the plain `medicine` key, so its caches are untouched.
+ */
+function subjectVersionKey(context: SubjectContext | undefined): string {
+  if (!context) return 'other'
+  if (context.subject === 'language' && context.targetLanguage)
+    return `language-${context.targetLanguage}`
+  if (context.subject === 'medicine' && context.examStyle === 'international')
+    return 'medicine-intl'
+  return context.subject
 }

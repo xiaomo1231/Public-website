@@ -4,12 +4,15 @@ import type { QuestionEvaluation } from '@/entities/questionAttempt/types'
 import { prompts } from '@/infrastructure/ai/prompts'
 import { logger } from '@/infrastructure/logger/logger'
 import { t } from '@/i18n'
+import { blankCredit } from './answerEvaluationService'
 
 /**
  * Second look at fill-in-the-blank answers that did not match locally: the
  * AI decides only whether a term is an exact equivalent (synonym, English
  * term, abbreviation). Matching, scoring and the verdict stay local; if the
- * AI is unavailable the local result stands.
+ * AI is unavailable the local result stands. Blanks that are only misspelt
+ * in the course language (accents, capitals, ß → ss) are never asked: the
+ * spelling is the point, and the AI must not excuse it.
  */
 export async function checkBlanksWithAi(
   ai: AIService,
@@ -19,7 +22,7 @@ export async function checkBlanksWithAi(
   const results = evaluation.blanks ?? []
   const asked = results
     .map((blank, i) => ({ ...blank, index: i + 1 }))
-    .filter((blank) => !blank.correct && blank.given.trim())
+    .filter((blank) => !blank.correct && !blank.spelling && blank.given.trim())
   if (asked.length === 0) return evaluation
   try {
     const { data } = await ai.chatJSON<unknown>(
@@ -47,12 +50,12 @@ export async function checkBlanksWithAi(
     const blanks = results.map((blank, i) =>
       verdicts.get(i + 1) ? { ...blank, correct: true, byAi: true } : blank,
     )
-    const earned = blanks.filter((blank) => blank.correct).length
+    const earned = blanks.reduce((sum, blank) => sum + blankCredit(blank), 0)
     return {
       ...evaluation,
       blanks,
       score: { earned, total: blanks.length },
-      isCorrect: earned === blanks.length,
+      isCorrect: blanks.every((blank) => blank.correct),
       note: t('fillBlank.aiAccepted'),
     }
   } catch (err) {

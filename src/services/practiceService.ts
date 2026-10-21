@@ -37,7 +37,7 @@ import type { AIService } from './aiService'
 import type { MistakeService } from './mistakeService'
 import type { MasteryService } from './masteryService'
 import { ShortAnswerGrader, unverifiedShortAnswer } from './shortAnswerGrader'
-import { loadProjectSubject } from './projectSubject'
+import { loadProjectSubjectContext } from './projectSubject'
 import { parseTrueFalse } from './answerEvaluationService'
 
 /** Extraction confidence at or above this is imported without a review step. */
@@ -489,7 +489,7 @@ export class PracticeService {
       }
     }
     const rubric = await this.ensureRubric(question)
-    const subject = await loadProjectSubject(question.projectId, this.db)
+    const subject = await loadProjectSubjectContext(question.projectId, this.db)
     const evaluation = await new ShortAnswerGrader(this.ai).grade(
       this.asQuizQuestion(question, rubric),
       userAnswer.trim(),

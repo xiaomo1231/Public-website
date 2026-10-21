@@ -29,8 +29,8 @@ import { t } from '@/i18n'
 import { logger } from '@/infrastructure/logger/logger'
 import type { AIService } from './aiService'
 import type { ChatMessage } from '@/infrastructure/ai/types'
-import { loadProjectSubject } from './projectSubject'
-import type { Subject } from '@/entities/project/types'
+import { loadProjectSubjectContext } from './projectSubject'
+import type { SubjectInput } from '@/entities/project/types'
 
 /** How many previous Q&A turns are sent back to the model. */
 const CHAT_HISTORY_TURNS = 8
@@ -320,7 +320,7 @@ export class SlideLessonService {
 
     // Slide prompt plus the course's subject profile, so a subject change
     // regenerates the slide lessons too.
-    const subject = await loadProjectSubject(content.document.projectId, this.db)
+    const subject = await loadProjectSubjectContext(content.document.projectId, this.db)
     const promptVersion = prompts.subjectProfile.subjectPromptVersion(
       prompts.slideLesson.VERSION,
       subject,
@@ -365,7 +365,7 @@ export class SlideLessonService {
     contentIn?: SlideContent,
     contentHashIn?: string,
     promptVersionIn?: string,
-    subjectIn?: Subject,
+    subjectIn?: SubjectInput,
   ): Promise<SlideLessonResult> {
     const content = contentIn ?? (await this.getSlideContent(input.documentId, input.slideNumber))
     if (isEmptySlide(content)) throw new AppError(t('slides.emptySlide'), 'SLIDE_EMPTY')
@@ -387,7 +387,7 @@ export class SlideLessonService {
         role: 'system',
         content: prompts.subjectProfile.withSubject(
           prompts.slideLesson.buildSystemPrompt(),
-          subjectIn ?? (await loadProjectSubject(content.document.projectId, this.db)),
+          subjectIn ?? (await loadProjectSubjectContext(content.document.projectId, this.db)),
         ),
       },
       {

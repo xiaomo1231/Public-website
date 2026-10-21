@@ -1,3 +1,4 @@
+import { targetLanguageOf } from '@/shared/lib/language'
 import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
@@ -489,6 +490,7 @@ export function HomeworkQuestionView({
               mode="text"
               multiline
               subject={project?.subject}
+              language={targetLanguageOf(project)}
               fieldRef={workingRef}
               value={draft}
               onChange={setDraft}
@@ -765,6 +767,7 @@ export function HomeworkQuestionView({
                 mode="text"
                 multiline
                 subject={project?.subject}
+                language={targetLanguageOf(project)}
                 fieldRef={askRef}
                 value={question_}
                 onChange={setQuestionText}

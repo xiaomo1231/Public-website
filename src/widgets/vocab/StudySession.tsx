@@ -4,9 +4,11 @@ import { Button } from '@/shared/ui/Button'
 import { Card, CardContent } from '@/shared/ui/Card'
 import { Input } from '@/shared/ui/Input'
 import { Progress } from '@/shared/ui/Progress'
-import { canSpeak, speak } from '@/shared/lib/speech'
+import { canSpeak, hasVoiceFor, onVoicesChanged, speak } from '@/shared/lib/speech'
+import { isEnglish, languageName, targetHintKey } from '@/shared/lib/language'
 import { cn } from '@/shared/lib/utils'
-import { checkSpelling, clozeOf, type RootEntry } from '@/entities/vocab/text'
+import { checkSpelling, clozeOf, type RootEntry, type SpellingResult } from '@/entities/vocab/text'
+import { LetterBar } from '@/widgets/mathInput/LetterBar'
 import type { SessionItem, VocabMode, VocabRating, WordView } from '@/entities/vocab/types'
 import type { VocabService } from '@/services/vocabService'
 import { toast } from '@/features/toast/toastStore'
@@ -37,12 +39,28 @@ const MODE_KEYS: Record<VocabMode, TranslationKey> = {
 /** A word that is forgotten comes back at most this often in one session. */
 const MAX_REPEATS = 2
 
+/**
+ * Whether the word can be read aloud: English needs speech synthesis; another
+ * language also needs a voice for it installed on this device.
+ */
+function canSpeakWord(language?: string): boolean {
+  return canSpeak() && (isEnglish(language) || hasVoiceFor(language!))
+}
+
+/** The word read aloud, in its book's language. */
+function speakWord(word: string, language?: string): void {
+  speak(word, isEnglish(language) ? 'en-US' : language)
+}
+
 /** The mode actually used: dictation needs speech, a cloze needs a sentence holding the word. */
 function effectiveMode(item: SessionItem): VocabMode {
-  if (item.mode === 'dictation' && !canSpeak()) return 'spell'
+  if (item.mode === 'dictation' && !canSpeakWord(item.language)) return 'spell'
   if (
     item.mode === 'cloze' &&
-    !(item.view.context && clozeOf(item.view.context.text, item.view.word, item.view.forms))
+    !(
+      item.view.context &&
+      clozeOf(item.view.context.text, item.view.word, item.view.forms, item.language)
+    )
   )
     return 'spell'
   return item.mode
@@ -115,25 +133,36 @@ export function StudySession({
   onExit,
   onProgress,
 }: StudySessionProps): JSX.Element {
-  const { t } = useTranslation()
+  const { t, language: uiLanguage } = useTranslation()
   const [queue, setQueue] = useState(items)
   const [done, setDone] = useState(0)
   const [revealed, setRevealed] = useState(false)
   const [typed, setTyped] = useState('')
-  const [result, setResult] = useState<{ correct: boolean; nearMiss: boolean } | null>(null)
+  const [result, setResult] = useState<SpellingResult | null>(null)
   const [intervals, setIntervals] = useState<Record<VocabRating, number> | null>(null)
   const [roots, setRoots] = useState<RootEntry[]>([])
   const [busy, setBusy] = useState(false)
   const repeats = useRef(new Map<string, number>())
   const inputRef = useRef<HTMLInputElement>(null)
 
+  // Browsers list their voices late: re-render when they arrive.
+  const [, setVoices] = useState(0)
+  useEffect(() => onVoicesChanged(() => setVoices((n) => n + 1)), [])
+
   const current = queue[0] ?? null
+  const language = current?.language
   const mode = current ? effectiveMode(current) : 'learn'
   const typing = mode === 'spell' || mode === 'dictation' || mode === 'cloze'
+  const speakable = canSpeakWord(language)
   const cloze = useMemo(
     () =>
       current?.view.context
-        ? clozeOf(current.view.context.text, current.view.word, current.view.forms)
+        ? clozeOf(
+            current.view.context.text,
+            current.view.word,
+            current.view.forms,
+            current.language,
+          )
         : null,
     [current],
   )
@@ -144,11 +173,16 @@ export function StudySession({
     let cancelled = false
     setIntervals(null)
     setRoots([])
-    void service
-      .previewIntervals(current.view.word)
-      .then((value) => !cancelled && setIntervals(value))
-    void service.details(current.view.word).then((value) => !cancelled && setRoots(value.roots))
-    if (mode === 'dictation') speak(current.view.word)
+    const lang = current.language
+    void (
+      lang
+        ? service.previewIntervals(current.view.word, undefined, lang)
+        : service.previewIntervals(current.view.word)
+    ).then((value) => !cancelled && setIntervals(value))
+    void (
+      lang ? service.details(current.view.word, lang) : service.details(current.view.word)
+    ).then((value) => !cancelled && setRoots(value.roots))
+    if (mode === 'dictation') speakWord(current.view.word, lang)
     if (typing) setTimeout(() => inputRef.current?.focus(), 0)
     return () => {
       cancelled = true
@@ -163,6 +197,7 @@ export function StudySession({
         await service.grade(current.view.word, rating, mode, {
           ...(correct !== undefined ? { correct } : {}),
           ...(bookId ? { bookId } : {}),
+          ...(current.language ? { language: current.language } : {}),
         })
         const key = current.view.word
         const count = repeats.current.get(key) ?? 0
@@ -171,7 +206,15 @@ export function StudySession({
           // Forgotten: once more at the end of this session, as recognition.
           if (rating === 1 && count < MAX_REPEATS) {
             repeats.current.set(key, count + 1)
-            return [...rest, { view: current.view, kind: 'review', mode: 'recognize' }]
+            return [
+              ...rest,
+              {
+                view: current.view,
+                kind: 'review',
+                mode: 'recognize',
+                ...(current.language ? { language: current.language } : {}),
+              },
+            ]
           }
           return rest
         })
@@ -195,8 +238,8 @@ export function StudySession({
 
   const check = useCallback(() => {
     if (!current || !typed.trim()) return
-    const target = checkSpelling(typed, current.view.word)
-    const form = cloze ? checkSpelling(typed, cloze.answer) : target
+    const target = checkSpelling(typed, current.view.word, current.language)
+    const form = cloze ? checkSpelling(typed, cloze.answer, current.language) : target
     setResult(form.correct ? form : target)
     setRevealed(true)
   }, [current, typed, cloze])
@@ -256,6 +299,11 @@ export function StudySession({
             {t('vocab.endSession')}
           </Button>
         </div>
+        {!isEnglish(language) && !speakable && (
+          <p className="text-xs text-muted-foreground">
+            {t('vocab.noVoice', { language: languageName(language!, uiLanguage) })}
+          </p>
+        )}
 
         <div className="space-y-3 rounded-lg border border-border/70 bg-muted/30 px-5 py-6 text-center">
           {/* Prompt */}
@@ -264,12 +312,12 @@ export function StudySession({
               <span translate="no" className="notranslate text-3xl font-semibold tracking-wide">
                 {view.word}
               </span>
-              {canSpeak() && (
+              {speakable && (
                 <Button
                   variant="ghost"
                   size="icon"
                   aria-label={t('vocab.speak')}
-                  onClick={() => speak(view.word)}
+                  onClick={() => speakWord(view.word, language)}
                 >
                   <Volume2 className="h-4 w-4" />
                 </Button>
@@ -280,7 +328,7 @@ export function StudySession({
             <p className="text-sm text-muted-foreground">/{view.phonetic}/</p>
           )}
           {mode === 'dictation' && (
-            <Button variant="outline" onClick={() => speak(view.word)}>
+            <Button variant="outline" onClick={() => speakWord(view.word, language)}>
               <Volume2 className="h-4 w-4" />
               {t('vocab.listenAgain')}
             </Button>
@@ -307,8 +355,8 @@ export function StudySession({
                 value={typed}
                 onChange={(event) => setTyped(event.target.value)}
                 disabled={Boolean(result)}
-                placeholder={t('vocab.typeWord')}
-                aria-label={t('vocab.typeWord')}
+                placeholder={t(isEnglish(language) ? 'vocab.typeWord' : 'vocab.typeWordAny')}
+                aria-label={t(isEnglish(language) ? 'vocab.typeWord' : 'vocab.typeWordAny')}
                 autoCapitalize="off"
                 autoComplete="off"
                 autoCorrect="off"
@@ -320,6 +368,14 @@ export function StudySession({
                   result && !result.correct && 'border-destructive',
                 )}
               />
+              {!result && (
+                <LetterBar
+                  language={language}
+                  field={() => inputRef.current}
+                  value={() => typed}
+                  onChange={setTyped}
+                />
+              )}
               {result && (
                 <p
                   className={cn(
@@ -330,9 +386,11 @@ export function StudySession({
                   {result.correct ? <Check className="h-4 w-4" /> : <X className="h-4 w-4" />}
                   {result.correct
                     ? t('vocab.correct')
-                    : result.nearMiss
-                      ? t('vocab.nearMiss')
-                      : t('vocab.wrong')}
+                    : result.outcome && targetHintKey(result.outcome, view.word, typed)
+                      ? t(targetHintKey(result.outcome, view.word, typed)!, { answer: view.word })
+                      : result.nearMiss
+                        ? t('vocab.nearMiss')
+                        : t('vocab.wrong')}
                 </p>
               )}
             </div>
@@ -348,12 +406,12 @@ export function StudySession({
                   {view.phonetic && (
                     <span className="text-sm text-muted-foreground">/{view.phonetic}/</span>
                   )}
-                  {canSpeak() && (
+                  {speakable && (
                     <Button
                       variant="ghost"
                       size="icon"
                       aria-label={t('vocab.speak')}
-                      onClick={() => speak(view.word)}
+                      onClick={() => speakWord(view.word, language)}
                     >
                       <Volume2 className="h-4 w-4" />
                     </Button>

@@ -1,3 +1,4 @@
+import { targetHintKey } from '@/shared/lib/language'
 import { useState } from 'react'
 import { AlertCircle, CheckCircle2, ChevronRight, Lightbulb, Loader2, XCircle } from 'lucide-react'
 import { QUESTION_TYPE_LABEL_KEYS, type Question } from '@/entities/question/types'
@@ -249,7 +250,15 @@ function EvaluationBox({ evaluation }: { evaluation: QuestionEvaluation }): JSX.
                 ({i + 1}) {blank.given || '—'}
               </span>
               {blank.byAi && <span className="text-muted-foreground">{t('fillBlank.byAi')}</span>}
-              {!blank.correct && (
+              {blank.spelling && blank.expectedForm && (
+                <span className="font-medium text-foreground">
+                  {t(targetHintKey(blank.spelling, blank.expectedForm, blank.given)!, {
+                    answer: blank.expectedForm,
+                  })}
+                  {t('fillBlank.halfCredit')}
+                </span>
+              )}
+              {!blank.correct && !blank.spelling && (
                 <span className="text-muted-foreground">
                   {t('fillBlank.accepted', { answers: blank.accepted.join(' / ') })}
                 </span>

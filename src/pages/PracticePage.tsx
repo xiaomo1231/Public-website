@@ -1,3 +1,4 @@
+import { targetLanguageOf } from '@/shared/lib/language'
 import { useCallback, useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { ArrowLeft, Check, ClipboardList, Loader2, Upload, X } from 'lucide-react'
@@ -157,6 +158,7 @@ function QuestionCard({
                     : 'text'
               }
               subject={project?.subject}
+              language={targetLanguageOf(project)}
               multiline={question.type === 'short_answer' || question.type === 'unknown'}
               value={answer}
               onChange={setAnswer}

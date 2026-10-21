@@ -10,7 +10,7 @@ import { MISTAKE_TYPES } from '@/entities/mistake/types'
 import { collectSourceSnippets } from './sourceContext'
 import { AppError } from '@/infrastructure/errors/AppError'
 import { t } from '@/i18n'
-import { loadProjectSubject } from './projectSubject'
+import { loadProjectSubjectContext } from './projectSubject'
 import { UserRepository } from '@/entities/user/repository'
 import { resolveContentLanguage } from '@/entities/user/types'
 
@@ -119,7 +119,7 @@ export class MistakeAnalysisService {
         role: 'system',
         content: prompts.subjectProfile.withSubject(
           prompts.mistakeAnalyzer.buildSystemPrompt(),
-          await loadProjectSubject(mistake.projectId),
+          await loadProjectSubjectContext(mistake.projectId),
         ),
       },
       {

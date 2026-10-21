@@ -4,14 +4,28 @@ import type {
   StructureConfidence,
 } from '@/entities/courseStructure/types'
 import { UNSTRUCTURED_TITLE } from '@/entities/courseStructure/types'
+import {
+  findRunningLines,
+  isNumberedList,
+  ORDINAL_UNIT,
+  ROMAN_UNIT,
+  runningLineKey,
+  TOC_LEADER,
+} from './headingHeuristics'
 
 /**
  * Detect the textbook's chapter/section hierarchy from observable signals.
  *
  * Layers, in priority order:
- *   1. explicit chapter/unit/part headings ("Chapter 2: Functions", "Unit I")
+ *   1. explicit chapter/unit/part/lesson headings ("Chapter 2: Functions",
+ *      "Unit I", "Lektion 3", "2. lecke – SZÁMOK", "III. Körperteile")
  *   2. numbered sections / subsections ("2.1 Sets", "2.1.1 Examples")
  *   3. heading markers the extractor already produced (`contentType: 'heading'`)
+ *
+ * Running headers / footers (a line on at least half of the pages) and
+ * table-of-contents entries never open a node, and an untitled repeat of a
+ * unit number already seen ("1. lecke" again in an answer key) continues the
+ * current node instead of opening a duplicate.
  *
  * When none of these fire, we do **not** invent chapters — the document becomes
  * a single "General Course Material" node with `low` confidence.
@@ -42,7 +56,7 @@ export interface DetectedStructure {
 }
 
 const CHAPTER_WORD =
-  /^\s*(chapter|unit|part|module)\s+([0-9]{1,3}|[ivxlc]{1,6})\b\s*[:.\-–—]?\s*(.*)$/i
+  /^\s*(chapter|unit|part|module|lesson|lektion|lecke|kapitel|fejezet)\s+([0-9]{1,3}|[ivxlc]{1,6})\b\s*[:.\-–—]?\s*(.*)$/i
 const CJK_CHAPTER = /^\s*第\s*([一二三四五六七八九十百千0-9]+)\s*[章单元篇部分]\s*[:：]?\s*(.*)$/
 const SUBSECTION = /^\s*([0-9]{1,3}(?:\.[0-9]{1,3}){2})\s*[:.\-–—]?\s+(.+)$/
 const SECTION = /^\s*([0-9]{1,3}\.[0-9]{1,3})\s*[:.\-–—]?\s+(.+)$/
@@ -63,6 +77,8 @@ interface Classified {
   type: CourseStructureNodeType
   number?: string
   title: string
+  /** The heading carries only its number ("Lesson 2"): the title is a label. */
+  untitled?: boolean
 }
 
 function cleanTitle(raw: string): string {
@@ -75,6 +91,7 @@ function cleanTitle(raw: string): string {
 function classifyHeading(text: string, isMarkedHeading: boolean): Classified | null {
   const line = text.trim()
   if (!line || line.length > MAX_HEADING_CHARS) return null
+  if (TOC_LEADER.test(line) || isNumberedList(line)) return null
 
   const subsection = SUBSECTION.exec(line)
   if (subsection) {
@@ -97,7 +114,26 @@ function classifyHeading(text: string, isMarkedHeading: boolean): Classified | n
       number: chapterWord[2]!,
       // "Chapter 2: Functions" → "Functions"; a bare "Chapter 2" keeps a label.
       title: title || `${keyword[0]!.toUpperCase()}${keyword.slice(1)} ${chapterWord[2]!}`,
+      ...(title ? {} : { untitled: true }),
     }
+  }
+
+  // "2. lecke – BEMUTATKOZÁS" (Hungarian puts the ordinal first).
+  const ordinal = ORDINAL_UNIT.exec(line)
+  if (ordinal && !line.includes('\n')) {
+    const title = cleanTitle(ordinal[3]!)
+    return {
+      type: 'chapter',
+      number: ordinal[1]!,
+      title: title || `${ordinal[1]!}. ${ordinal[2]!.toLowerCase()}`,
+      ...(title ? {} : { untitled: true }),
+    }
+  }
+
+  // "III. Körperteile / Body parts": only a heading on its own line.
+  const roman = ROMAN_UNIT.exec(line)
+  if (roman && (isMarkedHeading || !line.includes('\n'))) {
+    return { type: 'chapter', number: roman[1]!, title: cleanTitle(roman[2]!) }
   }
 
   const cjk = CJK_CHAPTER.exec(line)
@@ -127,13 +163,35 @@ function confidenceFor(nodes: DetectedNode[]): StructureConfidence {
   return 'low'
 }
 
+/** Running headers / footers of the material, as `runningLineKey`s. */
+function runningLinesOf(chunks: StructureChunkInput[]): Set<string> {
+  const byPage = new Map<number, string[]>()
+  for (const chunk of chunks) {
+    if (chunk.pageNumber === undefined) continue
+    const lines = byPage.get(chunk.pageNumber) ?? []
+    lines.push(...chunk.text.split('\n'))
+    byPage.set(chunk.pageNumber, lines)
+  }
+  return findRunningLines([...byPage.values()])
+}
+
 export function detectStructure(chunks: StructureChunkInput[]): DetectedStructure {
   const nodes: DetectedNode[] = []
   const assignments: number[] = new Array(chunks.length).fill(-1)
   let current = -1
+  const running = runningLinesOf(chunks)
+  const isRunning = (text: string) =>
+    running.size > 0 && text.split('\n').every((line) => running.has(runningLineKey(line)))
+  const numbered = new Set<string>()
 
   chunks.forEach((chunk, index) => {
-    const classified = classifyHeading(chunk.text, chunk.contentType === 'heading')
+    let classified = isRunning(chunk.text)
+      ? null
+      : classifyHeading(chunk.text, chunk.contentType === 'heading')
+    const key = classified?.number !== undefined ? `${classified.type}:${classified.number}` : null
+    // An untitled repeat of a number already seen continues the current node.
+    if (classified?.untitled && key && numbered.has(key)) classified = null
+    if (key && classified) numbered.add(key)
     if (classified && isHeadingCandidate(chunk, classified)) {
       const depth = DEPTH[classified.type]
       const node: DetectedNode = {

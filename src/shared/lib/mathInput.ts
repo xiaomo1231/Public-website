@@ -29,6 +29,8 @@ export type SymbolGroupId =
   | 'chemistry'
   | 'biology'
   | 'medicine'
+  | 'de'
+  | 'hu'
   | 'chemEquation'
   | 'operators'
   | 'functions'
@@ -142,6 +144,9 @@ const TEXT_GROUPS: Record<SymbolGroupId, SymbolItem[]> = {
     sym('mmol/L'),
     sym('°C'),
   ],
+  // Letters of the course language (German, Hungarian) for a keyboard without them.
+  de: [...each('äöüßÄÖÜ'), sym('„'), sym('“')],
+  hu: each('áéíóöőúüűÁÉÍÓÖŐÚÜŰ'),
   chemEquation: [],
   operators: [],
   functions: [],
@@ -266,14 +271,32 @@ const CHEMISTRY_GROUPS: SymbolGroup[] = [
   },
 ]
 
-/** The symbol groups for a field, in the order to show them. */
-export function symbolGroupsFor(mode: MathInputMode, subject?: string): SymbolGroup[] {
+/** Letter groups by course language (BCP-47 primary tag). */
+const LANGUAGE_GROUPS: Record<string, SymbolGroupId> = { de: 'de', hu: 'hu' }
+
+/** The letters of a course language ('de' → ä ö ü ß …), or null when there is no group for it. */
+export function languageSymbolGroup(language?: string): SymbolGroup | null {
+  const primary = language?.trim().toLowerCase().split(/[-_]/)[0]
+  const id = primary ? LANGUAGE_GROUPS[primary] : undefined
+  return id ? { id, items: TEXT_GROUPS[id] } : null
+}
+
+/**
+ * The symbol groups for a field, in the order to show them. A text field of
+ * a course taught in German or Hungarian shows that language's letters first.
+ */
+export function symbolGroupsFor(
+  mode: MathInputMode,
+  subject?: string,
+  language?: string,
+): SymbolGroup[] {
   if (mode === 'expression') return EXPRESSION_GROUPS
   if (mode === 'number') return NUMBER_GROUPS
   if (mode === 'quantity') return QUANTITY_GROUPS
   if (mode === 'chemistry') return CHEMISTRY_GROUPS
   const order = TEXT_ORDER[subject ?? 'other'] ?? TEXT_ORDER.other!
-  return order.map((id) => ({ id, items: TEXT_GROUPS[id] }))
+  const letters = languageSymbolGroup(language)
+  return [...(letters ? [letters] : []), ...order.map((id) => ({ id, items: TEXT_GROUPS[id] }))]
 }
 
 // --- insertion ---------------------------------------------------------------

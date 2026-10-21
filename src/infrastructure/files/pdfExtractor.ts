@@ -1,4 +1,5 @@
 import * as pdfjsLib from 'pdfjs-dist'
+import { findRunningLines, looksLikeHeadingLine, runningLineKey } from './headingHeuristics'
 // Vite-specific worker URL injection. The `?url` suffix returns the asset URL
 // at build time so pdfjs can spawn its worker correctly.
 import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
@@ -237,26 +238,6 @@ export interface PdfExtractionResult {
   warnings: string[]
 }
 
-/**
- * Heuristic heading detection: a short line (< 80 chars) that either ends
- * without sentence punctuation, or is in all caps with mostly letters.
- */
-function looksLikeHeading(line: string): boolean {
-  const trimmed = line.trim()
-  if (trimmed.length === 0 || trimmed.length > 80) return false
-  if (/[.!?。！？]$/.test(trimmed)) return false
-  if (/^[\d\s.\-—()()]+$/.test(trimmed)) return false
-  // Lines that look like "Chapter 1: Derivatives" — short, contain a digit,
-  // start with capitalised word(s).
-  if (/^Chapter\s+\d+/i.test(trimmed)) return true
-  if (/^Section\s+\d+/i.test(trimmed)) return true
-  if (/^Lecture\s+\d+/i.test(trimmed)) return true
-  // All-caps short line.
-  if (/^[A-Z0-9 \-:&/]{4,}$/.test(trimmed) && /[A-Z]/.test(trimmed)) return true
-  if (/^第[一二三四五六七八九十百千零0-9]+[章篇部分单元]/.test(trimmed)) return true
-  return false
-}
-
 const SUPERSCRIPT_DIGITS: Record<string, string> = {
   '0': '⁰',
   '1': '¹',
@@ -449,7 +430,7 @@ export async function extractPdf(blob: Blob): Promise<PdfExtractionResult> {
       const headings: ExtractedPage['headings'] = []
       let pageText = ''
       for (const line of lines) {
-        if (looksLikeHeading(line)) headings.push({ text: line, level: 1 })
+        if (looksLikeHeadingLine(line)) headings.push({ text: line, level: 1 })
         pageText += (pageText ? '\n' : '') + line
         for (const ch of line) {
           if (/[\u4e00-\u9fff]/.test(ch)) zhChars++
@@ -476,6 +457,15 @@ export async function extractPdf(blob: Blob): Promise<PdfExtractionResult> {
         hasContent: false,
         imageCount: 0,
       })
+    }
+  }
+
+  // Running headers and footers (the course title or author on every page)
+  // are not headings, however they are set.
+  const running = findRunningLines(pages.map((page) => page.text.split('\n')))
+  if (running.size > 0) {
+    for (const page of pages) {
+      page.headings = page.headings.filter((heading) => !running.has(runningLineKey(heading.text)))
     }
   }
 

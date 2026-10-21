@@ -47,13 +47,14 @@ import type { SourceReference } from '@/entities/courseAnalysis/types'
 import { logger } from '@/infrastructure/logger/logger'
 import { AppError } from '@/infrastructure/errors/AppError'
 import { t } from '@/i18n'
-import { loadProjectSubject } from './projectSubject'
+import { loadProjectSubjectContext } from './projectSubject'
 import { ShortAnswerGrader } from './shortAnswerGrader'
 import { checkBlanksWithAi } from './fillBlankChecker'
+import { projectTargetLanguage } from './projectTargetLanguage'
 import { imbalances, parseEquation } from '@/infrastructure/chemistry/equation'
 import { isValidUnit } from '@/infrastructure/math/quantityAnswer'
 import { normalizeProgramOutput } from './answerEvaluationService'
-import type { Subject } from '@/entities/project/types'
+import type { SubjectInput } from '@/entities/project/types'
 import { UserRepository } from '@/entities/user/repository'
 import { shuffled } from '@/shared/lib/shuffle'
 import { DEFAULT_QUESTION_LANGUAGE, type QuestionLanguage } from '@/entities/user/types'
@@ -454,7 +455,7 @@ export class QuizService {
           language: quizLanguage(preference, analysis.language),
           ...(professorStyleContext ? { professorStyleContext } : {}),
         },
-        await loadProjectSubject(projectId),
+        await loadProjectSubjectContext(projectId),
         options.signal,
       )
 
@@ -532,7 +533,7 @@ export class QuizService {
       Parameters<typeof prompts.quizGenerator.buildUserPrompt>[0],
       'plan' | 'sourceSnippets' | 'knowledgePoints'
     >,
-    subject: Subject | undefined,
+    subject: SubjectInput,
     signal?: AbortSignal,
   ): Promise<Array<{ question: GeneratedQuizQuestion; entry: PlanEntry }>> {
     const delivered: Array<{ question: GeneratedQuizQuestion; entry: PlanEntry }> = []
@@ -681,7 +682,7 @@ export class QuizService {
 
   private async generateWithRetry(
     input: Parameters<typeof prompts.quizGenerator.buildUserPrompt>[0],
-    subject: Subject | undefined,
+    subject: SubjectInput,
     signal?: AbortSignal,
   ): Promise<GeneratedQuizQuestion[]> {
     const messages: ChatMessage[] = [
@@ -983,9 +984,15 @@ export class QuizService {
         ? await new ShortAnswerGrader(this.ai).grade(
             question,
             userAnswer.trim(),
-            await loadProjectSubject(quiz.projectId, this.db),
+            await loadProjectSubjectContext(quiz.projectId, this.db),
           )
-        : evaluateDeterministic(question, userAnswer)
+        : evaluateDeterministic(
+            question,
+            userAnswer,
+            question.type === 'fill_blank'
+              ? { targetLanguage: await projectTargetLanguage(quiz.projectId, this.db) }
+              : {},
+          )
     // Blanks that did not match locally may be exact synonyms: the AI says
     // which (only when one is configured); the score stays local.
     if (question.type === 'fill_blank' && opts.gradeShortAnswer && evaluation.isCorrect === false) {

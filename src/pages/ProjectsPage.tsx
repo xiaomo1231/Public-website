@@ -4,7 +4,9 @@ import { ArrowRight, FolderKanban, MoreHorizontal, Pencil, Plus, Trash2 } from '
 import { toast } from '@/features/toast/toastStore'
 import { useProjects } from '@/features/project/useProjects'
 import { SUBJECT_LABEL_KEYS, type Project, type Subject } from '@/entities/project/types'
-import { inferSubject } from '@/entities/project/subjectInference'
+import { inferCourse } from '@/entities/project/subjectInference'
+import { SubjectDetailsFields } from '@/widgets/project/SubjectDetailsFields'
+import { subjectDetailsFor, type ExamStyleChoice } from '@/widgets/project/subjectDetails'
 import {
   Dialog,
   DialogContent,
@@ -47,6 +49,8 @@ export function ProjectsPage(): JSX.Element {
   // Until the student picks a subject, it follows the name ("线性代数" →
   // Linear Algebra); unrecognised names stay "Other", never a guess.
   const [subjectTouched, setSubjectTouched] = useState(false)
+  const [targetLanguage, setTargetLanguage] = useState('')
+  const [examStyle, setExamStyle] = useState<ExamStyleChoice>('auto')
   const [description, setDescription] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [deleteCandidate, setDeleteCandidate] = useState<{ id: string; name: string } | null>(null)
@@ -71,6 +75,8 @@ export function ProjectsPage(): JSX.Element {
     setName('')
     setSubject('other')
     setSubjectTouched(false)
+    setTargetLanguage('')
+    setExamStyle('auto')
     setDescription('')
   }
 
@@ -84,9 +90,12 @@ export function ProjectsPage(): JSX.Element {
     setSubmitting(true)
     try {
       if (dialog.mode === 'create') {
+        const details = subjectDetailsFor(subject, targetLanguage, examStyle)
         const project = await create({
           name: name.trim(),
           subject,
+          ...(details.targetLanguage ? { targetLanguage: details.targetLanguage } : {}),
+          ...(details.examStyle ? { examStyle: details.examStyle } : {}),
           description: description.trim(),
         })
         toast({ variant: 'success', title: t('projects.created'), description: project.name })
@@ -197,7 +206,9 @@ export function ProjectsPage(): JSX.Element {
                 onChange={(e) => {
                   setName(e.target.value)
                   if (dialog?.mode === 'create' && !subjectTouched) {
-                    setSubject(inferSubject(e.target.value) ?? 'other')
+                    const inferred = inferCourse(e.target.value)
+                    setSubject(inferred?.subject ?? 'other')
+                    setTargetLanguage(inferred?.targetLanguage ?? '')
                   }
                 }}
                 placeholder={t('projects.namePlaceholder')}
@@ -228,6 +239,13 @@ export function ProjectsPage(): JSX.Element {
                     </SelectContent>
                   </Select>
                 </div>
+                <SubjectDetailsFields
+                  subject={subject}
+                  targetLanguage={targetLanguage}
+                  onTargetLanguageChange={setTargetLanguage}
+                  examStyle={examStyle}
+                  onExamStyleChange={setExamStyle}
+                />
                 <div className="space-y-2">
                   <Label htmlFor="description">{t('projects.description')}</Label>
                   <Textarea

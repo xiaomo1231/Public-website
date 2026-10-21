@@ -11,6 +11,8 @@ import { orderingItems, scoreOrdering } from '@/infrastructure/math/orderingAnsw
 import { expectedAnswerText, optionLetter } from '@/entities/question/types'
 import { logger } from '@/infrastructure/logger/logger'
 import { unverifiedShortAnswer } from './shortAnswerGrader'
+import { compareTargetText, isNearTarget } from '@/shared/lib/language'
+import type { BlankResult, NearSpelling } from '@/entities/questionAttempt/types'
 import { t } from '@/i18n'
 
 const UNVERIFIED_NOTE = (): string => t('question.unverified')
@@ -19,11 +21,24 @@ function norm(text: string): string {
   return text.trim().toLowerCase().replace(/\s+/g, ' ')
 }
 
+export interface DeterministicOptions {
+  /**
+   * The language the course teaches (BCP-47, `Project.targetLanguage`):
+   * fill-blank answers must then be spelt exactly — accents, capitals and
+   * spelling variants earn half a blank, with a hint.
+   */
+  targetLanguage?: string | undefined
+}
+
 /**
  * Deterministic answer evaluation. Never calls the network — callers may
  * layer an AI fallback on top when the result is `unverified`.
  */
-export function evaluateDeterministic(question: Question, userAnswer: string): QuestionEvaluation {
+export function evaluateDeterministic(
+  question: Question,
+  userAnswer: string,
+  options: DeterministicOptions = {},
+): QuestionEvaluation {
   switch (question.type) {
     case 'multiple_choice':
       return evaluateOption(question, userAnswer, false)
@@ -44,7 +59,7 @@ export function evaluateDeterministic(question: Question, userAnswer: string): Q
     case 'matching':
       return evaluateMatching(question, userAnswer)
     case 'fill_blank':
-      return evaluateFillBlank(question, userAnswer)
+      return evaluateFillBlank(question, userAnswer, options.targetLanguage)
     case 'short_answer':
       // Graded by scoring points with AI (ShortAnswerGrader); offline it is
       // shown with its points but not scored.
@@ -436,17 +451,53 @@ export function blankAccepted(given: string, accepted: string[]): boolean {
   )
 }
 
+/** Credit of one blank: 1 when accepted, half for a near spelling in the target language. */
+export function blankCredit(blank: BlankResult): number {
+  if (blank.correct) return 1
+  return blank.spelling ? 0.5 : 0
+}
+
+/**
+ * One blank in a course taught in `language`: the closest accepted answer by
+ * spelling. Exact → accepted; only accents / capitals / a spelling variant
+ * apart → not accepted, with the form it should have been. Otherwise the
+ * usual lenient match (punctuation, a "term (abbreviation)" pair) applies.
+ */
+function targetBlank(answer: string, accepted: string[], language: string): BlankResult {
+  let near: { outcome: NearSpelling; expected: string } | null = null
+  for (const expected of accepted) {
+    const outcome = compareTargetText(expected, answer, language)
+    if (outcome === 'exact') return { given: answer, accepted, correct: true }
+    if (!near && isNearTarget(outcome)) near = { outcome, expected }
+  }
+  if (near) {
+    return {
+      given: answer,
+      accepted,
+      correct: false,
+      spelling: near.outcome,
+      expectedForm: near.expected,
+    }
+  }
+  return { given: answer, accepted, correct: blankAccepted(answer, accepted) }
+}
+
 /** Fill-blank: each blank against its accepted answers; credit per blank. */
-function evaluateFillBlank(question: Question, userAnswer: string): QuestionEvaluation {
+function evaluateFillBlank(
+  question: Question,
+  userAnswer: string,
+  targetLanguage?: string,
+): QuestionEvaluation {
   const blanks = question.blanks ?? []
   const given = userAnswer.split('\n')
-  const results = blanks.map((accepted, i) => {
+  const results = blanks.map((accepted, i): BlankResult => {
     const answer = (given[i] ?? '').trim()
+    if (targetLanguage && answer) return targetBlank(answer, accepted, targetLanguage)
     return { given: answer, accepted, correct: blankAccepted(answer, accepted) }
   })
-  const earned = results.filter((r) => r.correct).length
+  const earned = results.reduce((sum, blank) => sum + blankCredit(blank), 0)
   return {
-    isCorrect: blanks.length > 0 ? earned === blanks.length : null,
+    isCorrect: blanks.length > 0 ? results.every((blank) => blank.correct) : null,
     method: 'blank_match',
     confidence: 1,
     score: { earned, total: blanks.length },

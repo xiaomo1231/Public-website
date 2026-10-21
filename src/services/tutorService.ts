@@ -28,7 +28,7 @@ import { logger } from '@/infrastructure/logger/logger'
 import { normalizeMathNotation } from '@/infrastructure/files/mathNotation'
 import { friendlyTutorError } from '@/shared/lib/aiErrors'
 import { t } from '@/i18n'
-import { loadProjectSubject } from './projectSubject'
+import { loadProjectSubjectContext } from './projectSubject'
 import { ShortAnswerGrader } from './shortAnswerGrader'
 import { shuffled } from '@/shared/lib/shuffle'
 
@@ -245,7 +245,7 @@ export class TutorService {
         role: 'system',
         content: prompts.subjectProfile.withSubject(
           prompts.tutorIntroduce.buildSystemPrompt(),
-          await loadProjectSubject(session.projectId, this.db),
+          await loadProjectSubjectContext(session.projectId, this.db),
         ),
       },
       {
@@ -333,7 +333,7 @@ export class TutorService {
         role: 'system',
         content: prompts.subjectProfile.withSubject(
           prompts.tutorQuestion.buildSystemPrompt(),
-          await loadProjectSubject(session.projectId, this.db),
+          await loadProjectSubjectContext(session.projectId, this.db),
         ),
       },
       {
@@ -477,7 +477,7 @@ export class TutorService {
       scored = await new ShortAnswerGrader(this.ai).grade(
         tutorQuestionAsQuiz(session, question),
         studentAnswer,
-        await loadProjectSubject(session.projectId, this.db),
+        await loadProjectSubjectContext(session.projectId, this.db),
       )
       evaluationTyped = tutorEvaluationFromScore(scored, question.expectedAnswer)
     } else {
@@ -487,7 +487,7 @@ export class TutorService {
           role: 'system',
           content: prompts.subjectProfile.withSubject(
             prompts.tutorEvaluate.buildSystemPrompt(),
-            await loadProjectSubject(session.projectId, this.db),
+            await loadProjectSubjectContext(session.projectId, this.db),
           ),
         },
         {
