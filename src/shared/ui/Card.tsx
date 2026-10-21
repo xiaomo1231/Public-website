@@ -20,7 +20,7 @@ const CARD_VARIANTS: Record<CardVariant, string> = {
   default: 'border-border/80 bg-card shadow-soft',
   elevated: 'border-border/70 bg-card shadow-lift',
   interactive:
-    'border-border/80 bg-card shadow-soft motion-safe:transition-[transform,box-shadow,border-color] motion-safe:duration-300 motion-safe:ease-out hover:-translate-y-1 hover:border-primary/30 hover:shadow-lift',
+    'border-border/80 bg-card shadow-soft transition-[box-shadow,border-color] duration-200 hover:border-primary/30 hover:shadow-lift',
   accent: 'border-theme-primary/25 bg-theme-primary-soft/45 shadow-soft',
   plain: 'border-transparent bg-transparent shadow-none',
 }

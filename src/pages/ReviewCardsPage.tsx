@@ -5,7 +5,14 @@ import { Button } from '@/shared/ui/Button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/shared/ui/Card'
 import { Badge } from '@/shared/ui/Badge'
 import { ConfirmDialog } from '@/shared/ui/ConfirmDialog'
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/shared/ui/Dialog'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/shared/ui/Dialog'
 import { EmptyState } from '@/shared/ui/EmptyState'
 import { ErrorState } from '@/shared/ui/ErrorState'
 import { Input } from '@/shared/ui/Input'
@@ -16,13 +23,24 @@ import { Textarea } from '@/shared/ui/Textarea'
 import { PageContainer, PageContent, PageHeader } from '@/shared/ui/Page'
 import { ProjectFlowNav } from '@/widgets/project/ProjectFlowNav'
 import { ReviewCardService, type ReviewStats } from '@/services/reviewCardService'
-import { DAY_MS, advanceSessionQueue, previewIntervals, type ReviewCard, type ReviewGrade } from '@/entities/reviewCard/types'
+import {
+  DAY_MS,
+  advanceSessionQueue,
+  previewIntervals,
+  type ReviewCard,
+  type ReviewGrade,
+} from '@/entities/reviewCard/types'
 import { toast } from '@/features/toast/toastStore'
 import { useTranslation, type TranslationKey } from '@/i18n'
+import { cn } from '@/shared/lib/utils'
 
 type T = ReturnType<typeof useTranslation>['t']
 
-const GRADES: Array<{ grade: ReviewGrade; labelKey: TranslationKey; variant: 'outline' | 'default' }> = [
+const GRADES: Array<{
+  grade: ReviewGrade
+  labelKey: TranslationKey
+  variant: 'outline' | 'default'
+}> = [
   { grade: 'again', labelKey: 'cards.again', variant: 'outline' },
   { grade: 'hard', labelKey: 'cards.hard', variant: 'outline' },
   { grade: 'good', labelKey: 'cards.good', variant: 'default' },
@@ -41,7 +59,9 @@ function formatSpan(ms: number, t: T): string {
 }
 
 function dueLabel(card: ReviewCard, now: number, t: T): string {
-  return card.due <= now ? t('cards.dueNow') : t('cards.dueIn', { span: formatSpan(card.due - now, t) })
+  return card.due <= now
+    ? t('cards.dueNow')
+    : t('cards.dueIn', { span: formatSpan(card.due - now, t) })
 }
 
 export function ReviewCardsPage(): JSX.Element {
@@ -113,7 +133,11 @@ export function ReviewCardsPage(): JSX.Element {
         setRevealed(false)
         await refresh()
       } catch (err) {
-        toast({ variant: 'error', title: t('cards.reviewFailed'), description: (err as Error).message })
+        toast({
+          variant: 'error',
+          title: t('cards.reviewFailed'),
+          description: (err as Error).message,
+        })
       } finally {
         setGrading(false)
       }
@@ -126,7 +150,11 @@ export function ReviewCardsPage(): JSX.Element {
     if (!current) return
     const onKey = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement | null
-      if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) return
+      if (
+        target &&
+        (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)
+      )
+        return
       if (!revealed && (event.key === ' ' || event.key === 'Enter')) {
         event.preventDefault()
         setRevealed(true)
@@ -144,7 +172,10 @@ export function ReviewCardsPage(): JSX.Element {
     setGenerating(true)
     try {
       const added = await service.generateFromConcepts(projectId)
-      toast({ variant: 'success', title: added > 0 ? t('cards.generated', { count: added }) : t('cards.generatedNone') })
+      toast({
+        variant: 'success',
+        title: added > 0 ? t('cards.generated', { count: added }) : t('cards.generatedNone'),
+      })
       await refresh()
     } catch (err) {
       toast({ variant: 'error', title: t('cards.addFailed'), description: (err as Error).message })
@@ -176,7 +207,10 @@ export function ReviewCardsPage(): JSX.Element {
   const now = Date.now()
   const needle = query.trim().toLowerCase()
   const visible = needle
-    ? cards.filter((card) => card.front.toLowerCase().includes(needle) || card.back.toLowerCase().includes(needle))
+    ? cards.filter(
+        (card) =>
+          card.front.toLowerCase().includes(needle) || card.back.toLowerCase().includes(needle),
+      )
     : cards
   const sessionTotal = queue ? reviewed + queue.length : 0
 
@@ -199,7 +233,11 @@ export function ReviewCardsPage(): JSX.Element {
         actions={
           <div className="flex flex-wrap gap-2">
             <Button variant="outline" onClick={() => void generate()} disabled={generating}>
-              {generating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+              {generating ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Sparkles className="h-4 w-4" />
+              )}
               {t('cards.generate')}
             </Button>
             <Button onClick={() => setEditing('new')}>
@@ -249,17 +287,21 @@ export function ReviewCardsPage(): JSX.Element {
               />
             ) : (
               stats && (
-                <Card>
-                  <CardContent className="grid gap-6 p-6 sm:grid-cols-[repeat(4,minmax(0,1fr))_auto] sm:items-center">
+                <Card className="lecture:rounded-none lecture:border-x-0 lecture:border-b lecture:border-t-[1.5px] lecture:border-b-border lecture:border-t-foreground lecture:bg-transparent lecture:shadow-none">
+                  <CardContent className="grid gap-6 p-6 lecture:px-0 lecture:py-4 lab:gap-0 lab:p-0 sm:grid-cols-[repeat(4,minmax(0,1fr))_auto] sm:items-center sm:lab:divide-x [&>*]:lab:px-3.5 [&>*]:lab:py-3">
                     <Stat value={stats.due} label={t('cards.statDue')} strong />
                     <Stat value={stats.total} label={t('cards.statTotal')} />
                     <Stat value={stats.fresh} label={t('cards.statFresh')} />
                     <Stat value={stats.mature} label={t('cards.statMature')} />
                     {stats.due > 0 ? (
-                      <Button onClick={() => void startReview()}>{t('cards.startReview', { count: stats.due })}</Button>
+                      <Button onClick={() => void startReview()}>
+                        {t('cards.startReview', { count: stats.due })}
+                      </Button>
                     ) : (
                       <p className="text-sm text-muted-foreground">
-                        {cards[0] ? t('cards.noneDue', { span: formatSpan(cards[0].due - now, t) }) : null}
+                        {cards[0]
+                          ? t('cards.noneDue', { span: formatSpan(cards[0].due - now, t) })
+                          : null}
                       </p>
                     )}
                   </CardContent>
@@ -267,10 +309,12 @@ export function ReviewCardsPage(): JSX.Element {
               )
             )}
 
-            <Card>
-              <CardHeader className="gap-3 sm:flex-row sm:items-center sm:justify-between sm:space-y-0">
+            <Card className="lecture:rounded-none lecture:border-0 lecture:bg-transparent lecture:shadow-none">
+              <CardHeader className="gap-3 lecture:px-0 lab:border-b lab:px-3.5 lab:py-2.5 sm:flex-row sm:items-center sm:justify-between sm:space-y-0">
                 <div>
-                  <CardTitle className="text-base">{t('cards.allCards')}</CardTitle>
+                  <CardTitle className="text-base lecture:font-heading lecture:text-[21px] lecture:font-bold lab:font-mono lab:text-[11px] lab:font-normal lab:uppercase lab:tracking-wider lab:text-muted-foreground">
+                    {t('cards.allCards')}
+                  </CardTitle>
                   <CardDescription>{t('cards.allCardsHint')}</CardDescription>
                 </div>
                 <div className="relative w-full sm:w-64">
@@ -284,25 +328,52 @@ export function ReviewCardsPage(): JSX.Element {
                   />
                 </div>
               </CardHeader>
-              <CardContent className="divide-y divide-border/70 p-0">
+              <CardContent className="divide-y divide-border/70 p-0 lecture:divide-border lecture:border-t">
                 {visible.length === 0 ? (
-                  <p className="px-6 py-8 text-center text-sm text-muted-foreground">{t('cards.noMatch')}</p>
+                  <p className="px-6 py-8 text-center text-sm text-muted-foreground">
+                    {t('cards.noMatch')}
+                  </p>
                 ) : (
                   visible.map((card) => (
-                    <div key={card.id} className="flex items-start gap-3 px-6 py-3">
+                    <div
+                      key={card.id}
+                      className="flex items-start gap-3 px-6 py-3 lecture:px-0 lab:px-3.5 lab:py-2.5"
+                    >
                       <div className="min-w-0 flex-1 space-y-1">
-                        <p className="break-words text-sm font-medium">{card.front}</p>
-                        <p className="line-clamp-2 break-words text-sm text-muted-foreground">{card.back}</p>
+                        <p className="break-words text-sm font-medium lecture:text-[15px]">
+                          {card.front}
+                        </p>
+                        <p className="line-clamp-2 break-words text-sm text-muted-foreground">
+                          {card.back}
+                        </p>
                         <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                          <Badge variant="outline">{t(`cards.source.${card.source}` as TranslationKey)}</Badge>
-                          <span>{dueLabel(card, now, t)}</span>
-                          {card.lapses > 0 && <span>{t('cards.lapses', { count: card.lapses })}</span>}
+                          <Badge variant="outline">
+                            {t(`cards.source.${card.source}` as TranslationKey)}
+                          </Badge>
+                          <span className="tabular-nums lab:font-mono">
+                            {dueLabel(card, now, t)}
+                          </span>
+                          {card.lapses > 0 && (
+                            <span className="tabular-nums lab:font-mono">
+                              {t('cards.lapses', { count: card.lapses })}
+                            </span>
+                          )}
                         </div>
                       </div>
-                      <Button variant="ghost" size="icon" aria-label={t('cards.edit')} onClick={() => setEditing(card)}>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        aria-label={t('cards.edit')}
+                        onClick={() => setEditing(card)}
+                      >
                         <Pencil className="h-4 w-4" />
                       </Button>
-                      <Button variant="ghost" size="icon" aria-label={t('cards.delete')} onClick={() => setDeleting(card)}>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        aria-label={t('cards.delete')}
+                        onClick={() => setDeleting(card)}
+                      >
                         <Trash2 className="h-4 w-4" />
                       </Button>
                     </div>
@@ -325,15 +396,6 @@ export function ReviewCardsPage(): JSX.Element {
         onConfirm={confirmDelete}
       />
     </PageContainer>
-  )
-}
-
-function Stat({ value, label, strong }: { value: number; label: string; strong?: boolean }): JSX.Element {
-  return (
-    <div>
-      <div className={strong ? 'text-3xl font-semibold tabular-nums text-theme-primary' : 'text-3xl font-semibold tabular-nums'}>{value}</div>
-      <div className="text-xs text-muted-foreground">{label}</div>
-    </div>
   )
 }
 
@@ -363,7 +425,9 @@ function ReviewSession({
       <Card>
         <CardContent className="space-y-4 p-6 text-center">
           <p className="text-lg font-medium">{t('cards.sessionDone')}</p>
-          <p className="text-sm text-muted-foreground">{t('cards.sessionDoneHint', { count: done })}</p>
+          <p className="text-sm text-muted-foreground">
+            {t('cards.sessionDoneHint', { count: done })}
+          </p>
           <Button onClick={onExit}>{t('cards.backToList')}</Button>
         </CardContent>
       </Card>
@@ -374,29 +438,41 @@ function ReviewSession({
     <Card>
       <CardContent className="space-y-5 p-6">
         <div className="flex items-center gap-3 text-xs text-muted-foreground">
-          <span className="tabular-nums">{t('cards.progress', { done, total })}</span>
+          <span className="tabular-nums lab:font-mono">{t('cards.progress', { done, total })}</span>
           <Progress value={total ? (done / total) * 100 : 0} className="h-1.5 flex-1" />
           <Button variant="ghost" size="sm" onClick={onExit}>
             {t('cards.endSession')}
           </Button>
         </div>
-        <div className="min-h-24 rounded-lg border border-border/70 bg-muted/30 px-5 py-6 text-center">
-          <p className="whitespace-pre-wrap break-words text-xl font-medium">{card.front}</p>
+        <div className="min-h-24 rounded-lg border border-border/70 bg-muted/30 px-5 py-6 text-center lecture:bg-card lab:bg-background">
+          <p className="whitespace-pre-wrap break-words text-xl font-medium lecture:font-heading lecture:text-2xl lecture:font-bold">
+            {card.front}
+          </p>
           {revealed && (
             <>
               <div className="mx-auto my-4 h-px w-16 bg-border" />
-              <p className="whitespace-pre-wrap break-words text-base text-foreground/90">{card.back}</p>
+              <p className="whitespace-pre-wrap break-words text-base text-foreground/90">
+                {card.back}
+              </p>
             </>
           )}
         </div>
         {revealed ? (
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
             {GRADES.map(({ grade, labelKey, variant }, i) => (
-              <Button key={grade} variant={variant} disabled={grading} onClick={() => onGrade(grade)} className="h-auto flex-col gap-0.5 py-2">
+              <Button
+                key={grade}
+                variant={variant}
+                disabled={grading}
+                onClick={() => onGrade(grade)}
+                className="h-auto flex-col gap-0.5 py-2"
+              >
                 <span>
                   {t(labelKey)} <span className="text-xs opacity-60">{i + 1}</span>
                 </span>
-                <span className="text-xs font-normal opacity-75">{formatSpan(spans[grade], t)}</span>
+                <span className="text-xs font-normal opacity-75">
+                  {formatSpan(spans[grade], t)}
+                </span>
               </Button>
             ))}
           </div>
@@ -456,11 +532,22 @@ function CardEditorDialog({
         <div className="space-y-4">
           <div className="space-y-1.5">
             <Label htmlFor="card-front">{t('cards.front')}</Label>
-            <Input id="card-front" value={front} onChange={(event) => setFront(event.target.value)} placeholder={t('cards.frontPlaceholder')} />
+            <Input
+              id="card-front"
+              value={front}
+              onChange={(event) => setFront(event.target.value)}
+              placeholder={t('cards.frontPlaceholder')}
+            />
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="card-back">{t('cards.back')}</Label>
-            <Textarea id="card-back" value={back} onChange={(event) => setBack(event.target.value)} rows={5} placeholder={t('cards.backPlaceholder')} />
+            <Textarea
+              id="card-back"
+              value={back}
+              onChange={(event) => setBack(event.target.value)}
+              rows={5}
+              placeholder={t('cards.backPlaceholder')}
+            />
           </div>
           {error && <p className="text-sm text-destructive">{error}</p>}
         </div>
@@ -475,5 +562,31 @@ function CardEditorDialog({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  )
+}
+
+function Stat({
+  value,
+  label,
+  strong,
+}: {
+  value: number
+  label: string
+  strong?: boolean
+}): JSX.Element {
+  return (
+    <div className="sm:lecture:[&:not(:first-child)]:border-l sm:lecture:[&:not(:first-child)]:pl-6">
+      <div
+        className={cn(
+          'text-3xl font-semibold tabular-nums lecture:font-heading lecture:font-bold lab:font-mono lab:text-[22px] lab:font-medium',
+          strong && 'text-theme-primary lecture:text-foreground',
+        )}
+      >
+        {value}
+      </div>
+      <div className="text-xs text-muted-foreground lecture:text-[13px] lab:font-mono lab:text-[10.5px] lab:uppercase lab:tracking-wider">
+        {label}
+      </div>
+    </div>
   )
 }

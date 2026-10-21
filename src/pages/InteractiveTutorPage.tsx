@@ -1,12 +1,11 @@
 import { Link, useParams } from 'react-router-dom'
 import { ArrowLeft, ArrowRight, Brain, MessagesSquare } from 'lucide-react'
 import { Button } from '@/shared/ui/Button'
-import { Card, CardDescription, CardHeader, CardTitle } from '@/shared/ui/Card'
 import { EmptyState } from '@/shared/ui/EmptyState'
 import { LoadingState } from '@/shared/ui/LoadingState'
 import { PageContainer, PageContent, PageHeader } from '@/shared/ui/Page'
-import { TruncatedText } from '@/shared/ui/TruncatedText'
 import { TutorPanel } from '@/widgets/tutor/TutorPanel'
+import { topicKicker, topicNumber } from '@/widgets/tutor/lessonStyle'
 import { ProjectFlowNav } from '@/widgets/project/ProjectFlowNav'
 import { useProjectTopics } from '@/features/tutor/useProjectTopics'
 import { useTranslation } from '@/i18n'
@@ -87,20 +86,30 @@ export function InteractiveTutorPage(): JSX.Element {
         nav={<ProjectFlowNav projectId={projectId} active="tutor" />}
       />
       <PageContent>
-        {/* Reading measure: a lecture-notes column, never full-bleed. */}
-        <div className="mx-auto w-full max-w-[48rem]">
-          <Card className="mb-4">
-            <CardHeader>
-              <CardTitle className="text-base">
-                <TruncatedText text={activeTopic.name} className="min-w-0 max-w-full" />
-              </CardTitle>
+        {/* Reading measure: a lecture-notes column, never full-bleed. Lecture
+          sets it on paper under a serif title; lab frames the topic as a
+          hairline header cell with mono metadata. */}
+        <div className="mx-auto w-full max-w-[48rem] lecture:max-w-[680px] lab:max-w-[54rem]">
+          <header className="mb-4 rounded-xl border bg-card p-5 lecture:mb-6 lecture:rounded-none lecture:border-x-0 lecture:border-t-0 lecture:bg-transparent lecture:px-0 lecture:pb-5 lecture:pt-0 lab:rounded-none lab:p-0">
+            <p className="text-xs text-muted-foreground lecture:text-[13px] lecture:tracking-[0.14em] lecture:text-primary lab:flex lab:flex-wrap lab:border-b lab:font-mono lab:text-[11.5px]">
+              <span className="hidden tabular-nums text-primary lab:inline lab:border-r lab:px-3.5 lab:py-2">
+                § {topicNumber(activeTopic, topics.indexOf(activeTopic))}
+              </span>
+              <span className="lab:px-3.5 lab:py-2 lab:uppercase lab:tracking-[0.06em]">
+                {topicKicker(activeTopic) || t('tutor.interactiveTitle')}
+              </span>
+            </p>
+            <div className="lab:px-5 lab:py-4">
+              <h2 className="mt-1 break-words font-heading text-lg font-semibold leading-snug text-foreground lecture:mt-2 lecture:text-[28px] lecture:font-bold lecture:leading-[1.35] lab:mt-0 lab:text-[20px]">
+                {activeTopic.name}
+              </h2>
               {activeTopic.description ? (
-                <CardDescription className="break-words">
+                <p className="mt-1.5 break-words text-sm text-muted-foreground lecture:text-[15px] lecture:leading-[1.75]">
                   {activeTopic.description}
-                </CardDescription>
+                </p>
               ) : null}
-            </CardHeader>
-          </Card>
+            </div>
+          </header>
 
           {language ? (
             <TutorPanel
@@ -115,9 +124,11 @@ export function InteractiveTutorPage(): JSX.Element {
             <LoadingState label={t('tutor.loading')} />
           )}
 
-          <div className="mt-4 flex flex-col gap-3 rounded-xl border border-border/70 bg-muted/20 p-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="mt-4 flex flex-col gap-3 rounded-xl border border-border/70 bg-muted/20 p-4 lecture:mt-10 lecture:rounded-none lecture:border-x-0 lecture:border-b-0 lecture:bg-transparent lecture:px-0 lab:bg-muted/40 sm:flex-row sm:items-center sm:justify-between">
             <div className="min-w-0">
-              <p className="text-sm font-medium text-foreground">{t('tutor.nextStepTitle')}</p>
+              <p className="text-sm font-medium text-foreground lecture:font-heading lecture:text-[17px] lecture:font-bold lab:font-mono lab:text-[11px] lab:uppercase lab:tracking-[0.06em] lab:text-muted-foreground">
+                {t('tutor.nextStepTitle')}
+              </p>
               <p className="text-xs text-muted-foreground">{t('tutor.nextStepHint')}</p>
             </div>
             <Button asChild size="sm" className="shrink-0">

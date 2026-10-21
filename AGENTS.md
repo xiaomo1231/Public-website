@@ -150,19 +150,24 @@ Dexie
 - `SourceReference` 必带 `chunkId`，引用必须来自**真实分块**，杜绝 AI 编造出处。
 - 章节层级**只有** `CourseStructure`/`CourseStructureNode` 一处；Topic / chunk / NoteLink / LectureChunkLink / PracticeQuestion 只保存 `chapterId`/`sectionId` 引用，不复制章节树。
 
-### 外观（Appearance）——两个独立维度
+### 外观（Appearance）——三个独立维度
 
 ```text
+uiStyle:    lecture（默认）| lab        （<html data-ui-style=…> → 结构 / 中性色 / 字体 / 圆角 / 阴影）
 mode:       light | dark | system      （themeStore 解析 → <html>.dark + color-scheme）
 colorTheme: default | pinkAqua | warmOrange | academic
-                                       （<html data-color-theme=…> → globals.css 变量块）
+                                       （<html data-color-theme=…> → 只决定强调色）
 ```
 
-- 两者都存在 `UserProfile`（`theme` / `colorTheme`），经 `useThemePreference()` / `useColorTheme()` 即时应用 + 持久化；**不是**第二套 localStorage key。
-- 颜色定义集中在 `features/theme/colorThemes.ts`（原始 hex，仅供预览）+ `shared/styles/globals.css`（每套主题 light/dark 各一块，共 21 个变量）。**组件不得硬编码颜色。**
+- 三者都存在 `UserProfile`（`uiStyle` / `theme` / `colorTheme`），经 `useUiStyle()` / `useThemePreference()` / `useColorTheme()` 即时应用 + 持久化；**不是**第二套 localStorage key。`index.html` 预置 `data-ui-style="lecture"` 避免首帧闪烁。
+- **界面风格**：`lecture`（讲义：暖纸色、衬线标题 `font-heading`、顶部导航 `TopNav` + 课程二级导航条、整页滚动、规则线代替卡片）；`lab`（精密实验室：冷色细线、毫米网格背景、方角、无阴影、左侧编号导航 `Sidebar`、等宽读数）。旧的"圆角卡片 + 侧栏"外观已移除。
+- **Token 分层**：`globals.css` 的 `[data-ui-style]` 块定义中性色（background / foreground / card / muted / border / input…）、圆角刻度、阴影、`--font-heading`、lab 的 `--grid-*`；配色块只定义强调色族（primary / primary-strong / secondary / accent / ring / destructive）。因此任意风格 × 配色 × 明暗都成立。
+- Tailwind 变体 `lecture:` / `lab:`（`tailwind.config.ts` 插件）用于两种风格结构不同之处；页面只用变体 + token，**不另写两套组件**。
+- 颜色定义集中在 `features/theme/colorThemes.ts`（原始 hex，仅供预览）+ `shared/styles/globals.css`。**组件不得硬编码颜色**（状态色 emerald / amber 沿用 Tailwind 调色板，不进主题 token）。
 - 填色且承载文字的表面（Button default / Badge default / Tooltip / 品牌标记）用 `--primary-strong`；`--primary` 留给 icon、链接、进度条、柔和状态、focus ring。
 - 主题切换是纯 presentation：**不触发 AI、不使 CourseAnalysis / TutorLesson / CourseContext 失效**。
-- 对比度由 `tests/themeContrast.test.ts` 从真实 CSS 计算并断言（正文 ≥4.5:1，填色按钮 ≥3:1）。
+- 对比度由 `tests/themeContrast.test.ts` 从真实 CSS 计算并断言（风格 × 明暗 × 配色共 16 组；正文 ≥4.5:1，填色按钮 ≥3:1）。
+- 测验单选 / 多选支持键盘：A–F 或 1–6 选择，Enter 提交（焦点在输入框、按住修饰键、对话框内时不生效；`widgets/quiz/quizKeyboard.ts`）。
 
 ---
 

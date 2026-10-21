@@ -7,6 +7,7 @@ import { AppShell } from '@/app/layout/AppShell'
 import { NotFoundPage, RouteError } from '@/app/RouteError'
 import { safeReturnPath } from '@/features/auth/returnPath'
 import { useProjectStore } from '@/features/project/projectStore'
+import { useThemeStore } from '@/features/theme/themeStore'
 import { useToastStore } from '@/features/toast/toastStore'
 import { Toaster } from '@/shared/ui/Toast'
 import type { Project } from '@/entities/project/types'
@@ -83,7 +84,10 @@ describe('project-scoped routes', () => {
     renderRoutes('/projects/deleted/homework')
     expect(screen.getByText('Project not found')).toBeInTheDocument()
     expect(screen.queryByText(/Homework for/)).not.toBeInTheDocument()
-    expect(screen.getByRole('link', { name: /Back to projects/ })).toHaveAttribute('href', '/projects')
+    expect(screen.getByRole('link', { name: /Back to projects/ })).toHaveAttribute(
+      'href',
+      '/projects',
+    )
   })
 
   it('reports a failed project load instead of "not found"', () => {
@@ -124,8 +128,23 @@ describe('safeReturnPath', () => {
   })
 })
 
-describe('mobile navigation drawer', () => {
+describe('app shell per interface style', () => {
+  it('lecture: a top bar with the four places and no drawer', () => {
+    useThemeStore.getState().setUiStyle('lecture')
+    seedProjects([PROJECT])
+    const router = createMemoryRouter(
+      [{ path: '/', element: <AppShell />, children: [{ index: true, element: <div>Home</div> }] }],
+      { initialEntries: ['/'] },
+    )
+    render(<RouterProvider router={router} />)
+    expect(screen.getByRole('navigation', { name: 'Main navigation' })).toBeInTheDocument()
+    expect(screen.queryByTestId('mobile-nav')).toBeNull()
+  })
+})
+
+describe('mobile navigation drawer (lab style)', () => {
   it('is inert while closed, takes focus when opened and closes on Escape', async () => {
+    useThemeStore.getState().setUiStyle('lab')
     seedProjects([PROJECT])
     const router = createMemoryRouter(
       [{ path: '/', element: <AppShell />, children: [{ index: true, element: <div>Home</div> }] }],

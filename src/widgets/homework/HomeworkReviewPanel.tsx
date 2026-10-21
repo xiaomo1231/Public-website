@@ -28,11 +28,20 @@ export function HomeworkReviewPanel({ question, service }: HomeworkReviewPanelPr
     setGuide(null)
     setError(null)
     setLoading(true)
-    void service.getOrGenerateReviewGuide(question.id, reviewLanguage)
-      .then((result) => { if (active) setGuide(result) })
-      .catch((err) => { if (active) setError(friendlyAIError(err)) })
-      .finally(() => { if (active) setLoading(false) })
-    return () => { active = false }
+    void service
+      .getOrGenerateReviewGuide(question.id, reviewLanguage)
+      .then((result) => {
+        if (active) setGuide(result)
+      })
+      .catch((err) => {
+        if (active) setError(friendlyAIError(err))
+      })
+      .finally(() => {
+        if (active) setLoading(false)
+      })
+    return () => {
+      active = false
+    }
   }, [question.id, reviewLanguage, service])
 
   async function regenerate(): Promise<void> {
@@ -50,7 +59,7 @@ export function HomeworkReviewPanel({ question, service }: HomeworkReviewPanelPr
   return (
     <Card>
       <CardHeader className="space-y-2">
-        <CardTitle className="flex items-center gap-2 text-base">
+        <CardTitle className="flex items-center gap-2 font-heading text-base lecture:font-bold">
           <BookOpen className="h-4 w-4" aria-hidden />
           {t('homework.review.title')}
         </CardTitle>
@@ -63,49 +72,102 @@ export function HomeworkReviewPanel({ question, service }: HomeworkReviewPanelPr
             {t('homework.review.preparing')}
           </p>
         )}
-        {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
+        {error && (
+          <p role="alert" className="text-sm text-destructive">
+            {error}
+          </p>
+        )}
         {guide && (
           <div className="space-y-6">
             <section className="space-y-2">
               <h4 className="text-sm font-semibold">{t('homework.review.meaning')}</h4>
-              <RichText text={formatHomeworkReviewText(guide.questionMeaning)} format="markdown" className="min-w-0 max-w-[75ch] overflow-x-auto" paragraphClassName="text-sm leading-relaxed" />
+              <RichText
+                text={formatHomeworkReviewText(guide.questionMeaning)}
+                format="markdown"
+                className="min-w-0 max-w-[75ch] overflow-x-auto"
+                paragraphClassName="text-sm leading-relaxed"
+              />
             </section>
             <section className="space-y-2">
               <h4 className="text-sm font-semibold">{t('homework.review.knowledge')}</h4>
               <ul className="list-outside list-disc space-y-2 pl-5 text-sm leading-relaxed">
                 {guide.knowledgePoints.map((point, index) => (
-                  <li key={index}><RichText text={formatHomeworkReviewText(point)} format="markdown" className="min-w-0 max-w-[75ch] overflow-x-auto" paragraphClassName="text-sm leading-relaxed" /></li>
+                  <li key={index}>
+                    <RichText
+                      text={formatHomeworkReviewText(point)}
+                      format="markdown"
+                      className="min-w-0 max-w-[75ch] overflow-x-auto"
+                      paragraphClassName="text-sm leading-relaxed"
+                    />
+                  </li>
                 ))}
               </ul>
             </section>
             <section className="space-y-2">
               <h4 className="text-sm font-semibold">{t('homework.review.method')}</h4>
-              <RichText text={formatHomeworkReviewText(guide.method)} format="markdown" className="min-w-0 max-w-[75ch] overflow-x-auto" paragraphClassName="text-sm leading-relaxed" />
+              <RichText
+                text={formatHomeworkReviewText(guide.method)}
+                format="markdown"
+                className="min-w-0 max-w-[75ch] overflow-x-auto"
+                paragraphClassName="text-sm leading-relaxed"
+              />
             </section>
             <section className="space-y-2">
               <h4 className="text-sm font-semibold">{t('homework.review.steps')}</h4>
               <ol className="list-outside list-decimal space-y-3 pl-5 text-sm leading-relaxed">
                 {guide.steps.map((step, index) => (
-                  <li key={index}><RichText text={formatHomeworkReviewText(step)} format="markdown" className="min-w-0 max-w-[75ch] overflow-x-auto" paragraphClassName="text-sm leading-relaxed" /></li>
+                  <li key={index}>
+                    <RichText
+                      text={formatHomeworkReviewText(step)}
+                      format="markdown"
+                      className="min-w-0 max-w-[75ch] overflow-x-auto"
+                      paragraphClassName="text-sm leading-relaxed"
+                    />
+                  </li>
                 ))}
               </ol>
             </section>
             <section className="space-y-2">
               <h4 className="text-sm font-semibold">{t('homework.review.explanation')}</h4>
-              <RichText text={formatHomeworkReviewText(guide.explanation)} format="markdown" className="min-w-0 max-w-[75ch] overflow-x-auto" paragraphClassName="text-sm leading-relaxed" />
+              <RichText
+                text={formatHomeworkReviewText(guide.explanation)}
+                format="markdown"
+                className="min-w-0 max-w-[75ch] overflow-x-auto"
+                paragraphClassName="text-sm leading-relaxed"
+              />
             </section>
             <section className="space-y-2">
               <h4 className="text-sm font-semibold">{t('homework.review.interpretation')}</h4>
-              <RichText text={formatHomeworkReviewText(guide.interpretation)} format="markdown" className="min-w-0 max-w-[75ch] overflow-x-auto" paragraphClassName="text-sm leading-relaxed" />
+              <RichText
+                text={formatHomeworkReviewText(guide.interpretation)}
+                format="markdown"
+                className="min-w-0 max-w-[75ch] overflow-x-auto"
+                paragraphClassName="text-sm leading-relaxed"
+              />
             </section>
             <section className="space-y-2">
               <h4 className="text-sm font-semibold">{t('homework.review.check')}</h4>
-              <RichText text={formatHomeworkReviewText(guide.check)} format="markdown" className="min-w-0 max-w-[75ch] overflow-x-auto" paragraphClassName="text-sm leading-relaxed" />
+              <RichText
+                text={formatHomeworkReviewText(guide.check)}
+                format="markdown"
+                className="min-w-0 max-w-[75ch] overflow-x-auto"
+                paragraphClassName="text-sm leading-relaxed"
+              />
             </section>
           </div>
         )}
-        <Button type="button" size="sm" variant="outline" onClick={() => void regenerate()} disabled={loading}>
-          {loading ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <RotateCcw className="h-4 w-4" aria-hidden />}
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          onClick={() => void regenerate()}
+          disabled={loading}
+        >
+          {loading ? (
+            <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+          ) : (
+            <RotateCcw className="h-4 w-4" aria-hidden />
+          )}
           {guide ? t('homework.review.regenerate') : t('homework.review.retry')}
         </Button>
       </CardContent>

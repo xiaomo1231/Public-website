@@ -17,15 +17,7 @@ import { useSlidingIndicator, type IndicatorRect } from '@/shared/lib/useSliding
 import { useTranslation, type TranslationKey } from '@/i18n'
 
 export type ProjectFlowSection =
-  | 'home'
-  | 'files'
-  | 'homework'
-  | 'tutor'
-  | 'quiz'
-  | 'mistakes'
-  | 'cards'
-  | 'mastery'
-  | 'history'
+  'home' | 'files' | 'homework' | 'tutor' | 'quiz' | 'mistakes' | 'cards' | 'mastery' | 'history'
 
 interface FlowItem {
   key: ProjectFlowSection
@@ -106,11 +98,7 @@ export interface ProjectFlowNavProps {
   className?: string
 }
 
-export function ProjectFlowNav({
-  projectId,
-  active,
-  className,
-}: ProjectFlowNavProps): JSX.Element {
+export function ProjectFlowNav({ projectId, active, className }: ProjectFlowNavProps): JSX.Element {
   const { t } = useTranslation()
   const activeRef = useRef<HTMLAnchorElement>(null)
   const indicator = useSlidingIndicator<HTMLElement>('[aria-current="page"]', {
@@ -145,7 +133,7 @@ export function ProjectFlowNav({
         aria-hidden
         data-animate={indicator.animate}
         className={cn(
-          'slide-indicator rounded-full bg-theme-primary-soft',
+          'slide-indicator rounded-full bg-theme-primary-soft lecture:hidden lab:rounded-sm',
           !indicator.ready && 'hidden',
         )}
         style={indicator.style}
@@ -160,16 +148,13 @@ export function ProjectFlowNav({
             to={item.path(projectId)}
             aria-current={isActive ? 'page' : undefined}
             className={cn(
-              'focus-ring group relative inline-flex min-h-9 shrink-0 items-center gap-1.5 rounded-full px-3 py-2 text-[13px] font-medium transition-colors duration-200',
+              'focus-ring group relative inline-flex min-h-9 shrink-0 items-center gap-1.5 rounded-full px-3 py-2 text-[13px] font-medium transition-colors duration-200 lecture:h-11 lecture:rounded-none lecture:px-2.5 lecture:text-[13.5px] lecture:font-normal lab:rounded-sm',
               isActive
-                ? 'bg-theme-primary-soft text-foreground group-data-[indicator=ready]/flow:bg-transparent'
-                : 'text-muted-foreground hover:bg-muted hover:text-foreground',
+                ? 'bg-theme-primary-soft text-foreground group-data-[indicator=ready]/flow:bg-transparent lecture:bg-transparent lecture:font-medium lecture:after:absolute lecture:after:inset-x-2.5 lecture:after:bottom-0 lecture:after:h-0.5 lecture:after:bg-primary'
+                : 'text-muted-foreground hover:bg-muted hover:text-foreground lecture:hover:bg-transparent',
             )}
           >
-            <Icon
-              className="h-3.5 w-3.5 shrink-0 transition-transform duration-300 motion-safe:group-hover:-translate-y-px motion-safe:group-hover:scale-110"
-              aria-hidden
-            />
+            <Icon className="h-3.5 w-3.5 shrink-0 lecture:hidden" aria-hidden />
             {t(item.labelKey)}
           </Link>
         )

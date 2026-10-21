@@ -37,13 +37,10 @@ import { SourceQuote } from '@/widgets/source/SourceQuote'
 import { SlideViewer } from '@/widgets/slides/SlideViewer'
 import { StudyModeTabs } from '@/widgets/slides/StudyModeTabs'
 import { TutorSymbolsPanel } from '@/widgets/tutor/TutorSymbolsPanel'
+import { LESSON_PROSE_CLASS } from '@/widgets/tutor/lessonStyle'
 import { ProjectFlowNav } from '@/widgets/project/ProjectFlowNav'
 import { useSlideLessonService } from '@/features/slides/useSlideLessonService'
-import type {
-  SlideContent,
-  SlideDocumentInfo,
-  SlideIndex,
-} from '@/services/slideLessonService'
+import type { SlideContent, SlideDocumentInfo, SlideIndex } from '@/services/slideLessonService'
 import type { SlideLesson } from '@/entities/slideLesson/types'
 import { PROCESSING_STATUS_LABEL_KEYS } from '@/entities/document/types'
 import { friendlyAIError } from '@/shared/lib/aiErrors'
@@ -67,7 +64,11 @@ const LANGUAGES: Array<{ value: 'zh' | 'en' | 'mixed'; labelKey: TranslationKey 
  */
 export function SlideStudyPage(): JSX.Element {
   const { t } = useTranslation()
-  const { id: projectId, documentId, slideNumber } = useParams<{
+  const {
+    id: projectId,
+    documentId,
+    slideNumber,
+  } = useParams<{
     id: string
     documentId: string
     slideNumber: string
@@ -198,7 +199,10 @@ export function SlideStudyPage(): JSX.Element {
     }
   }, [service, documentId, validSlideNumber, language, projectId, slideKey])
 
-  const slideNumbers = useMemo(() => (index?.slides ?? []).map((entry) => entry.slideNumber), [index])
+  const slideNumbers = useMemo(
+    () => (index?.slides ?? []).map((entry) => entry.slideNumber),
+    [index],
+  )
   const currentPosition = slideNumbers.indexOf(validSlideNumber ?? -1)
   const previousSlide =
     validSlideNumber !== undefined ? slideNumbers[currentPosition - 1] : undefined
@@ -431,14 +435,12 @@ export function SlideStudyPage(): JSX.Element {
         {notReady ? (
           <ErrorState
             title={t('slides.notReadyTitle')}
-            description={
-              currentDocumentInfo?.document.errorMessage ?? t('slides.notReadyBody')
-            }
+            description={currentDocumentInfo?.document.errorMessage ?? t('slides.notReadyBody')}
           />
         ) : loadingSlide || !content ? (
           <LoadingState label={t('common.loading')} />
         ) : (
-          <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+          <div className="grid gap-5 lab:gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] lg:lecture:gap-10">
             <div className="min-w-0 space-y-4">
               <SlideViewer content={content} />
               <div className="flex items-center justify-between gap-2">
@@ -488,12 +490,15 @@ export function SlideStudyPage(): JSX.Element {
                     </CardTitle>
                     <CardDescription>
                       {lesson?.status === 'failed'
-                        ? lesson.errorMessage ?? t('slides.failedBody')
+                        ? (lesson.errorMessage ?? t('slides.failedBody'))
                         : t('slides.generateHint')}
                     </CardDescription>
                   </CardHeader>
                   <CardContent>
-                    <Button onClick={() => void generate(lesson?.status === 'failed')} disabled={busy}>
+                    <Button
+                      onClick={() => void generate(lesson?.status === 'failed')}
+                      disabled={busy}
+                    >
                       {busy ? (
                         <Loader2 className="h-4 w-4 animate-spin" />
                       ) : lesson?.status === 'failed' ? (
@@ -507,9 +512,13 @@ export function SlideStudyPage(): JSX.Element {
                 </Card>
               ) : (
                 <>
-                  <Card>
-                    <CardHeader className="flex-row items-start justify-between gap-2 space-y-0">
-                      <CardTitle className="text-base">{t('slides.lessonLabel')}</CardTitle>
+                  {/* lecture: the explanation is prose on the paper under a small
+                    letter-spaced label. lab: a hairline cell with a mono header. */}
+                  <Card className="lecture:rounded-none lecture:border-0 lecture:bg-transparent lecture:shadow-none">
+                    <CardHeader className="flex-row items-start justify-between gap-2 space-y-0 lecture:px-0 lecture:pt-0 lab:border-b lab:px-5 lab:py-2.5">
+                      <CardTitle className="text-base lecture:text-xs lecture:font-normal lecture:tracking-[0.14em] lecture:text-muted-foreground lab:font-mono lab:text-[11px] lab:font-medium lab:uppercase lab:tracking-[0.06em] lab:text-muted-foreground">
+                        {t('slides.lessonLabel')}
+                      </CardTitle>
                       <Button
                         variant="ghost"
                         size="sm"
@@ -525,14 +534,17 @@ export function SlideStudyPage(): JSX.Element {
                         {t('slides.regenerate')}
                       </Button>
                     </CardHeader>
-                    <CardContent className="space-y-4">
+                    <CardContent className="space-y-4 lecture:px-0 lab:px-5 lab:pt-5">
                       <RichText
                         text={lesson.content ?? ''}
                         format="markdown"
-                        paragraphClassName="text-[15px] leading-relaxed"
+                        className={LESSON_PROSE_CLASS}
+                        paragraphClassName="text-[15px] leading-relaxed lecture:text-[16px] lecture:leading-[1.85] lab:leading-[1.8]"
                       />
-                      <div className="rounded-lg border border-border/60 bg-muted/20 p-3">
-                        <p className="text-xs font-medium text-muted-foreground mb-1">{t('slides.guidingQuestion')}</p>
+                      <div className="rounded-lg border border-border/60 bg-muted/20 p-3 lecture:rounded-none lecture:border-0 lecture:border-l-2 lecture:border-primary lecture:bg-transparent lecture:py-1 lecture:pl-4 lecture:pr-0 lab:rounded-none lab:border-l-2 lab:border-l-primary">
+                        <p className="mb-1 text-xs font-medium text-muted-foreground lecture:font-normal lecture:tracking-[0.14em] lab:font-mono lab:text-[11px] lab:uppercase lab:tracking-[0.06em]">
+                          {t('slides.guidingQuestion')}
+                        </p>
                         <RichText
                           text={lesson.question ?? ''}
                           format="markdown"
@@ -553,16 +565,21 @@ export function SlideStudyPage(): JSX.Element {
                     </CardContent>
                   </Card>
 
-                  {lesson.symbols.length > 0 && <TutorSymbolsPanel symbols={lesson.symbols} />}
+                  {lesson.symbols.length > 0 && (
+                    <TutorSymbolsPanel
+                      symbols={lesson.symbols}
+                      className="lecture:border-t lecture:pt-4 lab:border lab:bg-card lab:py-3"
+                    />
+                  )}
 
-                  <Card>
-                    <CardHeader>
-                      <CardTitle className="flex items-center gap-2 text-base">
+                  <Card className="lecture:rounded-none lecture:border-x-0 lecture:border-b-0 lecture:bg-transparent lecture:shadow-none">
+                    <CardHeader className="lecture:px-0 lab:border-b lab:px-5 lab:py-2.5">
+                      <CardTitle className="flex items-center gap-2 text-base lecture:text-xs lecture:font-normal lecture:tracking-[0.14em] lecture:text-muted-foreground lab:font-mono lab:text-[11px] lab:font-medium lab:uppercase lab:tracking-[0.06em] lab:text-muted-foreground">
                         <MessageCircle className="h-4 w-4 text-muted-foreground" aria-hidden />
                         {t('slides.askTitle')}
                       </CardTitle>
                     </CardHeader>
-                    <CardContent className="space-y-3">
+                    <CardContent className="space-y-3 lecture:px-0 lab:px-5 lab:pt-4">
                       {lesson.messages.length > 0 && (
                         <ul className="space-y-2">
                           {lesson.messages.map((message) => (
@@ -576,7 +593,8 @@ export function SlideStudyPage(): JSX.Element {
                               )}
                             >
                               <span className="sr-only">
-                                {message.role === 'student' ? t('slides.you') : t('slides.tutor')}:{' '}
+                                {message.role === 'student' ? t('slides.you') : t('slides.tutor')}
+                                :{' '}
                               </span>
                               {message.content}
                             </li>

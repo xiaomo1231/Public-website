@@ -53,7 +53,10 @@ export interface HomeworkWalkthroughPanelProps {
  * SelectionTranslator); saved questions are marked in the text and listed per
  * section and in "My questions".
  */
-export function HomeworkWalkthroughPanel({ set, mode }: HomeworkWalkthroughPanelProps): JSX.Element {
+export function HomeworkWalkthroughPanel({
+  set,
+  mode,
+}: HomeworkWalkthroughPanelProps): JSX.Element {
   const { t, language: uiLanguage } = useTranslation()
   const { state, notes, progress, loading, error, generate } = useWalkthrough(set.id)
   const [revealed, setRevealed] = useState(() => mode === 'review' || opened.has(set.id))
@@ -66,14 +69,22 @@ export function HomeworkWalkthroughPanel({ set, mode }: HomeworkWalkthroughPanel
   const qaLanguage = uiLanguage === 'zh-CN' ? 'zh' : 'en'
 
   const labels = useMemo(
-    () => new Map((state?.questions ?? []).map((question, index) => [question.id, questionLabel(question, index)])),
+    () =>
+      new Map(
+        (state?.questions ?? []).map((question, index) => [
+          question.id,
+          questionLabel(question, index),
+        ]),
+      ),
     [state?.questions],
   )
 
   const entries = state?.plan ?? []
   const readyCount = entries.filter((entry) => entry.section?.status === 'ready').length
   /** Sections with something to show (a walkthrough or the reason there is none). */
-  const writtenCount = entries.filter((entry) => entry.section && entry.section.status !== 'failed').length
+  const writtenCount = entries.filter(
+    (entry) => entry.section && entry.section.status !== 'failed',
+  ).length
   const needsWork = entries.filter((entry) => entry.needsWork).length
 
   // Mark saved passages; remember which ones are still in the text.
@@ -111,8 +122,17 @@ export function HomeworkWalkthroughPanel({ set, mode }: HomeworkWalkthroughPanel
   async function run(force: boolean): Promise<void> {
     const result = await generate(force)
     if (!result) return
-    if (result.fatalError) toast({ variant: 'error', title: t('homework.walkthrough.stopped'), description: result.fatalError })
-    else if (result.failed > 0) toast({ variant: 'warning', title: t('homework.walkthrough.someFailed', { count: result.failed }) })
+    if (result.fatalError)
+      toast({
+        variant: 'error',
+        title: t('homework.walkthrough.stopped'),
+        description: result.fatalError,
+      })
+    else if (result.failed > 0)
+      toast({
+        variant: 'warning',
+        title: t('homework.walkthrough.someFailed', { count: result.failed }),
+      })
     else toast({ variant: 'success', title: t('homework.walkthrough.done') })
   }
 
@@ -161,13 +181,20 @@ export function HomeworkWalkthroughPanel({ set, mode }: HomeworkWalkthroughPanel
 
   return (
     <div className="space-y-4">
-      <Card className="border-border/70">
-        <CardContent className="flex flex-wrap items-center gap-2 p-3">
-          <BookOpenText className="h-4 w-4 text-muted-foreground" aria-hidden />
-          <span className="text-sm font-medium">{t('homework.walkthrough.title')}</span>
-          <Badge variant="outline">{t(`homework.walkthrough.language.${state.language}` as TranslationKey)}</Badge>
+      <Card className="border-border/70 lecture:rounded-none lecture:border-x-0 lecture:border-t-0 lecture:bg-transparent lecture:shadow-none">
+        <CardContent className="flex flex-wrap items-center gap-2 p-3 lecture:px-0">
+          <BookOpenText className="h-4 w-4 text-muted-foreground lecture:hidden" aria-hidden />
+          <span className="text-sm font-medium lecture:font-heading lecture:text-base lecture:font-bold lab:font-mono lab:text-[11px] lab:uppercase lab:tracking-wider lab:text-muted-foreground">
+            {t('homework.walkthrough.title')}
+          </span>
+          <Badge variant="outline">
+            {t(`homework.walkthrough.language.${state.language}` as TranslationKey)}
+          </Badge>
           {writtenCount > 0 && needsWork > 0 && !running && (
-            <Badge variant="outline" className="border-amber-500/50 text-amber-700 dark:text-amber-300">
+            <Badge
+              variant="outline"
+              className="border-amber-500/50 text-amber-700 dark:text-amber-300"
+            >
               {t('homework.walkthrough.needsWork', { count: needsWork })}
             </Badge>
           )}
@@ -176,18 +203,32 @@ export function HomeworkWalkthroughPanel({ set, mode }: HomeworkWalkthroughPanel
               <MessageSquareText className="h-4 w-4" />
               {t('walkthroughQA.myQuestions', { count: notes.length })}
             </Button>
-            <Button variant="outline" size="sm" disabled={readyCount === 0} onClick={() => setPrinting(true)}>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={readyCount === 0}
+              onClick={() => setPrinting(true)}
+            >
               <Printer className="h-4 w-4" />
               {t('homework.walkthrough.print')}
             </Button>
             {writtenCount > 0 && needsWork > 0 && (
               <Button size="sm" disabled={running} onClick={() => void run(false)}>
-                {running ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+                {running ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <RefreshCw className="h-4 w-4" />
+                )}
                 {t('homework.walkthrough.update')}
               </Button>
             )}
             {writtenCount > 0 && (
-              <Button variant="ghost" size="sm" disabled={running} onClick={() => setConfirmRedo(true)}>
+              <Button
+                variant="ghost"
+                size="sm"
+                disabled={running}
+                onClick={() => setConfirmRedo(true)}
+              >
                 <RotateCcw className="h-4 w-4" />
                 {t('homework.walkthrough.regenerateAll')}
               </Button>
@@ -210,7 +251,9 @@ export function HomeworkWalkthroughPanel({ set, mode }: HomeworkWalkthroughPanel
               {t('homework.walkthrough.progress', { done: progress.done, total: progress.total })}
             </p>
             <Progress value={progress.total ? (progress.done / progress.total) * 100 : 0} />
-            <p className="text-xs text-muted-foreground">{t('homework.walkthrough.progressHint')}</p>
+            <p className="text-xs text-muted-foreground">
+              {t('homework.walkthrough.progressHint')}
+            </p>
           </CardContent>
         </Card>
       )}
@@ -220,7 +263,10 @@ export function HomeworkWalkthroughPanel({ set, mode }: HomeworkWalkthroughPanel
           <CardHeader>
             <CardTitle className="text-base">{t('homework.walkthrough.emptyTitle')}</CardTitle>
             <CardDescription>
-              {t('homework.walkthrough.emptyBody', { count: state.questions.length, requests: state.questions.length + 1 })}
+              {t('homework.walkthrough.emptyBody', {
+                count: state.questions.length,
+                requests: state.questions.length + 1,
+              })}
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
@@ -234,22 +280,33 @@ export function HomeworkWalkthroughPanel({ set, mode }: HomeworkWalkthroughPanel
           </CardContent>
         </Card>
       ) : (
-        <div className="grid gap-6 lg:grid-cols-[12rem_minmax(0,1fr)]">
+        <div className="grid gap-6 lg:grid-cols-[12rem_minmax(0,1fr)] lecture:lg:gap-12">
           <nav aria-label={t('homework.walkthrough.toc')} className="hidden lg:block">
-            <ol className="sticky top-4 space-y-1 text-sm">
+            <ol className="sticky top-4 space-y-1 text-sm lecture:space-y-0 lab:space-y-px lab:border lab:bg-card lab:p-1">
               {entries.map((entry) => (
                 <li key={entry.id}>
                   <a
                     href={`#wt-${entry.id}`}
                     onClick={(event) => {
                       event.preventDefault()
-                      document.getElementById(`wt-${entry.id}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+                      document
+                        .getElementById(`wt-${entry.id}`)
+                        ?.scrollIntoView({ behavior: 'smooth', block: 'start' })
                     }}
                     className={cn(
-                      'focus-ring block truncate rounded px-2 py-1 hover:bg-muted',
-                      entry.section?.status === 'ready' ? 'text-foreground' : 'text-muted-foreground',
+                      'focus-ring block truncate rounded px-2 py-1 transition-colors duration-150 hover:bg-muted',
+                      'lecture:rounded-none lecture:border-l lecture:py-1.5 lecture:pl-3 lecture:hover:border-primary lecture:hover:bg-transparent',
+                      entry.section?.status === 'ready'
+                        ? 'text-foreground'
+                        : 'text-muted-foreground',
                     )}
                   >
+                    <span
+                      aria-hidden
+                      className="mr-2 hidden font-mono text-[11px] tabular-nums text-muted-foreground lab:inline"
+                    >
+                      {sectionMarker(entry, labels)}
+                    </span>
                     {sectionTitle(entry, labels, t)}
                   </a>
                 </li>
@@ -257,23 +314,28 @@ export function HomeworkWalkthroughPanel({ set, mode }: HomeworkWalkthroughPanel
             </ol>
           </nav>
 
-          <Card className="min-w-0">
-            <CardContent className="p-5 sm:p-8">
-              <p className="mb-6 text-xs text-muted-foreground">{t('homework.walkthrough.selectHint')}</p>
+          <Card className="min-w-0 lecture:rounded-none lecture:border-0 lecture:bg-transparent lecture:shadow-none">
+            <CardContent className="p-5 lecture:mx-auto lecture:max-w-[680px] lecture:px-0 sm:p-8 sm:lecture:px-0 lab:sm:px-9">
+              <p className="mb-6 text-xs text-muted-foreground lab:font-mono lab:text-[11px]">
+                {t('homework.walkthrough.selectHint')}
+              </p>
               <article
                 data-selection-context="walkthrough"
                 data-walkthrough-project={set.projectId}
                 data-walkthrough-set={set.id}
                 data-selection-title={set.title}
                 onClick={onArticleClick}
-                className="space-y-12"
+                className="space-y-12 lab:space-y-10"
               >
-                <h1 className="text-2xl font-semibold tracking-tight">{set.title}</h1>
+                <h1 className="font-heading text-2xl font-semibold tracking-tight lecture:text-[32px] lecture:font-bold lecture:leading-snug lecture:tracking-normal lab:text-[22px]">
+                  {set.title}
+                </h1>
                 {entries.map((entry) => (
                   <WalkthroughSectionView
                     key={entry.id}
                     entry={entry}
                     title={sectionTitle(entry, labels, t)}
+                    marker={sectionMarker(entry, labels)}
                     running={progress?.running.includes(entry.id) ?? false}
                     notes={notes.filter((note) => note.sectionId === entry.id)}
                     onOpenNote={(note) => openNote(note, set.title, qaLanguage)}
@@ -299,7 +361,9 @@ export function HomeworkWalkthroughPanel({ set, mode }: HomeworkWalkthroughPanel
         open={confirmRedo}
         onOpenChange={setConfirmRedo}
         title={t('homework.walkthrough.regenerateAllTitle')}
-        description={t('homework.walkthrough.regenerateAllBody', { requests: state.questions.length + 1 })}
+        description={t('homework.walkthrough.regenerateAllBody', {
+          requests: state.questions.length + 1,
+        })}
         confirmLabel={t('homework.walkthrough.regenerateAll')}
         onConfirm={() => {
           setConfirmRedo(false)
@@ -308,28 +372,50 @@ export function HomeworkWalkthroughPanel({ set, mode }: HomeworkWalkthroughPanel
       />
 
       {printing && (
-        <WalkthroughPrint title={set.title} sections={printable} onDone={() => setPrinting(false)} />
+        <WalkthroughPrint
+          title={set.title}
+          sections={printable}
+          onDone={() => setPrinting(false)}
+        />
       )}
     </div>
   )
 }
 
-function sectionTitle(entry: WalkthroughPlanEntry, labels: ReadonlyMap<string, string>, t: T): string {
+function sectionTitle(
+  entry: WalkthroughPlanEntry,
+  labels: ReadonlyMap<string, string>,
+  t: T,
+): string {
   if (entry.kind === 'overview') return t('homework.walkthrough.overviewTitle')
   if (entry.kind === 'summary') return t('homework.walkthrough.summaryTitle')
   const label = labels.get(entry.question!.id) ?? '?'
   return /^[\d(（]/.test(label) ? t('homework.walkthrough.questionTitle', { label }) : label
 }
 
+/** The lab style's mono section number: Q1, Q2(a) … for questions, § otherwise. */
+function sectionMarker(entry: WalkthroughPlanEntry, labels: ReadonlyMap<string, string>): string {
+  if (!entry.question) return '§'
+  return `Q${labels.get(entry.question.id) ?? '?'}`
+}
+
 interface SectionViewProps {
   entry: WalkthroughPlanEntry
   title: string
+  marker: string
   running: boolean
   notes: WalkthroughNote[]
   onOpenNote: (note: WalkthroughNote) => void
 }
 
-function WalkthroughSectionView({ entry, title, running, notes, onOpenNote }: SectionViewProps): JSX.Element {
+function WalkthroughSectionView({
+  entry,
+  title,
+  marker,
+  running,
+  notes,
+  onOpenNote,
+}: SectionViewProps): JSX.Element {
   const { t } = useTranslation()
   const section = entry.section
   return (
@@ -339,15 +425,25 @@ function WalkthroughSectionView({ entry, title, running, notes, onOpenNote }: Se
       data-section-title={title}
       className="scroll-mt-6 space-y-4"
     >
-      <div className="flex flex-wrap items-center gap-2 border-b pb-2">
-        <h2 className="text-xl font-semibold">{title}</h2>
+      <div className="flex flex-wrap items-center gap-2 border-b pb-2 lecture:border-b-0 lecture:pb-0">
+        <h2 className="flex items-baseline gap-2.5 font-heading text-xl font-semibold lecture:text-[22px] lecture:font-bold lab:text-base">
+          <span
+            aria-hidden
+            className="hidden font-mono text-xs font-normal tabular-nums text-muted-foreground lab:inline"
+          >
+            {marker}
+          </span>
+          {title}
+        </h2>
         {running && (
           <Badge variant="outline" className="gap-1">
             <Loader2 className="h-3 w-3 animate-spin" aria-hidden />
             {t('homework.walkthrough.writing')}
           </Badge>
         )}
-        {!running && entry.outdated && <Badge variant="outline">{t('homework.walkthrough.outdated')}</Badge>}
+        {!running && entry.outdated && (
+          <Badge variant="outline">{t('homework.walkthrough.outdated')}</Badge>
+        )}
       </div>
 
       {entry.question && <QuestionPrompt question={entry.question} />}
@@ -355,7 +451,9 @@ function WalkthroughSectionView({ entry, title, running, notes, onOpenNote }: Se
       {!section ? (
         <p className="text-sm text-muted-foreground">{t('homework.walkthrough.notYet')}</p>
       ) : section.status === 'failed' ? (
-        <p className="text-sm text-destructive">{t('homework.walkthrough.sectionFailed', { reason: section.error ?? '' })}</p>
+        <p className="text-sm text-destructive">
+          {t('homework.walkthrough.sectionFailed', { reason: section.error ?? '' })}
+        </p>
       ) : section.status === 'insufficient' ? (
         <p className="text-sm text-muted-foreground">
           {t('homework.walkthrough.insufficient', { reason: section.error ?? '' })}
@@ -363,19 +461,36 @@ function WalkthroughSectionView({ entry, title, running, notes, onOpenNote }: Se
       ) : (
         <>
           {section.conclusion && (
-            <div className="rounded-lg border-l-4 border-primary bg-theme-primary-soft/40 px-4 py-3">
-              <span className="text-sm font-semibold">{t('homework.walkthrough.conclusion')}</span>
-              <RichText text={section.conclusion} format="markdown" paragraphClassName="text-[15px] leading-relaxed" />
+            <div className="rounded-lg border-l-4 border-primary bg-theme-primary-soft/40 px-4 py-3 lecture:rounded-none lecture:border-l-[3px] lecture:bg-transparent lecture:py-1 lab:rounded-none lab:border lab:border-l-2 lab:border-border lab:border-l-primary">
+              <span className="text-sm font-semibold lecture:block lecture:text-xs lecture:font-normal lecture:tracking-[0.14em] lecture:text-muted-foreground lab:font-mono lab:text-[11px] lab:uppercase lab:tracking-wider">
+                {t('homework.walkthrough.conclusion')}
+              </span>
+              <RichText
+                text={section.conclusion}
+                format="markdown"
+                paragraphClassName="text-[15px] leading-relaxed lecture:text-[17px] lecture:text-foreground"
+              />
             </div>
           )}
-          <RichText text={section.body} format="markdown" className="min-w-0 space-y-3" paragraphClassName="text-[15px] leading-[1.8]" />
+          <RichText
+            text={section.body}
+            format="markdown"
+            className="min-w-0 space-y-3"
+            paragraphClassName="text-[15px] leading-[1.8] lecture:text-[17px] lecture:leading-[1.9]"
+          />
           {section.suggestions && section.suggestions.length > 0 && (
             <div className="space-y-2">
-              <h3 className="text-base font-semibold">{t('homework.walkthrough.suggestions')}</h3>
+              <h3 className="font-heading text-base font-semibold lecture:text-lg lecture:font-bold">
+                {t('homework.walkthrough.suggestions')}
+              </h3>
               <ul className="list-outside list-disc space-y-1.5 pl-5">
                 {section.suggestions.map((item, index) => (
                   <li key={index}>
-                    <RichText text={item} format="markdown" paragraphClassName="text-[15px] leading-relaxed" />
+                    <RichText
+                      text={item}
+                      format="markdown"
+                      paragraphClassName="text-[15px] leading-relaxed"
+                    />
                   </li>
                 ))}
               </ul>
@@ -393,7 +508,7 @@ function WalkthroughSectionView({ entry, title, running, notes, onOpenNote }: Se
               key={note.id}
               type="button"
               onClick={() => onOpenNote(note)}
-              className="focus-ring inline-flex max-w-[16rem] items-center gap-1 truncate rounded-full border px-2.5 py-0.5 text-xs hover:bg-muted"
+              className="focus-ring inline-flex max-w-[16rem] items-center gap-1 truncate rounded-full border px-2.5 py-0.5 text-xs transition-colors duration-150 hover:bg-muted lab:rounded-sm"
               title={note.title}
             >
               <MessageSquareText className="h-3 w-3 shrink-0" aria-hidden />
@@ -409,8 +524,10 @@ function WalkthroughSectionView({ entry, title, running, notes, onOpenNote }: Se
 function QuestionPrompt({ question }: { question: HomeworkQuestion }): JSX.Element {
   const { t } = useTranslation()
   return (
-    <details className="rounded-lg border border-border/70 bg-muted/20 px-4 py-2 text-sm">
-      <summary className="cursor-pointer select-none text-muted-foreground">{t('homework.walkthrough.showQuestion')}</summary>
+    <details className="rounded-lg border border-border/70 bg-muted/20 px-4 py-2 text-sm lecture:rounded-none lecture:border-x-0 lecture:bg-transparent lecture:px-0 lab:rounded-none">
+      <summary className="cursor-pointer select-none text-muted-foreground">
+        {t('homework.walkthrough.showQuestion')}
+      </summary>
       <RichText
         text={formatHomeworkQuestion(question.prompt)}
         format="markdown"
@@ -424,19 +541,33 @@ function QuestionPrompt({ question }: { question: HomeworkQuestion }): JSX.Eleme
 function ChecksView({ checks }: { checks: LinearSystemCheck[] }): JSX.Element {
   const { t } = useTranslation()
   const wrong = checks.filter((check) => !check.rrefMatches || !check.kindMatches)
-  const kindLabel = (kind: LinearSystemCheck['computedKind']) => t(`homework.walkthrough.kind.${kind}` as TranslationKey)
+  const kindLabel = (kind: LinearSystemCheck['computedKind']) =>
+    t(`homework.walkthrough.kind.${kind}` as TranslationKey)
   return (
     <div className="space-y-2 text-sm">
       {wrong.length === 0 ? (
-        <p className="flex items-start gap-2 text-muted-foreground">
-          <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-400" aria-hidden />
-          {t('homework.walkthrough.checkOk', { labels: checks.map((check) => check.label).join(t('homework.walkthrough.listSeparator')) })}
+        <p className="flex items-start gap-2 text-muted-foreground lecture:border-y lecture:py-2 lecture:text-emerald-700 lab:items-center lab:border lab:border-dashed lab:border-emerald-600/45 lab:px-3 lab:py-2 lab:font-mono lab:text-xs lab:text-emerald-700 dark:lecture:text-emerald-400 dark:lab:text-emerald-400">
+          <ShieldCheck
+            className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600 lab:mt-0 lab:h-3.5 lab:w-3.5 dark:text-emerald-400"
+            aria-hidden
+          />
+          {t('homework.walkthrough.checkOk', {
+            labels: checks
+              .map((check) => check.label)
+              .join(t('homework.walkthrough.listSeparator')),
+          })}
         </p>
       ) : (
         wrong.map((check) => (
-          <div key={check.label} className="space-y-2 rounded-lg border border-amber-500/50 bg-amber-500/5 p-3">
+          <div
+            key={check.label}
+            className="space-y-2 rounded-lg border border-amber-500/50 bg-amber-500/5 p-3 lecture:rounded-none lecture:border-x-0 lecture:bg-transparent lecture:px-0 lab:rounded-none"
+          >
             <p className="flex items-start gap-2">
-              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" aria-hidden />
+              <AlertTriangle
+                className="mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400"
+                aria-hidden
+              />
               <span>
                 {!check.rrefMatches
                   ? t('homework.walkthrough.checkRref', { label: check.label })

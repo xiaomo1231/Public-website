@@ -86,10 +86,7 @@ export function HomeworkPage(): JSX.Element {
     }
   }, [load])
 
-  const index = useMemo(
-    () => questions.findIndex((q) => q.id === activeId),
-    [questions, activeId],
-  )
+  const index = useMemo(() => questions.findIndex((q) => q.id === activeId), [questions, activeId])
   const active = index >= 0 ? questions[index] : (questions[0] ?? null)
 
   // Keep the current question's chip visible in the horizontal navigator.
@@ -152,7 +149,7 @@ export function HomeworkPage(): JSX.Element {
               <div
                 role="group"
                 aria-label={t('homework.mode.label')}
-                className="inline-flex items-center gap-1 rounded-full border border-border/70 bg-muted/30 p-1"
+                className="inline-flex items-center gap-1 rounded-full border border-border/70 bg-muted/30 p-1 lab:gap-0.5 lab:rounded-md lab:bg-card lab:p-0.5"
               >
                 <Button
                   variant={view === 'questions' && mode === 'practice' ? 'default' : 'ghost'}
@@ -190,7 +187,11 @@ export function HomeworkPage(): JSX.Element {
             )}
             {set?.status === 'ready' && questions.length > 0 && (
               <Button variant="outline" onClick={() => void retrySet()} disabled={retrying}>
-                {retrying ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+                {retrying ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <RefreshCw className="h-4 w-4" />
+                )}
                 {t('homework.reanalyze')}
               </Button>
             )}
@@ -230,7 +231,11 @@ export function HomeworkPage(): JSX.Element {
             description={set.errorMessage ?? t('homework.noQuestions')}
             action={
               <Button variant="outline" onClick={() => void retrySet()} disabled={retrying}>
-                {retrying ? <Loader2 className="h-4 w-4 animate-spin" /> : <RotateCcw className="h-4 w-4" />}
+                {retrying ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <RotateCcw className="h-4 w-4" />
+                )}
                 {t('homework.retryAnalyze')}
               </Button>
             }
@@ -240,7 +245,9 @@ export function HomeworkPage(): JSX.Element {
             {summary && (
               <Card className="border-border/70">
                 <CardHeader>
-                  <CardTitle className="text-base">{t('homework.reanalysis.title')}</CardTitle>
+                  <CardTitle className="text-base lecture:font-heading lecture:font-bold">
+                    {t('homework.reanalysis.title')}
+                  </CardTitle>
                   <CardDescription>
                     {t('homework.reanalysis.summary', {
                       matched: summary.matched,
@@ -285,8 +292,8 @@ export function HomeworkPage(): JSX.Element {
                 {/* Compact question navigator: a single horizontal row so the
                     question and the working area are not squeezed into a third
                     column. The active chip scrolls itself into view. */}
-                <Card className="border-border/70">
-                  <CardContent className="flex items-center gap-2 p-2 sm:p-3">
+                <Card className="border-border/70 lecture:rounded-none lecture:border-x-0 lecture:bg-transparent lecture:shadow-none">
+                  <CardContent className="flex items-center gap-2 p-2 lecture:px-0 lab:p-1.5 sm:p-3 sm:lecture:px-0 sm:lab:p-1.5">
                     <Button
                       variant="outline"
                       size="sm"
@@ -318,9 +325,9 @@ export function HomeworkPage(): JSX.Element {
                                 aria-label={`${position + 1}. ${question.number ?? question.prompt}`}
                                 title={question.number ?? question.prompt}
                                 className={cn(
-                                  'focus-ring grid h-9 min-w-9 place-items-center rounded-full px-2.5 text-xs font-medium transition-colors',
+                                  'focus-ring grid h-9 min-w-9 place-items-center rounded-full px-2.5 text-xs font-medium transition-colors duration-150 lab:h-8 lab:rounded-sm motion-safe:active:scale-[0.97]',
                                   isActive
-                                    ? 'bg-theme-primary-soft text-foreground'
+                                    ? 'bg-theme-primary-soft text-foreground lecture:rounded-none lecture:bg-transparent lecture:text-foreground lecture:shadow-[inset_0_-2px_0_hsl(var(--primary))] lab:shadow-[inset_0_-2px_0_hsl(var(--primary))]'
                                     : 'text-muted-foreground hover:bg-muted hover:text-foreground',
                                 )}
                               >
@@ -347,7 +354,9 @@ export function HomeworkPage(): JSX.Element {
                       size="sm"
                       className="shrink-0"
                       onClick={() =>
-                        setActiveId(questions[Math.min(questions.length - 1, index + 1)]?.id ?? null)
+                        setActiveId(
+                          questions[Math.min(questions.length - 1, index + 1)]?.id ?? null,
+                        )
                       }
                       disabled={index >= questions.length - 1}
                     >
@@ -372,12 +381,17 @@ export function HomeworkPage(): JSX.Element {
             {retired.length > 0 && (
               <Card>
                 <CardHeader>
-                  <CardTitle className="text-base">{t('homework.retired.title')}</CardTitle>
+                  <CardTitle className="text-base lecture:font-heading lecture:font-bold">
+                    {t('homework.retired.title')}
+                  </CardTitle>
                   <CardDescription>{t('homework.retired.hint')}</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-3">
                   {retired.map((question) => (
-                    <div key={question.id} className="space-y-2 rounded-lg border border-border/70 p-3">
+                    <div
+                      key={question.id}
+                      className="space-y-2 rounded-lg border border-border/70 p-3"
+                    >
                       <RichText
                         text={formatHomeworkQuestion(question.prompt)}
                         format="markdown"
@@ -394,7 +408,11 @@ export function HomeworkPage(): JSX.Element {
                         </p>
                       )}
                       <div className="flex flex-wrap gap-2">
-                        <Button size="sm" variant="outline" onClick={() => void restore(question.id)}>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => void restore(question.id)}
+                        >
                           {t('homework.retired.restore')}
                         </Button>
                         <Button

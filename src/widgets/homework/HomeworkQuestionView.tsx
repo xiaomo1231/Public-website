@@ -21,7 +21,11 @@ import type { SourceReference } from '@/entities/courseAnalysis/types'
 import { formatHomeworkQuestion } from '@/entities/homework/formatQuestion'
 import { suggestLinearAlgebraMethod } from '@/entities/homework/linearAlgebraGuide'
 import { isDeferredProfessorAnswer } from '@/entities/homework/answerMatching'
-import { answerCheckInputHash, answerReference, type HomeworkAnswerCheck } from '@/entities/homework/answerCheck'
+import {
+  answerCheckInputHash,
+  answerReference,
+  type HomeworkAnswerCheck,
+} from '@/entities/homework/answerCheck'
 import type { HomeworkService } from '@/services/homeworkService'
 import { Badge } from '@/shared/ui/Badge'
 import { Button } from '@/shared/ui/Button'
@@ -59,8 +63,8 @@ export function HomeworkQuestionView({
   answerDocumentId,
 }: HomeworkQuestionViewProps): JSX.Element {
   const { t, language } = useTranslation()
-  const deferredAnswer = question.answerStatus === 'matched' &&
-    isDeferredProfessorAnswer(question.answerText ?? '')
+  const deferredAnswer =
+    question.answerStatus === 'matched' && isDeferredProfessorAnswer(question.answerText ?? '')
 
   const [draft, setDraft] = useState(question.draftText)
   const [saved, setSaved] = useState(true)
@@ -72,19 +76,24 @@ export function HomeworkQuestionView({
   const [generationError, setGenerationError] = useState(question.generationError)
   const [messages, setMessages] = useState<HomeworkMessage[]>(question.messages)
   const [question_, setQuestionText] = useState('')
-  const [speechLanguageOverride, setSpeechLanguageOverride] = useState<'en-US' | 'zh-CN' | null>(null)
+  const [speechLanguageOverride, setSpeechLanguageOverride] = useState<'en-US' | 'zh-CN' | null>(
+    null,
+  )
   const speechLanguage = speechLanguageOverride ?? (language === 'zh-CN' ? 'zh-CN' : 'en-US')
   const speech = useSpeechInput(speechLanguage, (text) => {
     setQuestionText((previous) => appendSpeechText(previous, text))
   })
-  const speechActive = speech.state === 'starting' || speech.state === 'listening' || speech.state === 'stopping'
+  const speechActive =
+    speech.state === 'starting' || speech.state === 'listening' || speech.state === 'stopping'
   const [asking, setAsking] = useState(false)
   const [askError, setAskError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [actionError, setActionError] = useState<string | null>(null)
   const [checking, setChecking] = useState(false)
   const [checkError, setCheckError] = useState<string | null>(null)
-  const [answerCheck, setAnswerCheck] = useState<HomeworkAnswerCheck | null>(question.answerCheck ?? null)
+  const [answerCheck, setAnswerCheck] = useState<HomeworkAnswerCheck | null>(
+    question.answerCheck ?? null,
+  )
   const [notice, setNotice] = useState<string | null>(null)
   const [sourcePages, setSourcePages] = useState<Array<{ page: number; url: string }>>([])
   const [answerPages, setAnswerPages] = useState<Array<{ page: number; url: string }>>([])
@@ -100,9 +109,12 @@ export function HomeworkQuestionView({
   const checkLanguage = language === 'zh-CN' ? 'zh' : 'en'
   // Shown only while the working is unchanged since it was checked; compared
   // under the version the check was produced with (prompt + course subject).
-  const visibleCheck = answerCheck && answerCheck.inputHash ===
-    answerCheckInputHash(question, draft, checkLanguage, answerCheck.promptVersion)
-    ? answerCheck : null
+  const visibleCheck =
+    answerCheck &&
+    answerCheck.inputHash ===
+      answerCheckInputHash(question, draft, checkLanguage, answerCheck.promptVersion)
+      ? answerCheck
+      : null
 
   function focusField(field: HTMLInputElement | HTMLTextAreaElement | null): void {
     field?.scrollIntoView?.({ block: 'center' })
@@ -112,13 +124,16 @@ export function HomeworkQuestionView({
   useEffect(() => {
     let cancelled = false
     let urls: string[] = []
-    void service.loadQuestionSourcePages(question).then((pages) => {
-      if (cancelled) return
-      urls = pages.map(({ image }) => URL.createObjectURL(image))
-      setSourcePages(pages.map(({ page }, index) => ({ page, url: urls[index]! })))
-    }).catch(() => {
-      // Original PDF remains available through the source link.
-    })
+    void service
+      .loadQuestionSourcePages(question)
+      .then((pages) => {
+        if (cancelled) return
+        urls = pages.map(({ image }) => URL.createObjectURL(image))
+        setSourcePages(pages.map(({ page }, index) => ({ page, url: urls[index]! })))
+      })
+      .catch(() => {
+        // Original PDF remains available through the source link.
+      })
     return () => {
       cancelled = true
       urls.forEach((url) => URL.revokeObjectURL(url))
@@ -126,16 +141,25 @@ export function HomeworkQuestionView({
   }, [question, service])
 
   useEffect(() => {
-    if (mode !== 'review' || !originalAnswerOpen || !answerDocumentId || question.answerStatus !== 'matched') return
+    if (
+      mode !== 'review' ||
+      !originalAnswerOpen ||
+      !answerDocumentId ||
+      question.answerStatus !== 'matched'
+    )
+      return
     let cancelled = false
     let urls: string[] = []
-    void service.loadAnswerSourcePages(question).then((pages) => {
-      if (cancelled) return
-      urls = pages.map(({ image }) => URL.createObjectURL(image))
-      setAnswerPages(pages.map(({ page }, index) => ({ page, url: urls[index]! })))
-    }).catch(() => {
-      // The extracted text and original document link remain available.
-    })
+    void service
+      .loadAnswerSourcePages(question)
+      .then((pages) => {
+        if (cancelled) return
+        urls = pages.map(({ image }) => URL.createObjectURL(image))
+        setAnswerPages(pages.map(({ page }, index) => ({ page, url: urls[index]! })))
+      })
+      .catch(() => {
+        // The extracted text and original document link remain available.
+      })
     return () => {
       cancelled = true
       urls.forEach((url) => URL.revokeObjectURL(url))
@@ -144,12 +168,17 @@ export function HomeworkQuestionView({
 
   useEffect(() => {
     let cancelled = false
-    void service.resolveQuestionSources(question).then((refs) => {
-      if (!cancelled) setDisplaySourceRefs(refs)
-    }).catch(() => {
-      // Keep the saved citation and original-document link available.
-    })
-    return () => { cancelled = true }
+    void service
+      .resolveQuestionSources(question)
+      .then((refs) => {
+        if (!cancelled) setDisplaySourceRefs(refs)
+      })
+      .catch(() => {
+        // Keep the saved citation and original-document link available.
+      })
+    return () => {
+      cancelled = true
+    }
   }, [question, service])
 
   // Debounced draft persistence; also flush when the question unmounts.
@@ -278,46 +307,72 @@ export function HomeworkQuestionView({
      */
     <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
       <div id={questionAnchorId} className="min-w-0 scroll-mt-4 space-y-4 lg:sticky lg:top-4">
-        <Card data-selection-context="homework" data-selection-title={question.number ?? question.documentName}>
-        <CardHeader className="space-y-2">
-          <div className="flex flex-wrap items-center gap-2">
-            <ClipboardList className="h-4 w-4 text-muted-foreground" aria-hidden />
-            <span className="text-xs font-medium text-muted-foreground">{t('homework.title')}</span>
-            {question.number && <Badge variant="outline">{question.number}</Badge>}
-          </div>
-          <RichText
-            text={formatHomeworkQuestion(question.prompt)}
-            format="markdown"
-            className="max-w-[74ch] [&>p]:mb-3"
-            paragraphClassName="text-[16px] leading-[1.75] sm:text-[17px]"
-          />
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <QuestionSource
-            sourceRefs={displaySourceRefs.map((ref) => ({
-              ...ref,
-              ...(ref.quote ? { quote: formatHomeworkQuestion(ref.quote) } : {}),
-            }))}
-            projectId={question.projectId}
-          />
-          {sourcePages.length > 0 && (
-            <details open={displaySourceRefs.some((ref) => ref.quotePending) || /\b(?:figure|diagram|shown|below|network)\b|图|如下图|如图/i.test(question.prompt)}>
-              <summary className="cursor-pointer rounded-lg px-1 py-2 text-sm font-medium text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
-                {t('homework.originalPages')}
-              </summary>
-              <div className="grid gap-4 pt-2 lg:grid-cols-2">
-                {sourcePages.map(({ page, url }) => (
-                  <figure key={page} className="min-w-0 space-y-2">
-                    <figcaption className="text-xs text-muted-foreground">{t('homework.originalPage', { page })}</figcaption>
-                    <a href={url} target="_blank" rel="noreferrer" aria-label={t('homework.openOriginalPage', { page })}>
-                      <img src={url} alt={t('homework.originalPage', { page })} loading="lazy" className="h-auto w-full rounded-lg border border-border object-contain" />
-                    </a>
-                  </figure>
-                ))}
-              </div>
-            </details>
-          )}
-        </CardContent>
+        <Card
+          data-selection-context="homework"
+          data-selection-title={question.number ?? question.documentName}
+        >
+          <CardHeader className="space-y-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <ClipboardList className="h-4 w-4 text-muted-foreground lecture:hidden" aria-hidden />
+              <span className="text-xs font-medium text-muted-foreground lecture:tracking-[0.14em] lab:font-mono lab:text-[11px] lab:uppercase lab:tracking-wider">
+                {t('homework.title')}
+              </span>
+              {question.number && (
+                <Badge variant="outline" className="lab:font-mono">
+                  {question.number}
+                </Badge>
+              )}
+            </div>
+            <RichText
+              text={formatHomeworkQuestion(question.prompt)}
+              format="markdown"
+              className="max-w-[74ch] [&>p]:mb-3"
+              paragraphClassName="text-[16px] leading-[1.75] sm:text-[17px]"
+            />
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <QuestionSource
+              sourceRefs={displaySourceRefs.map((ref) => ({
+                ...ref,
+                ...(ref.quote ? { quote: formatHomeworkQuestion(ref.quote) } : {}),
+              }))}
+              projectId={question.projectId}
+            />
+            {sourcePages.length > 0 && (
+              <details
+                open={
+                  displaySourceRefs.some((ref) => ref.quotePending) ||
+                  /\b(?:figure|diagram|shown|below|network)\b|图|如下图|如图/i.test(question.prompt)
+                }
+              >
+                <summary className="cursor-pointer rounded-lg px-1 py-2 text-sm font-medium text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                  {t('homework.originalPages')}
+                </summary>
+                <div className="grid gap-4 pt-2 lg:grid-cols-2">
+                  {sourcePages.map(({ page, url }) => (
+                    <figure key={page} className="min-w-0 space-y-2">
+                      <figcaption className="text-xs text-muted-foreground">
+                        {t('homework.originalPage', { page })}
+                      </figcaption>
+                      <a
+                        href={url}
+                        target="_blank"
+                        rel="noreferrer"
+                        aria-label={t('homework.openOriginalPage', { page })}
+                      >
+                        <img
+                          src={url}
+                          alt={t('homework.originalPage', { page })}
+                          loading="lazy"
+                          className="h-auto w-full rounded-lg border border-border object-contain"
+                        />
+                      </a>
+                    </figure>
+                  ))}
+                </div>
+              </details>
+            )}
+          </CardContent>
         </Card>
       </div>
 
@@ -345,7 +400,7 @@ export function HomeworkQuestionView({
             solutionRevealed={solutionRevealed}
             onWork={() => focusField(workingRef.current)}
             onAsk={(message) => {
-              setQuestionText((previous) => previous.trim() ? previous : message)
+              setQuestionText((previous) => (previous.trim() ? previous : message))
               focusField(askRef.current)
             }}
           />
@@ -376,8 +431,18 @@ export function HomeworkQuestionView({
                       <figcaption className="text-xs text-muted-foreground">
                         {t('homework.answer.originalPage', { page })}
                       </figcaption>
-                      <a href={url} target="_blank" rel="noreferrer" aria-label={t('homework.answer.openOriginalPage', { page })}>
-                        <img src={url} alt={t('homework.answer.originalPage', { page })} loading="lazy" className="h-auto w-full rounded-lg border border-border object-contain" />
+                      <a
+                        href={url}
+                        target="_blank"
+                        rel="noreferrer"
+                        aria-label={t('homework.answer.openOriginalPage', { page })}
+                      >
+                        <img
+                          src={url}
+                          alt={t('homework.answer.originalPage', { page })}
+                          loading="lazy"
+                          className="h-auto w-full rounded-lg border border-border object-contain"
+                        />
                       </a>
                     </figure>
                   ))}
@@ -387,7 +452,9 @@ export function HomeworkQuestionView({
                 <summary className="cursor-pointer rounded-lg py-2 text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
                   {t('homework.answer.extractedText')}
                 </summary>
-                <p className="pb-2 text-xs text-muted-foreground">{t('homework.answer.extractedTextCaveat')}</p>
+                <p className="pb-2 text-xs text-muted-foreground">
+                  {t('homework.answer.extractedTextCaveat')}
+                </p>
                 <RichText
                   text={question.answerText}
                   format="markdown"
@@ -406,322 +473,421 @@ export function HomeworkQuestionView({
           </details>
         )}
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center justify-between text-base">
-            <span>{t('homework.draft')}</span>
-            <span className={cn('text-xs font-medium text-muted-foreground', saved && 'opacity-70')}>
-              {saved ? t('homework.saved') : '…'}
-            </span>
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <MathField
-            mode="text"
-            multiline
-            subject={project?.subject}
-            fieldRef={workingRef}
-            value={draft}
-            onChange={setDraft}
-            placeholder={t('homework.draftPlaceholder')}
-            rows={5}
-            aria-label={t('homework.draft')}
-            // Working may mix prose and LaTeX; show it rendered when it does.
-            showRenderedPreview
-            {...(availableReference ? { onSubmit: () => void checkDraft() } : {})}
-          />
-          <div className="flex flex-wrap items-center gap-3">
-            <Button type="button" onClick={() => void checkDraft()} disabled={!draft.trim() || checking || !availableReference}>
-              {checking ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <CheckCircle2 className="h-4 w-4" aria-hidden />}
-              {checking ? t('homework.check.checking') : t('homework.check.button')}
-            </Button>
-            {!availableReference && (
-              <span className="text-sm text-muted-foreground">{t('homework.check.noReference')}</span>
-            )}
-          </div>
-          {checkError && <p role="alert" className="text-sm text-destructive">{checkError}</p>}
-          {visibleCheck && (
-            <section aria-label={t('homework.check.result')} className="space-y-3 rounded-lg border border-border/70 bg-muted/20 p-4">
-              <div className="flex flex-wrap items-center gap-2">
-                <Badge variant={visibleCheck.verdict === 'incorrect' ? 'destructive' : 'outline'}>
-                  {t(`homework.check.verdict.${visibleCheck.verdict}`)}
-                </Badge>
-                <span className="text-xs text-muted-foreground">
-                  {visibleCheck.method === 'local' ? t('homework.check.localMethod') : t('homework.check.aiMethod')}
-                  {' · '}{visibleCheck.referenceKind === 'professor' ? t('homework.check.professorReference') : t('homework.check.aiReference')}
-                </span>
-              </div>
-              {visibleCheck.similarityPercent !== undefined && (
-                <p className="text-sm font-medium tabular-nums">
-                  {t('homework.check.similarity')}: {visibleCheck.similarityPercent}%
-                </p>
-              )}
-              <RichText text={visibleCheck.feedback} format="markdown" paragraphClassName="text-sm leading-relaxed" />
-              {visibleCheck.expectedAnswer && (
-                <p className="text-sm">{t('homework.check.expected')}: <span className="font-medium">{visibleCheck.expectedAnswer}</span></p>
-              )}
-              {visibleCheck.matchedPoints && visibleCheck.matchedPoints.length > 0 && (
-                <div className="space-y-1 text-sm">
-                  <p className="font-medium">{t('homework.check.matchedPoints')}</p>
-                  <ul className="list-disc space-y-1 pl-5">{visibleCheck.matchedPoints.map((point, index) => <li key={index}>{point}</li>)}</ul>
-                </div>
-              )}
-              {visibleCheck.missingPoints && visibleCheck.missingPoints.length > 0 && (
-                <div className="space-y-1 text-sm">
-                  <p className="font-medium">{t('homework.check.missingPoints')}</p>
-                  <ul className="list-disc space-y-1 pl-5">{visibleCheck.missingPoints.map((point, index) => <li key={index}>{point}</li>)}</ul>
-                </div>
-              )}
-              <p className="text-xs leading-relaxed text-muted-foreground">
-                {visibleCheck.method === 'ai' ? t('homework.check.aiDisclaimer') : t('homework.check.localDisclaimer')}
-              </p>
-            </section>
-          )}
-        </CardContent>
-      </Card>
-
-      <div className="flex flex-wrap gap-2">
-        <Button type="button" variant="outline" onClick={() => void showNextHint()} disabled={busy}>
-          <Lightbulb className="h-4 w-4" />
-          {revealed === 0 ? t('homework.hint') : t('homework.nextHint')}
-        </Button>
-        <Button
-          type="button"
-          variant={solutionRevealed ? 'ghost' : 'outline'}
-          onClick={() => (solutionRevealed ? setSolutionRevealed(false) : void revealSolution())}
-          disabled={busy || !solution}
-        >
-          {solutionRevealed ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-          {solutionRevealed ? t('homework.hideAnswer') : t('homework.showAnswer')}
-        </Button>
-        <Button type="button" variant="ghost" onClick={() => void regenerate()} disabled={busy || deferredAnswer}>
-          {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <RotateCcw className="h-4 w-4" />}
-          {t('homework.regenerate')}
-        </Button>
-      </div>
-
-      {actionError && (
-        <div className="rounded-lg border border-destructive/40 bg-destructive/5 p-3 text-sm text-destructive">
-          {actionError}
-        </div>
-      )}
-
-      {notice && (
-        <div className="rounded-lg border border-border/70 bg-muted/30 p-3 text-sm text-muted-foreground">
-          {notice}
-        </div>
-      )}
-
-      {preparing && (
-        <Card>
-          <CardContent className="flex items-center gap-2 p-4 text-sm text-muted-foreground">
-            <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
-            {t('homework.preparing')}
-          </CardContent>
-        </Card>
-      )}
-
-      {status === 'failed' && (
-        <Card>
-          <CardContent className="space-y-3 p-4">
-            {deferredAnswer && <p className="text-sm font-medium">{t('homework.answer.deferredTitle')}</p>}
-            <p className="text-sm text-muted-foreground">
-              {deferredAnswer ? t('homework.answer.deferredAnswer') : generationError ?? t('homework.questionFailed')}
-            </p>
-            {!deferredAnswer && <Button type="button" variant="outline" size="sm" onClick={() => void regenerate()} disabled={busy}>
-              {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <RotateCcw className="h-4 w-4" />}
-              {t('homework.retry')}
-            </Button>}
-          </CardContent>
-        </Card>
-      )}
-
-      {hints.length > 0 && (
         <Card>
           <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-base">
-              <Lightbulb className="h-4 w-4 text-muted-foreground" aria-hidden />
-              {t('homework.hintOf', { current: revealed, total: hints.length })}
+            <CardTitle className="flex items-center justify-between font-heading text-base lecture:font-bold">
+              <span>{t('homework.draft')}</span>
+              <span
+                className={cn('text-xs font-medium text-muted-foreground', saved && 'opacity-70')}
+              >
+                {saved ? t('homework.saved') : '…'}
+              </span>
             </CardTitle>
-            {answerDocumentId && (
-              <p className="text-xs text-muted-foreground">
-                {question.answerBased
-                  ? t('homework.answer.aiExplanation')
-                  : t('homework.answer.aiExplanationNotBased')}
-              </p>
-            )}
           </CardHeader>
-          <CardContent className="space-y-2">
-            {/* Hints are AI-authored prose that can contain inline/display
-                LaTeX, so they render through the shared RichText renderer
-                instead of showing raw `$…$` delimiters. */}
-            {hints.slice(0, revealed).map((hint, index) => (
-              <div key={index} className="rounded-lg bg-muted/40 p-3">
-                <RichText
-                  text={hint}
-                  format="markdown"
-                  paragraphClassName="text-sm leading-relaxed text-foreground"
-                />
-              </div>
-            ))}
-            {revealed === 0 && <p className="text-xs text-muted-foreground">{t('homework.hint')}</p>}
-            {!hasMoreHints && <p className="text-xs text-muted-foreground">{t('homework.noMoreHints')}</p>}
-          </CardContent>
-        </Card>
-      )}
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-base">
-            <MessageCircle className="h-4 w-4 text-muted-foreground" aria-hidden />
-            {t('homework.askPanelTitle')}
-          </CardTitle>
-          <p className="text-xs text-muted-foreground">{t('homework.socraticNote')}</p>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          {messages.length > 0 && (
-            <ul className="space-y-2" aria-label={t('homework.askPanelTitle')}>
-              {messages.map((message) => (
-                <li
-                  key={message.id}
-                  className={cn(
-                    'max-w-[85%] rounded-xl px-3 py-2 text-sm leading-relaxed',
-                    message.role === 'student'
-                      ? 'ml-auto bg-primary-strong text-primary-foreground'
-                      : 'bg-muted/50 text-foreground',
-                  )}
-                >
-                  <span className="sr-only">
-                    {message.role === 'student' ? t('homework.you') : t('homework.tutor')}:{' '}
-                  </span>
-                  {message.role === 'assistant' ? (
-                    <RichText
-                      text={message.content}
-                      format="markdown"
-                      paragraphClassName="text-sm leading-relaxed"
-                    />
-                  ) : (
-                    message.content
-                  )}
-                </li>
-              ))}
-            </ul>
-          )}
-          {asking && (
-            <p role="status" className="flex items-center gap-2 text-xs text-muted-foreground">
-              <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
-              {t('homework.thinking')}
-            </p>
-          )}
-          {askError && <p role="alert" className="text-sm text-destructive">{askError}</p>}
-          <div className="space-y-2">
+          <CardContent className="space-y-4">
             <MathField
               mode="text"
               multiline
               subject={project?.subject}
-              fieldRef={askRef}
-              value={question_}
-              onChange={setQuestionText}
-              placeholder={t('homework.askPlaceholder')}
-              rows={2}
-              aria-label={t('homework.askTitle')}
-              onKeyDown={(event) => {
-                if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) {
-                  event.preventDefault()
-                  void send()
-                }
-              }}
+              fieldRef={workingRef}
+              value={draft}
+              onChange={setDraft}
+              placeholder={t('homework.draftPlaceholder')}
+              rows={5}
+              aria-label={t('homework.draft')}
+              // Working may mix prose and LaTeX; show it rendered when it does.
+              showRenderedPreview
+              {...(availableReference ? { onSubmit: () => void checkDraft() } : {})}
             />
-            <div className="flex flex-wrap items-center gap-2">
-              <label className="sr-only" htmlFor={`homework-speech-language-${question.id}`}>
-                {t('homework.speechLanguage')}
-              </label>
-              <select
-                id={`homework-speech-language-${question.id}`}
-                className="h-9 rounded-full border border-input bg-background px-3 text-sm focus-ring disabled:opacity-50"
-                value={speechLanguage}
-                onChange={(event) => {
-                  speech.cancel()
-                  setSpeechLanguageOverride(event.target.value as 'en-US' | 'zh-CN')
-                }}
-                disabled={!speech.supported || asking}
-              >
-                <option value="en-US">{t('homework.speechEnglish')}</option>
-                <option value="zh-CN">{t('homework.speechChinese')}</option>
-              </select>
+            <div className="flex flex-wrap items-center gap-3">
               <Button
                 type="button"
-                variant="outline"
-                onClick={() => speechActive ? speech.stop() : speech.start()}
-                disabled={!speech.supported || asking || speech.state === 'stopping'}
-                aria-pressed={speechActive}
+                onClick={() => void checkDraft()}
+                disabled={!draft.trim() || checking || !availableReference}
               >
-                {speechActive ? <MicOff aria-hidden /> : <Mic aria-hidden />}
-                {speechActive ? t('homework.speechStop') : t('homework.speechStart')}
+                {checking ? (
+                  <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+                ) : (
+                  <CheckCircle2 className="h-4 w-4" aria-hidden />
+                )}
+                {checking ? t('homework.check.checking') : t('homework.check.button')}
               </Button>
-              <Button type="button" onClick={() => void send()} disabled={asking || speechActive || !question_.trim()}>
-                {asking ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <Send className="h-4 w-4" aria-hidden />}
-                {t('homework.send')}
-              </Button>
+              {!availableReference && (
+                <span className="text-sm text-muted-foreground">
+                  {t('homework.check.noReference')}
+                </span>
+              )}
             </div>
-          </div>
-          {!speech.supported && <p className="text-xs text-muted-foreground">{t('homework.speechUnsupported')}</p>}
-          {speech.supported && (
-            <p role="status" aria-live="polite" className={cn('text-xs', speech.error ? 'text-destructive' : 'text-muted-foreground')}>
-              {speech.error
-                ? t(`homework.speechError.${speech.error}`)
-                : speech.state === 'starting'
-                  ? t('homework.speechStarting')
-                  : speech.state === 'listening'
-                    ? t('homework.speechListening')
-                    : speech.state === 'stopping'
-                      ? t('homework.speechStopping')
-                      : t('homework.speechReview')}
-            </p>
-          )}
-        </CardContent>
-      </Card>
-
-      {solutionRevealed && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-base">
-              <Eye className="h-4 w-4 text-muted-foreground" aria-hidden />
-              {t('homework.solutionTitle')}
-            </CardTitle>
-            <p className="text-xs text-muted-foreground">{t('homework.aiGenerated')}</p>
-            {answerDocumentId && (
-              <p className="text-xs text-muted-foreground">
-                {question.answerBased
-                  ? t('homework.answer.aiExplanation')
-                  : t('homework.answer.aiExplanationNotBased')}
+            {checkError && (
+              <p role="alert" className="text-sm text-destructive">
+                {checkError}
               </p>
             )}
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {solution ? (
-              <RichText text={solution} format="markdown" paragraphClassName="text-[16px] leading-[1.7]" />
-            ) : (
-              <p className="text-sm text-muted-foreground">{t('homework.noAnswer')}</p>
-            )}
-            {question.previousSolution && (
-              <details className="rounded-lg border border-border/60 bg-muted/20 p-3">
-                <summary className="cursor-pointer text-xs font-medium text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
-                  {t('homework.answer.previousSolution')}
-                </summary>
-                <div className="pt-2">
-                  <RichText
-                    text={question.previousSolution}
-                    format="markdown"
-                    paragraphClassName="text-[14px] leading-relaxed text-muted-foreground"
-                  />
+            {visibleCheck && (
+              <section
+                aria-label={t('homework.check.result')}
+                className="space-y-3 rounded-lg border border-border/70 bg-muted/20 p-4"
+              >
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge variant={visibleCheck.verdict === 'incorrect' ? 'destructive' : 'outline'}>
+                    {t(`homework.check.verdict.${visibleCheck.verdict}`)}
+                  </Badge>
+                  <span className="text-xs text-muted-foreground">
+                    {visibleCheck.method === 'local'
+                      ? t('homework.check.localMethod')
+                      : t('homework.check.aiMethod')}
+                    {' · '}
+                    {visibleCheck.referenceKind === 'professor'
+                      ? t('homework.check.professorReference')
+                      : t('homework.check.aiReference')}
+                  </span>
                 </div>
-              </details>
+                {visibleCheck.similarityPercent !== undefined && (
+                  <p className="text-sm font-medium tabular-nums">
+                    {t('homework.check.similarity')}: {visibleCheck.similarityPercent}%
+                  </p>
+                )}
+                <RichText
+                  text={visibleCheck.feedback}
+                  format="markdown"
+                  paragraphClassName="text-sm leading-relaxed"
+                />
+                {visibleCheck.expectedAnswer && (
+                  <p className="text-sm">
+                    {t('homework.check.expected')}:{' '}
+                    <span className="font-medium">{visibleCheck.expectedAnswer}</span>
+                  </p>
+                )}
+                {visibleCheck.matchedPoints && visibleCheck.matchedPoints.length > 0 && (
+                  <div className="space-y-1 text-sm">
+                    <p className="font-medium">{t('homework.check.matchedPoints')}</p>
+                    <ul className="list-disc space-y-1 pl-5">
+                      {visibleCheck.matchedPoints.map((point, index) => (
+                        <li key={index}>{point}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                {visibleCheck.missingPoints && visibleCheck.missingPoints.length > 0 && (
+                  <div className="space-y-1 text-sm">
+                    <p className="font-medium">{t('homework.check.missingPoints')}</p>
+                    <ul className="list-disc space-y-1 pl-5">
+                      {visibleCheck.missingPoints.map((point, index) => (
+                        <li key={index}>{point}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                <p className="text-xs leading-relaxed text-muted-foreground">
+                  {visibleCheck.method === 'ai'
+                    ? t('homework.check.aiDisclaimer')
+                    : t('homework.check.localDisclaimer')}
+                </p>
+              </section>
             )}
           </CardContent>
         </Card>
-      )}
 
+        <div className="flex flex-wrap gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => void showNextHint()}
+            disabled={busy}
+          >
+            <Lightbulb className="h-4 w-4" />
+            {revealed === 0 ? t('homework.hint') : t('homework.nextHint')}
+          </Button>
+          <Button
+            type="button"
+            variant={solutionRevealed ? 'ghost' : 'outline'}
+            onClick={() => (solutionRevealed ? setSolutionRevealed(false) : void revealSolution())}
+            disabled={busy || !solution}
+          >
+            {solutionRevealed ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+            {solutionRevealed ? t('homework.hideAnswer') : t('homework.showAnswer')}
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            onClick={() => void regenerate()}
+            disabled={busy || deferredAnswer}
+          >
+            {busy ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <RotateCcw className="h-4 w-4" />
+            )}
+            {t('homework.regenerate')}
+          </Button>
+        </div>
+
+        {actionError && (
+          <div className="rounded-lg border border-destructive/40 bg-destructive/5 p-3 text-sm text-destructive">
+            {actionError}
+          </div>
+        )}
+
+        {notice && (
+          <div className="rounded-lg border border-border/70 bg-muted/30 p-3 text-sm text-muted-foreground">
+            {notice}
+          </div>
+        )}
+
+        {preparing && (
+          <Card>
+            <CardContent className="flex items-center gap-2 p-4 text-sm text-muted-foreground">
+              <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+              {t('homework.preparing')}
+            </CardContent>
+          </Card>
+        )}
+
+        {status === 'failed' && (
+          <Card>
+            <CardContent className="space-y-3 p-4">
+              {deferredAnswer && (
+                <p className="text-sm font-medium">{t('homework.answer.deferredTitle')}</p>
+              )}
+              <p className="text-sm text-muted-foreground">
+                {deferredAnswer
+                  ? t('homework.answer.deferredAnswer')
+                  : (generationError ?? t('homework.questionFailed'))}
+              </p>
+              {!deferredAnswer && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => void regenerate()}
+                  disabled={busy}
+                >
+                  {busy ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <RotateCcw className="h-4 w-4" />
+                  )}
+                  {t('homework.retry')}
+                </Button>
+              )}
+            </CardContent>
+          </Card>
+        )}
+
+        {hints.length > 0 && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 font-heading text-base lecture:font-bold">
+                <Lightbulb className="h-4 w-4 text-muted-foreground" aria-hidden />
+                {t('homework.hintOf', { current: revealed, total: hints.length })}
+              </CardTitle>
+              {answerDocumentId && (
+                <p className="text-xs text-muted-foreground">
+                  {question.answerBased
+                    ? t('homework.answer.aiExplanation')
+                    : t('homework.answer.aiExplanationNotBased')}
+                </p>
+              )}
+            </CardHeader>
+            <CardContent className="space-y-2">
+              {/* Hints are AI-authored prose that can contain inline/display
+                LaTeX, so they render through the shared RichText renderer
+                instead of showing raw `$…$` delimiters. */}
+              {hints.slice(0, revealed).map((hint, index) => (
+                <div key={index} className="rounded-lg bg-muted/40 p-3">
+                  <RichText
+                    text={hint}
+                    format="markdown"
+                    paragraphClassName="text-sm leading-relaxed text-foreground"
+                  />
+                </div>
+              ))}
+              {revealed === 0 && (
+                <p className="text-xs text-muted-foreground">{t('homework.hint')}</p>
+              )}
+              {!hasMoreHints && (
+                <p className="text-xs text-muted-foreground">{t('homework.noMoreHints')}</p>
+              )}
+            </CardContent>
+          </Card>
+        )}
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 font-heading text-base lecture:font-bold">
+              <MessageCircle className="h-4 w-4 text-muted-foreground" aria-hidden />
+              {t('homework.askPanelTitle')}
+            </CardTitle>
+            <p className="text-xs text-muted-foreground">{t('homework.socraticNote')}</p>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {messages.length > 0 && (
+              <ul className="space-y-2" aria-label={t('homework.askPanelTitle')}>
+                {messages.map((message) => (
+                  <li
+                    key={message.id}
+                    className={cn(
+                      'max-w-[85%] rounded-xl px-3 py-2 text-sm leading-relaxed',
+                      message.role === 'student'
+                        ? 'ml-auto bg-primary-strong text-primary-foreground'
+                        : 'bg-muted/50 text-foreground',
+                    )}
+                  >
+                    <span className="sr-only">
+                      {message.role === 'student' ? t('homework.you') : t('homework.tutor')}:{' '}
+                    </span>
+                    {message.role === 'assistant' ? (
+                      <RichText
+                        text={message.content}
+                        format="markdown"
+                        paragraphClassName="text-sm leading-relaxed"
+                      />
+                    ) : (
+                      message.content
+                    )}
+                  </li>
+                ))}
+              </ul>
+            )}
+            {asking && (
+              <p role="status" className="flex items-center gap-2 text-xs text-muted-foreground">
+                <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+                {t('homework.thinking')}
+              </p>
+            )}
+            {askError && (
+              <p role="alert" className="text-sm text-destructive">
+                {askError}
+              </p>
+            )}
+            <div className="space-y-2">
+              <MathField
+                mode="text"
+                multiline
+                subject={project?.subject}
+                fieldRef={askRef}
+                value={question_}
+                onChange={setQuestionText}
+                placeholder={t('homework.askPlaceholder')}
+                rows={2}
+                aria-label={t('homework.askTitle')}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) {
+                    event.preventDefault()
+                    void send()
+                  }
+                }}
+              />
+              <div className="flex flex-wrap items-center gap-2">
+                <label className="sr-only" htmlFor={`homework-speech-language-${question.id}`}>
+                  {t('homework.speechLanguage')}
+                </label>
+                <select
+                  id={`homework-speech-language-${question.id}`}
+                  className="focus-ring h-9 rounded-full border border-input bg-background px-3 text-sm disabled:opacity-50"
+                  value={speechLanguage}
+                  onChange={(event) => {
+                    speech.cancel()
+                    setSpeechLanguageOverride(event.target.value as 'en-US' | 'zh-CN')
+                  }}
+                  disabled={!speech.supported || asking}
+                >
+                  <option value="en-US">{t('homework.speechEnglish')}</option>
+                  <option value="zh-CN">{t('homework.speechChinese')}</option>
+                </select>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => (speechActive ? speech.stop() : speech.start())}
+                  disabled={!speech.supported || asking || speech.state === 'stopping'}
+                  aria-pressed={speechActive}
+                >
+                  {speechActive ? <MicOff aria-hidden /> : <Mic aria-hidden />}
+                  {speechActive ? t('homework.speechStop') : t('homework.speechStart')}
+                </Button>
+                <Button
+                  type="button"
+                  onClick={() => void send()}
+                  disabled={asking || speechActive || !question_.trim()}
+                >
+                  {asking ? (
+                    <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+                  ) : (
+                    <Send className="h-4 w-4" aria-hidden />
+                  )}
+                  {t('homework.send')}
+                </Button>
+              </div>
+            </div>
+            {!speech.supported && (
+              <p className="text-xs text-muted-foreground">{t('homework.speechUnsupported')}</p>
+            )}
+            {speech.supported && (
+              <p
+                role="status"
+                aria-live="polite"
+                className={cn(
+                  'text-xs',
+                  speech.error ? 'text-destructive' : 'text-muted-foreground',
+                )}
+              >
+                {speech.error
+                  ? t(`homework.speechError.${speech.error}`)
+                  : speech.state === 'starting'
+                    ? t('homework.speechStarting')
+                    : speech.state === 'listening'
+                      ? t('homework.speechListening')
+                      : speech.state === 'stopping'
+                        ? t('homework.speechStopping')
+                        : t('homework.speechReview')}
+              </p>
+            )}
+          </CardContent>
+        </Card>
+
+        {solutionRevealed && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 font-heading text-base lecture:font-bold">
+                <Eye className="h-4 w-4 text-muted-foreground" aria-hidden />
+                {t('homework.solutionTitle')}
+              </CardTitle>
+              <p className="text-xs text-muted-foreground">{t('homework.aiGenerated')}</p>
+              {answerDocumentId && (
+                <p className="text-xs text-muted-foreground">
+                  {question.answerBased
+                    ? t('homework.answer.aiExplanation')
+                    : t('homework.answer.aiExplanationNotBased')}
+                </p>
+              )}
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {solution ? (
+                <RichText
+                  text={solution}
+                  format="markdown"
+                  paragraphClassName="text-[16px] leading-[1.7]"
+                />
+              ) : (
+                <p className="text-sm text-muted-foreground">{t('homework.noAnswer')}</p>
+              )}
+              {question.previousSolution && (
+                <details className="rounded-lg border border-border/60 bg-muted/20 p-3">
+                  <summary className="cursor-pointer text-xs font-medium text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                    {t('homework.answer.previousSolution')}
+                  </summary>
+                  <div className="pt-2">
+                    <RichText
+                      text={question.previousSolution}
+                      format="markdown"
+                      paragraphClassName="text-[14px] leading-relaxed text-muted-foreground"
+                    />
+                  </div>
+                </details>
+              )}
+            </CardContent>
+          </Card>
+        )}
       </div>
     </div>
   )

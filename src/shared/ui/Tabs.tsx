@@ -23,6 +23,8 @@ export const TabsList = forwardRef<
       className={cn(
         // Scrolls inside itself on narrow screens instead of widening the page.
         'group/tabs relative inline-flex h-10 max-w-full items-center justify-start gap-1 overflow-x-auto overflow-y-hidden rounded-lg border border-border/70 bg-muted/60 p-1 text-muted-foreground',
+        // Lecture: plain text tabs over a rule, the active one underlined.
+        'lecture:gap-5 lecture:rounded-none lecture:border-0 lecture:border-b lecture:bg-transparent lecture:p-0',
         className,
       )}
       {...props}
@@ -31,7 +33,10 @@ export const TabsList = forwardRef<
       <span
         aria-hidden
         data-animate={animate}
-        className={cn('slide-indicator rounded-md bg-card shadow-soft', !ready && 'hidden')}
+        className={cn(
+          'slide-indicator rounded-md bg-card shadow-soft lecture:rounded-none lecture:border-b-2 lecture:border-primary lecture:bg-transparent lecture:shadow-none',
+          !ready && 'hidden',
+        )}
         style={style}
       />
       {children}
@@ -47,7 +52,7 @@ export const TabsTrigger = forwardRef<
   <TabsPrimitive.Trigger
     ref={ref}
     className={cn(
-      'relative inline-flex items-center justify-center gap-1.5 whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium ring-offset-background transition-colors duration-200 hover:text-foreground focus-ring disabled:pointer-events-none disabled:opacity-50 data-[state=active]:bg-card data-[state=active]:text-foreground data-[state=active]:shadow-soft group-data-[indicator=ready]/tabs:data-[state=active]:bg-transparent group-data-[indicator=ready]/tabs:data-[state=active]:shadow-none',
+      'focus-ring relative inline-flex items-center justify-center gap-1.5 whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium ring-offset-background transition-colors duration-200 hover:text-foreground disabled:pointer-events-none disabled:opacity-50 data-[state=active]:bg-card data-[state=active]:text-foreground data-[state=active]:shadow-soft group-data-[indicator=ready]/tabs:data-[state=active]:bg-transparent group-data-[indicator=ready]/tabs:data-[state=active]:shadow-none lecture:h-full lecture:rounded-none lecture:px-0.5 lecture:py-0 lecture:data-[state=active]:bg-transparent lecture:data-[state=active]:shadow-none',
       className,
     )}
     {...props}

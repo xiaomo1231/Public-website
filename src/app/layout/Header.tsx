@@ -31,15 +31,9 @@ export interface HeaderProps {
 }
 
 export function Header({ onOpenMobileNav, onExpandNav }: HeaderProps): JSX.Element {
-  const { profile, lock } = useAuth()
   const { t } = useTranslation()
-  const { language, setLanguage } = useUILanguage()
-  const { preference, setPreference } = useThemePreference()
-
-  const ThemeIcon = preference === 'light' ? Sun : preference === 'dark' ? Moon : Monitor
-
   return (
-    <header className="flex h-16 shrink-0 items-center justify-between gap-3 px-4 sm:px-6 lg:px-8">
+    <header className="flex h-16 shrink-0 items-center justify-between gap-3 px-4 lab:h-12 lab:border-b lab:bg-card/80 sm:px-6 lg:px-8">
       <div className="flex min-w-0 items-center gap-2">
         <Button
           variant="ghost"
@@ -63,76 +57,93 @@ export function Header({ onOpenMobileNav, onExpandNav }: HeaderProps): JSX.Eleme
         )}
       </div>
 
-      <div className="header-controls flex shrink-0 items-center gap-1 rounded-full border border-border/50 bg-card/90 p-1 shadow-soft">
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="icon" aria-label={t('header.changeTheme')}>
-              <ThemeIcon className="h-4 w-4" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <DropdownMenuLabel>{t('header.theme')}</DropdownMenuLabel>
-            <DropdownMenuSeparator />
-            {THEME_OPTIONS.map((opt) => {
-              const Icon = opt.icon
-              return (
-                <DropdownMenuItem
-                  key={opt.value}
-                  onSelect={() => setPreference(opt.value)}
-                  className={cn(preference === opt.value && 'bg-accent')}
-                >
-                  <Icon className="h-4 w-4" />
-                  {t(opt.labelKey)}
-                </DropdownMenuItem>
-              )
-            })}
-          </DropdownMenuContent>
-        </DropdownMenu>
-
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="icon" aria-label={t('header.changeLanguage')}>
-              <Languages className="h-4 w-4" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <DropdownMenuLabel>{t('header.language')}</DropdownMenuLabel>
-            <DropdownMenuSeparator />
-            {UI_LANGUAGES.map((lang) => (
-              <DropdownMenuItem
-                key={lang}
-                onSelect={() => setLanguage(lang)}
-                className={cn(language === lang && 'bg-accent')}
-              >
-                {LANGUAGE_LABELS[lang]}
-              </DropdownMenuItem>
-            ))}
-          </DropdownMenuContent>
-        </DropdownMenu>
-
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="sm">
-              <span className="grid h-7 w-7 place-items-center rounded-full bg-muted text-xs font-semibold uppercase">
-                {profile?.name?.[0] ?? 'S'}
-              </span>
-              <span className="hidden max-w-[12rem] truncate sm:inline">
-                {profile?.name ?? t('header.account')}
-              </span>
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="max-w-[min(90vw,20rem)]">
-            <DropdownMenuLabel className="truncate">
-              {profile?.name ?? t('header.student')}
-            </DropdownMenuLabel>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem onSelect={() => void lock()}>
-              <LogOut className="h-4 w-4" />
-              {t('header.lockApp')}
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </div>
+      <HeaderControls />
     </header>
+  )
+}
+
+/**
+ * Mode, interface language and account — shared by the lab header and the
+ * lecture top bar.
+ */
+export function HeaderControls(): JSX.Element {
+  const { profile, lock } = useAuth()
+  const { t } = useTranslation()
+  const { language, setLanguage } = useUILanguage()
+  const { preference, setPreference } = useThemePreference()
+
+  const ThemeIcon = preference === 'light' ? Sun : preference === 'dark' ? Moon : Monitor
+
+  return (
+    <div className="header-controls flex shrink-0 items-center gap-1 rounded-full border border-border/50 bg-card/90 p-1 shadow-soft lecture:border-0 lecture:bg-transparent lecture:p-0 lecture:shadow-none lab:rounded-md lab:border-0 lab:bg-transparent lab:p-0 lab:shadow-none">
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button variant="ghost" size="icon" aria-label={t('header.changeTheme')}>
+            <ThemeIcon className="h-4 w-4" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end">
+          <DropdownMenuLabel>{t('header.theme')}</DropdownMenuLabel>
+          <DropdownMenuSeparator />
+          {THEME_OPTIONS.map((opt) => {
+            const Icon = opt.icon
+            return (
+              <DropdownMenuItem
+                key={opt.value}
+                onSelect={() => setPreference(opt.value)}
+                className={cn(preference === opt.value && 'bg-accent')}
+              >
+                <Icon className="h-4 w-4" />
+                {t(opt.labelKey)}
+              </DropdownMenuItem>
+            )
+          })}
+        </DropdownMenuContent>
+      </DropdownMenu>
+
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button variant="ghost" size="icon" aria-label={t('header.changeLanguage')}>
+            <Languages className="h-4 w-4" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end">
+          <DropdownMenuLabel>{t('header.language')}</DropdownMenuLabel>
+          <DropdownMenuSeparator />
+          {UI_LANGUAGES.map((lang) => (
+            <DropdownMenuItem
+              key={lang}
+              onSelect={() => setLanguage(lang)}
+              className={cn(language === lang && 'bg-accent')}
+            >
+              {LANGUAGE_LABELS[lang]}
+            </DropdownMenuItem>
+          ))}
+        </DropdownMenuContent>
+      </DropdownMenu>
+
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button variant="ghost" size="sm">
+            <span className="grid h-7 w-7 place-items-center rounded-full bg-muted text-xs font-semibold uppercase">
+              {profile?.name?.[0] ?? 'S'}
+            </span>
+            <span className="hidden max-w-[12rem] truncate sm:inline">
+              {profile?.name ?? t('header.account')}
+            </span>
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="max-w-[min(90vw,20rem)]">
+          <DropdownMenuLabel className="truncate">
+            {profile?.name ?? t('header.student')}
+          </DropdownMenuLabel>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem onSelect={() => void lock()}>
+            <LogOut className="h-4 w-4" />
+            {t('header.lockApp')}
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </div>
   )
 }

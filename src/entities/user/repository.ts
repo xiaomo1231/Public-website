@@ -45,11 +45,16 @@ export class UserRepository {
           ...(patch.language !== undefined ? { language: patch.language } : {}),
           ...(patch.theme !== undefined ? { theme: patch.theme } : {}),
           ...(patch.colorTheme !== undefined ? { colorTheme: patch.colorTheme } : {}),
+          ...(patch.uiStyle !== undefined ? { uiStyle: patch.uiStyle } : {}),
           ...(patch.uiLanguage !== undefined ? { uiLanguage: patch.uiLanguage } : {}),
-          ...(patch.questionLanguage !== undefined ? { questionLanguage: patch.questionLanguage } : {}),
+          ...(patch.questionLanguage !== undefined
+            ? { questionLanguage: patch.questionLanguage }
+            : {}),
           ...(patch.vocabBookId !== undefined ? { vocabBookId: patch.vocabBookId } : {}),
           ...(patch.vocabDailyNew !== undefined ? { vocabDailyNew: patch.vocabDailyNew } : {}),
-          ...(patch.vocabReviewMode !== undefined ? { vocabReviewMode: patch.vocabReviewMode } : {}),
+          ...(patch.vocabReviewMode !== undefined
+            ? { vocabReviewMode: patch.vocabReviewMode }
+            : {}),
         }
         await this.db.user.put(merged)
         return merged

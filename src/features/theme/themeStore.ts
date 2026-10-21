@@ -1,22 +1,26 @@
 import { create } from 'zustand'
-import type { UserTheme } from '@/entities/user/types'
 import {
-  DEFAULT_COLOR_THEME,
-  resolveColorTheme,
-  type ColorThemeId,
-} from './colorThemes'
+  DEFAULT_UI_STYLE,
+  UI_STYLES,
+  type UserTheme,
+  type UserUiStyle,
+} from '@/entities/user/types'
+import { DEFAULT_COLOR_THEME, resolveColorTheme, type ColorThemeId } from './colorThemes'
 
 interface ThemeState {
   resolved: 'light' | 'dark'
   preference: UserTheme
   /** Palette dimension — independent of `preference`. */
   colorTheme: ColorThemeId
+  /** Interface style — independent of mode and palette. */
+  uiStyle: UserUiStyle
   systemPrefersDark: boolean
 }
 
 interface ThemeActions {
   setPreference: (theme: UserTheme) => void
   setColorTheme: (theme: ColorThemeId) => void
+  setUiStyle: (style: UserUiStyle) => void
   syncSystem: () => void
   apply: (theme: UserTheme) => void
 }
@@ -34,45 +38,62 @@ function resolve(preference: UserTheme, systemDark: boolean): 'light' | 'dark' {
   return systemDark ? 'dark' : 'light'
 }
 
+export function resolveUiStyle(value: unknown): UserUiStyle {
+  return UI_STYLES.includes(value as UserUiStyle) ? (value as UserUiStyle) : DEFAULT_UI_STYLE
+}
+
 /**
- * Paint the resolved mode and palette onto `<html>`.
+ * Paint the resolved mode, palette and interface style onto `<html>`.
  *
- * Both dimensions are applied here and nowhere else: the mode as the `dark`
- * class (plus `color-scheme` for native controls) and the palette as
- * `data-color-theme`, which the CSS variable blocks in `globals.css` key off.
+ * All three dimensions are applied here and nowhere else: the mode as the
+ * `dark` class (plus `color-scheme` for native controls), the palette as
+ * `data-color-theme` and the style as `data-ui-style`, which the CSS variable
+ * blocks in `globals.css` (and the `lecture:` / `lab:` variants) key off.
  */
-function applyToDom(resolved: 'light' | 'dark', colorTheme: ColorThemeId): void {
+function applyToDom(
+  resolved: 'light' | 'dark',
+  colorTheme: ColorThemeId,
+  uiStyle: UserUiStyle,
+): void {
   if (typeof document === 'undefined') return
   const root = document.documentElement
   root.classList.toggle('dark', resolved === 'dark')
   root.style.colorScheme = resolved
   root.dataset.colorTheme = colorTheme
+  root.dataset.uiStyle = uiStyle
 }
 
 export const useThemeStore = create<ThemeStore>((set, get) => ({
   resolved: 'light',
   preference: 'system',
   colorTheme: DEFAULT_COLOR_THEME,
+  uiStyle: DEFAULT_UI_STYLE,
   systemPrefersDark: false,
 
   setPreference(theme) {
     const sys = get().systemPrefersDark
     const resolved = resolve(theme, sys)
-    applyToDom(resolved, get().colorTheme)
+    applyToDom(resolved, get().colorTheme, get().uiStyle)
     set({ preference: theme, resolved })
   },
 
   setColorTheme(theme) {
     const next = resolveColorTheme(theme)
-    applyToDom(get().resolved, next)
+    applyToDom(get().resolved, next, get().uiStyle)
     set({ colorTheme: next })
+  },
+
+  setUiStyle(style) {
+    const next = resolveUiStyle(style)
+    applyToDom(get().resolved, get().colorTheme, next)
+    set({ uiStyle: next })
   },
 
   syncSystem() {
     const sys = detectSystem()
-    const { preference, colorTheme } = get()
+    const { preference, colorTheme, uiStyle } = get()
     const resolved = resolve(preference, sys)
-    applyToDom(resolved, colorTheme)
+    applyToDom(resolved, colorTheme, uiStyle)
     set({ systemPrefersDark: sys, resolved })
   },
 
@@ -103,11 +124,13 @@ export function resetThemeForTesting(): void {
     resolved: 'light',
     preference: 'system',
     colorTheme: DEFAULT_COLOR_THEME,
+    uiStyle: DEFAULT_UI_STYLE,
     systemPrefersDark: false,
   })
   if (typeof document !== 'undefined') {
     const root = document.documentElement
     root.classList.remove('dark')
     delete root.dataset.colorTheme
+    delete root.dataset.uiStyle
   }
 }

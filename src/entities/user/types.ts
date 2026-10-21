@@ -30,6 +30,16 @@ export type UserTheme = 'light' | 'dark' | 'system'
  */
 export type UserColorTheme = 'default' | 'pinkAqua' | 'warmOrange' | 'academic'
 
+/**
+ * Interface style: the structure, type and surfaces of the whole app.
+ * `lecture` — paper surfaces, serif headings, top navigation, reading first.
+ * `lab` — hairlines, a millimetre grid, mono readouts, a side rail.
+ * Independent of the mode and the palette (the palette only sets the accent).
+ */
+export type UserUiStyle = 'lecture' | 'lab'
+export const UI_STYLES: readonly UserUiStyle[] = ['lecture', 'lab']
+export const DEFAULT_UI_STYLE: UserUiStyle = 'lecture'
+
 export interface UserProfile {
   id: 'singleton'
   name: string
@@ -45,6 +55,8 @@ export interface UserProfile {
    * before color themes existed, in which case the original palette is used.
    */
   colorTheme?: UserColorTheme
+  /** Interface style; absent means `DEFAULT_UI_STYLE`. */
+  uiStyle?: UserUiStyle
   /**
    * Language of the **application interface**. Persisted locally alongside the
    * rest of the profile; absent on profiles written before i18n existed, in
@@ -66,6 +78,7 @@ export interface UpdateUserInput {
   language?: UserLanguage
   theme?: UserTheme
   colorTheme?: UserColorTheme
+  uiStyle?: UserUiStyle
   uiLanguage?: UILanguage
   questionLanguage?: QuestionLanguage
   vocabBookId?: string

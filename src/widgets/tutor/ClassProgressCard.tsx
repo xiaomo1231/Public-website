@@ -40,14 +40,17 @@ export function ClassProgressCard({ topics, context }: ClassProgressCardProps): 
     .join(' · ')
 
   return (
-    <section className="min-w-0 rounded-lg border border-border/70 bg-muted/20 p-3" aria-label={t('classProgress.title')}>
+    <section
+      className="min-w-0 rounded-lg border border-border/70 bg-muted/20 p-3 lecture:rounded-none lecture:border-x-0 lecture:bg-transparent lecture:px-0 lab:bg-muted/40"
+      aria-label={t('classProgress.title')}
+    >
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
         <span className="inline-flex items-center gap-1.5 text-xs font-medium text-foreground">
           <GraduationCap className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden />
           {t('classProgress.title')}
         </span>
         {progress.progressPercent !== undefined && (
-          <span className="text-xs tabular-nums text-muted-foreground">
+          <span className="text-xs tabular-nums text-muted-foreground lab:font-mono">
             {t('classProgress.percent', { value: progress.progressPercent })}
           </span>
         )}
@@ -74,7 +77,7 @@ export function ClassProgressCard({ topics, context }: ClassProgressCardProps): 
       </div>
 
       {progress.progressPercent !== undefined && (
-        <Progress value={progress.progressPercent} className="mt-2 h-1.5" />
+        <Progress value={progress.progressPercent} className="mt-2 h-1.5 lecture:h-0.5 lab:h-1" />
       )}
 
       {open && (

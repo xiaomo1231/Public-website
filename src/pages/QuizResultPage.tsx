@@ -42,11 +42,31 @@ import { difficultyLabelKey } from '@/infrastructure/ai/prompts/types'
 type MoreMode = 'same_topic' | 'similar' | 'harder' | 'easier' | 'weakness'
 
 const MORE_OPTIONS: Array<{ mode: MoreMode; labelKey: TranslationKey; hintKey: TranslationKey }> = [
-  { mode: 'same_topic', labelKey: 'quizResult.followUp.sameTopic', hintKey: 'quizResult.followUp.sameTopicHint' },
-  { mode: 'similar', labelKey: 'quizResult.followUp.similar', hintKey: 'quizResult.followUp.similarHint' },
-  { mode: 'harder', labelKey: 'quizResult.followUp.harder', hintKey: 'quizResult.followUp.harderHint' },
-  { mode: 'easier', labelKey: 'quizResult.followUp.easier', hintKey: 'quizResult.followUp.easierHint' },
-  { mode: 'weakness', labelKey: 'quizResult.followUp.weakness', hintKey: 'quizResult.followUp.weaknessHint' },
+  {
+    mode: 'same_topic',
+    labelKey: 'quizResult.followUp.sameTopic',
+    hintKey: 'quizResult.followUp.sameTopicHint',
+  },
+  {
+    mode: 'similar',
+    labelKey: 'quizResult.followUp.similar',
+    hintKey: 'quizResult.followUp.similarHint',
+  },
+  {
+    mode: 'harder',
+    labelKey: 'quizResult.followUp.harder',
+    hintKey: 'quizResult.followUp.harderHint',
+  },
+  {
+    mode: 'easier',
+    labelKey: 'quizResult.followUp.easier',
+    hintKey: 'quizResult.followUp.easierHint',
+  },
+  {
+    mode: 'weakness',
+    labelKey: 'quizResult.followUp.weakness',
+    hintKey: 'quizResult.followUp.weaknessHint',
+  },
 ]
 
 export function QuizResultPage(): JSX.Element {
@@ -172,35 +192,87 @@ export function QuizResultPage(): JSX.Element {
         }
       />
       <PageContent className="space-y-6">
-        {/* The result moment: the score card rises in once, its bar sweeps to the score. */}
-        <Card className="animate-rise">
-          <CardContent className="grid gap-6 p-6 sm:grid-cols-[160px_1fr] sm:items-center">
-            <div className="text-center">
-              <div className="text-4xl font-semibold tabular-nums">{score.percentage}%</div>
-              <div className="text-xs text-muted-foreground">{t('quizResult.score')}</div>
-            </div>
-            <div className="space-y-3">
-              <Progress value={score.percentage} reveal />
-              <div className="flex flex-wrap gap-4 text-sm">
-                <span className="flex items-center gap-1 text-emerald-600">
-                  <CheckCircle2 className="h-4 w-4" /> {t('quizResult.correct', { count: score.correct })}
-                </span>
-                <span className="flex items-center gap-1 text-destructive">
-                  <XCircle className="h-4 w-4" /> {t('quizResult.wrong', { count: score.wrong })}
-                </span>
-                <span className="flex items-center gap-1 text-amber-600">
-                  <HelpCircle className="h-4 w-4" /> {t('quizResult.unverifiedCount', { count: score.unverified })}
-                </span>
-                <span className="text-muted-foreground">
-                  {t('quizResult.scoreLine', {
-                    // Partial credit from short answers (3 of 5 points → 0.6).
-                    correct: Math.round((score.points ?? score.correct) * 100) / 100,
-                    total: score.total,
-                  })}
+        {/*
+          The result moment: the score rises in once, its bar sweeps to the score.
+          lecture: a big serif figure beside a booktabs-ruled list.
+          lab: a readout strip of hairline cells.
+        */}
+        <Card className="animate-rise overflow-hidden">
+          <CardContent className="grid gap-6 p-6 lab:gap-0 lab:p-0 sm:grid-cols-[180px_1fr] sm:items-center lab:sm:grid-cols-[200px_1fr] lab:sm:items-stretch">
+            <div className="text-center lab:flex lab:flex-col lab:border-b lab:p-4 lab:text-left lab:sm:border-b-0 lab:sm:border-r">
+              <div className="data-num text-4xl font-semibold lecture:font-heading lecture:text-6xl lecture:font-bold lecture:tracking-tight lab:order-2 lab:mt-1.5 lab:font-mono lab:text-[32px] lab:font-medium">
+                {score.percentage}
+                <span className="lecture:text-3xl lecture:text-muted-foreground lab:text-base lab:text-muted-foreground">
+                  %
                 </span>
               </div>
+              <div className="text-xs text-muted-foreground lecture:mt-1 lecture:text-sm lab:order-1 lab:font-mono lab:text-[10.5px] lab:uppercase lab:tracking-wider">
+                {t('quizResult.score')}
+              </div>
+              <Progress
+                value={score.percentage}
+                reveal
+                className="mt-3 hidden h-1 rounded-none lab:order-3 lab:block"
+              />
+            </div>
+            <div className="space-y-3 lab:space-y-0">
+              <Progress value={score.percentage} reveal className="lab:hidden" />
+              <dl className="text-sm lecture:border-y-2 lecture:border-foreground/70 lab:grid lab:h-full lab:grid-cols-2 lab:sm:grid-cols-4">
+                {[
+                  {
+                    key: 'correct',
+                    icon: <CheckCircle2 className="h-4 w-4" />,
+                    tone: 'text-emerald-600',
+                    label: t('question.correct'),
+                    value: score.correct,
+                  },
+                  {
+                    key: 'wrong',
+                    icon: <XCircle className="h-4 w-4" />,
+                    tone: 'text-destructive',
+                    label: t('question.incorrect'),
+                    value: score.wrong,
+                  },
+                  {
+                    key: 'unverified',
+                    icon: <HelpCircle className="h-4 w-4" />,
+                    tone: 'text-amber-600',
+                    label: t('question.unverified'),
+                    value: score.unverified,
+                  },
+                  {
+                    key: 'points',
+                    icon: null,
+                    tone: 'text-muted-foreground',
+                    label: t('quizResult.pointsLabel'),
+                    value: t('quizResult.scoreLine', {
+                      // Partial credit from short answers (3 of 5 points → 0.6).
+                      correct: Math.round((score.points ?? score.correct) * 100) / 100,
+                      total: score.total,
+                    }),
+                  },
+                ].map((row) => (
+                  <div
+                    key={row.key}
+                    className="flex items-center justify-between gap-3 py-1.5 lecture:border-b lecture:border-border lecture:py-2 lecture:last:border-b-0 lab:flex-col lab:items-start lab:justify-start lab:gap-1.5 lab:border-b lab:p-4 lab:sm:border-b-0 lab:[&:not(:last-child)]:border-r"
+                  >
+                    <dt
+                      className={cn(
+                        'flex items-center gap-1.5 lab:font-mono lab:text-[10.5px] lab:uppercase lab:tracking-wider lab:text-muted-foreground',
+                        row.tone,
+                      )}
+                    >
+                      <span className="lab:hidden">{row.icon}</span>
+                      {row.label}
+                    </dt>
+                    <dd className="data-num font-medium lecture:font-heading lab:font-mono lab:text-[22px]">
+                      {row.value}
+                    </dd>
+                  </div>
+                ))}
+              </dl>
               {score.unverified > 0 && (
-                <p className="text-xs text-muted-foreground">
+                <p className="text-xs text-muted-foreground lab:border-t lab:px-4 lab:py-2.5">
                   {t('quizResult.unverifiedNote')}
                 </p>
               )}
@@ -255,9 +327,11 @@ export function QuizResultPage(): JSX.Element {
         <div className="grid gap-4 lg:grid-cols-2">
           <Card>
             <CardHeader>
-              <CardTitle className="text-base">{t('quizResult.byKnowledgePoint')}</CardTitle>
+              <CardTitle className="text-base lecture:font-heading">
+                {t('quizResult.byKnowledgePoint')}
+              </CardTitle>
             </CardHeader>
-            <CardContent className="space-y-2">
+            <CardContent className="space-y-2 lab:space-y-0">
               {score.byKnowledgePoint.length === 0 ? (
                 <p className="text-xs text-muted-foreground">{t('quizResult.noData')}</p>
               ) : (
@@ -265,12 +339,14 @@ export function QuizResultPage(): JSX.Element {
                   const gradable = k.correct + k.wrong
                   const pct = gradable > 0 ? Math.round((k.correct / gradable) * 100) : 0
                   return (
-                    <div key={k.knowledgePoint} className="space-y-1">
+                    <div key={k.knowledgePoint} className={RULE_ROW}>
                       <div className="flex items-center justify-between text-sm">
                         <span className="truncate">{k.knowledgePoint}</span>
-                        <span className="tabular-nums text-muted-foreground">{pct}%</span>
+                        <span className="tabular-nums text-muted-foreground lab:font-mono lab:text-xs">
+                          {pct}%
+                        </span>
                       </div>
-                      <Progress value={pct} className="h-1.5" />
+                      <Progress value={pct} className="h-1.5 lab:h-1 lab:rounded-none" />
                     </div>
                   )
                 })
@@ -280,9 +356,11 @@ export function QuizResultPage(): JSX.Element {
 
           <Card>
             <CardHeader>
-              <CardTitle className="text-base">{t('quizResult.byDifficulty')}</CardTitle>
+              <CardTitle className="text-base lecture:font-heading">
+                {t('quizResult.byDifficulty')}
+              </CardTitle>
             </CardHeader>
-            <CardContent className="space-y-2">
+            <CardContent className="space-y-2 lab:space-y-0">
               {Object.entries(score.byDifficulty).length === 0 ? (
                 <p className="text-xs text-muted-foreground">{t('quizResult.noData')}</p>
               ) : (
@@ -290,14 +368,14 @@ export function QuizResultPage(): JSX.Element {
                   const gradable = stat.correct + stat.wrong
                   const pct = gradable > 0 ? Math.round((stat.correct / gradable) * 100) : 0
                   return (
-                    <div key={difficulty} className="space-y-1">
+                    <div key={difficulty} className={RULE_ROW}>
                       <div className="flex items-center justify-between text-sm capitalize">
                         <span>{t(difficultyLabelKey(difficulty))}</span>
-                        <span className="tabular-nums text-muted-foreground">
+                        <span className="tabular-nums text-muted-foreground lab:font-mono lab:text-xs">
                           {stat.correct}/{stat.total}
                         </span>
                       </div>
-                      <Progress value={pct} className="h-1.5" />
+                      <Progress value={pct} className="h-1.5 lab:h-1 lab:rounded-none" />
                     </div>
                   )
                 })
@@ -328,9 +406,7 @@ export function QuizResultPage(): JSX.Element {
                       <div className="flex items-center gap-2">
                         <Badge variant="outline">{q.knowledgePoint}</Badge>
                         <Badge variant="outline">{t(QUESTION_TYPE_LABEL_KEYS[q.type])}</Badge>
-                        <Badge variant="outline">
-                          {t(difficultyLabelKey(attempt.difficulty))}
-                        </Badge>
+                        <Badge variant="outline">{t(difficultyLabelKey(attempt.difficulty))}</Badge>
                       </div>
                       <RichText
                         text={q.prompt}
@@ -344,7 +420,8 @@ export function QuizResultPage(): JSX.Element {
                             earned: attempt.evaluation.score.earned,
                             total: attempt.evaluation.score.total,
                             percent: Math.round(
-                              (attempt.evaluation.score.earned / attempt.evaluation.score.total) * 100,
+                              (attempt.evaluation.score.earned / attempt.evaluation.score.total) *
+                                100,
                             ),
                           })}
                         </p>
@@ -382,9 +459,7 @@ export function QuizResultPage(): JSX.Element {
                 <AlertCircle className="h-4 w-4 text-amber-600" />
                 {t('quizResult.unverifiedAnswers', { count: unverified.length })}
               </CardTitle>
-              <CardDescription>
-                {t('quizResult.unverifiedAnswersHint')}
-              </CardDescription>
+              <CardDescription>{t('quizResult.unverifiedAnswersHint')}</CardDescription>
             </CardHeader>
             <CardContent className="space-y-2 text-sm">
               {unverified.map((q) => {
@@ -398,7 +473,9 @@ export function QuizResultPage(): JSX.Element {
                     />
                     <p className="text-xs text-muted-foreground">
                       {t('quizResult.answerExpected', {
-                        yours: (attempt && displayAnswer(q, attempt.userAnswer)) || t('quizResult.blank'),
+                        yours:
+                          (attempt && displayAnswer(q, attempt.userAnswer)) ||
+                          t('quizResult.blank'),
                         expected: expectedText(q),
                       })}
                     </p>
@@ -443,9 +520,16 @@ export function QuizResultPage(): JSX.Element {
         </Card>
 
         {questions.length === 0 && (
-          <EmptyState title={t('quizResult.noQuestions')} description={t('quizResult.noQuestionsHint')} />
+          <EmptyState
+            title={t('quizResult.noQuestions')}
+            description={t('quizResult.noQuestionsHint')}
+          />
         )}
       </PageContent>
     </PageContainer>
   )
 }
+
+/** A ruled row: booktabs-style rules in lecture, hairline table rows in lab. */
+const RULE_ROW =
+  'space-y-1 border-b border-border/70 pb-2 last:border-b-0 last:pb-0 lab:space-y-1.5 lab:border-border lab:py-2.5 lab:last:pb-0 lab:first:pt-0'

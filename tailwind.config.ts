@@ -1,4 +1,5 @@
 import type { Config } from 'tailwindcss'
+import plugin from 'tailwindcss/plugin'
 
 export default {
   content: ['./index.html', './src/**/*.{ts,tsx}'],
@@ -209,8 +210,17 @@ export default {
           'Apple Symbols',
           'monospace',
         ],
+        // The interface style's heading face (serif in lecture, sans in lab).
+        heading: ['var(--font-heading)'],
       },
     },
   },
-  plugins: [],
+  plugins: [
+    // `lecture:` / `lab:` apply a utility only under that interface style
+    // (`<html data-ui-style>`), for structure the tokens cannot express.
+    plugin(({ addVariant }) => {
+      addVariant('lecture', ':is([data-ui-style="lecture"] &)')
+      addVariant('lab', ':is([data-ui-style="lab"] &)')
+    }),
+  ],
 } satisfies Config

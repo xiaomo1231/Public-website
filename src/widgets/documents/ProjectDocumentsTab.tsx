@@ -4,8 +4,8 @@ import { BookOpen, FolderOpen, Mic, NotebookPen, type LucideIcon } from 'lucide-
 import { DocumentList } from '@/widgets/documents/DocumentList'
 import { DocumentUploadDialog } from '@/widgets/documents/DocumentUploadDialog'
 import { Button } from '@/shared/ui/Button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/shared/ui/Card'
-import { Badge } from '@/shared/ui/Badge'
+import { cn } from '@/shared/lib/utils'
+import { useUiStyle } from '@/features/theme/useAppearance'
 import { useDocuments } from '@/features/documents/useDocuments'
 import { toast } from '@/features/toast/toastStore'
 import {
@@ -60,6 +60,7 @@ const GROUPS: readonly MaterialGroupSpec[] = [
 export function ProjectDocumentsTab({ projectId }: { projectId: string }): JSX.Element {
   const { t } = useTranslation()
   const { documents, loading, remove, rename } = useDocuments(projectId)
+  const lab = useUiStyle().uiStyle === 'lab'
   const [openType, setOpenType] = useState<LearningMaterialType | null>(null)
 
   function docsOf(type: LearningMaterialType): Document[] {
@@ -93,10 +94,12 @@ export function ProjectDocumentsTab({ projectId }: { projectId: string }): JSX.E
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-5">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h2 className="text-base font-semibold">{t('materials.title')}</h2>
+          <h2 className="font-heading text-base font-semibold lecture:text-[21px] lecture:font-bold lab:text-[15px]">
+            {t('materials.title')}
+          </h2>
           <p className="text-sm text-muted-foreground">{t('materials.subtitle')}</p>
         </div>
         <Button asChild variant="outline" size="sm" className="self-start sm:self-auto">
@@ -107,39 +110,77 @@ export function ProjectDocumentsTab({ projectId }: { projectId: string }): JSX.E
         </Button>
       </div>
 
-      <div className="stagger-in grid gap-4 lg:grid-cols-3">
+      <div className="stagger-in grid gap-x-8 gap-y-8 lab:gap-4 lg:lecture:grid-cols-3">
         {GROUPS.map((group) => {
           const docs = docsOf(group.type)
           const Icon = group.icon
           const ready = docs.filter((doc) => doc.status === 'ready').length
+          const allReady = ready === docs.length
+          const upload = (
+            <Button
+              variant="outline"
+              size="sm"
+              className={lab ? 'shrink-0' : 'self-start'}
+              onClick={() => setOpenType(group.type)}
+            >
+              <Icon className="h-4 w-4" />
+              {t(group.uploadKey)}
+            </Button>
+          )
           return (
-            <Card key={group.type} className="flex min-w-0 flex-col">
-              <CardHeader className="space-y-2">
-                <CardTitle className="flex items-center gap-2 text-base">
-                  <Icon className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
-                  <span className="min-w-0 break-words">{t(group.titleKey)}</span>
-                </CardTitle>
-                <CardDescription className="break-words">
+            <section
+              key={group.type}
+              aria-labelledby={`materials-${group.type}`}
+              className={cn(
+                'flex min-w-0 flex-col',
+                // lecture: a ruled section, no box.
+                'lecture:gap-3 lecture:border-t-[1.5px] lecture:border-foreground lecture:pt-4',
+                // lab: a hairline panel with a header bar.
+                'lab:border lab:border-border lab:bg-card',
+              )}
+            >
+              <header className="flex min-w-0 flex-col gap-1 lab:border-b lab:border-border lab:px-3.5 lab:py-2.5">
+                <div className="flex min-w-0 items-center gap-2">
+                  <h3
+                    id={`materials-${group.type}`}
+                    className="min-w-0 flex-1 break-words font-heading text-foreground lecture:text-[18px] lecture:font-bold lab:font-mono lab:text-[11px] lab:font-medium lab:uppercase lab:tracking-[0.06em] lab:text-muted-foreground"
+                  >
+                    {t(group.titleKey)}
+                    {lab && docs.length > 0 && (
+                      <span className="data-num ml-1.5 text-muted-foreground">/ {docs.length}</span>
+                    )}
+                  </h3>
+                  {lab && upload}
+                </div>
+                <p className="break-words text-[13px] text-muted-foreground lab:text-xs">
                   {t(group.descriptionKey)}
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="flex min-w-0 flex-1 flex-col gap-3">
+                </p>
                 {docs.length === 0 ? (
                   <p className="text-xs text-muted-foreground">{t(group.emptyKey)}</p>
                 ) : (
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Badge variant="outline">
+                  <p className="data-num flex flex-wrap items-center gap-x-1.5 text-xs">
+                    <span className="text-muted-foreground lab:font-mono">
                       {t('materials.fileCount', { count: docs.length })}
-                    </Badge>
-                    <Badge variant={ready === docs.length ? 'secondary' : 'outline'}>
-                      {ready === docs.length
-                        ? t('materials.analyzed')
-                        : t('materials.processing')}
-                    </Badge>
-                  </div>
+                    </span>
+                    <span aria-hidden className="text-muted-foreground">
+                      ·
+                    </span>
+                    <span
+                      className={cn(
+                        'lab:font-mono',
+                        allReady ? 'text-primary' : 'text-muted-foreground',
+                      )}
+                    >
+                      {allReady ? t('materials.analyzed') : t('materials.processing')}
+                    </span>
+                  </p>
                 )}
+              </header>
 
-                <div className="min-w-0 flex-1">
+              {/* An empty group already says so above and offers its upload
+                  button; the list's own empty card would only repeat it. */}
+              {(loading || docs.length > 0) && (
+                <div className="min-w-0 flex-1 lab:p-3.5">
                   <DocumentList
                     documents={docs}
                     loading={loading}
@@ -149,13 +190,10 @@ export function ProjectDocumentsTab({ projectId }: { projectId: string }): JSX.E
                     onDelete={handleDelete}
                   />
                 </div>
+              )}
 
-                <Button variant="outline" className="w-full" onClick={() => setOpenType(group.type)}>
-                  <Icon className="h-4 w-4" />
-                  {t(group.uploadKey)}
-                </Button>
-              </CardContent>
-            </Card>
+              {!lab && upload}
+            </section>
           )
         })}
       </div>

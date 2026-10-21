@@ -132,7 +132,12 @@ export function QuizLandingPage(): JSX.Element {
         </Card>
 
         <div ref={configRef} tabIndex={-1} className="scroll-mt-4 rounded-2xl outline-none">
-          <QuizConfigDialog projectId={projectId} onStart={handleStart} busy={busy} progress={progress} />
+          <QuizConfigDialog
+            projectId={projectId}
+            onStart={handleStart}
+            busy={busy}
+            progress={progress}
+          />
         </div>
 
         {loading ? (
@@ -153,21 +158,41 @@ export function QuizLandingPage(): JSX.Element {
           <Card>
             <CardHeader>
               <CardTitle className="text-base">{t('quiz.previous')}</CardTitle>
-              <CardDescription>{t('quiz.previousCount', { count: quizzes.length })}</CardDescription>
+              <CardDescription>
+                {t('quiz.previousCount', { count: quizzes.length })}
+              </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-2">
+            <CardContent className="space-y-2 lab:space-y-0 lab:pt-px">
               {quizzes.map((q) => (
                 <Link
                   key={q.id}
-                  to={q.status === 'completed' ? `/projects/${projectId}/quiz/${q.id}/result` : `/projects/${projectId}/quiz/${q.id}`}
-                  className="flex flex-wrap items-center gap-3 rounded-lg border px-3 py-2 text-sm transition-colors hover:bg-accent/50"
+                  to={
+                    q.status === 'completed'
+                      ? `/projects/${projectId}/quiz/${q.id}/result`
+                      : `/projects/${projectId}/quiz/${q.id}`
+                  }
+                  className="flex flex-wrap items-center gap-3 rounded-lg border px-3 py-2 text-sm transition-colors duration-150 ease-out hover:bg-accent/50 lecture:rounded-xl lecture:px-4 lecture:py-2.5 lab:-mt-px lab:rounded-none lab:hover:bg-background"
                 >
-                  <span className="min-w-0 flex-1 truncate font-medium">{q.title}</span>
-                  <Badge variant={q.status === 'completed' ? 'default' : q.status === 'failed' ? 'destructive' : 'secondary'}>
+                  <span className="min-w-0 flex-1 truncate font-medium lecture:font-heading">
+                    {q.title}
+                  </span>
+                  <Badge
+                    variant={
+                      q.status === 'completed'
+                        ? 'default'
+                        : q.status === 'failed'
+                          ? 'destructive'
+                          : 'secondary'
+                    }
+                  >
                     {t(QUIZ_STATUS_LABEL_KEYS[q.status])}
                   </Badge>
-                  {q.score && <Badge variant="outline">{q.score.percentage}%</Badge>}
-                  <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                  {q.score && (
+                    <Badge variant="outline" className="data-num lab:font-mono">
+                      {q.score.percentage}%
+                    </Badge>
+                  )}
+                  <span className="data-num flex items-center gap-1 text-xs text-muted-foreground lab:font-mono">
                     <Clock className="h-3 w-3" />
                     {formatDateTime(q.startedAt)}
                   </span>

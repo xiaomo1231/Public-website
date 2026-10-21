@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react'
 import { Check, X } from 'lucide-react'
-import type { Question } from '@/entities/question/types'
+import { optionLetter, type Question } from '@/entities/question/types'
 import { Textarea } from '@/shared/ui/Textarea'
 import { cn } from '@/shared/lib/utils'
 import { useProject } from '@/features/project/useProjects'
 import { MathField } from '@/widgets/mathInput/MathField'
 import { OrderingInput } from './OrderingInput'
 import { FillBlankInput, MatchingInput, MultipleSelectInput } from './ExamFormatInputs'
+import { optionKeyClass, optionListClass, optionRowClass } from './optionStyles'
 import { useTranslation, type TranslationKey } from '@/i18n'
 
 export interface AnswerInputProps {
@@ -32,10 +33,26 @@ export function AnswerInput({
   const { project } = useProject(question.projectId)
   const subject = project?.subject
   if (question.type === 'multiple_choice') {
-    return <MultipleChoiceInput question={question} value={value} onChange={onChange} disabled={disabled} revealed={revealed} />
+    return (
+      <MultipleChoiceInput
+        question={question}
+        value={value}
+        onChange={onChange}
+        disabled={disabled}
+        revealed={revealed}
+      />
+    )
   }
   if (question.type === 'true_false') {
-    return <TrueFalseInput value={value} onChange={onChange} disabled={disabled} revealed={revealed} correctAnswer={question.correctAnswer} />
+    return (
+      <TrueFalseInput
+        value={value}
+        onChange={onChange}
+        disabled={disabled}
+        revealed={revealed}
+        correctAnswer={question.correctAnswer}
+      />
+    )
   }
   if (question.type === 'numeric' && question.unit) {
     // A physical quantity: the unit is part of the answer, so it is typed
@@ -72,16 +89,42 @@ export function AnswerInput({
     )
   }
   if (question.type === 'multiple_select') {
-    return <MultipleSelectInput question={question} value={value} onChange={onChange} disabled={disabled} revealed={revealed} />
+    return (
+      <MultipleSelectInput
+        question={question}
+        value={value}
+        onChange={onChange}
+        disabled={disabled}
+        revealed={revealed}
+      />
+    )
   }
   if (question.type === 'matching') {
-    return <MatchingInput question={question} value={value} onChange={onChange} disabled={disabled} revealed={revealed} />
+    return (
+      <MatchingInput
+        question={question}
+        value={value}
+        onChange={onChange}
+        disabled={disabled}
+        revealed={revealed}
+      />
+    )
   }
   if (question.type === 'fill_blank') {
-    return <FillBlankInput question={question} value={value} onChange={onChange} disabled={disabled} {...(onSubmit ? { onSubmit } : {})} />
+    return (
+      <FillBlankInput
+        question={question}
+        value={value}
+        onChange={onChange}
+        disabled={disabled}
+        {...(onSubmit ? { onSubmit } : {})}
+      />
+    )
   }
   if (question.type === 'ordering') {
-    return <OrderingInput question={question} value={value} onChange={onChange} disabled={disabled} />
+    return (
+      <OrderingInput question={question} value={value} onChange={onChange} disabled={disabled} />
+    )
   }
   if (question.type === 'chem_equation') {
     return (
@@ -174,36 +217,35 @@ function MultipleChoiceInput({
 }: AnswerInputProps): JSX.Element {
   const options = question.options ?? []
   return (
-    <div className="space-y-2">
-      {options.map((option) => {
+    <div className={optionListClass}>
+      {options.map((option, i) => {
         const selected = value === option.id || value === option.label
-        const isCorrect = option.id === question.correctAnswer || option.label === question.correctAnswer
+        const isCorrect =
+          option.id === question.correctAnswer || option.label === question.correctAnswer
         return (
           <button
             key={option.id}
             type="button"
+            data-quiz-option
+            aria-pressed={selected}
             disabled={disabled}
             onClick={() => onChange(option.id)}
-            className={cn(
-              'flex w-full items-center gap-3 rounded-lg border px-3 py-2 text-left text-sm transition-[color,background-color,border-color,transform] duration-press ease-out motion-safe:active:scale-[0.98]',
-              selected ? 'border-foreground/40 bg-accent' : 'hover:bg-accent/50',
-              revealed && isCorrect && 'border-emerald-500/60 bg-emerald-50/50 dark:bg-emerald-950/20',
-              revealed && selected && !isCorrect && 'border-destructive/60 bg-destructive/5',
-            )}
+            className={optionRowClass({
+              selected,
+              correct: Boolean(revealed && isCorrect),
+              wrong: Boolean(revealed && selected && !isCorrect),
+            })}
           >
-            <span
-              className={cn(
-                'grid h-5 w-5 shrink-0 place-items-center rounded-full border text-[10px]',
-                selected ? 'border-foreground bg-foreground text-background' : 'border-muted-foreground/40',
-              )}
-            >
+            <span aria-hidden className={optionKeyClass(Boolean(selected && !revealed))}>
               {revealed && isCorrect ? (
-                <Check className="h-3 w-3 text-emerald-600" />
+                <Check className="h-3.5 w-3.5 text-emerald-600" />
               ) : revealed && selected && !isCorrect ? (
-                <X className="h-3 w-3 text-destructive" />
-              ) : null}
+                <X className="h-3.5 w-3.5 text-destructive" />
+              ) : (
+                optionLetter(i)
+              )}
             </span>
-            <span>{option.label}</span>
+            <span className="min-w-0 break-words">{option.label}</span>
           </button>
         )
       })}
@@ -235,7 +277,7 @@ function TrueFalseInput({
     { labelKey: 'answerInput.false', value: 'False', bool: false },
   ]
   return (
-    <div className="flex gap-2">
+    <div className="flex gap-2 lecture:gap-2.5 lab:gap-0">
       {options.map((o) => {
         const selected = local.toLowerCase() === o.value.toLowerCase()
         const isCorrect = revealed && correct === o.bool
@@ -248,11 +290,14 @@ function TrueFalseInput({
               setLocal(o.value)
               onChange(o.value)
             }}
+            aria-pressed={selected}
             className={cn(
-              'flex-1 rounded-lg border px-4 py-2 text-sm transition-[color,background-color,border-color,transform] duration-press ease-out motion-safe:active:scale-[0.98]',
-              selected ? 'border-foreground/40 bg-accent' : 'hover:bg-accent/50',
-              isCorrect && 'border-emerald-500/60 bg-emerald-50/50 dark:bg-emerald-950/20',
-              revealed && selected && !isCorrect && 'border-destructive/60 bg-destructive/5',
+              optionRowClass({
+                selected,
+                correct: Boolean(isCorrect),
+                wrong: Boolean(revealed && selected && !isCorrect),
+              }),
+              'flex-1 justify-center lab:-ml-px lab:mt-0 lab:first:ml-0',
             )}
           >
             {t(o.labelKey)}

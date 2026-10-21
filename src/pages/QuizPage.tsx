@@ -15,6 +15,7 @@ import type { Quiz } from '@/entities/quiz/types'
 import type { QuestionEvaluation } from '@/entities/questionAttempt/types'
 import { toast } from '@/features/toast/toastStore'
 import { isAppError } from '@/infrastructure/errors/AppError'
+import { cn } from '@/shared/lib/utils'
 import { useTranslation } from '@/i18n'
 
 export function QuizPage(): JSX.Element {
@@ -56,7 +57,8 @@ export function QuizPage(): JSX.Element {
         if (qs.length > 0 && firstOpen === -1) {
           // Every question was answered but the quiz was never closed.
           await service.completeQuiz(quizId)
-          if (!cancelled) navigate(`/projects/${projectId}/quiz/${quizId}/result`, { replace: true })
+          if (!cancelled)
+            navigate(`/projects/${projectId}/quiz/${quizId}/result`, { replace: true })
           return
         }
         setQuiz(q)
@@ -106,7 +108,11 @@ export function QuizPage(): JSX.Element {
       const updated = await service.disputeAttempt(attemptId)
       setEvaluation(updated.evaluation)
     } catch (err) {
-      toast({ variant: 'error', title: t('shortAnswer.disputeFailed'), description: (err as Error).message })
+      toast({
+        variant: 'error',
+        title: t('shortAnswer.disputeFailed'),
+        description: (err as Error).message,
+      })
     } finally {
       setDisputing(false)
     }
@@ -175,44 +181,70 @@ export function QuizPage(): JSX.Element {
         nav={<ProjectFlowNav projectId={projectId} active="quiz" />}
       />
       <PageContent className="space-y-4">
-        <div className="space-y-1">
-          <Progress value={(answeredCount / questions.length) * 100} />
-          <p className="text-xs text-muted-foreground">
-            {t('quiz.progress', {
-              answered: answeredCount,
-              total: questions.length,
-            })}
-          </p>
+        {/* lecture: one centred column. lab: the instrument panel, a little wider. */}
+        <div className="mx-auto w-full space-y-4 lecture:max-w-[720px] lecture:space-y-8 lab:max-w-[860px]">
+          <div className="space-y-1.5">
+            {/* lecture: a thin line. lab: one tick per question. */}
+            <Progress
+              value={(answeredCount / questions.length) * 100}
+              className="lecture:h-0.5 lecture:rounded-none lab:hidden"
+            />
+            <ol
+              aria-hidden
+              className="hidden gap-[3px] lab:grid"
+              style={{ gridTemplateColumns: `repeat(${questions.length}, minmax(0, 1fr))` }}
+            >
+              {questions.map((question, i) => (
+                <li
+                  key={question.id}
+                  className={cn(
+                    'h-1 transition-colors duration-200 ease-out',
+                    i === index && !answeredIds.has(question.id)
+                      ? 'bg-primary'
+                      : answeredIds.has(question.id)
+                        ? 'bg-emerald-600 dark:bg-emerald-500'
+                        : 'bg-border',
+                  )}
+                />
+              ))}
+            </ol>
+            <p className="data-num text-xs text-muted-foreground lab:font-mono lab:text-[11.5px]">
+              {t('quiz.progress', {
+                answered: answeredCount,
+                total: questions.length,
+              })}
+            </p>
+          </div>
+
+          {current && (
+            <QuestionCard
+              key={current.id}
+              question={current}
+              index={index}
+              total={questions.length}
+              difficulty={current.difficulty}
+              value={answer}
+              onChange={setAnswer}
+              onSubmit={submit}
+              onNext={next}
+              busy={busy}
+              evaluation={evaluation}
+              isLast={nextOpenIndex(questions, answeredIds, index) === -1}
+              {...(evaluation?.method === 'rubric_ai' && !evaluation.disputed && attemptId
+                ? { onDispute: () => void dispute() }
+                : {})}
+              disputing={disputing}
+            />
+          )}
+
+          {evaluation?.isCorrect === null && current?.type !== 'short_answer' && (
+            <Card>
+              <CardContent className="p-4 text-xs text-muted-foreground">
+                {t('quiz.unverifiedNote')}
+              </CardContent>
+            </Card>
+          )}
         </div>
-
-        {current && (
-          <QuestionCard
-            key={current.id}
-            question={current}
-            index={index}
-            total={questions.length}
-            difficulty={current.difficulty}
-            value={answer}
-            onChange={setAnswer}
-            onSubmit={submit}
-            onNext={next}
-            busy={busy}
-            evaluation={evaluation}
-            isLast={nextOpenIndex(questions, answeredIds, index) === -1}
-            {...(evaluation?.method === 'rubric_ai' && !evaluation.disputed && attemptId
-              ? { onDispute: () => void dispute() }
-              : {})}
-            disputing={disputing}
-          />
-        )}
-
-        {evaluation?.isCorrect === null && current?.type !== 'short_answer' && (
-          <Card>
-            <CardContent className="p-4 text-xs text-muted-foreground">
-              {t('quiz.unverifiedNote')}
-            </CardContent>
-          </Card>
-        )}
       </PageContent>
     </PageContainer>
   )

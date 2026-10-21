@@ -1,5 +1,15 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
-import { BookA, BookOpenCheck, Flame, GraduationCap, Loader2, Play, Sparkles, Trash2, Upload, X } from 'lucide-react'
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
+import {
+  BookA,
+  BookOpenCheck,
+  GraduationCap,
+  Loader2,
+  Play,
+  Sparkles,
+  Trash2,
+  Upload,
+  X,
+} from 'lucide-react'
 import { Button } from '@/shared/ui/Button'
 import { Badge } from '@/shared/ui/Badge'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/shared/ui/Card'
@@ -16,12 +26,24 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/shared/ui/Tabs'
 import { cn } from '@/shared/lib/utils'
 import { StudySession } from '@/widgets/vocab/StudySession'
 import { ExportMenu, ImportDialog, WordListDialog } from '@/widgets/vocab/VocabDialogs'
-import { MAX_DAILY_NEW, VocabService, type BookSummary, type VocabStats } from '@/services/vocabService'
+import {
+  MAX_DAILY_NEW,
+  VocabService,
+  type BookSummary,
+  type VocabStats,
+} from '@/services/vocabService'
 import { CourseVocabService } from '@/services/courseVocabService'
 import { ProjectService } from '@/services/projectService'
 import { buildAIServices } from '@/services/aiServices'
 import { useProjects } from '@/features/project/useProjects'
-import { RECOMMENDED_BOOK, type ReviewModePreference, type SessionItem, type VocabCard, type VocabSettings, type WordView } from '@/entities/vocab/types'
+import {
+  RECOMMENDED_BOOK,
+  type ReviewModePreference,
+  type SessionItem,
+  type VocabCard,
+  type VocabSettings,
+  type WordView,
+} from '@/entities/vocab/types'
 import { toast } from '@/features/toast/toastStore'
 import { friendlyAIError } from '@/shared/lib/aiErrors'
 import { useTranslation, type TranslationKey } from '@/i18n'
@@ -36,6 +58,13 @@ const REVIEW_MODES: Array<{ value: ReviewModePreference; labelKey: TranslationKe
 ]
 
 const bookName = (book: BookSummary, t: T) => (book.nameKey ? t(book.nameKey) : book.name)
+
+/** Lecture sets panels straight on the page, separated by rules; lab keeps the hairline box. */
+const FLAT_IN_LECTURE =
+  'lecture:rounded-none lecture:border-x-0 lecture:border-b-0 lecture:bg-transparent lecture:shadow-none'
+const PANEL_HEAD = 'lecture:px-0 lab:border-b lab:px-3.5 lab:py-3'
+const PANEL_TITLE =
+  'text-base lecture:font-heading lecture:text-lg lecture:font-bold lab:font-mono lab:text-[11px] lab:font-normal lab:uppercase lab:tracking-wider lab:text-muted-foreground'
 
 export function VocabPage(): JSX.Element {
   const { t } = useTranslation()
@@ -73,7 +102,11 @@ export function VocabPage(): JSX.Element {
       toast({ variant: 'success', title: t('vocab.bookChosen') })
       await refresh()
     } catch (err) {
-      toast({ variant: 'error', title: t('vocab.chooseBookFailed'), description: (err as Error).message })
+      toast({
+        variant: 'error',
+        title: t('vocab.chooseBookFailed'),
+        description: (err as Error).message,
+      })
     }
   }
 
@@ -82,13 +115,20 @@ export function VocabPage(): JSX.Element {
     try {
       const items = kind === 'today' ? await service.session() : await service.mistakeSession()
       if (items.length === 0) {
-        toast({ variant: 'info', title: kind === 'today' ? t('vocab.nothingToday') : t('vocab.noMistakes') })
+        toast({
+          variant: 'info',
+          title: kind === 'today' ? t('vocab.nothingToday') : t('vocab.noMistakes'),
+        })
         return
       }
       setSession(items)
     } catch (err) {
       // e.g. the dictionary (public/vocab/dictionary.json) failed to load.
-      toast({ variant: 'error', title: t('vocab.startFailed'), description: (err as Error).message })
+      toast({
+        variant: 'error',
+        title: t('vocab.startFailed'),
+        description: (err as Error).message,
+      })
     } finally {
       setStarting(false)
     }
@@ -113,12 +153,17 @@ export function VocabPage(): JSX.Element {
   }
 
   const current = books.find((book) => book.id === settings?.bookId)
+  // In lecture the today sentence below is the page's visible title.
+  const showToday = Boolean(settings && stats && !session && settings.bookId)
   return (
     <PageContainer>
       <PageHeader
+        className={
+          showToday ? 'lecture:pb-0 lecture:[&_h1]:sr-only lecture:[&_h1~p]:hidden' : undefined
+        }
         title={
           <span className="flex items-center gap-2">
-            <BookA className="h-4 w-4" />
+            <BookA className="h-4 w-4 lecture:hidden" />
             {t('vocab.title')}
           </span>
         }
@@ -158,6 +203,7 @@ export function VocabPage(): JSX.Element {
                 setSettings(await service.updateSettings(patch))
                 refreshStats()
               }}
+              service={service}
               t={t}
             />
             <Tabs defaultValue="books">
@@ -190,7 +236,12 @@ export function VocabPage(): JSX.Element {
                 />
               </TabsContent>
               <TabsContent value="mistakes" className="pt-4">
-                <MistakePanel service={service} starting={starting} onPractice={() => void start('mistakes')} t={t} />
+                <MistakePanel
+                  service={service}
+                  starting={starting}
+                  onPractice={() => void start('mistakes')}
+                  t={t}
+                />
               </TabsContent>
               <TabsContent value="stats" className="pt-4">
                 <StatsPanel stats={stats} service={service} t={t} />
@@ -234,16 +285,24 @@ export function VocabPage(): JSX.Element {
   )
 }
 
-function BookChooser({ books, onChoose, t }: { books: BookSummary[]; onChoose: (id: string) => void; t: T }): JSX.Element {
+function BookChooser({
+  books,
+  onChoose,
+  t,
+}: {
+  books: BookSummary[]
+  onChoose: (id: string) => void
+  t: T
+}): JSX.Element {
   const exam = books.filter((book) => book.kind === 'exam')
   const own = books.filter((book) => book.kind !== 'exam')
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="text-base">{t('vocab.chooseTitle')}</CardTitle>
+    <Card className={FLAT_IN_LECTURE}>
+      <CardHeader className={PANEL_HEAD}>
+        <CardTitle className={PANEL_TITLE}>{t('vocab.chooseTitle')}</CardTitle>
         <CardDescription>{t('vocab.chooseHint')}</CardDescription>
       </CardHeader>
-      <CardContent className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <CardContent className="grid gap-3 lecture:px-0 lab:p-3.5 sm:grid-cols-2 lg:grid-cols-4">
         {[...exam, ...own].map((book) => (
           <button
             key={book.id}
@@ -258,7 +317,9 @@ function BookChooser({ books, onChoose, t }: { books: BookSummary[]; onChoose: (
               {bookName(book, t)}
               {book.id === RECOMMENDED_BOOK && <Badge>{t('vocab.recommended')}</Badge>}
             </span>
-            <span className="block text-xs text-muted-foreground">{t('vocab.wordCount', { count: book.wordCount })}</span>
+            <span className="block text-xs text-muted-foreground">
+              {t('vocab.wordCount', { count: book.wordCount })}
+            </span>
           </button>
         ))}
       </CardContent>
@@ -273,9 +334,11 @@ function TodayCard({
   starting,
   onStart,
   onSettings,
+  service,
   t,
 }: {
   stats: VocabStats
+  service: VocabService
   settings: VocabSettings
   current: BookSummary | undefined
   starting: boolean
@@ -286,32 +349,90 @@ function TodayCard({
   const [daily, setDaily] = useState(String(settings.dailyNew))
   useEffect(() => setDaily(String(settings.dailyNew)), [settings.dailyNew])
   const newLeft = Math.max(0, stats.dailyNew - stats.newToday)
+  const allDone = stats.due === 0 && newLeft === 0
+  const [mistakeCount, setMistakeCount] = useState<number | null>(null)
+  useEffect(() => {
+    let alive = true
+    void service
+      .mistakes()
+      .then((items) => alive && setMistakeCount(items.length))
+      .catch(() => alive && setMistakeCount(null))
+    return () => {
+      alive = false
+    }
+  }, [service, stats])
+  const pad = (value: number) => String(value).padStart(2, '0')
   return (
-    <Card>
-      <CardContent className="space-y-5 p-6">
-        <div className="grid gap-6 sm:grid-cols-[repeat(3,minmax(0,1fr))_auto] sm:items-center">
-          <Stat value={stats.due} label={t('vocab.stat.due')} strong />
-          <Stat value={`${stats.newToday}/${stats.dailyNew}`} label={t('vocab.stat.newToday')} />
-          <div>
-            <div className="flex items-center gap-1.5 text-3xl font-semibold tabular-nums">
-              <Flame className={cn('h-6 w-6', stats.streak > 0 ? 'text-amber-500' : 'text-muted-foreground')} />
-              {stats.streak}
-            </div>
-            <div className="text-xs text-muted-foreground">{t('vocab.stat.streak')}</div>
-          </div>
-          <Button onClick={onStart} disabled={starting || (stats.due === 0 && newLeft === 0)}>
+    <Card className="lecture:rounded-none lecture:border-0 lecture:bg-transparent lecture:shadow-none lab:border-0 lab:bg-transparent">
+      <CardContent className="space-y-5 p-6 lecture:p-0 lab:p-0">
+        {/* Lecture: today's work as one sentence, set as the page's serif title. */}
+        <div className="hidden space-y-2 lecture:block">
+          <p aria-hidden className="text-xs tracking-[0.14em] text-primary">
+            {t('vocab.title')}
+          </p>
+          <h2 className="font-heading text-[30px] font-bold leading-snug text-foreground">
+            {allDone
+              ? t('vocab.allDone')
+              : t('vocab.todaySentence', { review: stats.due, fresh: newLeft })}
+          </h2>
+          <p className="text-sm text-muted-foreground">
+            {[
+              current ? bookName(current, t) : null,
+              current
+                ? t('vocab.bookProgress', { learned: current.learned, total: current.wordCount })
+                : null,
+              t('vocab.streakDays', { count: stats.streak }),
+            ]
+              .filter(Boolean)
+              .join(' · ')}
+          </p>
+        </div>
+        {/* Lab: a readout strip. */}
+        <div className="hidden border bg-card lab:grid lab:grid-cols-2 sm:lab:grid-cols-4">
+          <Readout label={t('vocab.stat.due')} value={pad(stats.due)} />
+          <Readout
+            label={t('vocab.stat.newToday')}
+            value={pad(stats.newToday)}
+            total={stats.dailyNew}
+          >
+            <Progress
+              value={stats.dailyNew ? (stats.newToday / stats.dailyNew) * 100 : 0}
+              className="mt-2.5 h-1"
+            />
+          </Readout>
+          <Readout label={t('vocab.stat.streak')} value={pad(stats.streak)} />
+          <Readout
+            label={t('vocab.tab.mistakes')}
+            value={mistakeCount === null ? '—' : pad(mistakeCount)}
+          />
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            onClick={onStart}
+            disabled={starting || allDone}
+            className="lecture:h-10 lecture:px-5"
+          >
             {starting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
-            {stats.due === 0 && newLeft === 0 ? t('vocab.allDone') : t('vocab.start', { review: stats.due, fresh: newLeft })}
+            {allDone ? t('vocab.allDone') : t('vocab.start', { review: stats.due, fresh: newLeft })}
           </Button>
         </div>
-        <div className="grid gap-4 border-t border-border/70 pt-4 sm:grid-cols-3">
+        <div className="grid gap-4 border-t border-border/70 pt-4 lecture:border-b lecture:pb-4 lab:border lab:bg-card lab:p-4 sm:grid-cols-3">
           <div className="space-y-1">
             <Label>{t('vocab.currentBook')}</Label>
             <p className="text-sm">
               {current ? (current.nameKey ? t(current.nameKey) : current.name) : '—'}
-              {current && <span className="ml-2 text-xs text-muted-foreground">{t('vocab.bookProgress', { learned: current.learned, total: current.wordCount })}</span>}
+              {current && (
+                <span className="ml-2 text-xs text-muted-foreground">
+                  {t('vocab.bookProgress', { learned: current.learned, total: current.wordCount })}
+                </span>
+              )}
             </p>
-            {current && <Progress value={current.wordCount ? (current.learned / current.wordCount) * 100 : 0} className="h-1" />}
+            {current && (
+              <Progress
+                value={current.wordCount ? (current.learned / current.wordCount) * 100 : 0}
+                className="h-1"
+              />
+            )}
           </div>
           <div className="space-y-1">
             <Label htmlFor="vocab-daily">{t('vocab.dailyNew')}</Label>
@@ -324,14 +445,20 @@ function TodayCard({
               onChange={(event) => setDaily(event.target.value)}
               onBlur={() => {
                 const value = Number(daily)
-                if (Number.isFinite(value) && value >= 1 && value !== settings.dailyNew) void onSettings({ dailyNew: value })
+                if (Number.isFinite(value) && value >= 1 && value !== settings.dailyNew)
+                  void onSettings({ dailyNew: value })
                 else setDaily(String(settings.dailyNew))
               }}
             />
           </div>
           <div className="space-y-1">
             <Label htmlFor="vocab-mode">{t('vocab.reviewModeLabel')}</Label>
-            <Select value={settings.reviewMode} onValueChange={(value) => void onSettings({ reviewMode: value as ReviewModePreference })}>
+            <Select
+              value={settings.reviewMode}
+              onValueChange={(value) =>
+                void onSettings({ reviewMode: value as ReviewModePreference })
+              }
+            >
               <SelectTrigger id="vocab-mode">
                 <SelectValue />
               </SelectTrigger>
@@ -350,11 +477,54 @@ function TodayCard({
   )
 }
 
-function Stat({ value, label, strong }: { value: number | string; label: string; strong?: boolean }): JSX.Element {
+function Stat({
+  value,
+  label,
+  strong,
+}: {
+  value: number | string
+  label: string
+  strong?: boolean
+}): JSX.Element {
   return (
-    <div>
-      <div className={cn('text-3xl font-semibold tabular-nums', strong && 'text-theme-primary')}>{value}</div>
-      <div className="text-xs text-muted-foreground">{label}</div>
+    <div className="lecture:border-l lecture:pl-4 lecture:first:border-l-0 lecture:first:pl-0">
+      <div
+        className={cn(
+          'text-3xl font-semibold tabular-nums lecture:font-heading lecture:font-bold lab:font-mono lab:text-[22px] lab:font-medium',
+          strong && 'text-theme-primary lecture:text-foreground',
+        )}
+      >
+        {value}
+      </div>
+      <div className="text-xs text-muted-foreground lecture:text-[13px] lab:font-mono lab:text-[10.5px] lab:uppercase lab:tracking-wider">
+        {label}
+      </div>
+    </div>
+  )
+}
+
+/** One cell of the lab readout strip: mono label, mono value, optional detail. */
+function Readout({
+  label,
+  value,
+  total,
+  children,
+}: {
+  label: string
+  value: string
+  total?: number
+  children?: ReactNode
+}): JSX.Element {
+  return (
+    <div className="border-b border-r px-3.5 py-3 sm:border-b-0 sm:last:!border-r-0 [&:nth-child(2n)]:border-r-0 sm:[&:nth-child(2n)]:border-r [&:nth-child(n+3)]:border-b-0">
+      <p className="font-mono text-[10.5px] uppercase tracking-wider text-muted-foreground">
+        {label}
+      </p>
+      <p className="mt-1.5 font-mono text-[22px] font-medium tabular-nums">
+        {value}
+        {total !== undefined && <small className="text-xs text-muted-foreground">/{total}</small>}
+      </p>
+      {children}
     </div>
   )
 }
@@ -377,30 +547,62 @@ function BookRow({
   t: T
 }): JSX.Element {
   return (
-    <div className="flex flex-wrap items-center gap-3 px-6 py-3">
-      <div className="min-w-0 flex-1 space-y-1">
-        <p className="flex items-center gap-2 text-sm font-medium">
+    <div className="flex flex-wrap items-center gap-3 px-6 py-3 lecture:px-0 lab:px-3.5 lab:py-2.5">
+      <div className="min-w-0 flex-1 space-y-1 sm:lab:grid sm:lab:grid-cols-[minmax(0,1fr)_6rem_10rem] sm:lab:items-center sm:lab:gap-3 sm:lab:space-y-0">
+        <p className="flex items-center gap-2 text-sm font-medium lecture:font-heading lecture:text-base">
           {bookName(book, t)}
-          {current && <Badge variant="outline">{t('vocab.current')}</Badge>}
-          {book.id === RECOMMENDED_BOOK && !current && <Badge variant="outline">{t('vocab.recommended')}</Badge>}
+          {current && (
+            <Badge
+              variant="outline"
+              className="lab:border-primary/40 lab:font-mono lab:text-primary"
+            >
+              {t('vocab.current')}
+            </Badge>
+          )}
+          {book.id === RECOMMENDED_BOOK && !current && (
+            <Badge variant="outline">{t('vocab.recommended')}</Badge>
+          )}
         </p>
-        <div className="flex items-center gap-2">
-          <Progress value={book.wordCount ? (book.learned / book.wordCount) * 100 : 0} className="h-1 max-w-48 flex-1" />
-          <span className="text-xs tabular-nums text-muted-foreground">{t('vocab.bookProgress', { learned: book.learned, total: book.wordCount })}</span>
+        <span className="hidden font-mono text-[13px] tabular-nums text-muted-foreground sm:lab:block">
+          {t('vocab.wordCount', { count: book.wordCount })}
+        </span>
+        <div className="flex items-center gap-2 lab:flex-col-reverse lab:items-stretch lab:gap-1">
+          <Progress
+            value={book.wordCount ? (book.learned / book.wordCount) * 100 : 0}
+            className="h-1 max-w-48 flex-1 lab:max-w-none lab:flex-none lab:rounded-none"
+          />
+          <span className="text-xs tabular-nums text-muted-foreground lab:font-mono">
+            {t('vocab.bookProgress', { learned: book.learned, total: book.wordCount })}
+          </span>
         </div>
       </div>
-      <div className="flex flex-wrap gap-1.5">
+      {/* lab: a fixed-width, right-aligned action cell keeps the table columns lined up. */}
+      <div className="flex flex-wrap gap-1.5 sm:lab:min-w-[18.5rem] sm:lab:justify-end">
         <Button variant="ghost" size="sm" onClick={() => onView(book)}>
           {t('vocab.viewWords')}
         </Button>
-        <ExportMenu service={service} target={{ bookId: book.id }} disabled={book.wordCount === 0} />
+        <ExportMenu
+          service={service}
+          target={{ bookId: book.id }}
+          disabled={book.wordCount === 0}
+        />
         {!current && (
-          <Button variant="outline" size="sm" onClick={() => onChoose(book.id)} disabled={book.wordCount === 0}>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => onChoose(book.id)}
+            disabled={book.wordCount === 0}
+          >
             {t('vocab.useBook')}
           </Button>
         )}
         {onDelete && (
-          <Button variant="ghost" size="icon" aria-label={t('vocab.deleteBook')} onClick={() => onDelete(book)}>
+          <Button
+            variant="ghost"
+            size="icon"
+            aria-label={t('vocab.deleteBook')}
+            onClick={() => onDelete(book)}
+          >
             <Trash2 className="h-4 w-4" />
           </Button>
         )}
@@ -427,8 +629,8 @@ function BookList({
   t: T
 }): JSX.Element {
   return (
-    <Card>
-      <CardContent className="divide-y divide-border/70 p-0">
+    <Card className="lecture:rounded-none lecture:border-x-0 lecture:border-b-0 lecture:bg-transparent lecture:shadow-none">
+      <CardContent className="divide-y divide-border/70 p-0 lecture:divide-border">
         {books.map((book) => (
           <BookRow
             key={book.id}
@@ -471,7 +673,10 @@ function CourseVocabPanel({
     setRunning(projectId)
     try {
       const bundle = await buildAIServices()
-      const result = await new CourseVocabService({ projects: new ProjectService(), ai: bundle?.ai ?? null }).extract(projectId)
+      const result = await new CourseVocabService({
+        projects: new ProjectService(),
+        ai: bundle?.ai ?? null,
+      }).extract(projectId)
       toast({
         variant: 'success',
         title: t('vocab.course.done', { total: result.total, added: result.added }),
@@ -483,7 +688,11 @@ function CourseVocabPanel({
       })
       onChanged()
     } catch (err) {
-      toast({ variant: 'error', title: t('vocab.course.failed'), description: friendlyAIError(err) })
+      toast({
+        variant: 'error',
+        title: t('vocab.course.failed'),
+        description: friendlyAIError(err),
+      })
     } finally {
       setRunning(null)
     }
@@ -491,12 +700,18 @@ function CourseVocabPanel({
 
   if (loading) return <LoadingState label={t('vocab.loading')} />
   if (projects.length === 0) {
-    return <EmptyState icon={<GraduationCap className="h-10 w-10" />} title={t('vocab.course.noProjects')} description={t('vocab.course.noProjectsHint')} />
+    return (
+      <EmptyState
+        icon={<GraduationCap className="h-10 w-10" />}
+        title={t('vocab.course.noProjects')}
+        description={t('vocab.course.noProjectsHint')}
+      />
+    )
   }
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="text-base">{t('vocab.course.title')}</CardTitle>
+    <Card className={FLAT_IN_LECTURE}>
+      <CardHeader className={PANEL_HEAD}>
+        <CardTitle className={PANEL_TITLE}>{t('vocab.course.title')}</CardTitle>
         <CardDescription>{t('vocab.course.hint')}</CardDescription>
       </CardHeader>
       <CardContent className="divide-y divide-border/70 p-0">
@@ -504,15 +719,33 @@ function CourseVocabPanel({
           const book = books.find((item) => item.projectId === project.id)
           return (
             <div key={project.id}>
-              <div className="flex flex-wrap items-center gap-3 px-6 py-3">
-                <p className="min-w-0 flex-1 text-sm font-medium">{project.name}</p>
-                <Button variant="outline" size="sm" disabled={running !== null} onClick={() => void extract(project.id)}>
-                  {running === project.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+              <div className="flex flex-wrap items-center gap-3 px-6 py-3 lecture:px-0 lab:px-3.5">
+                <p className="min-w-0 flex-1 text-sm font-medium lecture:font-heading lecture:text-base lecture:font-bold">
+                  {project.name}
+                </p>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={running !== null}
+                  onClick={() => void extract(project.id)}
+                >
+                  {running === project.id ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Sparkles className="h-4 w-4" />
+                  )}
                   {book ? t('vocab.course.update') : t('vocab.course.extract')}
                 </Button>
               </div>
               {book && (
-                <BookRow book={book} current={book.id === currentId} service={service} onChoose={onChoose} onView={onView} t={t} />
+                <BookRow
+                  book={book}
+                  current={book.id === currentId}
+                  service={service}
+                  onChoose={onChoose}
+                  onView={onView}
+                  t={t}
+                />
               )}
             </div>
           )
@@ -522,19 +755,42 @@ function CourseVocabPanel({
   )
 }
 
-function MistakePanel({ service, starting, onPractice, t }: { service: VocabService; starting: boolean; onPractice: () => void; t: T }): JSX.Element {
+function MistakePanel({
+  service,
+  starting,
+  onPractice,
+  t,
+}: {
+  service: VocabService
+  starting: boolean
+  onPractice: () => void
+  t: T
+}): JSX.Element {
   const [items, setItems] = useState<Array<{ view: WordView; card: VocabCard }> | null>(null)
   const load = useCallback(() => void service.mistakes().then(setItems), [service])
   useEffect(load, [load])
   if (!items) return <LoadingState label={t('vocab.loading')} />
   if (items.length === 0) {
-    return <EmptyState icon={<BookOpenCheck className="h-10 w-10" />} title={t('vocab.noMistakes')} description={t('vocab.noMistakesHint')} />
+    return (
+      <EmptyState
+        icon={<BookOpenCheck className="h-10 w-10" />}
+        title={t('vocab.noMistakes')}
+        description={t('vocab.noMistakesHint')}
+      />
+    )
   }
   return (
-    <Card>
-      <CardHeader className="gap-3 sm:flex-row sm:items-center sm:justify-between sm:space-y-0">
+    <Card className={FLAT_IN_LECTURE}>
+      <CardHeader
+        className={cn(
+          PANEL_HEAD,
+          'gap-3 sm:flex-row sm:items-center sm:justify-between sm:space-y-0',
+        )}
+      >
         <div>
-          <CardTitle className="text-base">{t('vocab.mistakesTitle', { count: items.length })}</CardTitle>
+          <CardTitle className={PANEL_TITLE}>
+            {t('vocab.mistakesTitle', { count: items.length })}
+          </CardTitle>
           <CardDescription>{t('vocab.mistakesHint')}</CardDescription>
         </div>
         <div className="flex gap-2">
@@ -547,15 +803,22 @@ function MistakePanel({ service, starting, onPractice, t }: { service: VocabServ
       </CardHeader>
       <CardContent className="divide-y divide-border/70 p-0">
         {items.map(({ view, card }) => (
-          <div key={view.word} className="flex items-start gap-3 px-6 py-2.5">
+          <div
+            key={view.word}
+            className="flex items-start gap-3 px-6 py-2.5 lecture:px-0 lab:px-3.5"
+          >
             <div className="min-w-0 flex-1">
               <p className="text-sm">
                 <span translate="no" className="notranslate font-medium">
                   {view.word}
                 </span>
-                <span className="ml-2 text-xs text-destructive">{t('vocab.mistakeCount', { count: card.mistakes })}</span>
+                <span className="ml-2 text-xs tabular-nums text-destructive lab:font-mono">
+                  {t('vocab.mistakeCount', { count: card.mistakes })}
+                </span>
               </p>
-              <p className="text-sm text-muted-foreground">{view.meanings.join('；') || t('vocab.noMeaning')}</p>
+              <p className="text-sm text-muted-foreground">
+                {view.meanings.join('；') || t('vocab.noMeaning')}
+              </p>
             </div>
             <Button
               variant="ghost"
@@ -575,15 +838,28 @@ function MistakePanel({ service, starting, onPractice, t }: { service: VocabServ
   )
 }
 
-function StatsPanel({ stats, service, t }: { stats: VocabStats; service: VocabService; t: T }): JSX.Element {
+function StatsPanel({
+  stats,
+  service,
+  t,
+}: {
+  stats: VocabStats
+  service: VocabService
+  t: T
+}): JSX.Element {
   const max = Math.max(1, ...stats.forecast)
   return (
-    <Card>
-      <CardHeader className="gap-3 sm:flex-row sm:items-center sm:justify-between sm:space-y-0">
-        <CardTitle className="text-base">{t('vocab.tab.stats')}</CardTitle>
+    <Card className={FLAT_IN_LECTURE}>
+      <CardHeader
+        className={cn(
+          PANEL_HEAD,
+          'gap-3 sm:flex-row sm:items-center sm:justify-between sm:space-y-0',
+        )}
+      >
+        <CardTitle className={PANEL_TITLE}>{t('vocab.tab.stats')}</CardTitle>
         <ExportMenu service={service} target="learned" disabled={stats.learned === 0} />
       </CardHeader>
-      <CardContent className="space-y-6">
+      <CardContent className="space-y-6 lecture:px-0 lab:p-3.5">
         <div className="grid gap-6 sm:grid-cols-4">
           <Stat value={stats.learned} label={t('vocab.stat.learned')} />
           <Stat value={stats.mature} label={t('vocab.stat.mature')} />
@@ -591,13 +867,22 @@ function StatsPanel({ stats, service, t }: { stats: VocabStats; service: VocabSe
           <Stat value={stats.streak} label={t('vocab.stat.streak')} />
         </div>
         <div className="space-y-2">
-          <p className="text-sm font-medium">{t('vocab.forecast')}</p>
+          <p className="text-sm font-medium lecture:font-heading lecture:text-base lecture:font-bold lab:font-mono lab:text-[11px] lab:font-normal lab:uppercase lab:tracking-wider lab:text-muted-foreground">
+            {t('vocab.forecast')}
+          </p>
           <div className="flex h-28 items-end gap-2">
             {stats.forecast.map((count, i) => (
               <div key={i} className="flex flex-1 flex-col items-center gap-1">
-                <span className="text-xs tabular-nums text-muted-foreground">{count}</span>
-                <div className="w-full rounded-t bg-theme-primary/70" style={{ height: `${Math.max(2, (count / max) * 80)}px` }} />
-                <span className="text-[11px] text-muted-foreground">{i === 0 ? t('vocab.today') : t('vocab.inDays', { count: i })}</span>
+                <span className="text-xs tabular-nums text-muted-foreground lab:font-mono">
+                  {count}
+                </span>
+                <div
+                  className="w-full rounded-t bg-theme-primary/70 lab:rounded-none"
+                  style={{ height: `${Math.max(2, (count / max) * 80)}px` }}
+                />
+                <span className="text-[11px] text-muted-foreground">
+                  {i === 0 ? t('vocab.today') : t('vocab.inDays', { count: i })}
+                </span>
               </div>
             ))}
           </div>

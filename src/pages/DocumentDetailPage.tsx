@@ -90,7 +90,9 @@ export function DocumentDetailPage(): JSX.Element {
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()
     if (!q) return chunks
-    return chunks.filter((c) => c.text.toLowerCase().includes(q) || c.sourceReference.toLowerCase().includes(q))
+    return chunks.filter(
+      (c) => c.text.toLowerCase().includes(q) || c.sourceReference.toLowerCase().includes(q),
+    )
   }, [chunks, search])
 
   if (!projectId) return <div />
@@ -159,7 +161,11 @@ export function DocumentDetailPage(): JSX.Element {
       setImpact(await describeDelete(document.id, projectId))
       setDeleteOpen(true)
     } catch (err) {
-      toast({ variant: 'error', title: t('documentDetail.deleteFailed'), description: (err as Error).message })
+      toast({
+        variant: 'error',
+        title: t('documentDetail.deleteFailed'),
+        description: (err as Error).message,
+      })
     } finally {
       setCheckingDelete(false)
     }
@@ -178,7 +184,11 @@ export function DocumentDetailPage(): JSX.Element {
       navigate(`/projects/${projectId}`, { replace: true })
     } catch (err) {
       setDeleteOpen(false)
-      toast({ variant: 'error', title: t('documentDetail.deleteFailed'), description: (err as Error).message })
+      toast({
+        variant: 'error',
+        title: t('documentDetail.deleteFailed'),
+        description: (err as Error).message,
+      })
     } finally {
       setDeleting(false)
     }
@@ -205,7 +215,15 @@ export function DocumentDetailPage(): JSX.Element {
             </Button>
             <TruncatedText text={document.name} className="min-w-0 max-w-full" />
             <Badge variant="outline">{document.type.toUpperCase()}</Badge>
-            <Badge variant={document.status === 'ready' ? 'default' : document.status === 'failed' ? 'destructive' : 'secondary'}>
+            <Badge
+              variant={
+                document.status === 'ready'
+                  ? 'default'
+                  : document.status === 'failed'
+                    ? 'destructive'
+                    : 'secondary'
+              }
+            >
               {t(PROCESSING_STATUS_LABEL_KEYS[document.status])}
             </Badge>
           </div>
@@ -213,7 +231,11 @@ export function DocumentDetailPage(): JSX.Element {
         description={t('documentDetail.subtitle')}
         nav={<ProjectFlowNav projectId={projectId} active="home" />}
         actions={
-          <Button variant="destructive" onClick={() => void requestDelete()} disabled={checkingDelete}>
+          <Button
+            variant="destructive"
+            onClick={() => void requestDelete()}
+            disabled={checkingDelete}
+          >
             <Trash2 className="h-4 w-4" />
             {t('common.delete')}
           </Button>
@@ -238,7 +260,9 @@ export function DocumentDetailPage(): JSX.Element {
                   className="pl-9"
                 />
               </div>
-              <Badge variant="outline">{filtered.length} / {chunks.length}</Badge>
+              <Badge variant="outline" className="data-num lab:font-mono">
+                {filtered.length} / {chunks.length}
+              </Badge>
             </div>
 
             {chunksError && (
@@ -284,16 +308,36 @@ export function DocumentDetailPage(): JSX.Element {
                 <CardDescription>{t('documentDetail.summaryHint')}</CardDescription>
               </CardHeader>
               <CardContent className="grid gap-3 sm:grid-cols-2">
-                <Meta icon={<Layers className="h-4 w-4" />} label={t('documentDetail.type')} value={document.type.toUpperCase()} />
-                <Meta icon={<Hash className="h-4 w-4" />} label={t('documentDetail.chunks')} value={String(chunks.length)} />
+                <Meta
+                  icon={<Layers className="h-4 w-4" />}
+                  label={t('documentDetail.type')}
+                  value={document.type.toUpperCase()}
+                />
+                <Meta
+                  icon={<Hash className="h-4 w-4" />}
+                  label={t('documentDetail.chunks')}
+                  value={String(chunks.length)}
+                />
                 <Meta
                   icon={<FileText className="h-4 w-4" />}
                   label={t('documentDetail.textLength')}
-                  value={document.textLength ? t('documentDetail.chars', { count: document.textLength.toLocaleString() }) : '—'}
+                  value={
+                    document.textLength
+                      ? t('documentDetail.chars', { count: document.textLength.toLocaleString() })
+                      : '—'
+                  }
                 />
-                <Meta icon={<Calendar className="h-4 w-4" />} label={t('documentDetail.uploaded')} value={formatDate(document.uploadedAt)} />
+                <Meta
+                  icon={<Calendar className="h-4 w-4" />}
+                  label={t('documentDetail.uploaded')}
+                  value={formatDate(document.uploadedAt)}
+                />
                 {document.processedAt && (
-                  <Meta icon={<Calendar className="h-4 w-4" />} label={t('documentDetail.processed')} value={formatDateTime(document.processedAt)} />
+                  <Meta
+                    icon={<Calendar className="h-4 w-4" />}
+                    label={t('documentDetail.processed')}
+                    value={formatDateTime(document.processedAt)}
+                  />
                 )}
               </CardContent>
               {document.warnings.length > 0 && (
@@ -328,21 +372,73 @@ export function DocumentDetailPage(): JSX.Element {
                 <CardDescription>{t('documentDetail.metadataHint')}</CardDescription>
               </CardHeader>
               <CardContent className="space-y-2 text-sm">
-                <Meta icon={<FileText className="h-4 w-4" />} label={t('documentDetail.fileSize')} value={formatBytes(document.sizeBytes)} />
-                {document.mimeType && <Meta icon={<FileText className="h-4 w-4" />} label={t('documentDetail.mimeType')} value={document.mimeType} />}
-                {document.metadata.title && <Meta icon={<FileText className="h-4 w-4" />} label={t('documentDetail.fileTitle')} value={document.metadata.title} />}
-                {document.metadata.author && <Meta icon={<FileText className="h-4 w-4" />} label={t('documentDetail.author')} value={document.metadata.author} />}
-                {document.metadata.subject && <Meta icon={<FileText className="h-4 w-4" />} label={t('documentDetail.subject')} value={document.metadata.subject} />}
-                {document.metadata.producer && <Meta icon={<FileText className="h-4 w-4" />} label={t('documentDetail.producer')} value={document.metadata.producer} />}
-                {document.metadata.creator && <Meta icon={<FileText className="h-4 w-4" />} label={t('documentDetail.creator')} value={document.metadata.creator} />}
+                <Meta
+                  icon={<FileText className="h-4 w-4" />}
+                  label={t('documentDetail.fileSize')}
+                  value={formatBytes(document.sizeBytes)}
+                />
+                {document.mimeType && (
+                  <Meta
+                    icon={<FileText className="h-4 w-4" />}
+                    label={t('documentDetail.mimeType')}
+                    value={document.mimeType}
+                  />
+                )}
+                {document.metadata.title && (
+                  <Meta
+                    icon={<FileText className="h-4 w-4" />}
+                    label={t('documentDetail.fileTitle')}
+                    value={document.metadata.title}
+                  />
+                )}
+                {document.metadata.author && (
+                  <Meta
+                    icon={<FileText className="h-4 w-4" />}
+                    label={t('documentDetail.author')}
+                    value={document.metadata.author}
+                  />
+                )}
+                {document.metadata.subject && (
+                  <Meta
+                    icon={<FileText className="h-4 w-4" />}
+                    label={t('documentDetail.subject')}
+                    value={document.metadata.subject}
+                  />
+                )}
+                {document.metadata.producer && (
+                  <Meta
+                    icon={<FileText className="h-4 w-4" />}
+                    label={t('documentDetail.producer')}
+                    value={document.metadata.producer}
+                  />
+                )}
+                {document.metadata.creator && (
+                  <Meta
+                    icon={<FileText className="h-4 w-4" />}
+                    label={t('documentDetail.creator')}
+                    value={document.metadata.creator}
+                  />
+                )}
                 {document.metadata.pageCount !== undefined && (
-                  <Meta icon={<Hash className="h-4 w-4" />} label={t('documentDetail.pages')} value={String(document.metadata.pageCount)} />
+                  <Meta
+                    icon={<Hash className="h-4 w-4" />}
+                    label={t('documentDetail.pages')}
+                    value={String(document.metadata.pageCount)}
+                  />
                 )}
                 {document.metadata.slideCount !== undefined && (
-                  <Meta icon={<Hash className="h-4 w-4" />} label={t('documentDetail.slides')} value={String(document.metadata.slideCount)} />
+                  <Meta
+                    icon={<Hash className="h-4 w-4" />}
+                    label={t('documentDetail.slides')}
+                    value={String(document.metadata.slideCount)}
+                  />
                 )}
                 {document.metadata.language && (
-                  <Meta icon={<FileText className="h-4 w-4" />} label={t('documentDetail.language')} value={document.metadata.language} />
+                  <Meta
+                    icon={<FileText className="h-4 w-4" />}
+                    label={t('documentDetail.language')}
+                    value={document.metadata.language}
+                  />
                 )}
                 {document.metadata.ocrConfidence !== undefined && (
                   <Meta
@@ -351,7 +447,9 @@ export function DocumentDetailPage(): JSX.Element {
                     value={`${document.metadata.ocrConfidence.toFixed(1)}%`}
                   />
                 )}
-                <p className="mt-4 text-xs text-muted-foreground">{t('documentDetail.lastActivity', { time: relativeTime(document.uploadedAt) })}</p>
+                <p className="mt-4 text-xs text-muted-foreground">
+                  {t('documentDetail.lastActivity', { time: relativeTime(document.uploadedAt) })}
+                </p>
               </CardContent>
             </Card>
           </TabsContent>
@@ -387,9 +485,18 @@ export function DocumentDetailPage(): JSX.Element {
         details={
           <dl className="space-y-1.5">
             <DetailRow label={t('documentDetail.detail.document')} value={document.name} />
-            <DetailRow label={t('documentDetail.detail.type')} value={document.type.toUpperCase()} />
-            <DetailRow label={t('documentDetail.detail.size')} value={formatBytes(document.sizeBytes)} />
-            <DetailRow label={t('documentDetail.detail.project')} value={project?.name ?? projectId ?? '—'} />
+            <DetailRow
+              label={t('documentDetail.detail.type')}
+              value={document.type.toUpperCase()}
+            />
+            <DetailRow
+              label={t('documentDetail.detail.size')}
+              value={formatBytes(document.sizeBytes)}
+            />
+            <DetailRow
+              label={t('documentDetail.detail.project')}
+              value={project?.name ?? projectId ?? '—'}
+            />
             <DetailRow
               label={t('documentDetail.detail.chunks')}
               value={t('documentDetail.detail.chunksWillDelete', {
@@ -415,10 +522,20 @@ function DetailRow({ label, value }: { label: string; value: string }) {
 function Meta({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {
   return (
     <div className="flex min-w-0 items-center gap-3 text-muted-foreground">
-      <span className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-muted">{icon}</span>
-      <div className="flex min-w-0 flex-col">
-        <span className="text-xs">{label}</span>
-        <TruncatedText text={value} className="text-sm font-medium text-foreground" />
+      <span
+        aria-hidden
+        className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-muted lecture:hidden lab:border lab:border-border lab:bg-transparent"
+      >
+        {icon}
+      </span>
+      <div className="flex min-w-0 flex-col lecture:w-full lecture:border-b lecture:border-border lecture:pb-2">
+        <span className="text-xs lab:font-mono lab:text-[10.5px] lab:uppercase lab:tracking-[0.06em]">
+          {label}
+        </span>
+        <TruncatedText
+          text={value}
+          className="data-num text-sm font-medium text-foreground lab:font-mono"
+        />
       </div>
     </div>
   )

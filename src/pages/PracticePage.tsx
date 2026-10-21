@@ -13,13 +13,22 @@ import { useProject } from '@/features/project/useProjects'
 import { VisualSourceFigure } from '@/widgets/source/VisualSourceFigure'
 import { DocumentUploadDialog } from '@/widgets/documents/DocumentUploadDialog'
 import { ProjectFlowNav } from '@/widgets/project/ProjectFlowNav'
-import { PracticeService, type PracticeFeedback, type PracticeProgress } from '@/services/practiceService'
+import {
+  PracticeService,
+  type PracticeFeedback,
+  type PracticeProgress,
+} from '@/services/practiceService'
 import { buildPracticeService } from '@/services/aiServices'
 import { ShortAnswerFeedback } from '@/widgets/quiz/ShortAnswerFeedback'
 import { CourseContextService } from '@/services/courseContextService'
-import type { PracticeQuestion, PracticeSet, ProfessorQuestionStyleProfile } from '@/entities/practice/types'
+import type {
+  PracticeQuestion,
+  PracticeSet,
+  ProfessorQuestionStyleProfile,
+} from '@/entities/practice/types'
 import type { TutorVisual } from '@/entities/tutorLesson/types'
 import { cn } from '@/shared/lib/utils'
+import { optionKeyClass, optionListClass, optionRowClass } from '@/widgets/quiz/optionStyles'
 import { useTranslation } from '@/i18n'
 
 function QuestionCard({
@@ -79,7 +88,9 @@ function QuestionCard({
       <CardHeader className="space-y-2">
         <CardTitle className="flex flex-wrap items-center gap-2 text-base">
           {question.number ? (
-            <span className="text-muted-foreground">{t('practice.number', { number: question.number })}</span>
+            <span className="text-muted-foreground">
+              {t('practice.number', { number: question.number })}
+            </span>
           ) : null}
           <Badge variant={question.status === 'verified' ? 'secondary' : 'outline'}>
             {question.status === 'verified' ? t('practice.verified') : t('practice.needsReview')}
@@ -88,28 +99,29 @@ function QuestionCard({
         <RichText
           text={question.prompt}
           format="markdown"
-          paragraphClassName="text-[16px] leading-[1.7]"
+          paragraphClassName="text-[16px] leading-[1.7] lecture:font-heading lecture:text-[19px] lecture:font-semibold lecture:leading-[1.75] lab:text-[16px]"
         />
       </CardHeader>
       <CardContent className="space-y-3">
         {visual && <VisualSourceFigure visual={visual} />}
 
         {isChoice ? (
-          <ul className="space-y-1.5">
+          <ul className={optionListClass}>
             {question.options.map((option, index) => {
               const label = String.fromCharCode(65 + index)
+              const selected = answer === label
               return (
                 <li key={option.id}>
                   <button
                     type="button"
                     onClick={() => setAnswer(label)}
-                    className={cn(
-                      'flex w-full items-start gap-2 rounded-lg border px-3 py-2 text-left text-[15px] transition-colors',
-                      answer === label ? 'border-primary bg-primary/5' : 'hover:bg-accent/50',
-                    )}
-                    aria-pressed={answer === label}
+                    className={cn(optionRowClass({ selected }), 'items-start')}
+                    aria-pressed={selected}
                   >
-                    <span className="font-medium">{label}.</span>
+                    <span aria-hidden className={optionKeyClass(selected)}>
+                      {label}
+                    </span>
+                    <span className="sr-only">{label}.</span>
                     <span className="min-w-0 break-words">{option.label}</span>
                   </button>
                 </li>
@@ -125,7 +137,13 @@ function QuestionCard({
               id={`answer-${question.id}`}
               // Graded types get the matching keyboard and a "read as"
               // preview; a short answer is free text with Unicode symbols.
-              mode={question.type === 'math_expr' ? 'expression' : question.type === 'numeric' ? 'number' : 'text'}
+              mode={
+                question.type === 'math_expr'
+                  ? 'expression'
+                  : question.type === 'numeric'
+                    ? 'number'
+                    : 'text'
+              }
               subject={project?.subject}
               multiline={question.type === 'short_answer' || question.type === 'unknown'}
               value={answer}
@@ -152,35 +170,38 @@ function QuestionCard({
               : {})}
             disputing={disputing}
           />
-        ) : feedback && (
-          <div
-            className={cn(
-              'space-y-1.5 rounded-lg border p-3 text-sm',
-              feedback.isCorrect === true && 'border-emerald-500/40 bg-emerald-50/40 dark:bg-emerald-950/20',
-              feedback.isCorrect === false && 'border-destructive/40 bg-destructive/5',
-              feedback.isCorrect === undefined && 'border-border',
-            )}
-          >
-            <p className="flex items-center gap-1.5 font-medium">
-              {feedback.isCorrect === true && <Check className="h-4 w-4 text-emerald-600" />}
-              {feedback.isCorrect === false && <X className="h-4 w-4 text-destructive" />}
-              {feedback.isCorrect === true
-                ? t('practice.correctFeedback')
-                : feedback.isCorrect === false
-                  ? t('practice.incorrectFeedback')
-                  : t('practice.cannotJudge')}
-            </p>
-            {feedback.expectedAnswer && (
-              <p className="text-muted-foreground">
-                {t('practice.expected')}: {feedback.expectedAnswer}
+        ) : (
+          feedback && (
+            <div
+              className={cn(
+                'space-y-1.5 rounded-lg border p-3 text-sm',
+                feedback.isCorrect === true &&
+                  'border-emerald-500/40 bg-emerald-50/40 dark:bg-emerald-950/20',
+                feedback.isCorrect === false && 'border-destructive/40 bg-destructive/5',
+                feedback.isCorrect === undefined && 'border-border',
+              )}
+            >
+              <p className="flex items-center gap-1.5 font-medium">
+                {feedback.isCorrect === true && <Check className="h-4 w-4 text-emerald-600" />}
+                {feedback.isCorrect === false && <X className="h-4 w-4 text-destructive" />}
+                {feedback.isCorrect === true
+                  ? t('practice.correctFeedback')
+                  : feedback.isCorrect === false
+                    ? t('practice.incorrectFeedback')
+                    : t('practice.cannotJudge')}
               </p>
-            )}
-            <p className="text-xs text-muted-foreground">
-              {feedback.answerSource === 'professor'
-                ? t('practice.answerSourceProfessor')
-                : t('practice.answerSourceNone')}
-            </p>
-          </div>
+              {feedback.expectedAnswer && (
+                <p className="text-muted-foreground">
+                  {t('practice.expected')}: {feedback.expectedAnswer}
+                </p>
+              )}
+              <p className="text-xs text-muted-foreground">
+                {feedback.answerSource === 'professor'
+                  ? t('practice.answerSourceProfessor')
+                  : t('practice.answerSourceNone')}
+              </p>
+            </div>
+          )
         )}
       </CardContent>
     </Card>

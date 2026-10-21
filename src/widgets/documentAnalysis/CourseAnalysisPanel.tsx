@@ -13,6 +13,9 @@ import type { CourseAnalysis, Formula, Topic, CourseSymbol } from '@/entities/co
 import { CourseContentRepository } from '@/entities/courseContent/repository'
 import type { CourseContentFreshness } from '@/entities/courseContent/types'
 import { friendlyAIError } from '@/shared/lib/aiErrors'
+import { cn } from '@/shared/lib/utils'
+import { useUiStyle } from '@/features/theme/useAppearance'
+import { LAB_TABLE_HEAD_CLASS } from '@/widgets/dashboard/Figures'
 import { useTranslation } from '@/i18n'
 
 export interface CourseAnalysisPanelProps {
@@ -36,6 +39,7 @@ export function CourseAnalysisPanel({
   onStartTutor,
 }: CourseAnalysisPanelProps): JSX.Element {
   const { t } = useTranslation()
+  const lab = useUiStyle().uiStyle === 'lab'
   const content = useMemo(() => new CourseContentRepository(), [])
   const [analysis, setAnalysis] = useState<CourseAnalysis | null>(null)
   const [topics, setTopics] = useState<Topic[]>([])
@@ -97,7 +101,11 @@ export function CourseAnalysisPanel({
         return
       }
       if (result.reason === 'no-documents') {
-        toast({ variant: 'error', title: t('analysis.failed'), description: t('errors.noProcessedDocuments') })
+        toast({
+          variant: 'error',
+          title: t('analysis.failed'),
+          description: t('errors.noProcessedDocuments'),
+        })
         return
       }
       if (result.reason === 'failed') {
@@ -144,7 +152,11 @@ export function CourseAnalysisPanel({
         description={t('analysis.emptyHint')}
         action={
           <Button onClick={analyze} disabled={running}>
-            {running ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+            {running ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Sparkles className="h-4 w-4" />
+            )}
             {running ? t('analysis.analyzing') : t('analysis.analyze')}
           </Button>
         }
@@ -156,18 +168,26 @@ export function CourseAnalysisPanel({
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-2">
         <Button onClick={analyze} disabled={running}>
-          {running ? <Loader2 className="h-4 w-4 animate-spin" /> : <RotateCcw className="h-4 w-4" />}
+          {running ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <RotateCcw className="h-4 w-4" />
+          )}
           {running ? t('analysis.analyzing') : t('analysis.reanalyze')}
         </Button>
         {analysis && (
           <Badge variant="outline">
-            {analysis.language === 'mixed' ? t('language.bilingual') : analysis.language.toUpperCase()}
+            {analysis.language === 'mixed'
+              ? t('language.bilingual')
+              : analysis.language.toUpperCase()}
           </Badge>
         )}
         {analysis?.promptVersion && (
           <Badge variant="outline" title={analysis.promptVersion}>
             {/* Full provenance (with the subject profile) stays in the tooltip. */}
-            {t('analysis.prompt', { version: analysis.promptVersion.split('+')[0] ?? analysis.promptVersion })}
+            {t('analysis.prompt', {
+              version: analysis.promptVersion.split('+')[0] ?? analysis.promptVersion,
+            })}
           </Badge>
         )}
         {analysis && !running && freshness?.fresh && (
@@ -209,36 +229,25 @@ export function CourseAnalysisPanel({
       )}
 
       {topics.length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-base">
-              <Tag className="h-4 w-4" /> {t('analysis.topics')}
-            </CardTitle>
-            <CardDescription>
+        <section aria-labelledby="analysis-topics" className="min-w-0">
+          <div className="mb-3 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+            <h3
+              id="analysis-topics"
+              className="flex items-center gap-2 font-heading text-base font-semibold text-foreground lecture:text-[21px] lecture:font-bold lab:font-mono lab:text-[11px] lab:font-medium lab:uppercase lab:tracking-[0.06em] lab:text-muted-foreground"
+            >
+              <Tag className="h-4 w-4 lecture:hidden lab:h-3.5 lab:w-3.5" aria-hidden />
+              {lab ? t('analysis.topics') : t('analysis.toc.title')}
+            </h3>
+            <p className="data-num text-xs text-muted-foreground lab:font-mono">
               {t('analysis.topicsCount', { count: topics.length })}
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="grid gap-3 sm:grid-cols-2">
-            {topics.map((topic) => (
-              <button
-                key={topic.id}
-                onClick={() => onStartTutor?.(topic.id)}
-                className="flex min-w-0 flex-col gap-1 rounded-lg border bg-card p-3 text-left transition-colors hover:bg-accent"
-              >
-                <TruncatedText text={topic.name} className="text-sm font-medium" />
-                <span className="line-clamp-2 break-words text-xs text-muted-foreground">
-                  {topic.description}
-                </span>
-                {topic.sourceRefs.length > 0 && (
-                  <TruncatedText
-                    text={t('analysis.source', { source: describeSources(topic.sourceRefs) })}
-                    className="text-xs text-muted-foreground"
-                  />
-                )}
-              </button>
-            ))}
-          </CardContent>
-        </Card>
+            </p>
+          </div>
+          {lab ? (
+            <TopicTable topics={topics} onStartTutor={onStartTutor} />
+          ) : (
+            <TopicContents topics={topics} onStartTutor={onStartTutor} />
+          )}
+        </section>
       )}
 
       {formulas.length > 0 && (
@@ -247,7 +256,9 @@ export function CourseAnalysisPanel({
             <CardTitle className="flex items-center gap-2 text-base">
               <Sigma className="h-4 w-4" /> {t('analysis.formulas')}
             </CardTitle>
-            <CardDescription>{t('analysis.formulasCount', { count: formulas.length })}</CardDescription>
+            <CardDescription>
+              {t('analysis.formulasCount', { count: formulas.length })}
+            </CardDescription>
           </CardHeader>
           <CardContent className="space-y-2 text-sm">
             {formulas.slice(0, 10).map((f) => (
@@ -278,7 +289,9 @@ export function CourseAnalysisPanel({
             <CardTitle className="flex items-center gap-2 text-base">
               <FileText className="h-4 w-4" /> {t('analysis.symbols')}
             </CardTitle>
-            <CardDescription>{t('analysis.symbolsCount', { count: symbols.length })}</CardDescription>
+            <CardDescription>
+              {t('analysis.symbolsCount', { count: symbols.length })}
+            </CardDescription>
           </CardHeader>
           <CardContent className="grid gap-2 sm:grid-cols-2">
             {symbols.slice(0, 18).map((s) => (
@@ -294,6 +307,160 @@ export function CourseAnalysisPanel({
           </CardContent>
         </Card>
       )}
+    </div>
+  )
+}
+interface ChapterGroup {
+  key: string
+  label: string | null
+  topics: Array<{ topic: Topic; index: number }>
+}
+
+/** Consecutive topics of the same chapter, in analysis order. */
+function groupByChapter(topics: Topic[], otherLabel: string): ChapterGroup[] {
+  const anyChapter = topics.some((topic) => topic.chapterId || topic.chapterTitle)
+  const groups: ChapterGroup[] = []
+  topics.forEach((topic, index) => {
+    const key = topic.chapterId ?? topic.chapterTitle ?? ''
+    const last = groups[groups.length - 1]
+    if (last && last.key === key) {
+      last.topics.push({ topic, index })
+      return
+    }
+    const title = [topic.chapterNumber, topic.chapterTitle].filter(Boolean).join('  ')
+    groups.push({
+      key,
+      label: anyChapter ? title || otherLabel : null,
+      topics: [{ topic, index }],
+    })
+  })
+  return groups
+}
+
+function topicNumber(topic: Topic, index: number): string {
+  return topic.sectionNumber ?? String(index + 1).padStart(2, '0')
+}
+
+/** Lecture: a table of contents — chapters in the serif, topics as ruled rows. */
+function TopicContents({
+  topics,
+  onStartTutor,
+}: {
+  topics: Topic[]
+  onStartTutor?: (topicId: string) => void
+}): JSX.Element {
+  const { t } = useTranslation()
+  const groups = groupByChapter(topics, t('analysis.toc.other'))
+  return (
+    <div className="border-t border-border">
+      {groups.map((group, groupIndex) => (
+        <div key={`${group.key}:${groupIndex}`}>
+          {group.label && (
+            <p className="pb-1.5 pt-4 font-heading text-[16px] font-bold text-foreground">
+              {group.label}
+            </p>
+          )}
+          <ul>
+            {group.topics.map(({ topic, index }) => (
+              <li key={topic.id} className="border-b border-border">
+                <button
+                  type="button"
+                  onClick={() => onStartTutor?.(topic.id)}
+                  className="focus-ring group grid w-full min-w-0 grid-cols-[3rem_minmax(0,1fr)] gap-x-2 rounded-sm py-2.5 text-left"
+                >
+                  <span className="data-num pt-px text-sm text-muted-foreground transition-colors duration-150 group-hover:text-primary">
+                    {topicNumber(topic, index)}
+                  </span>
+                  <span className="min-w-0">
+                    <TruncatedText
+                      text={topic.name}
+                      className="text-[15px] text-foreground transition-colors duration-150 group-hover:text-primary"
+                    />
+                    {topic.description && (
+                      <span className="line-clamp-1 break-words text-xs text-muted-foreground">
+                        {topic.description}
+                      </span>
+                    )}
+                    {topic.sourceRefs.length > 0 && (
+                      <TruncatedText
+                        text={t('analysis.source', { source: describeSources(topic.sourceRefs) })}
+                        className="text-xs text-muted-foreground/80"
+                      />
+                    )}
+                  </span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+/** Lab: a hairline table — mono numbers, topic, primary source. */
+function TopicTable({
+  topics,
+  onStartTutor,
+}: {
+  topics: Topic[]
+  onStartTutor?: (topicId: string) => void
+}): JSX.Element {
+  const { t } = useTranslation()
+  const head = 'px-3 py-2 text-left font-medium'
+  const cell = 'border-t border-border px-3 py-2 align-top'
+  return (
+    <div className="overflow-x-auto border border-border bg-card">
+      <table className="data-num w-full min-w-[520px] border-collapse text-[13px]">
+        <thead className={LAB_TABLE_HEAD_CLASS}>
+          <tr>
+            <th scope="col" className={cn(head, 'w-14')}>
+              #
+            </th>
+            <th scope="col" className={head}>
+              {t('analysis.col.topic')}
+            </th>
+            <th scope="col" className={cn(head, 'hidden w-56 md:table-cell')}>
+              {t('analysis.col.source')}
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          {topics.map((topic, index) => (
+            <tr key={topic.id} className="transition-colors duration-150 hover:bg-accent/50">
+              <td className={cn(cell, 'font-mono text-muted-foreground')}>
+                {topicNumber(topic, index)}
+              </td>
+              <td className={cell}>
+                <button
+                  type="button"
+                  onClick={() => onStartTutor?.(topic.id)}
+                  className="focus-ring block w-full min-w-0 rounded-sm text-left"
+                >
+                  <TruncatedText
+                    text={topic.name}
+                    className="font-medium text-foreground transition-colors duration-150 hover:text-primary"
+                  />
+                  {topic.description && (
+                    <span className="line-clamp-1 break-words text-xs text-muted-foreground">
+                      {topic.description}
+                    </span>
+                  )}
+                </button>
+              </td>
+              <td
+                className={cn(cell, 'hidden font-mono text-xs text-muted-foreground md:table-cell')}
+              >
+                {topic.sourceRefs.length > 0 ? (
+                  <TruncatedText text={describeSources(topic.sourceRefs)} />
+                ) : (
+                  '—'
+                )}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   )
 }

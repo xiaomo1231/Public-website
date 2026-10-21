@@ -3,11 +3,7 @@ import { Eye, EyeOff, ImageIcon, Languages, Loader2, RotateCcw, Save, Wifi } fro
 import { useAISettings } from '@/features/settings/useAISettings'
 import { useSettingsStore } from '@/features/settings/settingsStore'
 import { useUILanguage } from '@/features/settings/useUILanguage'
-import {
-  PROVIDER_PRESETS,
-  type AIProviderId,
-  type AISettings,
-} from '@/entities/settings/types'
+import { PROVIDER_PRESETS, type AIProviderId, type AISettings } from '@/entities/settings/types'
 import { Button } from '@/shared/ui/Button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/shared/ui/Card'
 import { Input } from '@/shared/ui/Input'
@@ -15,13 +11,7 @@ import { Label } from '@/shared/ui/Label'
 import { LoadingState } from '@/shared/ui/LoadingState'
 import { PageContainer, PageContent, PageHeader } from '@/shared/ui/Page'
 import { ThemePicker } from '@/widgets/theme/ThemePicker'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/shared/ui/Select2'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/shared/ui/Select2'
 import { Slider } from '@/shared/ui/Slider'
 import { cn } from '@/shared/lib/utils'
 import { toast } from '@/features/toast/toastStore'
@@ -31,6 +21,18 @@ import { DataManagementPanel } from '@/widgets/dataManagement/DataManagementPane
 import { APP_VERSION } from '@/shared/config/config'
 import { LANGUAGE_LABELS, UI_LANGUAGES, useTranslation, type UILanguage } from '@/i18n'
 
+/*
+ * Section shells. Lecture lays each section out as a ruled row — serif title
+ * and note on the left, controls on the right. Lab keeps a hairline panel
+ * with a mono label bar.
+ */
+const SECTION =
+  'lecture:rounded-none lecture:border-x-0 lecture:border-t-0 lecture:bg-transparent lecture:shadow-none md:lecture:grid md:lecture:grid-cols-[13rem_minmax(0,1fr)] md:lecture:gap-8'
+const SECTION_HEAD = 'lecture:px-0 lecture:pb-2 md:lecture:pb-6 lab:border-b lab:px-3.5 lab:py-2.5'
+const SECTION_TITLE =
+  'lecture:font-heading lecture:text-base lecture:font-bold lecture:leading-snug lab:font-mono lab:text-[11px] lab:font-normal lab:uppercase lab:tracking-wider lab:text-muted-foreground'
+const SECTION_BODY = 'lecture:px-0 md:lecture:pt-6 lab:p-3.5 lab:pt-3.5'
+
 export function SettingsPage(): JSX.Element {
   const { t } = useTranslation()
   const { language, setLanguage } = useUILanguage()
@@ -39,7 +41,12 @@ export function SettingsPage(): JSX.Element {
   const [showKey, setShowKey] = useState(false)
   const [dirty, setDirty] = useState(false)
   const [testing, setTesting] = useState(false)
-  const [testResult, setTestResult] = useState<{ ok: boolean; latencyMs: number; model: string; error?: string } | null>(null)
+  const [testResult, setTestResult] = useState<{
+    ok: boolean
+    latencyMs: number
+    model: string
+    error?: string
+  } | null>(null)
 
   useEffect(() => {
     if (settings && !draft) {
@@ -160,7 +167,11 @@ export function SettingsPage(): JSX.Element {
               aria-label={t('settings.testConnection')}
               title={t('settings.testConnection')}
             >
-              {testing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Wifi className="h-4 w-4" />}
+              {testing ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Wifi className="h-4 w-4" />
+              )}
               <span className="hidden sm:inline">
                 {testing ? t('settings.testing') : t('settings.testConnection')}
               </span>
@@ -172,230 +183,244 @@ export function SettingsPage(): JSX.Element {
           </>
         }
       />
-      <PageContent className="space-y-4">
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Languages className="h-4 w-4" />
-              {t('settings.language.title')}
-            </CardTitle>
-            <CardDescription>{t('settings.language.description')}</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-2">
-            <Label htmlFor="ui-language">{t('settings.language.label')}</Label>
-            <Select value={language} onValueChange={(v) => setLanguage(v as UILanguage)}>
-              <SelectTrigger id="ui-language" className="sm:max-w-xs">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {UI_LANGUAGES.map((lang) => (
-                  <SelectItem key={lang} value={lang}>
-                    {LANGUAGE_LABELS[lang]}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <p className="text-xs text-muted-foreground">{t('settings.language.hint')}</p>
-          </CardContent>
-        </Card>
+      <PageContent>
+        <div className="space-y-4 lecture:mx-auto lecture:max-w-[860px] lecture:space-y-0 lecture:border-t lab:max-w-[880px]">
+          <Card className={SECTION}>
+            <CardHeader className={SECTION_HEAD}>
+              <CardTitle className={cn(SECTION_TITLE, 'flex items-center gap-2')}>
+                <Languages className="h-4 w-4 lecture:hidden" />
+                {t('settings.language.title')}
+              </CardTitle>
+              <CardDescription>{t('settings.language.description')}</CardDescription>
+            </CardHeader>
+            <CardContent className={cn(SECTION_BODY, 'space-y-2')}>
+              <Label htmlFor="ui-language">{t('settings.language.label')}</Label>
+              <Select value={language} onValueChange={(v) => setLanguage(v as UILanguage)}>
+                <SelectTrigger id="ui-language" className="sm:max-w-xs">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {UI_LANGUAGES.map((lang) => (
+                    <SelectItem key={lang} value={lang}>
+                      {LANGUAGE_LABELS[lang]}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">{t('settings.language.hint')}</p>
+            </CardContent>
+          </Card>
 
-        {/* Appearance applies instantly; it is not part of the Save button. */}
-        <ThemePicker />
+          {/* Appearance applies instantly; it is not part of the Save button. */}
+          <ThemePicker />
 
-        <Card>
-          <CardHeader>
-            <CardTitle>{t('settings.provider.title')}</CardTitle>
-            <CardDescription>{t('settings.provider.description')}</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="space-y-2">
-                <Label htmlFor="provider">{t('settings.provider.label')}</Label>
-                <Select value={draft.provider} onValueChange={onProviderChange}>
-                  <SelectTrigger id="provider">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {PROVIDER_PRESETS.map((p) => (
-                      <SelectItem key={p.id} value={p.id}>
-                        {p.id === 'custom' ? t('provider.custom') : p.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <p className="text-xs text-muted-foreground">{t('settings.provider.hint')}</p>
+          <Card className={SECTION}>
+            <CardHeader className={SECTION_HEAD}>
+              <CardTitle className={SECTION_TITLE}>{t('settings.provider.title')}</CardTitle>
+              <CardDescription>{t('settings.provider.description')}</CardDescription>
+            </CardHeader>
+            <CardContent className={cn(SECTION_BODY, 'space-y-4')}>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="provider">{t('settings.provider.label')}</Label>
+                  <Select value={draft.provider} onValueChange={onProviderChange}>
+                    <SelectTrigger id="provider">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {PROVIDER_PRESETS.map((p) => (
+                        <SelectItem key={p.id} value={p.id}>
+                          {p.id === 'custom' ? t('provider.custom') : p.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">{t('settings.provider.hint')}</p>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="model">{t('settings.model')}</Label>
+                  <Input
+                    id="model"
+                    list="model-suggestions"
+                    value={draft.model}
+                    onChange={(e) => patch('model', e.target.value)}
+                    placeholder={preset?.defaultModel || t('settings.modelPlaceholder')}
+                  />
+                  {preset && preset.models.length > 0 && (
+                    <datalist id="model-suggestions">
+                      {preset.models.map((m) => (
+                        <option key={m} value={m} />
+                      ))}
+                    </datalist>
+                  )}
+                </div>
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="model">{t('settings.model')}</Label>
+                <Label htmlFor="baseURL">{t('settings.baseUrl')}</Label>
                 <Input
-                  id="model"
-                  list="model-suggestions"
-                  value={draft.model}
-                  onChange={(e) => patch('model', e.target.value)}
-                  placeholder={preset?.defaultModel || t('settings.modelPlaceholder')}
+                  id="baseURL"
+                  value={draft.baseURL}
+                  onChange={(e) => patch('baseURL', e.target.value)}
+                  placeholder="https://api.example.com/v1"
                 />
-                {preset && preset.models.length > 0 && (
-                  <datalist id="model-suggestions">
-                    {preset.models.map((m) => (
-                      <option key={m} value={m} />
-                    ))}
-                  </datalist>
+                <p className="text-xs text-muted-foreground">{t('settings.baseUrlHint')}</p>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className={SECTION}>
+            <CardHeader className={SECTION_HEAD}>
+              <CardTitle className={SECTION_TITLE}>{t('settings.apiKey.title')}</CardTitle>
+              <CardDescription>{t('settings.apiKey.description')}</CardDescription>
+            </CardHeader>
+            <CardContent className={cn(SECTION_BODY, 'space-y-3')}>
+              <div className="space-y-2">
+                <Label htmlFor="apiKey">{t('settings.apiKey.label')}</Label>
+                <div className="flex gap-2">
+                  <Input
+                    id="apiKey"
+                    type={showKey ? 'text' : 'password'}
+                    value={draft.apiKey}
+                    onChange={(e) => patch('apiKey', e.target.value)}
+                    placeholder="sk-..."
+                    autoComplete="off"
+                    spellCheck={false}
+                    className="font-mono"
+                  />
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    onClick={() => setShowKey((s) => !s)}
+                    aria-label={showKey ? t('settings.apiKey.hide') : t('settings.apiKey.show')}
+                  >
+                    {showKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </Button>
+                </div>
+                {testResult && (
+                  <p
+                    className={cn(
+                      'text-xs',
+                      testResult.ok ? 'text-emerald-600 dark:text-emerald-400' : 'text-destructive',
+                    )}
+                  >
+                    {testResult.ok
+                      ? t('settings.apiKey.connected', {
+                          latency: testResult.latencyMs,
+                          model: testResult.model,
+                        })
+                      : t('settings.apiKey.failed', {
+                          error: testResult.error ?? t('settings.unknownError'),
+                        })}
+                  </p>
                 )}
               </div>
-            </div>
+            </CardContent>
+          </Card>
 
-            <div className="space-y-2">
-              <Label htmlFor="baseURL">{t('settings.baseUrl')}</Label>
-              <Input
-                id="baseURL"
-                value={draft.baseURL}
-                onChange={(e) => patch('baseURL', e.target.value)}
-                placeholder="https://api.example.com/v1"
-              />
-              <p className="text-xs text-muted-foreground">{t('settings.baseUrlHint')}</p>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>{t('settings.apiKey.title')}</CardTitle>
-            <CardDescription>{t('settings.apiKey.description')}</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <div className="space-y-2">
-              <Label htmlFor="apiKey">{t('settings.apiKey.label')}</Label>
-              <div className="flex gap-2">
-                <Input
-                  id="apiKey"
-                  type={showKey ? 'text' : 'password'}
-                  value={draft.apiKey}
-                  onChange={(e) => patch('apiKey', e.target.value)}
-                  placeholder="sk-..."
-                  autoComplete="off"
-                  spellCheck={false}
-                  className="font-mono"
+          <Card className={SECTION}>
+            <CardHeader className={SECTION_HEAD}>
+              <CardTitle className={SECTION_TITLE}>{t('settings.sampling.title')}</CardTitle>
+              <CardDescription>{t('settings.sampling.description')}</CardDescription>
+            </CardHeader>
+            <CardContent className={cn(SECTION_BODY, 'grid gap-6 sm:grid-cols-2')}>
+              <div className="space-y-3">
+                <div className="flex items-baseline justify-between">
+                  <Label htmlFor="temperature">{t('settings.sampling.temperature')}</Label>
+                  <span className="text-sm tabular-nums text-muted-foreground lab:font-mono">
+                    {draft.temperature.toFixed(2)}
+                  </span>
+                </div>
+                <Slider
+                  id="temperature"
+                  min={0}
+                  max={2}
+                  step={0.05}
+                  value={[draft.temperature]}
+                  onValueChange={(v) => patch('temperature', v[0] ?? draft.temperature)}
                 />
-                <Button
-                  variant="outline"
-                  size="icon"
-                  onClick={() => setShowKey((s) => !s)}
-                  aria-label={showKey ? t('settings.apiKey.hide') : t('settings.apiKey.show')}
-                >
-                  {showKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                </Button>
-              </div>
-              {testResult && (
-                <p
-                  className={cn(
-                    'text-xs',
-                    testResult.ok ? 'text-emerald-600 dark:text-emerald-400' : 'text-destructive',
-                  )}
-                >
-                  {testResult.ok
-                    ? t('settings.apiKey.connected', {
-                        latency: testResult.latencyMs,
-                        model: testResult.model,
-                      })
-                    : t('settings.apiKey.failed', {
-                        error: testResult.error ?? t('settings.unknownError'),
-                      })}
+                <p className="text-xs text-muted-foreground">
+                  {t('settings.sampling.temperatureHint')}
                 </p>
-              )}
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>{t('settings.sampling.title')}</CardTitle>
-            <CardDescription>{t('settings.sampling.description')}</CardDescription>
-          </CardHeader>
-          <CardContent className="grid gap-6 sm:grid-cols-2">
-            <div className="space-y-3">
-              <div className="flex items-baseline justify-between">
-                <Label htmlFor="temperature">{t('settings.sampling.temperature')}</Label>
-                <span className="text-sm tabular-nums text-muted-foreground">
-                  {draft.temperature.toFixed(2)}
-                </span>
               </div>
-              <Slider
-                id="temperature"
-                min={0}
-                max={2}
-                step={0.05}
-                value={[draft.temperature]}
-                onValueChange={(v) => patch('temperature', v[0] ?? draft.temperature)}
-              />
-              <p className="text-xs text-muted-foreground">
-                {t('settings.sampling.temperatureHint')}
-              </p>
-            </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="maxTokens">{t('settings.sampling.maxTokens')}</Label>
-              <Input
-                id="maxTokens"
-                type="number"
-                min={64}
-                max={32000}
-                step={64}
-                value={draft.maxTokens}
-                onChange={(e) => patch('maxTokens', Number(e.target.value))}
-              />
-              <p className="text-xs text-muted-foreground">
-                {t('settings.sampling.maxTokensHint')}
-              </p>
-            </div>
-          </CardContent>
-        </Card>
+              <div className="space-y-2">
+                <Label htmlFor="maxTokens">{t('settings.sampling.maxTokens')}</Label>
+                <Input
+                  id="maxTokens"
+                  type="number"
+                  min={64}
+                  max={32000}
+                  step={64}
+                  value={draft.maxTokens}
+                  onChange={(e) => patch('maxTokens', Number(e.target.value))}
+                />
+                <p className="text-xs text-muted-foreground">
+                  {t('settings.sampling.maxTokensHint')}
+                </p>
+              </div>
+            </CardContent>
+          </Card>
 
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <ImageIcon className="h-4 w-4" aria-hidden />
-              {t('settings.webImages.title')}
-            </CardTitle>
-            <CardDescription>{t('settings.webImages.description')}</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <label className="flex cursor-pointer items-start gap-3">
-              <input
-                type="checkbox"
-                className="focus-ring mt-0.5 h-4 w-4 shrink-0 accent-primary"
-                checked={draft.webImagesEnabled}
-                onChange={(e) => patch('webImagesEnabled', e.target.checked)}
-              />
-              <span className="space-y-0.5">
-                <span className="block text-sm font-medium">{t('settings.webImages.enable')}</span>
-                <span className="block text-xs text-muted-foreground">{t('settings.webImages.enableHint')}</span>
-              </span>
-            </label>
-            <label
-              className={cn(
-                'flex items-start gap-3 pl-7',
-                draft.webImagesEnabled ? 'cursor-pointer' : 'cursor-not-allowed opacity-50',
-              )}
-            >
-              <input
-                type="checkbox"
-                className="focus-ring mt-0.5 h-4 w-4 shrink-0 accent-primary"
-                checked={draft.webImagesVisionCheck}
-                disabled={!draft.webImagesEnabled}
-                onChange={(e) => patch('webImagesVisionCheck', e.target.checked)}
-              />
-              <span className="space-y-0.5">
-                <span className="block text-sm font-medium">{t('settings.webImages.vision')}</span>
-                <span className="block text-xs text-muted-foreground">{t('settings.webImages.visionHint')}</span>
-              </span>
-            </label>
-          </CardContent>
-        </Card>
+          <Card className={SECTION}>
+            <CardHeader className={SECTION_HEAD}>
+              <CardTitle className={cn(SECTION_TITLE, 'flex items-center gap-2')}>
+                <ImageIcon className="h-4 w-4 lecture:hidden" aria-hidden />
+                {t('settings.webImages.title')}
+              </CardTitle>
+              <CardDescription>{t('settings.webImages.description')}</CardDescription>
+            </CardHeader>
+            <CardContent className={cn(SECTION_BODY, 'space-y-3')}>
+              <label className="flex cursor-pointer items-start gap-3">
+                <input
+                  type="checkbox"
+                  className="focus-ring mt-0.5 h-4 w-4 shrink-0 accent-primary"
+                  checked={draft.webImagesEnabled}
+                  onChange={(e) => patch('webImagesEnabled', e.target.checked)}
+                />
+                <span className="space-y-0.5">
+                  <span className="block text-sm font-medium">
+                    {t('settings.webImages.enable')}
+                  </span>
+                  <span className="block text-xs text-muted-foreground">
+                    {t('settings.webImages.enableHint')}
+                  </span>
+                </span>
+              </label>
+              <label
+                className={cn(
+                  'flex items-start gap-3 pl-7',
+                  draft.webImagesEnabled ? 'cursor-pointer' : 'cursor-not-allowed opacity-50',
+                )}
+              >
+                <input
+                  type="checkbox"
+                  className="focus-ring mt-0.5 h-4 w-4 shrink-0 accent-primary"
+                  checked={draft.webImagesVisionCheck}
+                  disabled={!draft.webImagesEnabled}
+                  onChange={(e) => patch('webImagesVisionCheck', e.target.checked)}
+                />
+                <span className="space-y-0.5">
+                  <span className="block text-sm font-medium">
+                    {t('settings.webImages.vision')}
+                  </span>
+                  <span className="block text-xs text-muted-foreground">
+                    {t('settings.webImages.visionHint')}
+                  </span>
+                </span>
+              </label>
+            </CardContent>
+          </Card>
 
-        <DataManagementPanel />
-        {/* Lets a bug report say which release it came from. */}
-        <p className="text-center text-xs text-muted-foreground">{t('settings.version', { version: APP_VERSION })}</p>
+          <div className="lecture:pt-8">
+            <DataManagementPanel />
+          </div>
+          {/* Lets a bug report say which release it came from. */}
+          <p className="text-center text-xs text-muted-foreground lecture:pt-6 lab:font-mono lab:text-[11px]">
+            {t('settings.version', { version: APP_VERSION })}
+          </p>
+        </div>
       </PageContent>
     </PageContainer>
   )

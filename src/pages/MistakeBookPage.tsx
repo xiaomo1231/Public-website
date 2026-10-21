@@ -9,13 +9,7 @@ import { Input } from '@/shared/ui/Input'
 import { LoadingState } from '@/shared/ui/LoadingState'
 import { PageContainer, PageContent, PageHeader } from '@/shared/ui/Page'
 import { ProgressiveList } from '@/shared/ui/ProgressiveList'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/shared/ui/Select2'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/shared/ui/Select2'
 import { MistakeCard } from '@/widgets/mistakes/MistakeCard'
 import { AddMistakeDialog } from '@/widgets/mistakes/AddMistakeDialog'
 import { WeaknessPanel } from '@/widgets/mistakes/WeaknessPanel'
@@ -46,10 +40,7 @@ export function MistakeBookPage(): JSX.Element {
   const [reviewBusy, setReviewBusy] = useState(false)
 
   // Clearing the box applies immediately; typing is debounced.
-  const debouncedQuery = useDebouncedValue(
-    query,
-    query.trim() === '' ? 0 : SEARCH_DEBOUNCE_MS,
-  )
+  const debouncedQuery = useDebouncedValue(query, query.trim() === '' ? 0 : SEARCH_DEBOUNCE_MS)
 
   // Guards against out-of-order responses and unmount updates.
   const requestSeq = useRef(0)
@@ -135,7 +126,10 @@ export function MistakeBookPage(): JSX.Element {
     toast({ variant: 'success', title: t('mistakes.removed') })
   }
 
-  async function handlePractice(id: string, mode: 'same_concept' | 'similar' | 'easier' | 'harder' | 'weakness') {
+  async function handlePractice(
+    id: string,
+    mode: 'same_concept' | 'similar' | 'easier' | 'harder' | 'weakness',
+  ) {
     if (!projectId) return
     const bundle = await buildAIServices()
     if (!bundle) {
@@ -162,7 +156,10 @@ export function MistakeBookPage(): JSX.Element {
     }
     setReviewBusy(true)
     try {
-      const session = await bundle.reviewSession.createReviewSession(projectId, { count: 10, difficulty: 'adaptive' })
+      const session = await bundle.reviewSession.createReviewSession(projectId, {
+        count: 10,
+        difficulty: 'adaptive',
+      })
       await bundle.quiz.startQuiz(session.id)
       toast({ variant: 'success', title: t('mistakes.reviewReady') })
       navigate(`/projects/${projectId}/quiz/${session.id}`)
@@ -199,7 +196,7 @@ export function MistakeBookPage(): JSX.Element {
                 <ArrowLeft className="h-4 w-4" />
               </Link>
             </Button>
-            <BookX className="h-4 w-4" />
+            <BookX className="h-4 w-4 lecture:hidden" />
             {t('mistakes.title')}
           </div>
         }
@@ -211,8 +208,15 @@ export function MistakeBookPage(): JSX.Element {
               <Plus className="h-4 w-4" />
               {t('mistakes.addManually')}
             </Button>
-            <Button onClick={handleReviewSession} disabled={reviewBusy || !stats || stats.active === 0}>
-              {reviewBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+            <Button
+              onClick={handleReviewSession}
+              disabled={reviewBusy || !stats || stats.active === 0}
+            >
+              {reviewBusy ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Sparkles className="h-4 w-4" />
+              )}
               {t('mistakes.reviewRecent')}
             </Button>
           </>
@@ -220,8 +224,8 @@ export function MistakeBookPage(): JSX.Element {
       />
       <PageContent className="space-y-6">
         {stats && stats.total > 0 && (
-          <Card>
-            <CardContent className="flex flex-wrap items-center gap-4 p-4 text-sm">
+          <Card className="lecture:rounded-none lecture:border-x-0 lecture:border-b-0 lecture:border-t-[1.5px] lecture:border-t-foreground lecture:bg-transparent lecture:shadow-none">
+            <CardContent className="flex flex-wrap items-center gap-4 p-4 text-sm tabular-nums lecture:px-0 lecture:py-3 lab:px-3.5 lab:py-2.5 lab:font-mono lab:text-xs">
               <span className="text-muted-foreground">
                 {t('mistakes.summary', {
                   active: stats.active,
@@ -265,7 +269,10 @@ export function MistakeBookPage(): JSX.Element {
               <SelectItem value="all">{t('mistakes.filter.all')}</SelectItem>
             </SelectContent>
           </Select>
-          <Select value={mistakeType} onValueChange={(v) => setMistakeType(v as MistakeType | 'all')}>
+          <Select
+            value={mistakeType}
+            onValueChange={(v) => setMistakeType(v as MistakeType | 'all')}
+          >
             <SelectTrigger className="w-[170px]">
               <SelectValue />
             </SelectTrigger>
@@ -302,7 +309,7 @@ export function MistakeBookPage(): JSX.Element {
           <ProgressiveList
             items={rows}
             pageSize={25}
-            className="space-y-3"
+            className="space-y-3 lecture:space-y-0 lecture:border-t lab:space-y-0 lab:divide-y lab:border lab:bg-card"
             renderItem={(m) => (
               <MistakeCard
                 key={m.id}

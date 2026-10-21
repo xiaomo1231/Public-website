@@ -76,7 +76,7 @@ describe('AnswerInput — single choice', () => {
       />,
     )
     const selected = screen.getByText('5').closest('button')
-    expect(selected?.className).toContain('bg-accent')
+    expect(selected).toHaveAttribute('aria-pressed', 'true')
   })
 
   it('renders no rows when a question has no options', () => {

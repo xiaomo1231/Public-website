@@ -17,7 +17,7 @@ import {
   type TutorSession,
   type TutorTurn,
 } from '@/entities/tutorSession/types'
-import { formatDateTime } from '@/shared/lib/utils'
+import { cn, formatDateTime } from '@/shared/lib/utils'
 import { difficultyLabelKey } from '@/infrastructure/ai/prompts/types'
 import { logger } from '@/infrastructure/logger/logger'
 import { useTranslation } from '@/i18n'
@@ -50,7 +50,9 @@ export function ChatHistoryPage(): JSX.Element {
       } catch (err) {
         if (cancelled) return
         logger.error('ChatHistoryPage load failed', { projectId }, err)
-        setError(err instanceof Error && err.message ? err.message : t('chatHistory.loadFailedHint'))
+        setError(
+          err instanceof Error && err.message ? err.message : t('chatHistory.loadFailedHint'),
+        )
       } finally {
         if (!cancelled) setLoading(false)
       }
@@ -124,23 +126,35 @@ export function ChatHistoryPage(): JSX.Element {
             }
           />
         ) : (
-          <div className="grid gap-6 lg:grid-cols-[280px_1fr]">
-            <aside className="space-y-2">
+          // lecture: a margin list of sessions beside a transcript read as prose.
+          // lab: one hairline panel — session index | log.
+          <div className="grid gap-6 lab:gap-0 lab:border lab:bg-card lg:grid-cols-[280px_1fr] lg:lecture:gap-12">
+            <aside className="space-y-2 lecture:space-y-0 lab:space-y-0 lab:border-b lg:lab:border-b-0 lg:lab:border-r">
               {sessions.map((s) => (
                 <button
                   key={s.id}
+                  type="button"
+                  aria-current={activeId === s.id ? 'true' : undefined}
                   onClick={() => setActiveId(s.id)}
-                  className={`block w-full rounded-lg border px-3 py-2 text-left text-sm transition-colors ${
-                    activeId === s.id ? 'border-foreground/30 bg-accent' : 'hover:bg-accent/50'
-                  }`}
+                  className={cn(
+                    'focus-ring block w-full rounded-lg border px-3 py-2 text-left text-sm transition-colors',
+                    'lecture:rounded-none lecture:border-0 lecture:border-l lecture:py-2.5 lecture:pl-3',
+                    'lab:rounded-none lab:border-0 lab:border-b lab:px-3.5 lab:py-2.5 lab:hover:bg-muted',
+                    activeId === s.id
+                      ? 'border-foreground/30 bg-accent lecture:border-l-2 lecture:border-primary lecture:bg-transparent lecture:pl-[11px] lab:bg-theme-primary-soft lab:shadow-[inset_2px_0_0_hsl(var(--primary))] lab:hover:bg-theme-primary-soft'
+                      : 'hover:bg-accent/50 lecture:hover:bg-transparent',
+                  )}
                 >
                   <div className="flex min-w-0 items-center justify-between gap-2">
                     <TruncatedText text={s.topicName} className="min-w-0 flex-1 font-medium" />
-                    <Badge variant="outline" className="shrink-0">
+                    <Badge
+                      variant="outline"
+                      className="shrink-0 lecture:border-0 lecture:px-0 lab:font-mono lab:text-[11px]"
+                    >
                       {t(difficultyLabelKey(s.currentDifficulty))}
                     </Badge>
                   </div>
-                  <div className="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
+                  <div className="mt-1 flex items-center gap-2 text-xs text-muted-foreground lab:font-mono lab:text-[11px] lab:tabular-nums">
                     <span>{formatDateTime(s.updatedAt)}</span>
                     <span>·</span>
                     <span>{t('chatHistory.turns', { count: s.turns.length })}</span>
@@ -148,23 +162,29 @@ export function ChatHistoryPage(): JSX.Element {
                 </button>
               ))}
             </aside>
-            <section className="space-y-3">
+            <section className="min-w-0 space-y-3 lecture:max-w-[680px] lecture:space-y-0 lab:space-y-0">
               {active && (
                 <>
-                  <Card>
-                    <CardHeader>
-                      <CardTitle className="flex flex-wrap items-center gap-2 text-base">
+                  <Card className="lecture:rounded-none lecture:border-x-0 lecture:border-t-0 lecture:bg-transparent lecture:shadow-none lab:rounded-none lab:border-0 lab:border-b">
+                    <CardHeader className="lecture:px-0 lecture:pt-0 lab:px-5 lab:py-4">
+                      <CardTitle className="flex flex-wrap items-center gap-2 text-base lecture:font-heading lecture:text-[22px] lecture:font-bold lecture:leading-snug">
                         <TruncatedText text={active.topicName} className="min-w-0 max-w-full" />
-                        <Badge variant="outline" className="shrink-0">
+                        <Badge
+                          variant="outline"
+                          className="shrink-0 tabular-nums lecture:font-sans lab:font-mono lab:text-[11px]"
+                        >
                           {t('chatHistory.mastery', {
                             value: `${Math.round(active.mastery * 100)}%`,
                           })}
                         </Badge>
-                        <Badge variant="outline">
+                        <Badge
+                          variant="outline"
+                          className="lecture:font-sans lab:font-mono lab:text-[11px]"
+                        >
                           {t(SESSION_STATUS_LABEL_KEYS[active.status])}
                         </Badge>
                       </CardTitle>
-                      <CardDescription>
+                      <CardDescription className="lab:font-mono lab:text-[11.5px]">
                         {t('chatHistory.started', {
                           date: formatDateTime(active.startedAt),
                           count: active.turns.length,
@@ -191,17 +211,26 @@ function TurnCard({ turn }: { turn: TutorTurn }) {
   const isFeedback = turn.kind === 'feedback'
   const correct = turn.evaluation?.isCorrect
   return (
+    // lecture: transcript entries separated by rules; the student's turns
+    // carry an accent side rule. lab: hairline log rows with mono metadata.
     <Card
-      className={
+      className={cn(
         isStudent
           ? 'border-primary/30'
           : isFeedback && correct === false
             ? 'border-destructive/40'
-            : 'border-border'
-      }
+            : 'border-border',
+        'lecture:rounded-none lecture:border-0 lecture:border-b lecture:border-border lecture:bg-transparent lecture:shadow-none',
+        'lab:rounded-none lab:border-0 lab:border-b lab:border-border lab:shadow-none',
+        isStudent &&
+          'lecture:border-l-2 lecture:border-l-primary lab:shadow-[inset_2px_0_0_hsl(var(--primary))]',
+        isFeedback &&
+          correct === false &&
+          'lecture:border-l-2 lecture:border-l-destructive lab:shadow-[inset_2px_0_0_hsl(var(--destructive))]',
+      )}
     >
-      <CardContent className="space-y-2 p-4 text-sm">
-        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+      <CardContent className="space-y-2 p-4 text-sm lecture:py-5 lecture:pr-0 lecture:text-[15.5px] lecture:leading-[1.8] lab:px-5">
+        <div className="flex items-center gap-2 text-xs text-muted-foreground lecture:tracking-[0.06em] lab:font-mono lab:text-[11px] lab:uppercase lab:tracking-[0.04em]">
           {isStudent ? t('chatHistory.student') : t('chatHistory.tutor')}
           <span>·</span>
           <span>{t(TURN_KIND_LABEL_KEYS[turn.kind])}</span>

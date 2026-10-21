@@ -1,8 +1,8 @@
 import type { ComponentType } from 'react'
 import { Check, Monitor, Moon, Sun } from 'lucide-react'
-import type { UserTheme } from '@/entities/user/types'
+import { UI_STYLES, type UserTheme, type UserUiStyle } from '@/entities/user/types'
 import { COLOR_THEMES, isCssHexColor } from '@/features/theme/colorThemes'
-import { useColorTheme, useThemePreference } from '@/features/theme/useAppearance'
+import { useColorTheme, useThemePreference, useUiStyle } from '@/features/theme/useAppearance'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/shared/ui/Card'
 import { cn } from '@/shared/lib/utils'
 import { useTranslation, type TranslationKey } from '@/i18n'
@@ -33,6 +33,7 @@ export function ThemePicker(): JSX.Element {
   const { t } = useTranslation()
   const { preference, setPreference } = useThemePreference()
   const { colorTheme, setColorTheme } = useColorTheme()
+  const { uiStyle, setUiStyle } = useUiStyle()
 
   return (
     <Card>
@@ -41,6 +42,47 @@ export function ThemePicker(): JSX.Element {
         <CardDescription>{t('theme.appearanceHint')}</CardDescription>
       </CardHeader>
       <CardContent className="space-y-5">
+        <fieldset className="space-y-2">
+          <legend className="text-sm font-medium">{t('theme.uiStyle')}</legend>
+          <p className="text-xs text-muted-foreground">{t('theme.uiStyleHint')}</p>
+          <div className="grid gap-3 sm:grid-cols-2">
+            {UI_STYLES.map((style) => {
+              const selected = uiStyle === style
+              return (
+                <label key={style} className="cursor-pointer">
+                  <input
+                    type="radio"
+                    name="interface-style"
+                    value={style}
+                    checked={selected}
+                    onChange={() => setUiStyle(style)}
+                    className="peer sr-only"
+                  />
+                  <span
+                    className={cn(
+                      'block rounded-xl border p-3 transition-colors',
+                      'peer-focus-visible:ring-2 peer-focus-visible:ring-ring peer-focus-visible:ring-offset-2 peer-focus-visible:ring-offset-background',
+                      selected
+                        ? 'border-primary ring-1 ring-primary'
+                        : 'border-input hover:bg-accent',
+                    )}
+                  >
+                    <StyleThumbnail style={style} />
+                    <span className="mt-2.5 block text-sm font-medium text-foreground">
+                      {t(style === 'lecture' ? 'theme.uiStyle.lecture' : 'theme.uiStyle.lab')}
+                    </span>
+                    <span className="block text-xs text-muted-foreground">
+                      {t(
+                        style === 'lecture' ? 'theme.uiStyle.lectureHint' : 'theme.uiStyle.labHint',
+                      )}
+                    </span>
+                  </span>
+                </label>
+              )
+            })}
+          </div>
+        </fieldset>
+
         <fieldset className="space-y-2">
           <legend className="text-sm font-medium">{t('theme.mode')}</legend>
           <div className="flex flex-wrap gap-2">
@@ -112,13 +154,9 @@ export function ThemePicker(): JSX.Element {
                       <span className="min-w-0 break-words text-sm font-medium text-foreground">
                         {t(theme.labelKey)}
                       </span>
-                      {selected && (
-                        <Check className="h-4 w-4 shrink-0 text-primary" aria-hidden />
-                      )}
+                      {selected && <Check className="h-4 w-4 shrink-0 text-primary" aria-hidden />}
                     </span>
-                    <span className="text-xs text-muted-foreground">
-                      {t(theme.descriptionKey)}
-                    </span>
+                    <span className="text-xs text-muted-foreground">{t(theme.descriptionKey)}</span>
                     <span className="mt-auto flex flex-wrap items-center gap-1.5 pt-1" aria-hidden>
                       {theme.preview.map((color, index) => {
                         const valid = isCssHexColor(color)
@@ -147,5 +185,54 @@ export function ThemePicker(): JSX.Element {
         </div>
       </CardContent>
     </Card>
+  )
+}
+
+/**
+ * A wireframe of each style, drawn in the current theme's own tokens so it
+ * never hard-codes a colour: lecture is a centred column under a top bar with
+ * a serif title; lab is a side rail beside a grid of readouts.
+ */
+function StyleThumbnail({ style }: { style: UserUiStyle }): JSX.Element {
+  if (style === 'lecture') {
+    return (
+      <span
+        aria-hidden
+        className="grid h-20 grid-rows-[10px_1fr] overflow-hidden rounded-md border bg-background"
+      >
+        <span className="border-b" />
+        <span className="mx-auto mt-2 flex w-1/2 flex-col gap-1.5">
+          <span className="font-serif text-[11px] font-bold leading-none text-foreground">
+            Aa 讲义
+          </span>
+          <span className="h-1 rounded-full bg-muted-foreground/30" />
+          <span className="h-1 w-5/6 rounded-full bg-muted-foreground/30" />
+          <span className="h-1 rounded-full bg-muted-foreground/30" />
+        </span>
+      </span>
+    )
+  }
+  return (
+    <span
+      aria-hidden
+      className="grid h-20 grid-cols-[22%_1fr] overflow-hidden rounded-sm border bg-background [background-image:linear-gradient(hsl(var(--border))_1px,transparent_1px),linear-gradient(90deg,hsl(var(--border))_1px,transparent_1px)] [background-size:10px_10px]"
+    >
+      <span className="border-r bg-card" />
+      <span className="flex flex-col gap-1.5 p-2">
+        <span className="h-1 w-1/3 bg-primary" />
+        <span className="grid grid-cols-3 gap-0.5">
+          <span className="h-4 border bg-card font-mono text-[8px] leading-4 text-foreground">
+            06
+          </span>
+          <span className="h-4 border bg-card font-mono text-[8px] leading-4 text-foreground">
+            0.62
+          </span>
+          <span className="h-4 border bg-card font-mono text-[8px] leading-4 text-foreground">
+            2/6
+          </span>
+        </span>
+        <span className="h-1 bg-muted-foreground/30" />
+      </span>
+    </span>
   )
 }

@@ -25,22 +25,24 @@ export function PageHeader({
   className,
 }: PageHeaderProps): JSX.Element {
   return (
-    <header className={cn('px-4 pb-3 pt-5 sm:px-6 lg:px-8', className)}>
+    <header className={cn('flex flex-col px-4 pb-3 pt-5 sm:px-6 lg:px-8', className)}>
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div className="flex min-w-0 flex-1 items-start gap-3">
           {icon && (
             <span
               aria-hidden
-              className="mt-0.5 grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-theme-primary-soft text-secondary-foreground [&_svg]:h-5 [&_svg]:w-5"
+              className="mt-0.5 grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-theme-primary-soft text-secondary-foreground lecture:hidden lab:h-9 lab:w-9 lab:border lab:bg-card lab:text-foreground [&_svg]:h-5 [&_svg]:w-5 lab:[&_svg]:h-4 lab:[&_svg]:w-4"
             >
               {icon}
             </span>
           )}
           <div className="min-w-0 space-y-1.5">
             {eyebrow && (
-              <p className="text-sm text-muted-foreground">{eyebrow}</p>
+              <p className="text-sm text-muted-foreground lecture:text-xs lecture:tracking-[0.14em] lecture:text-primary lab:font-mono lab:text-[11px] lab:uppercase lab:tracking-wider">
+                {eyebrow}
+              </p>
             )}
-            <h1 className="break-words text-[26px] font-semibold leading-tight tracking-tight text-foreground sm:text-[28px]">
+            <h1 className="break-words font-heading text-[26px] font-semibold leading-tight tracking-tight text-foreground lecture:font-bold lecture:tracking-normal lab:text-[22px] sm:text-[28px] sm:lecture:text-[30px] sm:lab:text-[22px]">
               {title}
             </h1>
             {description && (
@@ -52,7 +54,12 @@ export function PageHeader({
         </div>
         {actions && <div className="flex shrink-0 flex-wrap items-center gap-2">{actions}</div>}
       </div>
-      {nav && <div className="mt-4">{nav}</div>}
+      {/* Lecture: the course sections form a second bar under the top bar. */}
+      {nav && (
+        <div className="mt-4 lecture:order-first lecture:-mx-4 lecture:-mt-5 lecture:mb-6 lecture:border-b lecture:px-4 sm:lecture:-mx-6 sm:lecture:px-6 lg:lecture:-mx-8 lg:lecture:px-8">
+          {nav}
+        </div>
+      )}
     </header>
   )
 }
@@ -73,6 +80,9 @@ export function PageContent({ children, className }: PageContentProps): JSX.Elem
         // a page resolve against the shell column, escape this scroll box, and
         // stretch the document into a second scroll container.
         'relative flex-1 overflow-auto px-4 py-6 outline-none sm:px-6 lg:px-8',
+        // Lecture scrolls the whole page (header included) so the reading
+        // column gets the full height; lab keeps the header pinned.
+        'lecture:flex-none lecture:overflow-visible',
         className,
       )}
     >
@@ -91,5 +101,9 @@ export function PageContainer({
   className?: string
 }): JSX.Element {
   const Comp = asChild ? Slot : 'div'
-  return <Comp className={cn('flex h-full min-h-0 flex-col', className)}>{children}</Comp>
+  return (
+    <Comp className={cn('flex h-full min-h-0 flex-col lecture:overflow-y-auto', className)}>
+      {children}
+    </Comp>
+  )
 }

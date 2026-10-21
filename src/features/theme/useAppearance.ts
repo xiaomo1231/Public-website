@@ -1,5 +1,5 @@
 import { useCallback } from 'react'
-import type { UserTheme } from '@/entities/user/types'
+import type { UserTheme, UserUiStyle } from '@/entities/user/types'
 import { useAuthStore } from '@/features/auth/authStore'
 import { logger } from '@/infrastructure/logger/logger'
 import { useThemeStore } from './themeStore'
@@ -60,4 +60,26 @@ export function useColorTheme(): {
   )
 
   return { colorTheme, setColorTheme }
+}
+
+export function useUiStyle(): {
+  uiStyle: UserUiStyle
+  setUiStyle: (style: UserUiStyle) => void
+} {
+  const uiStyle = useThemeStore((s) => s.uiStyle)
+  const applyUiStyle = useThemeStore((s) => s.setUiStyle)
+  const persistUiStyle = useAuthStore((s) => s.setUiStyle)
+
+  const setUiStyle = useCallback(
+    (next: UserUiStyle) => {
+      applyUiStyle(next)
+      void persistUiStyle(next).catch((err: unknown) => {
+        logger.warn('Failed to persist interface style', { uiStyle: next })
+        logger.debug('Interface style persistence error', { error: String(err) })
+      })
+    },
+    [applyUiStyle, persistUiStyle],
+  )
+
+  return { uiStyle, setUiStyle }
 }

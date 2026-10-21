@@ -2,6 +2,8 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { Outlet, useMatches } from 'react-router-dom'
 import { Sidebar } from './Sidebar'
 import { Header } from './Header'
+import { TopNav } from './TopNav'
+import { useThemeStore } from '@/features/theme/themeStore'
 import { cn } from '@/shared/lib/utils'
 import { EASE_OUT, prefersReducedMotion } from '@/shared/lib/motion'
 import { useTranslation } from '@/i18n'
@@ -15,6 +17,7 @@ export function AppShell(): JSX.Element {
    * between pages (no persistence, no database table).
    */
   const [navCollapsed, setNavCollapsed] = useState(false)
+  const uiStyle = useThemeStore((s) => s.uiStyle)
 
   /*
    * Page transition. Plays when the matched route changes (a different page),
@@ -87,13 +90,27 @@ export function AppShell(): JSX.Element {
     return () => window.removeEventListener('resize', onResize)
   }, [])
 
+  if (uiStyle === 'lecture') {
+    // Lecture: one bar across the top, the page as a single column below it.
+    return (
+      <div className="relative flex h-full min-h-screen w-full flex-col bg-background text-foreground">
+        <a
+          href="#main-content"
+          className="focus-ring sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-[60] focus:rounded-full focus:bg-primary-strong focus:px-4 focus:py-2 focus:text-sm focus:font-medium focus:text-primary-foreground"
+        >
+          {t('common.skipToContent')}
+        </a>
+        <TopNav />
+        <div ref={pageRef} className="flex min-h-0 flex-1 flex-col">
+          <Outlet />
+        </div>
+      </div>
+    )
+  }
+
+  // Lab: the side rail, attached to the edge, over the millimetre grid.
   return (
-    <div
-      className={cn(
-        'app-shell-wash relative flex h-full min-h-screen w-full bg-background text-foreground lg:p-4',
-        navCollapsed ? 'lg:gap-0' : 'lg:gap-2',
-      )}
-    >
+    <div className={cn('relative flex h-full min-h-screen w-full text-foreground')}>
       <a
         href="#main-content"
         className="focus-ring sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-[60] focus:rounded-full focus:bg-primary-strong focus:px-4 focus:py-2 focus:text-sm focus:font-medium focus:text-primary-foreground"
@@ -109,7 +126,7 @@ export function AppShell(): JSX.Element {
       <div
         className={cn(
           'relative z-10 hidden shrink-0 overflow-hidden transition-[width] duration-200 ease-out motion-reduce:transition-none lg:block',
-          navCollapsed ? 'w-0' : 'w-60',
+          navCollapsed ? 'w-0' : 'w-56',
         )}
         aria-hidden={navCollapsed}
       >

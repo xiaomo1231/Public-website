@@ -3,14 +3,11 @@ import { Link } from 'react-router-dom'
 import {
   AlertCircle,
   CheckCircle2,
-  FileImage,
-  FileSpreadsheet,
   FileText,
   Filter,
   Loader2,
   MoreHorizontal,
   Pencil,
-  Presentation,
   Search,
   Trash2,
 } from 'lucide-react'
@@ -23,18 +20,10 @@ import {
   type ProcessingStatus,
 } from '@/entities/document/types'
 import { Button } from '@/shared/ui/Button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/shared/ui/Card'
 import { EmptyState } from '@/shared/ui/EmptyState'
 import { Input } from '@/shared/ui/Input'
 import { LoadingState } from '@/shared/ui/LoadingState'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/shared/ui/Select2'
-import { Badge } from '@/shared/ui/Badge'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/shared/ui/Select2'
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -42,19 +31,20 @@ import {
   DropdownMenuItem,
   DropdownMenuSeparator,
 } from '@/shared/ui/DropdownMenu'
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogDescription } from '@/shared/ui/Dialog'
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from '@/shared/ui/Dialog'
 import { TooltipProvider, TooltipWrapper } from '@/shared/ui/Tooltip'
-import { relativeTime } from '@/shared/lib/utils'
+import { cn, relativeTime } from '@/shared/lib/utils'
+import { useUiStyle } from '@/features/theme/useAppearance'
+import { LAB_CHIP_CLASS, LAB_TABLE_HEAD_CLASS } from '@/widgets/dashboard/Figures'
 import { formatBytes } from '@/shared/lib/format'
 import { useTranslation, type TranslationKey } from '@/i18n'
-
-const TYPE_ICON: Record<DocumentType, typeof FileText> = {
-  pdf: FileText,
-  docx: FileSpreadsheet,
-  pptx: Presentation,
-  image: FileImage,
-  text: FileText,
-}
 
 const TYPE_LABEL_KEY: Record<DocumentType, TranslationKey> = {
   pdf: 'docType.pdf',
@@ -64,14 +54,20 @@ const TYPE_LABEL_KEY: Record<DocumentType, TranslationKey> = {
   text: 'docType.text',
 }
 
-const STATUS_BADGE: Record<ProcessingStatus, { labelKey: TranslationKey; variant: 'default' | 'secondary' | 'destructive' | 'outline' }> = {
+const STATUS_BADGE: Record<
+  ProcessingStatus,
+  { labelKey: TranslationKey; variant: 'default' | 'secondary' | 'destructive' | 'outline' }
+> = {
   uploading: { labelKey: 'docStatus.uploading', variant: 'outline' },
   processing: { labelKey: 'docStatus.processing', variant: 'secondary' },
   ready: { labelKey: 'docStatus.ready', variant: 'default' },
   failed: { labelKey: 'docStatus.failed', variant: 'destructive' },
 }
 
-const STATUS_ICON: Record<ProcessingStatus, typeof Loader2 | typeof CheckCircle2 | typeof AlertCircle> = {
+const STATUS_ICON: Record<
+  ProcessingStatus,
+  typeof Loader2 | typeof CheckCircle2 | typeof AlertCircle
+> = {
   uploading: Loader2,
   processing: Loader2,
   ready: CheckCircle2,
@@ -122,6 +118,7 @@ export function DocumentList({
   onDeleteRequest,
 }: DocumentListProps): JSX.Element {
   const { t } = useTranslation()
+  const { uiStyle } = useUiStyle()
   const [query, setQuery] = useState('')
   const [type, setType] = useState<TypeFilter>('all')
   const [material, setMaterial] = useState<MaterialFilter>('all')
@@ -167,11 +164,7 @@ export function DocumentList({
         icon={<FileText className="h-10 w-10" />}
         title={t('documents.empty')}
         description={t('documents.emptyHint')}
-        action={
-          <Button onClick={onUploadClick}>
-            {t('documents.uploadFirst')}
-          </Button>
-        }
+        action={<Button onClick={onUploadClick}>{t('documents.uploadFirst')}</Button>}
       />
     )
   }
@@ -240,97 +233,179 @@ export function DocumentList({
             <SelectItem value="size">{t('documents.sort.size')}</SelectItem>
           </SelectContent>
         </Select>
-        <Button onClick={onUploadClick}>
-          {t('documents.upload')}
-        </Button>
+        <Button onClick={onUploadClick}>{t('documents.upload')}</Button>
       </div>
 
       {filtered.length === 0 ? (
         <EmptyState title={t('documents.noMatches')} description={t('documents.noMatchesHint')} />
       ) : (
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm">{t('documents.title')}</CardTitle>
-            <CardDescription>
-              {t('documents.count', { shown: filtered.length, total: documents.length, count: documents.length })}
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-1">
-            {filtered.map((doc) => {
-              const Icon = TYPE_ICON[doc.type]
-              const StatusIcon = STATUS_ICON[doc.status]
-              const statusBadge = STATUS_BADGE[doc.status]
-              return (
-                <div
-                  key={doc.id}
-                  className="flex items-center gap-3 rounded-lg border bg-card px-3 py-2 transition-colors hover:bg-accent/50"
-                >
-                  <Icon className="h-4 w-4 shrink-0 text-muted-foreground" />
-                  <TooltipProvider delayDuration={300}>
-                    <TooltipWrapper content={doc.name}>
-                      <Link
-                        to={`/projects/${projectId}/documents/${doc.id}`}
-                        aria-label={doc.name}
-                        className="min-w-0 flex-1 truncate text-sm font-medium hover:underline"
-                      >
-                        {doc.name}
-                      </Link>
-                    </TooltipWrapper>
-                  </TooltipProvider>
-                  {showMaterialType && (
-                    <Badge variant="secondary" className="hidden shrink-0 md:inline-flex">
-                      {t(MATERIAL_LABEL_KEY[resolveMaterialType(doc.materialType)])}
-                    </Badge>
-                  )}
-                  <Badge variant="outline" className="hidden sm:inline-flex">
-                    {t(TYPE_LABEL_KEY[doc.type])}
-                  </Badge>
-                  <span className="hidden text-xs tabular-nums text-muted-foreground md:inline">
-                    {formatBytes(doc.sizeBytes)}
-                  </span>
-                  <Badge variant={statusBadge.variant} className="gap-1">
-                    <StatusIcon
-                      className={`h-3 w-3 ${doc.status === 'processing' || doc.status === 'uploading' ? 'animate-spin' : ''}`}
-                    />
-                    {t(statusBadge.labelKey)}
-                  </Badge>
-                  <span className="hidden text-xs text-muted-foreground lg:inline">
-                    {relativeTime(doc.uploadedAt)}
-                  </span>
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button variant="ghost" size="icon" aria-label={t('documents.actions')}>
-                        <MoreHorizontal className="h-4 w-4" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      <DropdownMenuItem asChild>
-                        <Link to={`/projects/${projectId}/documents/${doc.id}`}>{t('documents.open')}</Link>
-                      </DropdownMenuItem>
-                      <DropdownMenuItem
-                        onSelect={() => {
-                          setRenaming(doc)
-                          setRenameValue(doc.name)
-                        }}
-                      >
-                        <Pencil className="h-4 w-4" />
-                        {t('documents.rename')}
-                      </DropdownMenuItem>
-                      <DropdownMenuSeparator />
-                      <DropdownMenuItem
-                        onSelect={() => (onDeleteRequest ? onDeleteRequest(doc) : setDeleting(doc))}
-                        className="text-destructive focus:text-destructive"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                        {t('documents.delete')}
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </div>
-              )
+        <section aria-label={t('documents.title')} className="min-w-0">
+          <p className="data-num mb-2 text-xs text-muted-foreground lab:font-mono lab:text-[11px]">
+            {t('documents.title')} ·{' '}
+            {t('documents.count', {
+              shown: filtered.length,
+              total: documents.length,
+              count: documents.length,
             })}
-          </CardContent>
-        </Card>
+          </p>
+          {uiStyle === 'lab' ? (
+            <div className="overflow-x-auto border border-border bg-card">
+              <table className="data-num w-full min-w-[520px] border-collapse text-[13px]">
+                <thead className={LAB_TABLE_HEAD_CLASS}>
+                  <tr>
+                    <th scope="col" className={LAB_HEAD}>
+                      {t('documents.col.file')}
+                    </th>
+                    {showMaterialType && (
+                      <th scope="col" className={cn(LAB_HEAD, 'hidden w-36 md:table-cell')}>
+                        {t('documents.col.role')}
+                      </th>
+                    )}
+                    <th scope="col" className={cn(LAB_HEAD, 'hidden w-24 sm:table-cell')}>
+                      {t('documents.col.size')}
+                    </th>
+                    <th scope="col" className={cn(LAB_HEAD, 'w-28')}>
+                      {t('documents.col.status')}
+                    </th>
+                    <th scope="col" className={cn(LAB_HEAD, 'hidden w-28 lg:table-cell')}>
+                      {t('documents.col.uploaded')}
+                    </th>
+                    <th scope="col" className={cn(LAB_HEAD, 'w-11')}>
+                      <span className="sr-only">{t('documents.actions')}</span>
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filtered.map((doc) => {
+                    const busy = doc.status === 'processing' || doc.status === 'uploading'
+                    const StatusIcon = STATUS_ICON[doc.status]
+                    return (
+                      <tr
+                        key={doc.id}
+                        className="transition-colors duration-150 hover:bg-accent/50"
+                      >
+                        <td className={LAB_CELL}>
+                          <span className="flex min-w-0 items-center gap-2.5">
+                            <span className="w-10 shrink-0 truncate font-mono text-[10.5px] uppercase text-muted-foreground">
+                              {doc.type}
+                            </span>
+                            <DocumentLink doc={doc} projectId={projectId} />
+                          </span>
+                        </td>
+                        {showMaterialType && (
+                          <td className={cn(LAB_CELL, 'hidden md:table-cell')}>
+                            <span className={LAB_CHIP_CLASS}>
+                              {t(MATERIAL_LABEL_KEY[resolveMaterialType(doc.materialType)])}
+                            </span>
+                          </td>
+                        )}
+                        <td
+                          className={cn(
+                            LAB_CELL,
+                            'hidden font-mono text-xs text-muted-foreground sm:table-cell',
+                          )}
+                        >
+                          {formatBytes(doc.sizeBytes)}
+                        </td>
+                        <td className={LAB_CELL}>
+                          <span
+                            className={cn(
+                              LAB_CHIP_CLASS,
+                              'gap-1',
+                              doc.status === 'ready' && 'border-primary/40 text-primary',
+                              doc.status === 'failed' && 'border-destructive/40 text-destructive',
+                            )}
+                          >
+                            <StatusIcon
+                              aria-hidden
+                              className={cn('h-3 w-3', busy && 'motion-safe:animate-spin')}
+                            />
+                            {t(STATUS_BADGE[doc.status].labelKey)}
+                          </span>
+                        </td>
+                        <td
+                          className={cn(
+                            LAB_CELL,
+                            'hidden font-mono text-xs text-muted-foreground lg:table-cell',
+                          )}
+                        >
+                          {relativeTime(doc.uploadedAt)}
+                        </td>
+                        <td className={cn(LAB_CELL, 'px-1 text-right')}>
+                          <RowMenu
+                            doc={doc}
+                            projectId={projectId}
+                            onRename={() => {
+                              setRenaming(doc)
+                              setRenameValue(doc.name)
+                            }}
+                            onDelete={() =>
+                              onDeleteRequest ? onDeleteRequest(doc) : setDeleting(doc)
+                            }
+                          />
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <ul className="border-t border-border">
+              {filtered.map((doc) => {
+                const busy = doc.status === 'processing' || doc.status === 'uploading'
+                return (
+                  <li
+                    key={doc.id}
+                    className="flex min-w-0 items-center gap-3 border-b border-border py-2.5"
+                  >
+                    <span className="min-w-0 flex-1">
+                      <DocumentLink doc={doc} projectId={projectId} />
+                      <span className="data-num mt-0.5 flex min-w-0 flex-wrap gap-x-1.5 text-xs text-muted-foreground">
+                        {showMaterialType && (
+                          <>
+                            <span>
+                              {t(MATERIAL_LABEL_KEY[resolveMaterialType(doc.materialType)])}
+                            </span>
+                            <span aria-hidden>·</span>
+                          </>
+                        )}
+                        <span>{t(TYPE_LABEL_KEY[doc.type])}</span>
+                        <span aria-hidden>·</span>
+                        <span>{formatBytes(doc.sizeBytes)}</span>
+                        <span aria-hidden className="hidden sm:inline">
+                          ·
+                        </span>
+                        <span className="hidden sm:inline">{relativeTime(doc.uploadedAt)}</span>
+                      </span>
+                    </span>
+                    <span
+                      className={cn(
+                        'inline-flex shrink-0 items-center gap-1 text-xs',
+                        doc.status === 'ready' && 'text-primary',
+                        doc.status === 'failed' && 'text-destructive',
+                        busy && 'text-muted-foreground',
+                      )}
+                    >
+                      {busy && <Loader2 aria-hidden className="h-3 w-3 motion-safe:animate-spin" />}
+                      {doc.status === 'failed' && <AlertCircle aria-hidden className="h-3 w-3" />}
+                      {t(STATUS_BADGE[doc.status].labelKey)}
+                    </span>
+                    <RowMenu
+                      doc={doc}
+                      projectId={projectId}
+                      onRename={() => {
+                        setRenaming(doc)
+                        setRenameValue(doc.name)
+                      }}
+                      onDelete={() => (onDeleteRequest ? onDeleteRequest(doc) : setDeleting(doc))}
+                    />
+                  </li>
+                )
+              })}
+            </ul>
+          )}
+        </section>
       )}
 
       <Dialog
@@ -395,5 +470,66 @@ export function DocumentList({
         </Dialog>
       )}
     </div>
+  )
+}
+
+const LAB_HEAD = 'px-3 py-2 text-left font-medium'
+const LAB_CELL = 'border-t border-border px-3 py-2 align-middle'
+
+function DocumentLink({ doc, projectId }: { doc: Document; projectId: string }): JSX.Element {
+  return (
+    <TooltipProvider delayDuration={300}>
+      <TooltipWrapper content={doc.name}>
+        <Link
+          to={`/projects/${projectId}/documents/${doc.id}`}
+          aria-label={doc.name}
+          className="focus-ring block min-w-0 flex-1 truncate rounded-sm text-sm font-medium text-foreground transition-colors duration-150 hover:text-primary lecture:text-[15px]"
+        >
+          {doc.name}
+        </Link>
+      </TooltipWrapper>
+    </TooltipProvider>
+  )
+}
+
+function RowMenu({
+  doc,
+  projectId,
+  onRename,
+  onDelete,
+}: {
+  doc: Document
+  projectId: string
+  onRename: () => void
+  onDelete: () => void
+}): JSX.Element {
+  const { t } = useTranslation()
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button
+          variant="ghost"
+          size="icon"
+          aria-label={t('documents.actions')}
+          className="shrink-0"
+        >
+          <MoreHorizontal className="h-4 w-4" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end">
+        <DropdownMenuItem asChild>
+          <Link to={`/projects/${projectId}/documents/${doc.id}`}>{t('documents.open')}</Link>
+        </DropdownMenuItem>
+        <DropdownMenuItem onSelect={onRename}>
+          <Pencil className="h-4 w-4" />
+          {t('documents.rename')}
+        </DropdownMenuItem>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem onSelect={onDelete} className="text-destructive focus:text-destructive">
+          <Trash2 className="h-4 w-4" />
+          {t('documents.delete')}
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
   )
 }

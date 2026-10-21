@@ -19,6 +19,7 @@ import { TruncatedText } from '@/shared/ui/TruncatedText'
 import { RichText } from '@/shared/ui/RichText'
 import { toast } from '@/features/toast/toastStore'
 import { cn } from '@/shared/lib/utils'
+import { LESSON_PROSE_CLASS } from '@/widgets/tutor/lessonStyle'
 import { useTranslation } from '@/i18n'
 import { buildAIServices } from '@/services/aiServices'
 import type { DifficultyLevel, TutorEvaluation } from '@/infrastructure/ai/prompts/types'
@@ -209,19 +210,26 @@ export function TutorPanel(props: TutorPanelProps): JSX.Element {
   const introText = intro || persistedIntro
 
   return (
-    <div className="space-y-4">
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex flex-wrap items-center gap-2 text-base">
+    <div className="space-y-4 lecture:space-y-6">
+      {/* lecture: the introduction is prose on the paper, not a card.
+          lab: a hairline cell with mono metadata. */}
+      <Card className="lecture:rounded-none lecture:border-0 lecture:bg-transparent lecture:shadow-none">
+        <CardHeader className="lecture:px-0 lecture:pt-0 lab:border-b lab:px-5 lab:py-3">
+          <CardTitle className="flex flex-wrap items-center gap-2 text-base lecture:text-sm lecture:font-normal lecture:text-muted-foreground lab:text-sm">
             <GraduationCap className="h-4 w-4 shrink-0" />
             <TruncatedText text={props.topicName} className="min-w-0 max-w-full" />
-            <Badge variant="outline" className="shrink-0">{session.currentDifficulty}</Badge>
-            <Badge variant="outline" className="shrink-0">
+            <Badge variant="outline" className="shrink-0 lab:font-mono lab:text-[11px]">
+              {session.currentDifficulty}
+            </Badge>
+            <Badge
+              variant="outline"
+              className="shrink-0 tabular-nums lab:font-mono lab:text-[11px]"
+            >
               {t('tutor.mastery', { value: `${Math.round(session.mastery * 100)}%` })}
             </Badge>
           </CardTitle>
         </CardHeader>
-        <CardContent className="space-y-3">
+        <CardContent className="space-y-3 lecture:px-0 lab:px-5 lab:pt-5">
           {introText ? (
             // Rendered through the shared reading renderer so paragraphs are
             // separated, LaTeX typesets, and any Markdown structure the model
@@ -230,8 +238,8 @@ export function TutorPanel(props: TutorPanelProps): JSX.Element {
             <RichText
               text={introText}
               format="markdown"
-              className="space-y-5 [&_ol]:space-y-2 [&_ul]:space-y-2"
-              paragraphClassName="text-[17px] leading-[1.8]"
+              className={cn('space-y-5 [&_ol]:space-y-2 [&_ul]:space-y-2', LESSON_PROSE_CLASS)}
+              paragraphClassName="text-[17px] leading-[1.8] lecture:leading-[1.9] lab:text-[15px] lab:leading-[1.85]"
             />
           ) : (
             <div className="text-[15px] text-muted-foreground">{t('tutor.loadingIntro')}</div>
@@ -255,16 +263,18 @@ export function TutorPanel(props: TutorPanelProps): JSX.Element {
       {lastEvaluation && <FeedbackCard evaluation={lastEvaluation} />}
 
       {lastQuestion && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">{t('tutor.question')}</CardTitle>
+        <Card className="lecture:rounded-none lecture:border-x-0 lecture:border-b-0 lecture:bg-transparent lecture:shadow-none">
+          <CardHeader className="lecture:px-0 lecture:pb-3 lab:border-b lab:px-5 lab:py-2.5">
+            <CardTitle className="text-base lecture:text-xs lecture:font-normal lecture:tracking-[0.14em] lecture:text-muted-foreground lab:font-mono lab:text-[11px] lab:font-medium lab:uppercase lab:tracking-[0.06em] lab:text-muted-foreground">
+              {t('tutor.question')}
+            </CardTitle>
           </CardHeader>
-          <CardContent className="space-y-3">
+          <CardContent className="space-y-3 lecture:px-0 lab:px-5 lab:pt-5">
             {/* Markdown + LaTeX, like every other question surface. */}
             <RichText
               text={lastQuestion.prompt}
               format="markdown"
-              paragraphClassName="text-[17px] font-medium leading-[1.7]"
+              paragraphClassName="text-[17px] font-medium leading-[1.7] lecture:font-heading lecture:text-[19px] lecture:font-semibold lecture:leading-[1.75]"
             />
             {lastQuestion.options && (
               <ul className="ml-5 list-disc space-y-2 text-[16px] leading-[1.7]">
@@ -276,7 +286,13 @@ export function TutorPanel(props: TutorPanelProps): JSX.Element {
             <MathField
               // An expression answer gets the maths keyboard and a "read as"
               // preview; everything else is free working with Unicode symbols.
-              mode={lastQuestion.type === 'math_expr' ? 'expression' : lastQuestion.type === 'numeric' ? 'number' : 'text'}
+              mode={
+                lastQuestion.type === 'math_expr'
+                  ? 'expression'
+                  : lastQuestion.type === 'numeric'
+                    ? 'number'
+                    : 'text'
+              }
               subject={project?.subject}
               multiline={lastQuestion.type !== 'math_expr' && lastQuestion.type !== 'numeric'}
               rows={4}
@@ -290,14 +306,24 @@ export function TutorPanel(props: TutorPanelProps): JSX.Element {
             />
             <div className="flex flex-wrap items-center gap-2">
               <Button onClick={submit} disabled={busy}>
-                {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
+                {busy ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <CheckCircle2 className="h-4 w-4" />
+                )}
                 {t('tutor.submitAnswer')}
               </Button>
-              <Button variant="outline" onClick={revealHint} disabled={busy || revealedHints >= (lastQuestion.hints?.length ?? 0)}>
+              <Button
+                variant="outline"
+                onClick={revealHint}
+                disabled={busy || revealedHints >= (lastQuestion.hints?.length ?? 0)}
+              >
                 <Lightbulb className="h-4 w-4" />
-                {revealedHints > 0 ? t('tutor.hintLabel', { number: revealedHints + 1 }) : t('tutor.hint')}
+                {revealedHints > 0
+                  ? t('tutor.hintLabel', { number: revealedHints + 1 })
+                  : t('tutor.hint')}
               </Button>
-              <span className="text-xs text-muted-foreground">
+              <span className="text-xs text-muted-foreground lab:ml-auto lab:font-mono lab:text-[11px]">
                 {t('tutor.hintsAvailable', {
                   count: lastQuestion.hints?.length ?? 0,
                   point: lastQuestion.knowledgePoint,
@@ -348,7 +374,9 @@ function FeedbackCard({ evaluation }: { evaluation: TutorEvaluation }) {
           confidence: 0.8,
           score: { earned: evaluation.scoring.earned, total: evaluation.scoring.total },
           rubric: evaluation.scoring.rubric,
-          ...(evaluation.scoring.contradictions ? { contradictions: evaluation.scoring.contradictions } : {}),
+          ...(evaluation.scoring.contradictions
+            ? { contradictions: evaluation.scoring.contradictions }
+            : {}),
           ...(evaluation.feedback ? { explanation: evaluation.feedback } : {}),
           expected: evaluation.groundedExplanation,
         }}
@@ -359,12 +387,18 @@ function FeedbackCard({ evaluation }: { evaluation: TutorEvaluation }) {
     <Card
       className={cn(
         'border',
-        correct ? 'border-emerald-500/40 bg-emerald-50/40 dark:bg-emerald-950/20' : 'border-destructive/40 bg-destructive/5',
+        correct
+          ? 'border-emerald-500/40 bg-emerald-50/40 dark:bg-emerald-950/20'
+          : 'border-destructive/40 bg-destructive/5',
       )}
     >
       <CardHeader>
         <CardTitle className="flex items-center gap-2 text-base">
-          {correct ? <CheckCircle2 className="h-4 w-4 text-emerald-600" /> : <XCircle className="h-4 w-4 text-destructive" />}
+          {correct ? (
+            <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+          ) : (
+            <XCircle className="h-4 w-4 text-destructive" />
+          )}
           {correct ? t('tutor.looksGood') : t('tutor.notQuite')}
         </CardTitle>
       </CardHeader>
@@ -391,9 +425,10 @@ function FeedbackCard({ evaluation }: { evaluation: TutorEvaluation }) {
             ))}
           </ul>
         )}
-        <p className="text-[15px] text-muted-foreground">{t('tutor.next', { value: evaluation.nextSteps })}</p>
+        <p className="text-[15px] text-muted-foreground">
+          {t('tutor.next', { value: evaluation.nextSteps })}
+        </p>
       </CardContent>
     </Card>
   )
 }
-

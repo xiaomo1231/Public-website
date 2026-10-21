@@ -38,7 +38,9 @@ export function HomeworkStudyGuide({
   return (
     <Card>
       <CardHeader className="space-y-2">
-        <CardTitle className="text-base">{t('homework.guide.title')}</CardTitle>
+        <CardTitle className="font-heading text-base lecture:font-bold">
+          {t('homework.guide.title')}
+        </CardTitle>
         <p className="text-sm leading-relaxed text-muted-foreground">{t('homework.guide.intro')}</p>
       </CardHeader>
       <CardContent className="space-y-4">

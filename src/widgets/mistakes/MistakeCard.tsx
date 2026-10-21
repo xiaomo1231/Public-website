@@ -29,7 +29,10 @@ export interface MistakeCardProps {
   onArchive: (id: string) => Promise<void>
   onRestore: (id: string) => Promise<void>
   onRemove: (id: string) => Promise<void>
-  onPractice: (id: string, mode: 'same_concept' | 'similar' | 'easier' | 'harder' | 'weakness') => Promise<void>
+  onPractice: (
+    id: string,
+    mode: 'same_concept' | 'similar' | 'easier' | 'harder' | 'weakness',
+  ) => Promise<void>
 }
 
 export function MistakeCard({
@@ -63,8 +66,15 @@ export function MistakeCard({
         : 'border-amber-500/40'
 
   return (
-    <Card className={cn(statusTone)}>
-      <CardHeader className="flex flex-row flex-wrap items-start gap-2 space-y-0 py-3">
+    <Card
+      className={cn(
+        statusTone,
+        // Lecture: a ruled row on the page. Lab: a hairline table row (the list draws the box) with the status as a left mark.
+        'lecture:rounded-none lecture:border-x-0 lecture:border-t-0 lecture:border-border lecture:bg-transparent lecture:shadow-none',
+        'lab:rounded-none lab:border-0 lab:border-l-2',
+      )}
+    >
+      <CardHeader className="flex flex-row flex-wrap items-start gap-2 space-y-0 py-3 lecture:px-0 lecture:py-4 lab:px-3.5 lab:py-2.5">
         <div className="min-w-0 flex-1 space-y-1">
           <div className="flex flex-wrap items-center gap-2">
             <Badge variant="outline">{t(MISTAKE_TYPE_LABEL_KEYS[mistake.mistakeType])}</Badge>
@@ -87,7 +97,7 @@ export function MistakeCard({
               </Badge>
             )}
           </div>
-          <p className="line-clamp-2 text-sm font-medium">{mistake.question}</p>
+          <p className="line-clamp-2 text-sm font-medium lecture:text-[15px]">{mistake.question}</p>
           <p className="text-xs text-muted-foreground">
             {t('mistakeCard.answerLine', {
               yours: mistake.studentAnswer || t('quizResult.blank'),
@@ -95,16 +105,26 @@ export function MistakeCard({
             })}
           </p>
         </div>
-        <span className="text-xs text-muted-foreground">{relativeTime(mistake.createdAt)}</span>
-        <Button variant="ghost" size="icon" aria-label={t('common.expand')} onClick={() => setExpanded((e) => !e)}>
+        <span className="text-xs tabular-nums text-muted-foreground lab:font-mono lab:text-[11px]">
+          {relativeTime(mistake.createdAt)}
+        </span>
+        <Button
+          variant="ghost"
+          size="icon"
+          aria-label={t('common.expand')}
+          onClick={() => setExpanded((e) => !e)}
+        >
           {expanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
         </Button>
       </CardHeader>
 
       {expanded && (
-        <CardContent className="space-y-3 pt-0">
+        <CardContent className="space-y-3 pt-0 lecture:px-0 lab:px-3.5">
           {mistake.analysis ? (
-            <MistakeAnalysisView analysis={mistake.analysis} onPractice={() => run('practice', () => onPractice(mistake.id, 'same_concept'))} />
+            <MistakeAnalysisView
+              analysis={mistake.analysis}
+              onPractice={() => run('practice', () => onPractice(mistake.id, 'same_concept'))}
+            />
           ) : mistake.analysisStatus === 'analyzing' ? (
             <AnalysisPlaceholder message={t('mistakeCard.analysing')} />
           ) : mistake.analysisStatus === 'failed' ? (
@@ -112,47 +132,89 @@ export function MistakeCard({
               <AnalysisPlaceholder
                 message={mistake.analysisError ?? t('mistakeCard.analysisFailed')}
               />
-              <Button variant="outline" size="sm" onClick={() => run('analyze', () => onAnalyze(mistake.id))} disabled={busy === 'analyze'}>
-                {busy === 'analyze' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => run('analyze', () => onAnalyze(mistake.id))}
+                disabled={busy === 'analyze'}
+              >
+                {busy === 'analyze' ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Sparkles className="h-4 w-4" />
+                )}
                 {t('mistakeCard.retry')}
               </Button>
             </div>
           ) : (
             <div className="space-y-2">
               <AnalysisPlaceholder message={t('mistakeCard.runAnalysis')} />
-              <Button size="sm" onClick={() => run('analyze', () => onAnalyze(mistake.id))} disabled={busy === 'analyze'}>
-                {busy === 'analyze' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+              <Button
+                size="sm"
+                onClick={() => run('analyze', () => onAnalyze(mistake.id))}
+                disabled={busy === 'analyze'}
+              >
+                {busy === 'analyze' ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Sparkles className="h-4 w-4" />
+                )}
                 {t('mistakeCard.explain')}
               </Button>
             </div>
           )}
 
-          <PracticeMoreMenu onSelect={(mode) => run(`practice-${mode}`, () => onPractice(mistake.id, mode))} busy={busy?.startsWith('practice') ?? false} />
+          <PracticeMoreMenu
+            onSelect={(mode) => run(`practice-${mode}`, () => onPractice(mistake.id, mode))}
+            busy={busy?.startsWith('practice') ?? false}
+          />
 
           <QuestionSource sourceRefs={mistake.sourceRefs} projectId={mistake.projectId} />
 
           <div className="flex flex-wrap items-center gap-2 border-t pt-3">
             {mistake.status === 'active' && (
-              <Button variant="outline" size="sm" onClick={() => run('understood', () => onMarkUnderstood(mistake.id))} disabled={busy === 'understood'}>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => run('understood', () => onMarkUnderstood(mistake.id))}
+                disabled={busy === 'understood'}
+              >
                 <CheckCircle2 className="h-4 w-4" />
                 {t('mistakeCard.markUnderstood')}
               </Button>
             )}
             {mistake.status !== 'archived' ? (
-              <Button variant="outline" size="sm" onClick={() => run('archive', () => onArchive(mistake.id))} disabled={busy === 'archive'}>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => run('archive', () => onArchive(mistake.id))}
+                disabled={busy === 'archive'}
+              >
                 <Archive className="h-4 w-4" />
                 {t('mistakeCard.archive')}
               </Button>
             ) : (
-              <Button variant="outline" size="sm" onClick={() => run('restore', () => onRestore(mistake.id))} disabled={busy === 'restore'}>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => run('restore', () => onRestore(mistake.id))}
+                disabled={busy === 'restore'}
+              >
                 <ArchiveRestore className="h-4 w-4" />
                 {t('mistakeCard.restore')}
               </Button>
             )}
             {confirmDelete ? (
               <div className="ml-auto flex items-center gap-2">
-                <span className="text-xs text-muted-foreground">{t('mistakeCard.removeConfirm')}</span>
-                <Button variant="destructive" size="sm" onClick={() => run('remove', () => onRemove(mistake.id))} disabled={busy === 'remove'}>
+                <span className="text-xs text-muted-foreground">
+                  {t('mistakeCard.removeConfirm')}
+                </span>
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  onClick={() => run('remove', () => onRemove(mistake.id))}
+                  disabled={busy === 'remove'}
+                >
                   {t('common.confirm')}
                 </Button>
                 <Button variant="ghost" size="sm" onClick={() => setConfirmDelete(false)}>

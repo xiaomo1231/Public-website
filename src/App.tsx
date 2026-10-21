@@ -6,6 +6,7 @@ import { useAuthStore } from '@/features/auth/useAuth'
 import { useProjectStore } from '@/features/project/projectStore'
 import { useSettingsStore } from '@/features/settings/settingsStore'
 import { useThemeStore, initThemeListener } from '@/features/theme/themeStore'
+import { DEFAULT_UI_STYLE } from '@/entities/user/types'
 import { useI18nStore, initUILanguage } from '@/i18n'
 import { Toaster } from '@/shared/ui/Toast'
 import { SelectionTranslator } from '@/widgets/translation/SelectionTranslator'
@@ -19,6 +20,7 @@ export function App(): JSX.Element {
   const profile = useAuthStore((s) => s.profile)
   const setPreference = useThemeStore((s) => s.setPreference)
   const setColorTheme = useThemeStore((s) => s.setColorTheme)
+  const setUiStyle = useThemeStore((s) => s.setUiStyle)
   const syncUILanguage = useI18nStore((s) => s.syncFromProfile)
 
   // Bootstrap data once on mount
@@ -40,6 +42,11 @@ export function App(): JSX.Element {
   useEffect(() => {
     if (profile?.colorTheme) setColorTheme(profile.colorTheme)
   }, [profile?.colorTheme, setColorTheme])
+
+  // Interface style follows the profile too (absent → the default style)
+  useEffect(() => {
+    if (profile) setUiStyle(profile.uiStyle ?? DEFAULT_UI_STYLE)
+  }, [profile, setUiStyle])
 
   // The persisted profile is authoritative once it has loaded
   useEffect(() => {

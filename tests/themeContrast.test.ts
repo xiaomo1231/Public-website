@@ -6,7 +6,8 @@ import { describe, expect, it } from 'vitest'
  * WCAG contrast audit computed from the real `globals.css` token values.
  *
  * This resolves the CSS custom properties exactly as the browser would
- * (`var()` aliases included) for every Light/Dark × Color Theme combination and
+ * (`var()` aliases included) for every Interface style × Light/Dark × Color Theme
+ * combination and
  * checks the text/background pairs that actually carry content.
  */
 
@@ -58,16 +59,25 @@ function resolve(tokens: Tokens, name: string): string {
 
 const THEMES = ['default', 'pinkAqua', 'warmOrange', 'academic'] as const
 const MODES = ['light', 'dark'] as const
+const STYLES = ['lecture', 'lab'] as const
 
 type Theme = (typeof THEMES)[number]
 type Mode = (typeof MODES)[number]
+type Style = (typeof STYLES)[number]
 
-/** Effective tokens after the cascade: :root → .dark → theme block. */
-function effectiveTokens(mode: Mode, theme: Theme): Tokens {
+/**
+ * Effective tokens after the cascade: :root → .dark → interface style block →
+ * palette block (the style blocks come first in the file, so a palette wins
+ * where both set a token).
+ */
+function effectiveTokens(mode: Mode, theme: Theme, style: Style = 'lecture'): Tokens {
   const merged = new Map(blockFor(':root'))
   if (mode === 'dark') {
     for (const [key, value] of blockFor('.dark')) merged.set(key, value)
   }
+  const styleSelector =
+    mode === 'dark' ? `.dark[data-ui-style='${style}']` : `:root[data-ui-style='${style}']`
+  for (const [key, value] of blockFor(styleSelector)) merged.set(key, value)
   if (theme !== 'default') {
     const selector =
       mode === 'dark' ? `.dark[data-color-theme='${theme}']` : `:root[data-color-theme='${theme}']`
@@ -115,9 +125,18 @@ function contrast(fg: Rgb, bg: Rgb): number {
   return (hi + 0.05) / (lo + 0.05)
 }
 
-function ratio(mode: Mode, theme: Theme, fgToken: string, bgToken: string): number {
-  const tokens = effectiveTokens(mode, theme)
-  return contrast(hslTripletToRgb(resolve(tokens, fgToken)), hslTripletToRgb(resolve(tokens, bgToken)))
+function ratio(
+  mode: Mode,
+  theme: Theme,
+  fgToken: string,
+  bgToken: string,
+  style: Style = 'lecture',
+): number {
+  const tokens = effectiveTokens(mode, theme, style)
+  return contrast(
+    hslTripletToRgb(resolve(tokens, fgToken)),
+    hslTripletToRgb(resolve(tokens, bgToken)),
+  )
 }
 
 /** Pairs that carry normal-size text and must meet WCAG AA (4.5:1). */
@@ -133,52 +152,106 @@ const TEXT_PAIRS = [
 describe('WCAG contrast', () => {
   it('prints the measured matrix (diagnostic)', () => {
     const rows: string[] = []
-    for (const mode of MODES) {
-      for (const theme of THEMES) {
-        const button = ratio(mode, theme, '--primary-foreground', '--primary-strong')
-        const body = ratio(mode, theme, '--foreground', '--background')
-        const muted = ratio(mode, theme, '--muted-foreground', '--background')
-        rows.push(
-          `${mode.padEnd(5)} ${theme.padEnd(11)} button=${button.toFixed(2)} body=${body.toFixed(2)} muted=${muted.toFixed(2)}`,
-        )
+    for (const style of STYLES) {
+      for (const mode of MODES) {
+        for (const theme of THEMES) {
+          const button = ratio(mode, theme, '--primary-foreground', '--primary-strong', style)
+          const body = ratio(mode, theme, '--foreground', '--background', style)
+          const muted = ratio(mode, theme, '--muted-foreground', '--background', style)
+          rows.push(
+            `${style.padEnd(7)} ${mode.padEnd(5)} ${theme.padEnd(11)} button=${button.toFixed(2)} body=${body.toFixed(2)} muted=${muted.toFixed(2)}`,
+          )
+        }
       }
     }
     console.log(`\n${rows.join('\n')}\n`)
-    expect(rows).toHaveLength(MODES.length * THEMES.length)
+    expect(rows).toHaveLength(STYLES.length * MODES.length * THEMES.length)
   })
 
-  for (const mode of MODES) {
-    for (const theme of THEMES) {
-      it(`${mode} + ${theme}: normal text meets AA (4.5:1)`, () => {
-        for (const [fg, bg] of TEXT_PAIRS) {
-          const value = ratio(mode, theme, fg, bg)
-          expect(value, `${fg} on ${bg} = ${value.toFixed(2)}:1`).toBeGreaterThanOrEqual(4.5)
-        }
-      })
+  for (const style of STYLES) {
+    for (const mode of MODES) {
+      for (const theme of THEMES) {
+        it(`${style} + ${mode} + ${theme}: normal text meets AA (4.5:1)`, () => {
+          for (const [fg, bg] of TEXT_PAIRS) {
+            const value = ratio(mode, theme, fg, bg, style)
+            expect(value, `${fg} on ${bg} = ${value.toFixed(2)}:1`).toBeGreaterThanOrEqual(4.5)
+          }
+          // Body text also sits on cards and muted panels.
+          for (const bg of ['--card', '--muted'] as const) {
+            const value = ratio(mode, theme, '--muted-foreground', bg, style)
+            expect(
+              value,
+              `--muted-foreground on ${bg} = ${value.toFixed(2)}:1`,
+            ).toBeGreaterThanOrEqual(4.5)
+          }
+        })
 
-      it(`${mode} + ${theme}: filled primary surfaces meet AA-large (3:1)`, () => {
-        const value = ratio(mode, theme, '--primary-foreground', '--primary-strong')
-        expect(value, `${mode}+${theme} = ${value.toFixed(2)}:1`).toBeGreaterThanOrEqual(3)
-      })
+        it(`${style} + ${mode} + ${theme}: filled primary surfaces meet AA-large (3:1)`, () => {
+          const value = ratio(mode, theme, '--primary-foreground', '--primary-strong', style)
+          expect(value, `${style}+${mode}+${theme} = ${value.toFixed(2)}:1`).toBeGreaterThanOrEqual(
+            3,
+          )
+        })
+      }
     }
   }
 
+  it('gives every interface style its own neutrals in both modes', () => {
+    for (const style of STYLES) {
+      for (const selector of [
+        `:root[data-ui-style='${style}']`,
+        `.dark[data-ui-style='${style}']`,
+      ]) {
+        const tokens = blockFor(selector)
+        for (const name of [
+          '--background',
+          '--foreground',
+          '--card',
+          '--muted-foreground',
+          '--border',
+        ]) {
+          expect(tokens.has(name), `${selector} ${name}`).toBe(true)
+        }
+      }
+    }
+    // Palettes only set the accent family; neutrals come from the style.
+    for (const theme of THEMES.filter((t) => t !== 'default')) {
+      for (const selector of [
+        `:root[data-color-theme='${theme}']`,
+        `.dark[data-color-theme='${theme}']`,
+      ]) {
+        expect(blockFor(selector).has('--background'), selector).toBe(false)
+      }
+    }
+  })
+
   it('records the light-mode primary-button ratios after the accessibility fix', () => {
     // Pink Aqua now uses #1E8F9C instead of #2A9BB8.
-    expect(ratio('light', 'pinkAqua', '--primary-foreground', '--primary-strong')).toBeCloseTo(3.84, 1)
+    expect(ratio('light', 'pinkAqua', '--primary-foreground', '--primary-strong')).toBeCloseTo(
+      3.84,
+      1,
+    )
     // Warm Orange now uses #8C3332 instead of #D15C2C.
     expect(
       ratio('light', 'warmOrange', '--primary-foreground', '--primary-strong'),
     ).toBeGreaterThanOrEqual(7.5)
     // Academic's #2C7F4D already passed AA, so primary-strong aliases primary.
-    expect(ratio('light', 'academic', '--primary-foreground', '--primary-strong')).toBeGreaterThanOrEqual(4.5)
+    expect(
+      ratio('light', 'academic', '--primary-foreground', '--primary-strong'),
+    ).toBeGreaterThanOrEqual(4.5)
     // Default is the original near-black.
-    expect(ratio('light', 'default', '--primary-foreground', '--primary-strong')).toBeGreaterThanOrEqual(4.5)
+    expect(
+      ratio('light', 'default', '--primary-foreground', '--primary-strong'),
+    ).toBeGreaterThanOrEqual(4.5)
   })
 
   it('resolves --primary-strong to the text-safe colour per theme', () => {
-    expect(resolve(effectiveTokens('light', 'pinkAqua'), '--primary-strong')).toBe('186.2 67.7% 36.5%')
-    expect(resolve(effectiveTokens('light', 'warmOrange'), '--primary-strong')).toBe('0.7 47.4% 37.3%')
+    expect(resolve(effectiveTokens('light', 'pinkAqua'), '--primary-strong')).toBe(
+      '186.2 67.7% 36.5%',
+    )
+    expect(resolve(effectiveTokens('light', 'warmOrange'), '--primary-strong')).toBe(
+      '0.7 47.4% 37.3%',
+    )
     // The original primaries are kept, not deleted.
     expect(resolve(effectiveTokens('light', 'pinkAqua'), '--primary')).toBe('192 63% 44%')
     expect(resolve(effectiveTokens('light', 'warmOrange'), '--primary')).toBe('18 65% 50%')
@@ -200,7 +273,9 @@ describe('WCAG contrast', () => {
     expect(readSource('src/shared/ui/buttonVariants.ts')).toContain(
       'bg-primary-strong text-primary-foreground',
     )
-    expect(readSource('src/shared/ui/Badge.tsx')).toContain('bg-primary-strong text-primary-foreground')
+    expect(readSource('src/shared/ui/Badge.tsx')).toContain(
+      'bg-primary-strong text-primary-foreground',
+    )
     expect(readSource('src/shared/ui/Tooltip.tsx')).toContain('bg-primary-strong')
     // Decorative uses keep the original primary.
     expect(readSource('src/shared/ui/Progress.tsx')).toContain('bg-primary ')

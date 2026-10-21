@@ -18,6 +18,15 @@ import { useProjects } from '@/features/project/useProjects'
 import { useAuth } from '@/features/auth/useAuth'
 import { useAISettings } from '@/features/settings/useAISettings'
 import { useHomeOverview } from '@/features/home/useHomeOverview'
+import { useUiStyle } from '@/features/theme/useAppearance'
+import {
+  FigureStrip,
+  LAB_TABLE_HEAD_CLASS,
+  MiniBar,
+  SECTION_TITLE_CLASS,
+  type FigureItem,
+} from '@/widgets/dashboard/Figures'
+import { useCourseMastery, type CourseMasteryEstimate } from '@/widgets/dashboard/useCourseMastery'
 import type {
   CourseNextStep,
   CourseOverview,
@@ -47,14 +56,28 @@ export function DashboardPage(): JSX.Element {
   const { settings, loaded: settingsLoaded } = useAISettings()
   const { overview, loading: overviewLoading, error } = useHomeOverview(projects, loaded)
 
+  const { uiStyle } = useUiStyle()
+  const projectIds = useMemo(() => projects.map((p) => p.id), [projects])
+  const mastery = useCourseMastery(loaded ? projectIds : [])
+
   const name = profile?.name ?? t('dashboard.student')
   const aiReady = Boolean(settings?.apiKey?.trim())
   const hasProjects = projects.length > 0
 
+  const focus =
+    overviewLoading && !overview ? (
+      <div className="space-y-4" aria-hidden>
+        <div className="h-40 animate-pulse rounded-3xl bg-muted" />
+        <div className="h-32 animate-pulse rounded-2xl bg-muted/70" />
+      </div>
+    ) : overview ? (
+      <StudyFocus overview={overview} />
+    ) : null
+
   return (
     <PageContainer>
       <PageContent>
-        <div className="mx-auto w-full max-w-6xl">
+        <div className="mx-auto w-full max-w-6xl lecture:max-w-[980px]">
           <HomeHeader
             name={name}
             language={language}
@@ -67,35 +90,87 @@ export function DashboardPage(): JSX.Element {
           ) : !hasProjects ? (
             <Onboarding aiReady={aiReady} />
           ) : (
-            <div className="space-y-8 pt-8">
+            <div className="space-y-8 pt-6 lecture:space-y-11">
+              {overview && <HomeFigures overview={overview} />}
               {settingsLoaded && !aiReady && <AiMissingNotice />}
               {error && (
                 <p role="status" className="text-sm text-muted-foreground">
                   {t('home.loadFailed')}
                 </p>
               )}
-              <div className="grid gap-x-10 gap-y-10 lg:grid-cols-[minmax(0,1.65fr)_minmax(0,1fr)]">
-                <div className="min-w-0 space-y-10">
-                  {overviewLoading && !overview ? (
-                    <div className="space-y-4" aria-hidden>
-                      <div className="h-48 animate-pulse rounded-3xl bg-muted" />
-                      <div className="h-40 animate-pulse rounded-2xl bg-muted/70" />
-                    </div>
-                  ) : overview ? (
-                    <StudyFocus overview={overview} />
-                  ) : null}
+              {uiStyle === 'lab' ? (
+                // Lab: the course table is the page's instrument panel; what to
+                // do next and the weak points sit under it.
+                <>
+                  <CourseTable projects={projects} overview={overview} mastery={mastery} />
+                  <div className="grid gap-x-6 gap-y-8 lg:grid-cols-[minmax(0,1.65fr)_minmax(0,1fr)]">
+                    <div className="min-w-0 space-y-8">{focus}</div>
+                    {overview && (
+                      <aside className="min-w-0">
+                        <WeakPoints courses={overview.courses} />
+                      </aside>
+                    )}
+                  </div>
+                </>
+              ) : (
+                <div className="grid gap-x-12 gap-y-10 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
+                  <div className="min-w-0 space-y-10">{focus}</div>
+                  <aside className="min-w-0 space-y-10">
+                    <CourseList projects={projects} overview={overview} mastery={mastery} />
+                    {overview && <WeakPoints courses={overview.courses} />}
+                  </aside>
                 </div>
-                <aside className="min-w-0 space-y-10">
-                  <CourseList projects={projects} overview={overview} />
-                  {overview && <WeakPoints courses={overview.courses} />}
-                </aside>
-              </div>
+              )}
             </div>
           )}
         </div>
       </PageContent>
     </PageContainer>
   )
+}
+
+/* ------------------------------------------------------------------------ */
+/* Figures / readouts                                                        */
+/* ------------------------------------------------------------------------ */
+
+/**
+ * Four counts the overview already holds — nothing estimated or invented.
+ * Lecture shows them as a "figures" row, lab as a readout strip.
+ */
+function HomeFigures({ overview }: { overview: HomeOverview }): JSX.Element {
+  const { t } = useTranslation()
+  const { courses } = overview
+  const open = courses.reduce((sum, c) => sum + (c.homework.questions - c.homework.worked), 0)
+  const openCourses = courses.filter((c) => c.homework.questions > c.homework.worked).length
+  const mistakes = courses.reduce((sum, c) => sum + c.activeMistakes, 0)
+  const mistakeCourses = courses.filter((c) => c.activeMistakes > 0).length
+  const topics = courses.reduce((sum, c) => sum + (c.analysis === 'ready' ? c.topicCount : 0), 0)
+  const materials = courses.reduce((sum, c) => sum + c.materials.total, 0)
+  const latest = courses.reduce((max, c) => Math.max(max, c.lastActivityAt), 0)
+
+  const items: FigureItem[] = [
+    {
+      label: t('home.fig.homework'),
+      value: open,
+      sub: openCourses > 0 ? t('home.fig.across', { count: openCourses }) : undefined,
+    },
+    {
+      label: t('home.fig.mistakes'),
+      value: mistakes,
+      sub: mistakeCourses > 0 ? t('home.fig.across', { count: mistakeCourses }) : undefined,
+    },
+    {
+      label: t('home.fig.topics'),
+      value: topics,
+      sub: t('home.courses.materials', { count: materials }),
+    },
+    {
+      label: t('home.fig.courses'),
+      value: courses.length,
+      sub: latest > 0 ? t('home.courses.lastActive', { date: relativeTime(latest) }) : undefined,
+    },
+  ]
+  return <FigureStrip items={items} label={t('home.figures.label')} />
 }
 
 /* ------------------------------------------------------------------------ */
@@ -148,13 +223,17 @@ function HomeHeader({
   }, [overview, projectCount, t])
 
   return (
-    <header className="flex flex-col gap-5 border-b border-border/80 pb-8 pt-2 sm:flex-row sm:items-end sm:justify-between">
-      <div className="min-w-0 space-y-2">
-        <p className="text-sm text-muted-foreground">{date}</p>
-        <h1 className="text-balance text-[2rem] font-semibold leading-[1.1] tracking-[-0.025em] text-foreground sm:text-[2.6rem]">
+    <header className="flex flex-col gap-5 pb-2 pt-2 lecture:pt-6 sm:flex-row sm:items-end sm:justify-between">
+      <div className="min-w-0 space-y-2 lecture:space-y-3">
+        <p className="text-muted-foreground lecture:text-[13px] lecture:tracking-[0.14em] lab:font-mono lab:text-[11px] lab:uppercase lab:tracking-[0.08em]">
+          {date}
+        </p>
+        <h1 className="text-balance font-heading text-foreground lecture:text-[30px] lecture:font-bold lecture:leading-snug lab:text-[22px] lab:font-semibold lab:leading-tight lab:tracking-[-0.01em] sm:lecture:text-[36px]">
           {t(greetingKey(now.getHours()), { name })}
         </h1>
-        <p className="data-num text-[15px] text-muted-foreground">{summary}</p>
+        <p className="data-num text-muted-foreground lecture:text-[15px] lab:font-mono lab:text-xs">
+          {summary}
+        </p>
       </div>
       {projectCount > 0 && (
         <Button asChild variant="outline" className="self-start sm:self-auto">
@@ -227,7 +306,10 @@ function stepText(step: CourseNextStep, t: T): { title: string; hint: string } {
       }
     case 'tutor':
       return step.topicName
-        ? { title: t('home.step.tutorTopic', { topic: step.topicName }), hint: t('home.step.tutor.hint') }
+        ? {
+            title: t('home.step.tutorTopic', { topic: step.topicName }),
+            hint: t('home.step.tutor.hint'),
+          }
         : { title: t('home.step.tutor'), hint: t('home.step.tutor.hint') }
   }
 }
@@ -290,20 +372,30 @@ function StudyFocus({ overview }: { overview: HomeOverview }): JSX.Element {
     <>
       {focus && (
         <section aria-labelledby="home-resume">
-          <h2 id="home-resume" className="mb-3 text-sm font-semibold text-foreground">
+          <h2 id="home-resume" className={cn('mb-3', SECTION_TITLE_CLASS)}>
             {t('home.resume.title')}
           </h2>
           <Link
             to={focus.href}
-            className="focus-ring group block rounded-3xl bg-theme-primary-soft p-7 text-secondary-foreground transition-[box-shadow,transform] duration-300 hover:shadow-lift motion-safe:hover:-translate-y-0.5 sm:p-9"
+            className={cn(
+              'focus-ring group block transition-colors duration-200',
+              // lecture: a ruled entry, the title set large in the serif.
+              'lecture:border-y lecture:border-y-border lecture:border-t-foreground lecture:py-6',
+              // lab: a flat hairline panel.
+              'lab:border lab:border-border lab:bg-card lab:p-5 lab:hover:border-primary/40',
+            )}
           >
-            <p className="text-sm font-medium">{focus.kicker}</p>
-            <p className="mt-3 break-words text-[1.6rem] font-semibold leading-tight tracking-[-0.02em] sm:text-[2rem]">
+            <p className="text-[13px] text-muted-foreground lab:font-mono lab:text-[11px] lab:uppercase lab:tracking-[0.06em]">
+              {focus.kicker}
+            </p>
+            <p className="mt-2 break-words font-heading text-foreground transition-colors duration-200 lecture:text-[26px] lecture:font-bold lecture:leading-snug lecture:group-hover:text-primary lab:text-[20px] lab:font-semibold lab:leading-tight">
               {focus.title}
             </p>
-            <div className="mt-8 flex flex-wrap items-center justify-between gap-4">
-              <p className="data-num text-sm">{focus.meta}</p>
-              <span className="inline-flex h-11 items-center gap-2 rounded-full bg-primary-strong px-5 text-sm font-medium text-primary-foreground shadow-soft">
+            <div className="mt-5 flex flex-wrap items-center justify-between gap-4">
+              <p className="data-num text-sm text-muted-foreground lab:font-mono lab:text-xs">
+                {focus.meta}
+              </p>
+              <span className="inline-flex h-10 items-center gap-2 rounded-full px-5 text-sm font-medium transition-transform duration-press ease-out lecture:bg-foreground lecture:text-background lab:h-9 lab:rounded-md lab:bg-primary-strong lab:px-4 lab:text-primary-foreground motion-safe:group-active:scale-[0.97]">
                 {focus.action}
                 <ArrowRight
                   aria-hidden
@@ -318,10 +410,10 @@ function StudyFocus({ overview }: { overview: HomeOverview }): JSX.Element {
       {/* With a single course its step is already the large card above. */}
       {upNext.length > 0 && (
         <section aria-labelledby="home-next">
-          <h2 id="home-next" className="mb-3 text-sm font-semibold text-foreground">
+          <h2 id="home-next" className={cn('mb-3', SECTION_TITLE_CLASS)}>
             {t('home.next.title')}
           </h2>
-          <ul className="hairline-list overflow-hidden rounded-2xl border border-border/80 bg-card">
+          <ul className="hairline-list overflow-hidden lecture:border-y lecture:border-border lab:border lab:border-border lab:bg-card">
             {upNext.map(({ course, href }) => (
               <li key={course.project.id}>
                 <NextStepRow course={course} href={href} />
@@ -342,23 +434,25 @@ function NextStepRow({ course, href }: { course: CourseOverview; href: string })
   return (
     <Link
       to={href}
-      className="focus-ring group flex min-w-0 items-center gap-4 px-5 py-4 transition-colors hover:bg-accent/50"
+      className="focus-ring group flex min-w-0 items-center gap-4 transition-colors duration-200 lecture:py-4 lab:px-4 lab:py-3 lab:hover:bg-accent/60"
     >
       <span
         aria-hidden
-        className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-muted text-foreground"
+        className="grid shrink-0 place-items-center text-muted-foreground lecture:hidden lab:h-8 lab:w-8 lab:rounded-md lab:border lab:border-border"
       >
-        <Icon className={cn('h-[18px] w-[18px]', busy && 'motion-safe:animate-spin')} />
+        <Icon className={cn('h-4 w-4', busy && 'motion-safe:animate-spin')} />
       </span>
-      <span className="min-w-0 flex-1">
-        <span className="block truncate text-[15px] font-medium text-foreground">{text.title}</span>
-        <span className="block truncate text-[13px] text-muted-foreground">
+      <span className="flex min-w-0 flex-1 flex-col">
+        <span className="order-2 block truncate text-foreground transition-colors duration-200 lecture:font-heading lecture:text-[18px] lecture:font-bold lecture:group-hover:text-primary lab:order-1 lab:text-sm lab:font-medium">
+          {text.title}
+        </span>
+        <span className="order-1 block truncate text-[13px] text-muted-foreground lab:order-2 lab:text-xs">
           {course.project.name} · {text.hint}
         </span>
       </span>
       <ChevronRight
         aria-hidden
-        className="h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200 motion-safe:group-hover:translate-x-0.5"
+        className="h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200 lecture:text-primary motion-safe:group-hover:translate-x-0.5"
       />
     </Link>
   )
@@ -370,91 +464,215 @@ function NextStepRow({ course, href }: { course: CourseOverview; href: string })
 
 const COURSE_PREVIEW = 5
 
+function courseRows(
+  projects: Project[],
+  overview: HomeOverview | null,
+): Array<{ project: Project; course?: CourseOverview }> {
+  // Prefer the overview's activity order; fall back to the store order.
+  return overview
+    ? overview.courses.map((course) => ({ project: course.project, course }))
+    : projects.map((project) => ({ project }))
+}
+
+function CoursesHeading({ total }: { total: number }): JSX.Element {
+  const { t } = useTranslation()
+  return (
+    <div className="mb-3 flex items-center justify-between gap-3">
+      <h2 id="home-courses" className={SECTION_TITLE_CLASS}>
+        {t('home.courses.title')}
+      </h2>
+      {total > COURSE_PREVIEW && (
+        <Link
+          to="/projects"
+          className="focus-ring rounded-full text-sm text-muted-foreground transition-colors hover:text-foreground lab:text-xs"
+        >
+          {t('home.courses.viewAll')}
+        </Link>
+      )}
+    </div>
+  )
+}
+
+/** Lecture: courses as ruled rows with the name in the serif. */
 function CourseList({
   projects,
   overview,
+  mastery,
 }: {
   projects: Project[]
   overview: HomeOverview | null
+  mastery: Record<string, CourseMasteryEstimate>
 }): JSX.Element {
   const { t } = useTranslation()
-  // Prefer the overview's activity order; fall back to the store order.
-  const rows: Array<{ project: Project; course?: CourseOverview }> = overview
-    ? overview.courses.map((course) => ({ project: course.project, course }))
-    : projects.map((project) => ({ project }))
+  const rows = courseRows(projects, overview)
 
   return (
     <section aria-labelledby="home-courses">
-      <div className="mb-3 flex items-center justify-between gap-3">
-        <h2 id="home-courses" className="text-sm font-semibold text-foreground">
-          {t('home.courses.title')}
-        </h2>
-        {projects.length > COURSE_PREVIEW && (
-          <Link
-            to="/projects"
-            className="focus-ring rounded-full text-sm text-muted-foreground transition-colors hover:text-foreground"
-          >
-            {t('home.courses.viewAll')}
-          </Link>
-        )}
-      </div>
-      <ul className="hairline-list overflow-hidden rounded-2xl border border-border/80 bg-card">
-        {rows.slice(0, COURSE_PREVIEW).map(({ project, course }) => (
-          <li key={project.id}>
-            <Link
-              to={`/projects/${project.id}`}
-              className="focus-ring group flex min-w-0 items-start gap-3 px-5 py-4 transition-colors hover:bg-accent/50"
-            >
-              <span
-                aria-hidden
-                className="mt-0.5 grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-theme-primary-soft text-sm font-semibold text-secondary-foreground"
+      <CoursesHeading total={projects.length} />
+      <ul className="border-t border-border">
+        {rows.slice(0, COURSE_PREVIEW).map(({ project, course }) => {
+          const estimate = mastery[project.id]
+          return (
+            <li key={project.id} className="border-b border-border">
+              <Link
+                to={`/projects/${project.id}`}
+                className="focus-ring group block min-w-0 py-3.5"
               >
-                {project.name.slice(0, 1)}
-              </span>
-              <span className="min-w-0 flex-1">
                 <TruncatedText
                   as="span"
                   text={project.name}
-                  className="block text-[15px] font-medium text-foreground"
+                  className="block font-heading text-[17px] font-bold text-foreground transition-colors duration-200 group-hover:text-primary"
                 />
-                <span className="block truncate text-[13px] text-muted-foreground">
+                <span className="mt-0.5 block truncate text-[13px] text-muted-foreground">
                   {t(SUBJECT_LABEL_KEYS[project.subject])} ·{' '}
                   {t('home.courses.lastActive', {
                     date: relativeTime(course?.lastActivityAt ?? project.updatedAt),
                   })}
                 </span>
-                {course && <CourseStats course={course} />}
-              </span>
-            </Link>
-          </li>
-        ))}
+                {course && <CourseStats course={course} estimate={estimate} />}
+              </Link>
+            </li>
+          )
+        })}
       </ul>
     </section>
   )
 }
 
-function CourseStats({ course }: { course: CourseOverview }): JSX.Element {
+function CourseStats({
+  course,
+  estimate,
+}: {
+  course: CourseOverview
+  estimate?: CourseMasteryEstimate
+}): JSX.Element {
   const { t } = useTranslation()
   const items: string[] = [t('home.courses.materials', { count: course.materials.total })]
-  if (course.analysis === 'ready') items.push(t('home.courses.topics', { count: course.topicCount }))
+  if (course.analysis === 'ready')
+    items.push(t('home.courses.topics', { count: course.topicCount }))
   else if (course.materials.total > 0) items.push(t('home.courses.notAnalysed'))
   if (course.homework.questions > 0)
     items.push(
-      t('home.courses.homework', { done: course.homework.worked, total: course.homework.questions }),
+      t('home.courses.homework', {
+        done: course.homework.worked,
+        total: course.homework.questions,
+      }),
     )
   if (course.activeMistakes > 0)
     items.push(t('home.courses.mistakes', { count: course.activeMistakes }))
+  if (estimate)
+    items.push(t('home.courses.masteryEstimate', { value: Math.round(estimate.average * 100) }))
   return (
-    <span className="data-num mt-2 flex flex-wrap gap-1.5">
-      {items.map((item) => (
-        <span
-          key={item}
-          className="rounded-lg bg-muted px-1.5 py-0.5 text-[12px] leading-5 text-muted-foreground"
-        >
-          {item}
+    <span className="data-num mt-1 flex flex-wrap gap-x-1.5 text-[12.5px] leading-5 text-muted-foreground">
+      {items.map((item, index) => (
+        <span key={item} className="inline-flex gap-1.5">
+          {index > 0 && <span aria-hidden>·</span>}
+          <span>{item}</span>
         </span>
       ))}
     </span>
+  )
+}
+
+/** Lab: a hairline table of courses with mono figures. */
+function CourseTable({
+  projects,
+  overview,
+  mastery,
+}: {
+  projects: Project[]
+  overview: HomeOverview | null
+  mastery: Record<string, CourseMasteryEstimate>
+}): JSX.Element {
+  const { t } = useTranslation()
+  const rows = courseRows(projects, overview)
+  const head = 'px-3.5 py-2 text-left font-medium'
+  const cell = 'border-t border-border px-3.5 py-2.5 align-middle'
+
+  return (
+    <section aria-labelledby="home-courses">
+      <CoursesHeading total={projects.length} />
+      <div className="overflow-x-auto border border-border bg-card">
+        <table className="data-num w-full min-w-[560px] border-collapse text-[13.5px]">
+          <thead className={LAB_TABLE_HEAD_CLASS}>
+            <tr>
+              <th scope="col" className={head}>
+                {t('home.table.course')}
+              </th>
+              <th scope="col" className={cn(head, 'w-20')}>
+                {t('home.table.topics')}
+              </th>
+              <th scope="col" className={cn(head, 'w-40')}>
+                {t('home.table.mastery')}
+              </th>
+              <th scope="col" className={cn(head, 'w-20')}>
+                {t('home.table.mistakes')}
+              </th>
+              <th scope="col" className={cn(head, 'w-24')}>
+                {t('home.table.homework')}
+              </th>
+              <th scope="col" className={cn(head, 'w-20')}>
+                <span className="sr-only">{t('home.table.open')}</span>
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.slice(0, COURSE_PREVIEW).map(({ project, course }) => {
+              const estimate = mastery[project.id]
+              return (
+                <tr key={project.id} className="transition-colors duration-150 hover:bg-accent/50">
+                  <td className={cell}>
+                    <Link
+                      to={`/projects/${project.id}`}
+                      className="focus-ring block min-w-0 rounded-sm"
+                    >
+                      <TruncatedText
+                        as="span"
+                        text={project.name}
+                        className="font-medium text-foreground"
+                      />
+                      <span className="block truncate text-xs text-muted-foreground">
+                        {t(SUBJECT_LABEL_KEYS[project.subject])} ·{' '}
+                        {relativeTime(course?.lastActivityAt ?? project.updatedAt)}
+                      </span>
+                    </Link>
+                  </td>
+                  <td className={cn(cell, 'font-mono')}>
+                    {course && course.analysis === 'ready' ? course.topicCount : '—'}
+                  </td>
+                  <td className={cell}>
+                    {estimate ? (
+                      <span className="flex items-center gap-2.5">
+                        <span className="font-mono">{estimate.average.toFixed(2)}</span>
+                        <MiniBar value={estimate.average} className="w-16" />
+                      </span>
+                    ) : (
+                      <span className="font-mono text-muted-foreground">—</span>
+                    )}
+                  </td>
+                  <td className={cn(cell, 'font-mono')}>{course ? course.activeMistakes : '—'}</td>
+                  <td className={cn(cell, 'font-mono')}>
+                    {course && course.homework.questions > 0
+                      ? `${course.homework.worked}/${course.homework.questions}`
+                      : '—'}
+                  </td>
+                  <td className={cn(cell, 'text-right')}>
+                    <Button asChild variant="outline" size="sm">
+                      <Link
+                        to={`/projects/${project.id}`}
+                        aria-label={`${t('home.table.open')} ${project.name}`}
+                      >
+                        {t('home.table.open')}
+                      </Link>
+                    </Button>
+                  </td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      </div>
+    </section>
   )
 }
 
@@ -468,36 +686,34 @@ function WeakPoints({ courses }: { courses: CourseOverview[] }): JSX.Element | n
 
   return (
     <section aria-labelledby="home-weak">
-      <h2 id="home-weak" className="text-sm font-semibold text-foreground">
+      <h2 id="home-weak" className={SECTION_TITLE_CLASS}>
         {t('home.weak.title')}
       </h2>
-      <p className="mb-3 text-[13px] text-muted-foreground">{t('home.weak.hint')}</p>
-      <ul className="space-y-1">
+      <p className="mb-3 mt-1 text-[13px] text-muted-foreground">{t('home.weak.hint')}</p>
+      <ul className="hairline-list lecture:border-y lecture:border-border lab:border lab:border-border lab:bg-card">
         {points.map((point) => {
           const value = Math.round(point.mastery * 100)
           return (
             <li key={`${point.project.id}:${point.knowledgePoint}`}>
               <Link
                 to={`/projects/${point.project.id}/mastery`}
-                className="focus-ring block rounded-lg px-3 py-2.5 transition-colors hover:bg-accent/50"
+                className="focus-ring group block py-2.5 transition-colors duration-200 lecture:py-3 lab:px-3.5 lab:hover:bg-accent/60"
               >
                 <span className="flex items-baseline justify-between gap-3">
-                  <span className="min-w-0 truncate text-sm font-medium text-foreground">
+                  <span className="min-w-0 truncate text-sm font-medium text-foreground transition-colors duration-200 lecture:group-hover:text-primary">
                     {point.knowledgePoint}
                   </span>
-                  <span className="data-num shrink-0 text-[13px] text-muted-foreground">
+                  <span className="data-num shrink-0 text-[13px] text-muted-foreground lab:font-mono lab:text-xs">
                     {t('home.weak.mastery', { value })}
                   </span>
                 </span>
                 <span className="mt-0.5 block truncate text-[12px] text-muted-foreground">
                   {point.project.name}
                 </span>
-                <span aria-hidden className="mt-2 block h-1 overflow-hidden rounded-full bg-muted">
-                  <span
-                    className="block h-full rounded-full bg-primary"
-                    style={{ width: `${Math.max(4, value)}%` }}
-                  />
-                </span>
+                <MiniBar
+                  value={Math.max(4, value) / 100}
+                  className="mt-2 rounded-full lab:rounded-none"
+                />
               </Link>
             </li>
           )
@@ -562,21 +778,21 @@ function Onboarding({ aiReady }: { aiReady: boolean }): JSX.Element {
 
   return (
     <section aria-labelledby="home-onboarding" className="max-w-3xl pt-8">
-      <h2 id="home-onboarding" className="mb-4 text-sm font-semibold text-foreground">
+      <h2 id="home-onboarding" className={cn('mb-4', SECTION_TITLE_CLASS)}>
         {t('home.onboarding.title')}
       </h2>
-      <ol className="hairline-list overflow-hidden rounded-2xl border border-border/80 bg-card">
+      <ol className="hairline-list overflow-hidden lecture:border-y lecture:border-border lab:border lab:border-border lab:bg-card">
         {steps.map((step, index) => {
           const active = index === current
           return (
             <li
               key={step.title}
-              className="flex flex-col gap-4 px-5 py-5 sm:flex-row sm:items-center sm:px-6"
+              className="flex flex-col gap-4 py-5 lab:px-5 sm:flex-row sm:items-center"
             >
               <span
                 aria-hidden
                 className={cn(
-                  'data-num grid h-10 w-10 shrink-0 place-items-center rounded-full text-sm font-semibold',
+                  'data-num grid h-10 w-10 shrink-0 place-items-center rounded-full text-sm font-semibold lab:h-8 lab:w-8 lab:rounded-md lab:font-mono lab:text-xs',
                   step.done
                     ? 'bg-theme-primary-soft text-secondary-foreground'
                     : active

@@ -38,16 +38,26 @@ export const en = {
   'common.none': 'None',
   'common.somethingWrong': 'Something went wrong',
   'common.unexpectedError': 'Unexpected error',
-  'common.pageErrorHint': 'This page hit an error and could not be shown. Your saved data is not affected — reload the page or go back home.',
+  'common.pageErrorHint':
+    'This page hit an error and could not be shown. Your saved data is not affected — reload the page or go back home.',
   'common.reloadPage': 'Reload page',
   'common.backHome': 'Back to home',
   'common.pageNotFound': 'Page not found',
-  'common.pageNotFoundHint': 'This address does not match any page. Check the link, or go back home.',
+  'common.pageNotFoundHint':
+    'This address does not match any page. Check the link, or go back home.',
 
   'app.name': 'AI Learning',
   'app.tagline': 'Local-first',
   'app.dataStaysLocal': 'Data stays on your device.',
 
+  'nav.main': 'Main navigation',
+  'theme.uiStyle': 'Interface style',
+  'theme.uiStyleHint':
+    'The structure and type of the whole interface; the colour theme only sets the accent, so any pair works.',
+  'theme.uiStyle.lecture': 'Lecture',
+  'theme.uiStyle.lectureHint': 'Paper and serif headings, built for reading',
+  'theme.uiStyle.lab': 'Precision lab',
+  'theme.uiStyle.labHint': 'Hairlines, a grid and data readouts, dense',
   'nav.dashboard': 'Home',
   'nav.projects': 'Projects',
   'nav.settings': 'Settings',
@@ -119,7 +129,8 @@ export const en = {
   'dashboard.noProjectsHint': 'Create a project to start uploading course materials.',
   'dashboard.updatedAt': 'updated {date}',
   'dashboard.whatsNext': 'Make yourself at home',
-  'dashboard.roadmap': 'Choose your colors, connect your AI, and create a space that feels like you.',
+  'dashboard.roadmap':
+    'Choose your colors, connect your AI, and create a space that feels like you.',
   'dashboard.aiProvider': 'AI Provider',
   'dashboard.contentLibrary': 'Content Library',
   'dashboard.aiTutor': 'AI Tutor',
@@ -128,8 +139,7 @@ export const en = {
   'dashboard.localFirstTitle': 'Local-first',
   'dashboard.localFirstBody':
     'Your projects, documents, mistakes, and AI settings live on this device. Configure an AI provider in Settings to unlock Tutor, Quiz, and Mistake analysis.',
-  'dashboard.phaseStatus':
-    'Phases 1–5 shipped. Next: knowledge retrieval, then dashboard polish.',
+  'dashboard.phaseStatus': 'Phases 1–5 shipped. Next: knowledge retrieval, then dashboard polish.',
   'dashboard.phase1Done': 'Phase 1 ✓',
   'dashboard.ready': 'Ready',
   'dashboard.phase2': 'Phase 2',
@@ -166,7 +176,8 @@ export const en = {
   'home.step.processing': 'Processing your material',
   'home.step.processing.hint': 'You can analyse the course once it finishes.',
   'home.step.analyze': 'Analyse the course',
-  'home.step.analyze.hint': 'Builds topics, concepts and formulas, and unlocks the tutor and quizzes.',
+  'home.step.analyze.hint':
+    'Builds topics, concepts and formulas, and unlocks the tutor and quizzes.',
   'home.step.analyzing': 'Analysing the course',
   'home.step.analyzing.hint': 'Topics will appear when the analysis finishes.',
   'home.step.quiz': 'Finish quiz: {title}',
@@ -192,6 +203,52 @@ export const en = {
   'home.weak.hint': 'Estimated from your practice, not a grade.',
   'home.weak.mastery': '{value}% mastery',
   'home.loadFailed': 'Could not load your study summary. Your projects are still listed.',
+  'home.figures.label': 'Today at a glance',
+  'home.fig.homework': 'Homework questions open',
+  'home.fig.mistakes': 'Mistakes to review',
+  'home.fig.topics': 'Topics analysed',
+  'home.fig.courses': 'Courses',
+  'home.fig.across': 'Across {count} courses',
+  'home.fig.across.one': 'Across {count} course',
+  'home.table.course': 'Course',
+  'home.table.topics': 'Topics',
+  'home.table.mastery': 'Mastery (est.)',
+  'home.table.mistakes': 'Mistakes',
+  'home.table.homework': 'Homework',
+  'home.table.open': 'Open',
+  'home.courses.masteryEstimate': 'Mastery ≈ {value}% (estimate)',
+  'projects.table.name': 'Name',
+  'projects.table.subject': 'Subject',
+  'projects.table.updated': 'Updated',
+  'projectDetail.figures.label': 'Course at a glance',
+  'projectDetail.fig.mastery': 'Mastery (estimate)',
+  'projectDetail.fig.masterySub': 'From {count} practised knowledge points',
+  'projectDetail.fig.masterySub.one': 'From {count} practised knowledge point',
+  'projectDetail.fig.masteryNone': 'No practice yet',
+  'projectDetail.fig.topics': 'Topics',
+  'projectDetail.fig.mistakes': 'Mistakes to review',
+  'projectDetail.fig.homework': 'Homework questions open',
+  'projectDetail.fig.materials': 'Materials',
+  'projectDetail.fig.processing': '{count} processing',
+  'projectDetail.fig.failed': '{count} failed',
+  'projectDetail.fig.analysis': 'Course analysis',
+  'projectDetail.fig.pending': 'Pending',
+  'projectDetail.fig.pendingSub': '{mistakes} mistakes · {homework} homework open',
+  'projectDetail.analysisState.ready': 'Ready',
+  'projectDetail.analysisState.pending': 'Pending',
+  'projectDetail.analysisState.analyzing': 'Analysing',
+  'projectDetail.analysisState.failed': 'Failed',
+  'projectDetail.analysisState.none': 'Not analysed',
+  'projectDetail.continueReading': 'Continue reading {topic}',
+  'documents.col.file': 'File',
+  'documents.col.role': 'Role',
+  'documents.col.size': 'Size',
+  'documents.col.status': 'Status',
+  'documents.col.uploaded': 'Uploaded',
+  'analysis.toc.title': 'Contents',
+  'analysis.toc.other': 'Other topics',
+  'analysis.col.topic': 'Topic',
+  'analysis.col.source': 'Source',
   'home.onboarding.title': 'Get started',
   'home.onboarding.step1': 'Connect an AI service',
   'home.onboarding.step1.hint':
@@ -337,7 +394,8 @@ export const en = {
   'homework.empty': 'No homework yet',
   'homework.emptyHint': 'Upload a photo, PDF, or other file of your assignment to start.',
   'homework.assignmentNotFound': 'Assignment not found',
-  'homework.assignmentNotFoundHint': 'This assignment may have been deleted, or the link is wrong. Your other homework is still in the list.',
+  'homework.assignmentNotFoundHint':
+    'This assignment may have been deleted, or the link is wrong. Your other homework is still in the list.',
   'homework.analyzing': 'Reading the questions…',
   'homework.status.analyzing': 'Reading questions',
   'homework.status.preparing': 'Preparing help',
@@ -360,7 +418,8 @@ export const en = {
   'homework.viewQuestion': 'View question',
   'homework.questionNavHint': 'Jump to another question',
   'homework.guide.title': 'Start with the question',
-  'homework.guide.intro': 'Work through these steps in your own order. Your notes stay in Your working; opening a step never calls AI.',
+  'homework.guide.intro':
+    'Work through these steps in your own order. Your notes stay in Your working; opening a step never calls AI.',
   'homework.guide.steps': 'Problem-solving steps',
   'homework.guide.step.read': 'Read',
   'homework.guide.step.translate': 'Translate',
@@ -368,13 +427,20 @@ export const en = {
   'homework.guide.step.solve': 'Solve',
   'homework.guide.step.interpret': 'Interpret',
   'homework.guide.step.check': 'Check',
-  'homework.guide.body.read': 'Read the original question on the left. Identify the requested result, given information, notation and every subpart. Open the source page if a figure or formula looks uncertain.',
-  'homework.guide.body.translate': 'Before calculating, write in one sentence what the question asks you to find or prove. Keep the original symbols and assumptions.',
-  'homework.guide.body.match': 'Which definition or equation turns that request into a task you can start? Choose a method yourself; the suggested one is only a clue.',
-  'homework.guide.body.solve': 'Write one step at a time in Your working. If you get stuck, reveal one hint or ask about the exact step.',
-  'homework.guide.body.interpret': 'Explain what your result means for the original question. State the conclusion in the question’s terms.',
-  'homework.guide.body.check': 'Compare your work with the original question before viewing the full solution.',
-  'homework.guide.methodCaution': 'These are general method cues, not the solution. The suggestion comes from keywords in the extracted question; check it against the original page.',
+  'homework.guide.body.read':
+    'Read the original question on the left. Identify the requested result, given information, notation and every subpart. Open the source page if a figure or formula looks uncertain.',
+  'homework.guide.body.translate':
+    'Before calculating, write in one sentence what the question asks you to find or prove. Keep the original symbols and assumptions.',
+  'homework.guide.body.match':
+    'Which definition or equation turns that request into a task you can start? Choose a method yourself; the suggested one is only a clue.',
+  'homework.guide.body.solve':
+    'Write one step at a time in Your working. If you get stuck, reveal one hint or ask about the exact step.',
+  'homework.guide.body.interpret':
+    'Explain what your result means for the original question. State the conclusion in the question’s terms.',
+  'homework.guide.body.check':
+    'Compare your work with the original question before viewing the full solution.',
+  'homework.guide.methodCaution':
+    'These are general method cues, not the solution. The suggestion comes from keywords in the extracted question; check it against the original page.',
   'homework.guide.chooseMethod': 'Choose a linear algebra method',
   'homework.guide.suggested': 'suggested',
   'homework.guide.method.span': 'Span',
@@ -383,29 +449,45 @@ export const en = {
   'homework.guide.method.vectorForm': 'Vector form',
   'homework.guide.method.linearSystem': 'Linear system',
   'homework.guide.method.flow': 'Flow balance',
-  'homework.guide.template.span': 'Start from the definition: \\(v\\in\\operatorname{Span}(v_1,\\ldots,v_k)\\) means that some coefficients satisfy \\(a_1v_1+\\cdots+a_kv_k=v\\). Compare every coordinate, solve for the coefficients, then state whether such a combination exists.',
-  'homework.guide.template.independence': 'Start with \\(a_1v_1+\\cdots+a_kv_k=0\\). Find whether the only solution has every coefficient zero. A nonzero solution shows dependence.',
-  'homework.guide.template.subspace': 'Check whether the zero vector belongs to the set, then whether it stays in the set under addition and scalar multiplication. One valid counterexample is enough to disprove a required property.',
-  'homework.guide.template.vectorForm': 'For each unknown, collect its coefficients from every equation into one column vector. Their linear combination equals the column of right-hand-side values.',
-  'homework.guide.template.linearSystem': 'Write the equations clearly, solve for the unknowns and substitute back into every original equation. A contradiction means no solution; free variables describe a family of solutions.',
-  'homework.guide.template.flow': 'At each node, list every incoming and outgoing flow, then write inflow = outflow. Verify each arrow against the original diagram before solving.',
+  'homework.guide.template.span':
+    'Start from the definition: \\(v\\in\\operatorname{Span}(v_1,\\ldots,v_k)\\) means that some coefficients satisfy \\(a_1v_1+\\cdots+a_kv_k=v\\). Compare every coordinate, solve for the coefficients, then state whether such a combination exists.',
+  'homework.guide.template.independence':
+    'Start with \\(a_1v_1+\\cdots+a_kv_k=0\\). Find whether the only solution has every coefficient zero. A nonzero solution shows dependence.',
+  'homework.guide.template.subspace':
+    'Check whether the zero vector belongs to the set, then whether it stays in the set under addition and scalar multiplication. One valid counterexample is enough to disprove a required property.',
+  'homework.guide.template.vectorForm':
+    'For each unknown, collect its coefficients from every equation into one column vector. Their linear combination equals the column of right-hand-side values.',
+  'homework.guide.template.linearSystem':
+    'Write the equations clearly, solve for the unknowns and substitute back into every original equation. A contradiction means no solution; free variables describe a family of solutions.',
+  'homework.guide.template.flow':
+    'At each node, list every incoming and outgoing flow, then write inflow = outflow. Verify each arrow against the original diagram before solving.',
   'homework.guide.checkQuestion': 'Did I answer the exact question and every subpart?',
-  'homework.guide.checkConditions': 'Did I check each coordinate, sign, assumption and diagram edge I used?',
-  'homework.guide.checkConclusion': 'Does my final sentence explain the result, not just show a calculation?',
+  'homework.guide.checkConditions':
+    'Did I check each coordinate, sign, assumption and diagram edge I used?',
+  'homework.guide.checkConclusion':
+    'Does my final sentence explain the result, not just show a calculation?',
   'homework.guide.examTitle': 'Exam answer outline',
-  'homework.guide.examOutline': 'After comparing with the worked solution, write a short version in your own words: starting definition or equation → decisive steps → explicit conclusion. Check it against the original question.',
+  'homework.guide.examOutline':
+    'After comparing with the worked solution, write a short version in your own words: starting definition or equation → decisive steps → explicit conclusion. Check it against the original question.',
   'homework.guide.writeWorking': 'Write in my working',
   'homework.guide.askAI': 'Ask about this step',
   'homework.guide.nextStep': 'Next step',
-  'homework.guide.notGraded': 'These steps guide your practice; they do not grade your written reasoning.',
+  'homework.guide.notGraded':
+    'These steps guide your practice; they do not grade your written reasoning.',
   'homework.guide.ask.read': 'Please help me identify what this question asks, without solving it.',
-  'homework.guide.ask.translate': 'Please restate this question as a simple mathematical task, preserving its notation and assumptions. Do not solve it yet.',
-  'homework.guide.ask.match': 'Please help me choose a method for this question and explain why it fits. Do not solve the problem.',
-  'homework.guide.ask.solve': 'I am stuck on one step. Please give only the next small hint, not the full solution.',
-  'homework.guide.ask.interpret': 'Please help me explain what my result means for the original question. I will add my work here: ',
-  'homework.guide.ask.check': 'Please check the first incorrect or missing step in my work without replacing it with a full solution. I will add my work here: ',
+  'homework.guide.ask.translate':
+    'Please restate this question as a simple mathematical task, preserving its notation and assumptions. Do not solve it yet.',
+  'homework.guide.ask.match':
+    'Please help me choose a method for this question and explain why it fits. Do not solve the problem.',
+  'homework.guide.ask.solve':
+    'I am stuck on one step. Please give only the next small hint, not the full solution.',
+  'homework.guide.ask.interpret':
+    'Please help me explain what my result means for the original question. I will add my work here: ',
+  'homework.guide.ask.check':
+    'Please check the first incorrect or missing step in my work without replacing it with a full solution. I will add my work here: ',
   'homework.review.title': 'Guided review',
-  'homework.review.aiNote': 'AI teaching explanation for this question. Check its mathematics against the original question and any professor answer.',
+  'homework.review.aiNote':
+    'AI teaching explanation for this question. Check its mathematics against the original question and any professor answer.',
   'homework.review.preparing': 'Preparing the complete review…',
   'homework.review.meaning': 'What the question asks',
   'homework.review.knowledge': 'Knowledge points',
@@ -417,8 +499,10 @@ export const en = {
   'homework.review.regenerate': 'Regenerate review',
   'homework.review.retry': 'Retry review',
   'homework.review.invalid': 'The AI did not provide a complete review. Retry this question.',
-  'homework.review.insufficient': 'A reliable full review could not be made: {reason}. Check the original question and answer file.',
-  'homework.review.changed': 'The question or professor answer changed while the review was being prepared. Retry to use the latest version.',
+  'homework.review.insufficient':
+    'A reliable full review could not be made: {reason}. Check the original question and answer file.',
+  'homework.review.changed':
+    'The question or professor answer changed while the review was being prepared. Retry to use the latest version.',
   'homework.draft': 'Your working',
   'homework.check.button': 'Check answer',
   'homework.check.checking': 'Checking answer…',
@@ -435,15 +519,21 @@ export const en = {
   'homework.check.expected': 'Reference answer',
   'homework.check.matchedPoints': 'What matches',
   'homework.check.missingPoints': 'What to review',
-  'homework.check.aiDisclaimer': 'This answer judgment and similarity estimate were generated by AI and may be wrong. They are not a grade. Check the original question and answer yourself.',
-  'homework.check.localDisclaimer': 'This direct check compares a single recognized answer. Check the original question and professor answer yourself, especially units and working.',
+  'homework.check.aiDisclaimer':
+    'This answer judgment and similarity estimate were generated by AI and may be wrong. They are not a grade. Check the original question and answer yourself.',
+  'homework.check.localDisclaimer':
+    'This direct check compares a single recognized answer. Check the original question and professor answer yourself, especially units and working.',
   'homework.check.empty': 'Write an answer before checking it.',
-  'homework.check.noReference': 'No usable answer is available for this question. Confirm a professor answer or generate a solution first.',
+  'homework.check.noReference':
+    'No usable answer is available for this question. Confirm a professor answer or generate a solution first.',
   'homework.check.objectiveCorrect': 'Your answer matches the recognized professor answer.',
-  'homework.check.objectiveIncorrect': 'Your answer does not match the recognized professor answer. Compare the value and units with the original.',
+  'homework.check.objectiveIncorrect':
+    'Your answer does not match the recognized professor answer. Compare the value and units with the original.',
   'homework.check.invalid': 'The AI did not return a usable answer judgment. Please try again.',
-  'homework.check.insufficient': 'This answer could not be checked reliably: {reason}. Review the original question and answer.',
-  'homework.check.changed': 'Your answer or the reference changed during checking. Check again using the latest version.',
+  'homework.check.insufficient':
+    'This answer could not be checked reliably: {reason}. Review the original question and answer.',
+  'homework.check.changed':
+    'Your answer or the reference changed during checking. Check again using the latest version.',
   'homework.draftPlaceholder': 'Write your steps here — saved automatically on this device.',
   'homework.saved': 'Saved',
   'homework.hint': 'Hint',
@@ -467,13 +557,20 @@ export const en = {
   'homework.speechListening': 'Listening… Select Stop listening when you finish.',
   'homework.speechStopping': 'Finishing transcription…',
   'homework.speechReview': 'Review the transcription before sending, especially equations.',
-  'homework.speechUnsupported': 'Voice input is not available in this browser. You can type your question instead.',
-  'homework.speechError.not-allowed': 'Microphone access was denied. Allow microphone access in your browser, then try again.',
-  'homework.speechError.no-speech': 'No speech was heard. Try speaking again or type your question.',
-  'homework.speechError.audio-capture': 'No microphone is available. Connect one or type your question.',
-  'homework.speechError.network': 'Speech recognition lost its connection. Check your connection and try again.',
-  'homework.speechError.language-not-supported': 'This speech language is unavailable. Choose another language or type your question.',
-  'homework.speechError.other': 'Voice input stopped unexpectedly. Try again or type your question.',
+  'homework.speechUnsupported':
+    'Voice input is not available in this browser. You can type your question instead.',
+  'homework.speechError.not-allowed':
+    'Microphone access was denied. Allow microphone access in your browser, then try again.',
+  'homework.speechError.no-speech':
+    'No speech was heard. Try speaking again or type your question.',
+  'homework.speechError.audio-capture':
+    'No microphone is available. Connect one or type your question.',
+  'homework.speechError.network':
+    'Speech recognition lost its connection. Check your connection and try again.',
+  'homework.speechError.language-not-supported':
+    'This speech language is unavailable. Choose another language or type your question.',
+  'homework.speechError.other':
+    'Voice input stopped unexpectedly. Try again or type your question.',
   'homework.send': 'Send',
   'homework.thinking': 'Thinking…',
   'homework.socraticNote':
@@ -507,8 +604,7 @@ export const en = {
   'homework.reanalysis.title': 'Re-analysis complete',
   'homework.reanalysis.summary':
     'Kept {matched} unchanged · updated {regenerated} · added {added} · restored {restored} · archived {retired}',
-  'homework.reanalysis.failed':
-    '{count} question(s) still need help — retry them below.',
+  'homework.reanalysis.failed': '{count} question(s) still need help — retry them below.',
   'homework.retired.title': 'Removed questions (your work is kept)',
   'homework.retired.hint':
     'These questions are not in the new version. Your draft and conversation are kept — restore or delete them here.',
@@ -566,11 +662,14 @@ export const en = {
   'homework.answer.generatedSummary':
     'Generated {generated}; {failed} failed; {skipped} already explained or without a professor solution. Failed questions kept their previous help and can be retried individually.',
   'homework.answer.upToDate': 'All matched questions already have current explanations.',
-  'homework.answer.generationProgress': 'Generating explanations · {completed}/{total} questions finished',
+  'homework.answer.generationProgress':
+    'Generating explanations · {completed}/{total} questions finished',
   'homework.answer.generationProgressLabel': 'Explanation generation progress',
-  'homework.answer.generationCanClose': 'You can close this window while generation continues in this tab.',
+  'homework.answer.generationCanClose':
+    'You can close this window while generation continues in this tab.',
   'homework.answer.questionGenerationFailed': 'Explanation failed',
-  'homework.answer.deferredAnswer': 'The professor leaves this problem to the student and provides no worked answer, so an answer-based explanation cannot be generated. Continue with the original file, including any diagram; your draft and conversation are preserved.',
+  'homework.answer.deferredAnswer':
+    'The professor leaves this problem to the student and provides no worked answer, so an answer-based explanation cannot be generated. Continue with the original file, including any diagram; your draft and conversation are preserved.',
   'homework.answer.deferredTitle': 'No professor solution for this question',
   'homework.answer.retryQuestion': 'Retry this question',
   'homework.answer.replace': 'Replace answer file',
@@ -584,12 +683,16 @@ export const en = {
   'homework.answer.originalPage': 'Original answer · page {page}',
   'homework.answer.openOriginalPage': 'Open original answer page {page}',
   'homework.answer.extractedText': 'Extracted text',
-  'homework.answer.extractedTextCaveat': 'PDF extraction may lose mathematical layout. Check the original page above when available.',
-  'homework.answer.pdfRequired': 'The linked answer file is not a PDF. Upload a PDF to re-extract its text.',
+  'homework.answer.extractedTextCaveat':
+    'PDF extraction may lose mathematical layout. Check the original page above when available.',
+  'homework.answer.pdfRequired':
+    'The linked answer file is not a PDF. Upload a PDF to re-extract its text.',
   'homework.answer.reprocess': 'Re-read original PDF',
-  'homework.answer.reprocessHint': 'The answer mapping will need checking again. Your working, hints, and conversations are kept.',
+  'homework.answer.reprocessHint':
+    'The answer mapping will need checking again. Your working, hints, and conversations are kept.',
   'homework.answer.reprocessConfirm': 'Re-read and clear mapping',
-  'homework.answer.reprocessDone': 'The original PDF was re-read. Check and save the answer mapping again.',
+  'homework.answer.reprocessDone':
+    'The original PDF was re-read. Check and save the answer mapping again.',
   'homework.answer.verifyNote':
     'AI-generated explanation. If it disagrees with the professor’s answer, trust the original file.',
   'homework.answer.aiExplanation': 'AI explanation based on the professor answer',
@@ -621,13 +724,15 @@ export const en = {
   'homework.answer.noSourcePage': 'no page',
   'homework.answer.duplicateSelection':
     'The same answer is selected for more than one question — give each question its own answer.',
-  'homework.answer.invalidSplit': 'That division is not usable — mark at least one non-empty answer.',
+  'homework.answer.invalidSplit':
+    'That division is not usable — mark at least one non-empty answer.',
   'homework.answer.splitTooLarge':
     'The manual division is too large to store. Split it into fewer, smaller answers.',
   'homework.answer.duplicateQuestion': 'The same question appears twice in the mapping.',
   'homework.answer.invalidQuestion':
     'A question in the mapping does not belong to this assignment.',
-  'homework.answer.invalidAnswerIndex': 'The selected answer no longer exists. Reload and try again.',
+  'homework.answer.invalidAnswerIndex':
+    'The selected answer no longer exists. Reload and try again.',
   'homework.answer.duplicateAnswer': 'One answer cannot be assigned to two questions.',
   'homework.mode.label': 'Study mode',
   'homework.mode.practice': 'Practice',
@@ -639,21 +744,26 @@ export const en = {
   'homework.walkthrough.language.zh': 'Chinese',
   'homework.walkthrough.language.en': 'English',
   'homework.walkthrough.spoilerTitle': 'The walkthrough shows every solution',
-  'homework.walkthrough.spoilerBody': 'Try the questions in Practice first, then read the walkthrough.',
+  'homework.walkthrough.spoilerBody':
+    'Try the questions in Practice first, then read the walkthrough.',
   'homework.walkthrough.spoilerOpen': 'Got it, open the walkthrough',
   'homework.walkthrough.emptyTitle': 'No walkthrough yet',
-  'homework.walkthrough.emptyBody': 'The whole assignment explained like a handout: the tools it needs, then each question with its result, every step and a check, and finally a summary with review suggestions. {count} questions, about {requests} AI requests.',
+  'homework.walkthrough.emptyBody':
+    'The whole assignment explained like a handout: the tools it needs, then each question with its result, every step and a check, and finally a summary with review suggestions. {count} questions, about {requests} AI requests.',
   'homework.walkthrough.generate': 'Write the walkthrough',
   'homework.walkthrough.lastFailed': 'The last attempt did not succeed; you can try again.',
   'homework.walkthrough.progress': 'Writing the walkthrough ({done} / {total} parts)…',
-  'homework.walkthrough.progressHint': 'Finished parts appear right away and are saved on this device, even if you leave this page.',
+  'homework.walkthrough.progressHint':
+    'Finished parts appear right away and are saved on this device, even if you leave this page.',
   'homework.walkthrough.needsWork': '{count} parts need updating',
   'homework.walkthrough.update': 'Update these parts',
   'homework.walkthrough.regenerateAll': 'Rewrite everything',
   'homework.walkthrough.regenerateAllTitle': 'Rewrite the whole walkthrough?',
-  'homework.walkthrough.regenerateAllBody': 'Every part is written again (about {requests} AI requests). Saved questions stay; those whose passage changed a lot are marked "passage changed".',
+  'homework.walkthrough.regenerateAllBody':
+    'Every part is written again (about {requests} AI requests). Saved questions stay; those whose passage changed a lot are marked "passage changed".',
   'homework.walkthrough.print': 'Print / PDF',
-  'homework.walkthrough.selectHint': 'Select any text or formula and choose Explain or Ask: the answer opens in a window you can move, and you can save it to read again later.',
+  'homework.walkthrough.selectHint':
+    'Select any text or formula and choose Explain or Ask: the answer opens in a window you can move, and you can save it to read again later.',
   'homework.walkthrough.overviewTitle': 'Tools you need',
   'homework.walkthrough.summaryTitle': 'Summary and review',
   'homework.walkthrough.questionTitle': 'Question {label}',
@@ -668,14 +778,19 @@ export const en = {
   'homework.walkthrough.invalid': 'The AI returned an incomplete walkthrough. Please try again.',
   'homework.walkthrough.noQuestions': 'No questions have been recognised in this assignment yet.',
   'homework.walkthrough.done': 'The walkthrough is ready',
-  'homework.walkthrough.someFailed': '{count} parts could not be written. Use "Update these parts" to retry.',
+  'homework.walkthrough.someFailed':
+    '{count} parts could not be written. Use "Update these parts" to retry.',
   'homework.walkthrough.stopped': 'Writing stopped',
   'homework.walkthrough.listSeparator': ', ',
-  'homework.walkthrough.checkOk': 'Checked locally: the RREF of {labels} matches the one recomputed from the augmented matrix.',
-  'homework.walkthrough.checkRref': '{label}: the RREF in the walkthrough differs from the one recomputed locally from its augmented matrix. There may be an arithmetic slip; please compare.',
-  'homework.walkthrough.checkKind': '{label}: the walkthrough says "{claimed}", but the local computation gives "{computed}".',
+  'homework.walkthrough.checkOk':
+    'Checked locally: the RREF of {labels} matches the one recomputed from the augmented matrix.',
+  'homework.walkthrough.checkRref':
+    '{label}: the RREF in the walkthrough differs from the one recomputed locally from its augmented matrix. There may be an arithmetic slip; please compare.',
+  'homework.walkthrough.checkKind':
+    '{label}: the walkthrough says "{claimed}", but the local computation gives "{computed}".',
   'homework.walkthrough.checkComputed': 'RREF computed locally ({kind}):',
-  'homework.walkthrough.checkScope': 'This checks the reduction from the augmented matrix written in the walkthrough to its RREF, not whether that augmented matrix was set up correctly.',
+  'homework.walkthrough.checkScope':
+    'This checks the reduction from the augmented matrix written in the walkthrough to its RREF, not whether that augmented matrix was set up correctly.',
   'homework.walkthrough.kind.none': 'no solution',
   'homework.walkthrough.kind.unique': 'a unique solution',
   'homework.walkthrough.kind.infinite': 'infinitely many solutions',
@@ -697,13 +812,15 @@ export const en = {
   'walkthroughQA.cardsNone': 'These questions are already review cards',
   'walkthroughQA.cardsFailed': 'Could not add review cards',
   'walkthroughQA.closeUnsaved': 'This conversation is not saved and will be lost when closed.',
-  'walkthroughQA.discard': 'Don\'t save',
+  'walkthroughQA.discard': "Don't save",
   'walkthroughQA.saveAndClose': 'Save and close',
   'walkthroughQA.myQuestions': 'My questions ({count})',
   'walkthroughQA.inSection': 'Questions here:',
   'walkthroughQA.listTitle': 'My questions',
-  'walkthroughQA.listHint': 'Questions saved in this walkthrough. Opening one puts its window back where it was, and you can keep asking.',
-  'walkthroughQA.listEmpty': 'No saved questions yet. Select text in the walkthrough, ask, then choose Save in the window.',
+  'walkthroughQA.listHint':
+    'Questions saved in this walkthrough. Opening one puts its window back where it was, and you can keep asking.',
+  'walkthroughQA.listEmpty':
+    'No saved questions yet. Select text in the walkthrough, ask, then choose Save in the window.',
   'walkthroughQA.noMatch': 'No matching questions',
   'walkthroughQA.search': 'Search questions, answers or passages',
   'walkthroughQA.meta': '{section} · {count} questions · {time}',
@@ -712,12 +829,10 @@ export const en = {
   'walkthroughQA.titleEmpty': 'The name cannot be empty',
   'walkthroughQA.deleteTitle': 'Delete this saved question?',
   'walkthroughQA.deleteBody': '"{title}" will be deleted permanently.',
-  'homework.analysisInterrupted':
-    'This analysis looks interrupted. Use Re-analyze to try again.',
+  'homework.analysisInterrupted': 'This analysis looks interrupted. Use Re-analyze to try again.',
   'homework.setRemoved': 'This assignment was removed.',
   'homework.deleteTitle': 'Delete this assignment?',
-  'homework.deleteIntro':
-    '“{name}” and its uploaded file will be removed from this project only.',
+  'homework.deleteIntro': '“{name}” and its uploaded file will be removed from this project only.',
   'homework.deleteScope': 'Also removed: {count} question(s).',
   'homework.deleteStudentNote':
     'Your saved drafts, revealed hints and conversations for this assignment will be deleted too.',
@@ -804,7 +919,8 @@ export const en = {
   'documents.renameTitle': 'Rename document',
   'documents.renameDescription': 'Pick a new filename for this document.',
   'documents.deleteTitle': 'Delete document?',
-  'documents.deleteBody': '"{name}" and its extracted chunks will be permanently removed from this device.',
+  'documents.deleteBody':
+    '"{name}" and its extracted chunks will be permanently removed from this device.',
   'documents.deleteAction': 'Delete document',
 
   'docType.pdf': 'PDF',
@@ -901,7 +1017,8 @@ export const en = {
   'analysis.noProviderHint': 'Open Settings → AI Settings to add your API key.',
   'analysis.complete': 'Analysis complete',
   'analysis.completeBody': '{topics} topics, {formulas} formulas, {symbols} symbols',
-  'analysis.interrupted': 'The last analysis was interrupted before it finished (the page was closed or reloaded). Your materials are kept; run the analysis again.',
+  'analysis.interrupted':
+    'The last analysis was interrupted before it finished (the page was closed or reloaded). Your materials are kept; run the analysis again.',
   'analysis.failed': 'Analysis failed',
   'analysis.failedReason': 'Reason: {reason}',
   'analysis.failedHint':
@@ -917,9 +1034,9 @@ export const en = {
   'analysis.prompt': 'prompt {version}',
   'analysis.saved': 'Using saved course content',
   'analysis.stale': 'The source material changed — this analysis may be out of date.',
-  'analysis.staleTruncated': 'This analysis only read the opening of the textbook (earlier versions read about 50,000 characters at most). Re-analysing reads the whole book, chapter by chapter.',
-  'analysis.staleHint':
-    'Re-analyze to update it. The saved content stays available until then.',
+  'analysis.staleTruncated':
+    'This analysis only read the opening of the textbook (earlier versions read about 50,000 characters at most). Re-analysing reads the whole book, chapter by chapter.',
+  'analysis.staleHint': 'Re-analyze to update it. The saved content stays available until then.',
   'analysis.working': 'Working… {stage}',
   'analysis.topics': 'Topics',
   'analysis.topicsCount': '{count} topics identified across your documents.',
@@ -1011,6 +1128,16 @@ export const en = {
   'tutor.symbolsHint': 'Symbols used in this lesson',
   'tutor.symbolsEmpty': 'This lesson does not use any special mathematical symbols.',
   'tutor.symbolsCount': '{count} used in this lesson',
+  'tutor.readingTime': 'About {count} min read',
+  'tutor.readout.reading': 'Reading time',
+  'tutor.readout.readingSub': 'About {count} words',
+  'tutor.readout.figures': 'Figures',
+  'tutor.readout.figuresSub': '{drawn} drawn · {course} from course material',
+  'tutor.readout.symbolsSub': 'From the lesson formulas',
+  'tutor.readout.position': 'Topic',
+  'tutor.toc': 'Contents',
+  'tutor.nextTopic': 'Next topic',
+  'tutor.coveredInClass': 'Covered in class',
 
   // Teaching-block labels. The lesson body keeps the tutor language; only the
   // block's own label is UI chrome.
@@ -1076,7 +1203,8 @@ export const en = {
   'quizConfig.questionCount': 'Number of questions',
   'quizConfig.questionCountHint': 'Between 1 and 30.',
   'quizConfig.questionLanguage': 'Question language',
-  'quizConfig.questionLanguageHint': 'Also used for mistake analysis and AI tutor questions; your choice is remembered.',
+  'quizConfig.questionLanguageHint':
+    'Also used for mistake analysis and AI tutor questions; your choice is remembered.',
   'questionLanguage.zh_terms': 'Chinese (key terms in English)',
   'questionLanguage.source': 'Same as the textbook',
   'questionLanguage.en': 'English',
@@ -1117,8 +1245,11 @@ export const en = {
   'question.correct': 'Correct',
   'question.incorrect': 'Incorrect',
   'question.unverified': 'Unable to verify automatically',
-  'chemEquation.unreadable': 'The equation could not be read. Use -> (or <=>) between the two sides.',
-  'chemEquation.unreadableTerm': 'Could not read “{term}”. Check element symbols, brackets and charges (e.g. Fe^3+).',
+  'question.keyboardHint': 'Press {keys} to choose, {enter} to submit',
+  'chemEquation.unreadable':
+    'The equation could not be read. Use -> (or <=>) between the two sides.',
+  'chemEquation.unreadableTerm':
+    'Could not read “{term}”. Check element symbols, brackets and charges (e.g. Fe^3+).',
   'chemEquation.missing': 'Missing: {species}.',
   'chemEquation.extra': 'Not in this reaction: {species}.',
   'chemEquation.unbalanced': 'Not balanced: {details}.',
@@ -1128,20 +1259,25 @@ export const en = {
   'chemEquation.isomers':
     'Balanced and correct by molecular formula, but {species} is written as a different structure from the reference — it may be an isomer. Compare it with the reference answer; this answer is not counted.',
   'answerInput.chemEquationPlaceholder': 'e.g. 2H2 + O2 -> 2H2O',
-  'answerInput.chemEquationHint': 'Write numbers as typed (H2O); charges with ^ (Fe^3+, SO4^2-); -> or <=> between the sides.',
-  'answerInput.orderingHint': 'Drag the items, or use the arrows, until they are in the right order.',
+  'answerInput.chemEquationHint':
+    'Write numbers as typed (H2O); charges with ^ (Fe^3+, SO4^2-); -> or <=> between the sides.',
+  'answerInput.orderingHint':
+    'Drag the items, or use the arrows, until they are in the right order.',
   'answerInput.moveUp': 'Move “{item}” up',
   'answerInput.moveDown': 'Move “{item}” down',
   'answerInput.orderScore': '{earned}/{total} in the right order · {percent}%',
   'answerInput.partialScore': '{earned}/{total} · {percent}%',
   'answerInput.yourAnswer': 'your answer: {value}',
-  'answerInput.multipleSelectHint': 'Choose every correct option (one or more). Each wrong choice cancels a right one.',
+  'answerInput.multipleSelectHint':
+    'Choose every correct option (one or more). Each wrong choice cancels a right one.',
   'answerInput.matchingOptions': 'Shared options',
   'answerInput.matchingItem': 'Option for item {n}',
   'answerInput.blankLabel': 'Blank {n}',
   'answerInput.blankPlaceholder': 'Term',
-  'answerInput.fillBlankHint': 'Use the standard term; synonyms, abbreviations and the English term are accepted.',
-  'fillBlank.aiAccepted': 'Some blanks were accepted by the AI as exact equivalents of the expected term.',
+  'answerInput.fillBlankHint':
+    'Use the standard term; synonyms, abbreviations and the English term are accepted.',
+  'fillBlank.aiAccepted':
+    'Some blanks were accepted by the AI as exact equivalents of the expected term.',
   'fillBlank.byAi': '(equivalent term, checked by AI)',
   'fillBlank.accepted': 'accepted: {answers}',
   'mathPreview.equationNoArrow': 'Add -> (or <=>) between reactants and products.',
@@ -1150,7 +1286,8 @@ export const en = {
   'shortAnswer.judgedByAi': 'Scoring points checked by AI against your own words.',
   'shortAnswer.tooShort': 'The answer is too short to cover any scoring point.',
   'shortAnswer.noRubric': 'This question has no scoring points, so it was not graded.',
-  'shortAnswer.needsAi': 'Short answers are checked point by point by AI. Connect an AI service to grade them; this one is not scored.',
+  'shortAnswer.needsAi':
+    'Short answers are checked point by point by AI. Connect an AI service to grade them; this one is not scored.',
   'shortAnswer.checkFailed': 'The answer could not be checked this time, so it is not scored.',
   'shortAnswer.insufficient': 'Not graded: {reason}',
   'shortAnswer.score': '{earned}/{total} scoring points · {percent}%',
@@ -1161,13 +1298,17 @@ export const en = {
   'shortAnswer.contradictions': 'Statements that disagree with the reference',
   'shortAnswer.reference': 'Reference answer',
   'shortAnswer.dispute': 'I disagree with this judgement',
-  'shortAnswer.disputed': 'Marked as disputed. It no longer counts toward your score, mistakes or mastery.',
+  'shortAnswer.disputed':
+    'Marked as disputed. It no longer counts toward your score, mistakes or mastery.',
   'shortAnswer.disputeFailed': 'Could not save the dispute.',
   'question.unitMissing': 'A unit is required. Write the value with its unit, e.g. {example}.',
-  'question.unitWrongDimension': 'That unit measures a different quantity. The answer is in {unit}.',
-  'question.unitUnreadable': 'The unit “{unit}” could not be read, so this answer was not graded automatically.',
+  'question.unitWrongDimension':
+    'That unit measures a different quantity. The answer is in {unit}.',
+  'question.unitUnreadable':
+    'The unit “{unit}” could not be read, so this answer was not graded automatically.',
   'question.unitConverted': 'Your answer converts to {value} {unit}.',
-  'question.outputMismatch': 'The output differs. Compare line by line, including spaces and line breaks.',
+  'question.outputMismatch':
+    'The output differs. Compare line by line, including spaces and line breaks.',
   'question.expected': 'Expected: {value}',
 
   'questionSource.title': 'Question Source',
@@ -1176,7 +1317,8 @@ export const en = {
   'questionSource.page': 'Page {page}',
   'questionSource.slide': 'Slide {slide}',
   'questionSource.sourceN': 'Source {index}',
-  'questionSource.pageExcerpt': 'The exact sentence was not recorded; this is the course text on that page:',
+  'questionSource.pageExcerpt':
+    'The exact sentence was not recorded; this is the course text on that page:',
   'questionSource.unavailable': 'No matching course excerpt was found.',
   'questionSource.pendingExcerpt':
     'The exact passage for this question has not been located yet — open the source to verify it.',
@@ -1222,7 +1364,8 @@ export const en = {
   'symbolGroup.functions': 'Functions',
   'symbolGroup.units': 'Units',
   'mathPreview.readAs': 'Will be read as',
-  'mathPreview.expressionError': 'This cannot be read yet. Check that brackets match and no operator is missing.',
+  'mathPreview.expressionError':
+    'This cannot be read yet. Check that brackets match and no operator is missing.',
   'mathPreview.numberError': 'This cannot be read as a number.',
   'mathPreview.numberValue': 'Read as {value}',
   'mathPreview.quantity': 'Read as {value} {unit}',
@@ -1232,11 +1375,13 @@ export const en = {
   'mathPreview.rendered': 'Preview',
   'answerInput.textPlaceholder': 'Type your answer…',
   'answerInput.quantityPlaceholder': 'Value and unit, e.g. 9.8 m/s^2',
-  'answerInput.quantityHint': 'Any equivalent unit is accepted (e.g. km/h or m/s). Use ^ for powers.',
+  'answerInput.quantityHint':
+    'Any equivalent unit is accepted (e.g. km/h or m/s). Use ^ for powers.',
   'answerInput.codeOutputPlaceholder': 'Exactly what the program prints, one line per line',
   'answerInput.shortAnswerPlaceholder': 'Answer in your own words: the key ideas and why',
   'answerInput.charCount': '{count} characters',
-  'answerInput.codeOutputHint': 'Graded character by character; trailing spaces at line ends are ignored.',
+  'answerInput.codeOutputHint':
+    'Graded character by character; trailing spaces at line ends are ignored.',
   'answerInput.true': 'True',
   'answerInput.false': 'False',
 
@@ -1266,6 +1411,7 @@ export const en = {
   'quizResult.wrong.one': '{count} wrong',
   'quizResult.unverifiedCount': '{count} unverified',
   'quizResult.scoreLine': '{correct} of {total}',
+  'quizResult.pointsLabel': 'Points',
   'quizResult.unverifiedNote':
     'Unverified answers could not be graded automatically and are excluded from the score.',
   'quizResult.weakPoints': 'Weak knowledge points',
@@ -1565,11 +1711,13 @@ export const en = {
   'translate.noProject': 'Open a project to use translation',
   'translate.noProvider': 'Configure AI provider first',
   'translate.failed': 'Translation failed',
-  'translate.incomplete': 'The AI translated only part of the selection. Select a shorter passage and try again.',
+  'translate.incomplete':
+    'The AI translated only part of the selection. Select a shorter passage and try again.',
 
   'invite.verifyFailed': 'Could not verify invite code',
   'invite.title': 'Enter invite code',
-  'invite.description': 'The first version is invite-only. Enter your code below to unlock the app.',
+  'invite.description':
+    'The first version is invite-only. Enter your code below to unlock the app.',
   'invite.label': 'Invite code',
   'invite.verifying': 'Verifying…',
   'invite.unlock': 'Unlock',
@@ -1577,7 +1725,8 @@ export const en = {
 
   'chatHistory.loading': 'Loading chat history',
   'chatHistory.loadFailed': 'Could not load chat history',
-  'chatHistory.loadFailedHint': 'Your saved conversations were not changed. Try again; if it keeps failing, reload the page.',
+  'chatHistory.loadFailedHint':
+    'Your saved conversations were not changed. Try again; if it keeps failing, reload the page.',
   'chatHistory.backToProject': 'Back to project',
   'chatHistory.title': 'Chat History',
   'chatHistory.subtitle':
@@ -1704,8 +1853,7 @@ export const en = {
   'errors.aiNonJson': 'AI returned a non-JSON response',
   'errors.aiConnectionFailed': 'Connection failed',
   'errors.aiNetwork': 'Network error',
-  'errors.aiOutputTruncated':
-    'The AI response was cut off at the {limit}-token output limit.',
+  'errors.aiOutputTruncated': 'The AI response was cut off at the {limit}-token output limit.',
   'errors.aiOutputTruncatedGeneric': 'The AI response was cut off before it finished.',
   'errors.aiNoTranslation': 'The AI did not return a translation.',
   'errors.aiNoAnswer': 'The AI did not return an answer.',
@@ -1719,10 +1867,14 @@ export const en = {
   'errors.hintUnavailable': 'No hint available.',
   'errors.noActiveQuestion': 'No active question',
 
-  'errors.fileTooLarge': 'File is too large: a browser can read at most {max} in one file. Split it (for example by chapter) and upload the parts.',
-  'errors.storageInsufficient': 'Not enough browser storage: the file is {size} but only about {free} is free. Delete courses or files you no longer need and try again.',
-  'errors.storageFull': 'Browser storage is full, so the file was not saved. Delete courses or files you no longer need and try again.',
-  'errors.storageFullProcessing': 'Browser storage is full, so the processed text could not be saved (the uploaded file and any earlier result are kept). Delete courses or files you no longer need, then process the file again.',
+  'errors.fileTooLarge':
+    'File is too large: a browser can read at most {max} in one file. Split it (for example by chapter) and upload the parts.',
+  'errors.storageInsufficient':
+    'Not enough browser storage: the file is {size} but only about {free} is free. Delete courses or files you no longer need and try again.',
+  'errors.storageFull':
+    'Browser storage is full, so the file was not saved. Delete courses or files you no longer need and try again.',
+  'errors.storageFullProcessing':
+    'Browser storage is full, so the processed text could not be saved (the uploaded file and any earlier result are kept). Delete courses or files you no longer need, then process the file again.',
   'errors.unsupportedFileType': 'Unsupported file type: {name}',
   'errors.textTooLong': 'Text is too long (max {max} KB)',
   'errors.docxFailed': 'DOCX conversion failed: {reason}',
@@ -1800,7 +1952,8 @@ export const en = {
   'mistakeAnalysis.fallbackWhereWrong':
     'The first divergence could not be pinpointed from the answer alone.',
   'mistakeAnalysis.fallbackFirstError': 'The key error could not be isolated automatically.',
-  'mistakeAnalysis.fallbackWhyWrong': 'This step does not hold, but the reason needs a closer look.',
+  'mistakeAnalysis.fallbackWhyWrong':
+    'This step does not hold, but the reason needs a closer look.',
   'mistakeAnalysis.fallbackCorrectApproach': 'Review the worked solution for the correct path.',
   'mistakeAnalysis.fallbackContinuePrompt': 'Would you like to try a similar question?',
 
@@ -1809,8 +1962,7 @@ export const en = {
   'friendlyError.missingApiKey': 'No API key configured. Open Settings → AI Settings to add one.',
   'friendlyError.missingBaseUrl':
     'No API base URL configured. Open Settings → AI Settings to set one.',
-  'friendlyError.missingModel':
-    'No model selected. Open Settings → AI Settings to choose one.',
+  'friendlyError.missingModel': 'No model selected. Open Settings → AI Settings to choose one.',
   'friendlyError.authFailed':
     'The API key was rejected. Check that it is correct and still active.',
   'friendlyError.rateLimited':
@@ -1825,12 +1977,10 @@ export const en = {
     'The AI took too long to respond. Check your connection or try a smaller request.',
   'friendlyError.providerUnavailable':
     'AI connection unavailable. Check your network and that the base URL is reachable.',
-  'friendlyError.invalidResponse':
-    'The AI returned a response the app could not read. Try again.',
+  'friendlyError.invalidResponse': 'The AI returned a response the app could not read. Try again.',
   'friendlyError.cancelled': 'The request was cancelled.',
   'friendlyError.invalidRequest': 'The AI provider rejected the request.',
-  'friendlyError.requestFailed':
-    'The AI request failed. Check your AI Settings and try again.',
+  'friendlyError.requestFailed': 'The AI request failed. Check your AI Settings and try again.',
   'friendlyError.noDocuments':
     'No processed documents found. Upload a document and wait for it to finish processing.',
   'friendlyError.noAnalysis':
@@ -1848,8 +1998,7 @@ export const en = {
   'homework.openOriginalPage': 'Open original page {page} in full size',
 
   'evalNote.integrationConstant': 'Integration constant treated as arbitrary.',
-  'evalNote.equationRearranged':
-    'Unable to verify automatically — equations may be rearranged.',
+  'evalNote.equationRearranged': 'Unable to verify automatically — equations may be rearranged.',
   'evalNote.couldNotParse': 'Could not parse equation.',
   'evalNote.unverified': 'Unable to verify automatically.',
   'evalNote.unverifiedReason': 'Unable to verify automatically ({reason}).',
@@ -1960,7 +2109,8 @@ export const en = {
   'viz.titrationAria': 'Titration curve; equivalence at {volume} mL, pH {pH}',
   'viz.titrationAxis': 'Volume of {base} added (mL)',
   'viz.titrationEquivalence': 'Equivalence point',
-  'viz.titrationSetup': '{acidVolume} mL of {acidConcentration} M {acid} titrated with {baseConcentration} M {base}',
+  'viz.titrationSetup':
+    '{acidVolume} mL of {acidConcentration} M {acid} titrated with {baseConcentration} M {base}',
   'viz.titrationInitialPH': 'Initial pH {value}',
   'viz.punnettAria': 'Punnett square for the cross {mother} × {father}',
   'viz.punnettGenotypes': 'Genotypes',
@@ -1986,7 +2136,7 @@ export const en = {
   'viz.translationTemplateShort': 'template strand',
   'viz.translationReversed': '— reversed below to line up with the mRNA (5′→3′).',
   'viz.translationNoStart': 'No start codon (AUG) in this mRNA, so nothing is translated.',
-  'viz.translationLeader': "5′ untranslated",
+  'viz.translationLeader': '5′ untranslated',
   'viz.distributionUndefined': 'does not exist',
   'viz.punnettCrossLabel': 'Cross:',
   'viz.punnettDaughters': '♀ Daughters',
@@ -2003,7 +2153,8 @@ export const en = {
   'viz.inheritanceYL': 'Y-linked',
   'viz.inheritancePossible': 'possible',
   'viz.inheritanceExcluded': 'excluded',
-  'viz.inheritanceAssumption': 'Assumes full penetrance and no new mutations. "Possible" means consistent with this pedigree, not proven.',
+  'viz.inheritanceAssumption':
+    'Assumes full penetrance and no new mutations. "Possible" means consistent with this pedigree, not proven.',
   'viz.witnessUnaffectedParents': 'unaffected parents with an affected child ({who})',
   'viz.witnessAffectedParents': 'two affected parents with an unaffected child ({who})',
   'viz.witnessAffectedMother': 'an affected mother with an unaffected son ({who})',
@@ -2015,7 +2166,8 @@ export const en = {
   'viz.witnessCarrierDominant': 'a dominant trait has no unaffected carriers ({who})',
   'viz.witnessMaleCarrier': 'a male cannot be a carrier of an X-linked trait ({who})',
   'viz.witnessNoAssignment': 'no assignment of genotypes fits the whole family',
-  'viz.medicalTeachingOnly': 'Teaching example from textbook formulas — not for clinical decisions.',
+  'viz.medicalTeachingOnly':
+    'Teaching example from textbook formulas — not for clinical decisions.',
   'viz.membraneAria': 'Membrane potentials; resting potential {vm} mV',
   'viz.membraneInside': 'Inside (mmol/L)',
   'viz.membraneOutside': 'Outside (mmol/L)',
@@ -2027,15 +2179,20 @@ export const en = {
   'viz.apVentricular': 'Ventricular muscle cell',
   'viz.apPacemaker': 'Sinoatrial node (pacemaker) cell',
   'viz.apValues': 'resting {resting} mV · threshold {threshold} mV · peak {peak} mV',
-  'viz.apNeuronPhases': '① depolarisation to threshold ② rapid depolarisation (Na⁺ in) ③ repolarisation (K⁺ out) ④ after-hyperpolarisation',
-  'viz.apVentricularPhases': '0 rapid depolarisation (Na⁺) · 1 early repolarisation (Ito, K⁺) · 2 plateau (Ca²⁺ in ≈ K⁺ out) · 3 repolarisation (K⁺) · 4 resting',
-  'viz.apPacemakerPhases': '4 slow diastolic depolarisation (If, Ca²⁺) · 0 depolarisation (Ca²⁺ in) · 3 repolarisation (K⁺)',
+  'viz.apNeuronPhases':
+    '① depolarisation to threshold ② rapid depolarisation (Na⁺ in) ③ repolarisation (K⁺ out) ④ after-hyperpolarisation',
+  'viz.apVentricularPhases':
+    '0 rapid depolarisation (Na⁺) · 1 early repolarisation (Ito, K⁺) · 2 plateau (Ca²⁺ in ≈ K⁺ out) · 3 repolarisation (K⁺) · 4 resting',
+  'viz.apPacemakerPhases':
+    '4 slow diastolic depolarisation (If, Ca²⁺) · 0 depolarisation (Ca²⁺ in) · 3 repolarisation (K⁺)',
   'viz.apSchematic': 'Shape is schematic; the voltages are the lesson’s values.',
   'viz.oxygenAria': 'Oxyhaemoglobin dissociation curve, P50 {p50} mmHg',
   'viz.oxygenAt': 'PO₂ {po2}: SO₂ {so2}%, O₂ content {content} mL/dL',
   'viz.oxygenExtraction': 'Arteriovenous O₂ difference {value} mL/dL',
-  'viz.oxygenShift': 'Right shift (↑P50): ↑PCO₂, ↓pH, ↑temperature, ↑2,3-BPG — O₂ unloaded more easily.',
-  'viz.cardiacAria': 'Left-ventricular pressure–volume loop; stroke volume {sv} mL, ejection fraction {ef}%',
+  'viz.oxygenShift':
+    'Right shift (↑P50): ↑PCO₂, ↓pH, ↑temperature, ↑2,3-BPG — O₂ unloaded more easily.',
+  'viz.cardiacAria':
+    'Left-ventricular pressure–volume loop; stroke volume {sv} mL, ejection fraction {ef}%',
   'viz.cardiacVolume': 'Volume (mL)',
   'viz.cardiacPressure': 'Pressure (mmHg)',
   'viz.cardiacFilling': 'Filling',
@@ -2065,11 +2222,16 @@ export const en = {
   'viz.acidBaseExpectedHco3': 'Expected compensation {chronicity}: HCO₃⁻ {low}–{high} mmol/L',
   'viz.acidBaseAcute': '(acute)',
   'viz.acidBaseChronic': '(chronic)',
-  'viz.acidBaseExtraRespAcidosis': 'PaCO₂ above the expected range: a coexisting respiratory acidosis.',
-  'viz.acidBaseExtraRespAlkalosis': 'PaCO₂ below the expected range: a coexisting respiratory alkalosis.',
-  'viz.acidBaseExtraMetAlkalosis': 'HCO₃⁻ above the expected range: a coexisting metabolic alkalosis.',
-  'viz.acidBaseExtraMetAcidosis': 'HCO₃⁻ below the expected range: a coexisting metabolic acidosis.',
-  'viz.acidBaseInconsistent': 'These values do not fit Henderson–Hasselbalch (computed pH {ph}); check the lesson’s numbers.',
+  'viz.acidBaseExtraRespAcidosis':
+    'PaCO₂ above the expected range: a coexisting respiratory acidosis.',
+  'viz.acidBaseExtraRespAlkalosis':
+    'PaCO₂ below the expected range: a coexisting respiratory alkalosis.',
+  'viz.acidBaseExtraMetAlkalosis':
+    'HCO₃⁻ above the expected range: a coexisting metabolic alkalosis.',
+  'viz.acidBaseExtraMetAcidosis':
+    'HCO₃⁻ below the expected range: a coexisting metabolic acidosis.',
+  'viz.acidBaseInconsistent':
+    'These values do not fit Henderson–Hasselbalch (computed pH {ph}); check the lesson’s numbers.',
   'viz.aminoAria': 'Net charge of {name} against pH; pI {pi}',
   'viz.aminoCharge': 'Net charge',
   'viz.aminoBelow': 'pH < pI: net positive (moves to the cathode)',
@@ -2122,12 +2284,14 @@ export const en = {
   'cards.addFailed': 'Could not add flashcards',
   'projectNav.cards': 'Flashcards',
   'cards.title': 'Flashcards',
-  'cards.subtitle': 'Spaced-repetition review of terms, definitions and relation tables. Cards due today come first.',
+  'cards.subtitle':
+    'Spaced-repetition review of terms, definitions and relation tables. Cards due today come first.',
   'cards.backToProject': 'Back to course',
   'cards.loading': 'Loading flashcards…',
   'cards.loadFailed': 'Could not load flashcards',
   'cards.empty': 'No flashcards yet',
-  'cards.emptyHint': 'Generate cards from the course concepts (term → definition), add them from an anatomy table in a lesson, or write your own.',
+  'cards.emptyHint':
+    'Generate cards from the course concepts (term → definition), add them from an anatomy table in a lesson, or write your own.',
   'cards.generate': 'Generate from concepts',
   'cards.generated': 'Added {count} cards from the course concepts.',
   'cards.generatedNone': 'No new cards — every concept with a definition already has one.',
@@ -2137,7 +2301,8 @@ export const en = {
   'cards.deleteTitle': 'Delete this card?',
   'cards.deleted': 'Card deleted',
   'cards.saved': 'Card saved',
-  'cards.editorHint': 'The front is the prompt (a term or a question); the back is what you should recall.',
+  'cards.editorHint':
+    'The front is the prompt (a term or a question); the back is what you should recall.',
   'cards.front': 'Front',
   'cards.back': 'Back',
   'cards.frontPlaceholder': 'e.g. 三角肌 — 神经支配',
@@ -2178,12 +2343,14 @@ export const en = {
   'cards.source.note': 'Homework Q&A',
   'nav.vocab': 'Vocabulary',
   'vocab.title': 'Vocabulary',
-  'vocab.subtitle': 'Spaced repetition (FSRS) and active recall: recognition, spelling, dictation and gap-fills from your course sentences. Word books come from ECDICT; new words can also be picked out of your own course material.',
+  'vocab.subtitle':
+    'Spaced repetition (FSRS) and active recall: recognition, spelling, dictation and gap-fills from your course sentences. Word books come from ECDICT; new words can also be picked out of your own course material.',
   'vocab.loading': 'Loading…',
   'vocab.loadFailed': 'Could not load the word data',
   'vocab.loadFailedHint': 'Check the connection or the server and try again.',
   'vocab.chooseTitle': 'Choose a word book to start',
-  'vocab.chooseHint': 'You can switch any time. You can also pick words out of your own course material under “Course words”, or import a list.',
+  'vocab.chooseHint':
+    'You can switch any time. You can also pick words out of your own course material under “Course words”, or import a list.',
   'vocab.recommended': 'Recommended',
   'vocab.bookChosen': 'Word book changed',
   'vocab.wordCount': '{count} words',
@@ -2194,7 +2361,8 @@ export const en = {
   'vocab.viewWords': 'View words',
   'vocab.deleteBook': 'Delete book',
   'vocab.deleteBookTitle': 'Delete this word book?',
-  'vocab.deleteBookHint': '“{name}” and its words will be deleted; progress on words you have learned is kept.',
+  'vocab.deleteBookHint':
+    '“{name}” and its words will be deleted; progress on words you have learned is kept.',
   'vocab.cannotDeleteExam': 'Built-in exam books cannot be deleted.',
   'vocab.dailyNew': 'New words per day',
   'vocab.reviewModeLabel': 'Review mode',
@@ -2204,6 +2372,8 @@ export const en = {
   'vocab.reviewMode.dictation': 'Dictation only',
   'vocab.start': 'Start (review {review} · new {fresh})',
   'vocab.allDone': 'All done for today',
+  'vocab.todaySentence': 'Today: {review} to review, {fresh} new words',
+  'vocab.streakDays': '{count}-day streak',
   'vocab.nothingToday': 'Nothing left to review or learn today.',
   'vocab.stat.due': 'Due',
   'vocab.stat.newToday': 'New today',
@@ -2226,7 +2396,8 @@ export const en = {
   'vocab.exam.toefl': 'TOEFL',
   'vocab.exam.ielts': 'IELTS',
   'vocab.exam.gre': 'GRE',
-  'vocab.dictionarySource': 'Words and meanings come from the open-source ECDICT dictionary (MIT), ordered from common to rare.',
+  'vocab.dictionarySource':
+    'Words and meanings come from the open-source ECDICT dictionary (MIT), ordered from common to rare.',
   'vocab.searchWords': 'Search words or meanings',
   'vocab.showMore': 'Show more ({count} left)',
   'vocab.removeWord': 'Remove this word',
@@ -2245,7 +2416,7 @@ export const en = {
   'vocab.listenAgain': 'Listen again',
   'vocab.typeWord': 'Type the English word',
   'vocab.check': 'Check',
-  'vocab.dontKnow': 'Don\'t know',
+  'vocab.dontKnow': "Don't know",
   'vocab.correct': 'Correct',
   'vocab.nearMiss': 'One letter off',
   'vocab.wrong': 'Not quite',
@@ -2276,18 +2447,21 @@ export const en = {
   'vocab.practiceMistakes': 'Practise these',
   'vocab.clearMistake': 'Remove from this list',
   'vocab.course.title': 'Course words',
-  'vocab.course.hint': 'Finds the words of a course’s English material you may not know (skipping very common and CET-4-level words), with the sentence and page they appear on. Technical words missing from the dictionary get a Chinese meaning from your AI.',
+  'vocab.course.hint':
+    'Finds the words of a course’s English material you may not know (skipping very common and CET-4-level words), with the sentence and page they appear on. Technical words missing from the dictionary get a Chinese meaning from your AI.',
   'vocab.course.extract': 'Find course words',
   'vocab.course.update': 'Find again',
   'vocab.course.done': '{total} course words, {added} new',
   'vocab.course.glossed': 'The AI added {count} meanings.',
   'vocab.course.unglossed': '{count} words still have no meaning; try again later.',
-  'vocab.course.noAi': 'No AI configured: {count} technical words have no meaning yet (they can still be learned from their sentences).',
+  'vocab.course.noAi':
+    'No AI configured: {count} technical words have no meaning yet (they can still be learned from their sentences).',
   'vocab.course.failed': 'Could not find course words',
   'vocab.course.noProjects': 'No courses yet',
   'vocab.course.noProjectsHint': 'Create a course and upload English material first.',
   'vocab.importTitle': 'Import a word list',
-  'vocab.importHint': 'One word per line, optionally followed by its meaning after a tab, comma or colon; words without a meaning are looked up in the dictionary. .txt and .csv files work.',
+  'vocab.importHint':
+    'One word per line, optionally followed by its meaning after a tab, comma or colon; words without a meaning are looked up in the dictionary. .txt and .csv files work.',
   'vocab.importName': 'Book name',
   'vocab.importDefaultName': 'My word list',
   'vocab.importWords': 'Words',
@@ -2300,9 +2474,11 @@ export const en = {
   'vocab.export.button': 'Export',
   'vocab.export.title': 'Export for another app',
   'vocab.export.anki': 'Anki (.txt, tab-separated)',
-  'vocab.export.ankiHint': 'Use “Import File” in Anki: the word on the front, phonetic, meaning and example on the back.',
+  'vocab.export.ankiHint':
+    'Use “Import File” in Anki: the word on the front, phonetic, meaning and example on the back.',
   'vocab.export.csv': 'Excel / spreadsheet (.csv)',
-  'vocab.export.csvHint': 'Word, phonetic, meaning, example and source columns, for apps that import spreadsheets.',
+  'vocab.export.csvHint':
+    'Word, phonetic, meaning, example and source columns, for apps that import spreadsheets.',
   'vocab.export.txt': 'Plain word list (.txt)',
   'vocab.export.txtHint': 'One word per line, for apps that take a plain word list.',
   'vocab.exportFailed': 'Export failed',
@@ -2313,7 +2489,7 @@ export const en = {
   'viz.formulaReset': 'Reset',
   'viz.tangentAria': 'Tangent at {point}, slope {slope}',
   'viz.tangentPoint': 'Point {variable}₀',
-  'viz.tangentSlope': "f′({point}) = {slope}",
+  'viz.tangentSlope': 'f′({point}) = {slope}',
   'viz.tangentLine': 'tangent: {line}',
   'viz.secantSlope': 'secant slope (h = {h}): {slope}',
   'viz.riemannAria': 'Riemann sum with {n} pieces: {sum}; integral {integral}',
@@ -2333,7 +2509,8 @@ export const en = {
   'viz.forcesBalanced': 'Net force 0 — the body is in equilibrium.',
   'viz.forcesNet': 'Net force {magnitude} {unit} at {angle}°',
   'viz.forcesAcceleration': 'a = F/m = {value} m/s²',
-  'viz.forcesAlongIncline': 'along the incline (up) {along} {unit}, perpendicular {perpendicular} {unit}',
+  'viz.forcesAlongIncline':
+    'along the incline (up) {along} {unit}, perpendicular {perpendicular} {unit}',
   'viz.motionAria': 'Graph of {quantity} against time',
   'viz.motionDisplacement': 'Displacement {value} m',
   'viz.motionDistance': 'Distance {value} m',
@@ -2355,7 +2532,8 @@ export const en = {
   'viz.opticsFarImage': '(the image is off the drawing)',
   'viz.circuitAria': 'Circuit with {count} resistors; equivalent resistance {resistance} Ω',
   'viz.circuitTable': 'Voltage, current and power of each resistor',
-  'viz.regressionAria': 'Scatter plot of {n} points with a least-squares line, slope {slope}, R² {r2}',
+  'viz.regressionAria':
+    'Scatter plot of {n} points with a least-squares line, slope {slope}, R² {r2}',
   'viz.regressionBands': 'Show {level}% confidence (inner) and prediction (outer) bands',
   'viz.regressionSlopeTest': 'slope SE {se}, t test p = {p} (df {df})',
   'viz.ciAria': '{level}% confidence interval from {lower} to {upper}',
@@ -2417,9 +2595,12 @@ export const en = {
   'viz.chiSquareObserved': 'Observed (O)',
   'viz.chiSquareExpected': 'Expected (E)',
   'viz.chiSquareCritical': 'critical value (α = {alpha}): {value}',
-  'viz.chiSquareReject': 'p < α: reject the null hypothesis — the data differ significantly from the expected ratio.',
-  'viz.chiSquareKeep': 'p ≥ α: do not reject the null hypothesis — the data are consistent with the expected ratio.',
-  'viz.chiSquareSmall': 'Some expected counts are below 5, so the χ² approximation may be unreliable.',
+  'viz.chiSquareReject':
+    'p < α: reject the null hypothesis — the data differ significantly from the expected ratio.',
+  'viz.chiSquareKeep':
+    'p ≥ α: do not reject the null hypothesis — the data are consistent with the expected ratio.',
+  'viz.chiSquareSmall':
+    'Some expected counts are below 5, so the χ² approximation may be unreliable.',
 
   'materials.title': 'Learning Materials',
   'materials.subtitle':
@@ -2451,7 +2632,8 @@ export const en = {
   'materialType.homework_answer': 'Professor answer',
 
   'files.title': 'Project files',
-  'files.subtitle': 'Every file uploaded to this project, with the role and status it was stored as.',
+  'files.subtitle':
+    'Every file uploaded to this project, with the role and status it was stored as.',
   'files.upload': 'Upload file',
   'files.openAll': 'All project files',
   'files.materialLabel': 'This file is',

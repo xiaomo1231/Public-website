@@ -13,7 +13,11 @@ import {
   Upload,
 } from 'lucide-react'
 import { DocumentRepository } from '@/entities/document/repository'
-import { PROCESSING_STATUS_LABEL_KEYS, resolveMaterialType, type Document } from '@/entities/document/types'
+import {
+  PROCESSING_STATUS_LABEL_KEYS,
+  resolveMaterialType,
+  type Document,
+} from '@/entities/document/types'
 import {
   HOMEWORK_STATUS_LABEL_KEYS,
   type HomeworkSet,
@@ -48,8 +52,15 @@ import { ProjectFlowNav } from '@/widgets/project/ProjectFlowNav'
 import { useHomeworkService } from '@/features/homework/useHomeworkService'
 import { toast } from '@/features/toast/toastStore'
 import { friendlyAIError } from '@/shared/lib/aiErrors'
-import { relativeTime } from '@/shared/lib/utils'
+import { cn, relativeTime } from '@/shared/lib/utils'
 import { useTranslation } from '@/i18n'
+
+/**
+ * One assignment. Lecture lists them as ruled rows (title left, action
+ * right); lab keeps a grid of hairline panels.
+ */
+const SET_ROW =
+  'lecture:rounded-none lecture:border-x-0 lecture:border-t-0 lecture:bg-transparent lecture:shadow-none sm:lecture:flex-row sm:lecture:items-center sm:lecture:gap-8'
 
 const STATUS_VARIANT = {
   analyzing: 'secondary',
@@ -92,9 +103,7 @@ export function HomeworkLandingPage(): JSX.Element {
   const load = useCallback(async () => {
     if (!projectId) return
     const docs = await new DocumentRepository().listByProject(projectId)
-    const homeworkDocs = docs.filter(
-      (doc) => resolveMaterialType(doc.materialType) === 'homework',
-    )
+    const homeworkDocs = docs.filter((doc) => resolveMaterialType(doc.materialType) === 'homework')
     const nextSets = service ? await service.listSets(projectId) : []
     setDocuments(homeworkDocs)
     setSets(nextSets)
@@ -253,7 +262,9 @@ export function HomeworkLandingPage(): JSX.Element {
             {summary && (
               <Card className="border-border/70">
                 <CardHeader>
-                  <CardTitle className="text-base">{t('homework.reanalysis.title')}</CardTitle>
+                  <CardTitle className="text-base lecture:font-heading lecture:font-bold">
+                    {t('homework.reanalysis.title')}
+                  </CardTitle>
                   <CardDescription>
                     {t('homework.reanalysis.summary', {
                       matched: summary.matched,
@@ -298,7 +309,7 @@ export function HomeworkLandingPage(): JSX.Element {
                 }
               />
             ) : (
-              <ul className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+              <ul className="grid gap-4 lecture:gap-0 lecture:border-t lab:gap-3 sm:grid-cols-2 sm:lecture:grid-cols-1 xl:grid-cols-3 xl:lecture:grid-cols-1">
                 {sets.map((set) => {
                   const running =
                     busyDocumentId === set.documentId || Boolean(service?.isSetRunning(set.id))
@@ -306,13 +317,14 @@ export function HomeworkLandingPage(): JSX.Element {
                     set.status === 'analyzing' &&
                     !running &&
                     Date.now() - set.updatedAt > STALE_ANALYZING_MS
-                  const generating = set.status === 'analyzing' && set.progress?.stage === 'generating'
+                  const generating =
+                    set.status === 'analyzing' && set.progress?.stage === 'generating'
                   return (
                     <li key={set.id}>
-                      <Card className="flex h-full flex-col">
-                        <CardHeader>
+                      <Card className={cn('flex h-full flex-col', SET_ROW)}>
+                        <CardHeader className="lecture:min-w-0 lecture:flex-1 lecture:px-0 lecture:py-4 lab:p-4">
                           <div className="flex items-start justify-between gap-2">
-                            <CardTitle className="min-w-0 text-base">
+                            <CardTitle className="min-w-0 text-base lecture:font-heading lecture:text-lg lecture:font-bold">
                               <TruncatedText text={set.title} className="min-w-0 max-w-full" />
                             </CardTitle>
                             <div className="flex shrink-0 items-center gap-1">
@@ -375,7 +387,7 @@ export function HomeworkLandingPage(): JSX.Element {
                               : relativeTime(set.updatedAt)}
                           </CardDescription>
                         </CardHeader>
-                        <CardContent className="mt-auto space-y-3">
+                        <CardContent className="mt-auto space-y-3 lecture:px-0 lab:p-4 lab:pt-0 sm:lecture:mt-0 sm:lecture:w-60 sm:lecture:shrink-0 sm:lecture:py-4">
                           {interrupted && (
                             <p className="text-xs text-amber-600 dark:text-amber-400">
                               {t('homework.analysisInterrupted')}
@@ -433,9 +445,14 @@ export function HomeworkLandingPage(): JSX.Element {
                   .filter((doc) => !sets.some((set) => set.documentId === doc.id))
                   .map((doc) => (
                     <li key={doc.id}>
-                      <Card className="flex h-full flex-col border-dashed">
-                        <CardHeader>
-                          <CardTitle className="min-w-0 text-base">
+                      <Card
+                        className={cn(
+                          'flex h-full flex-col border-dashed lecture:border-solid',
+                          SET_ROW,
+                        )}
+                      >
+                        <CardHeader className="lecture:min-w-0 lecture:flex-1 lecture:px-0 lecture:py-4 lab:p-4">
+                          <CardTitle className="min-w-0 text-base lecture:font-heading lecture:text-lg lecture:font-bold">
                             <TruncatedText text={doc.name} className="min-w-0 max-w-full" />
                           </CardTitle>
                           <CardDescription>
@@ -444,7 +461,7 @@ export function HomeworkLandingPage(): JSX.Element {
                               : t(PROCESSING_STATUS_LABEL_KEYS[doc.status])}
                           </CardDescription>
                         </CardHeader>
-                        <CardContent className="mt-auto space-y-2">
+                        <CardContent className="mt-auto space-y-2 lecture:px-0 lab:p-4 lab:pt-0 sm:lecture:mt-0 sm:lecture:w-60 sm:lecture:shrink-0 sm:lecture:py-4">
                           <p className="flex items-center gap-2 text-sm text-muted-foreground">
                             {(busyDocumentId === doc.id ||
                               doc.status === 'processing' ||
@@ -534,8 +551,16 @@ export function HomeworkLandingPage(): JSX.Element {
             <Button variant="outline" onClick={() => setDeleting(null)} disabled={deleteBusy}>
               {t('common.cancel')}
             </Button>
-            <Button variant="destructive" onClick={() => void confirmDelete()} disabled={deleteBusy}>
-              {deleteBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+            <Button
+              variant="destructive"
+              onClick={() => void confirmDelete()}
+              disabled={deleteBusy}
+            >
+              {deleteBusy ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Trash2 className="h-4 w-4" />
+              )}
               {t('homework.deleteConfirm')}
             </Button>
           </DialogFooter>

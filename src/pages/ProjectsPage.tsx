@@ -29,7 +29,9 @@ import { Textarea } from '@/shared/ui/Textarea'
 import { LoadingState } from '@/shared/ui/LoadingState'
 import { PageContainer, PageContent, PageHeader } from '@/shared/ui/Page'
 import { TruncatedText } from '@/shared/ui/TruncatedText'
-import { relativeTime } from '@/shared/lib/utils'
+import { cn, formatDate, relativeTime } from '@/shared/lib/utils'
+import { useUiStyle } from '@/features/theme/useAppearance'
+import { LAB_CHIP_CLASS, LAB_TABLE_HEAD_CLASS } from '@/widgets/dashboard/Figures'
 import { useTranslation, type TranslationKey } from '@/i18n'
 
 const SUBJECT_OPTIONS = Object.entries(SUBJECT_LABEL_KEYS) as [Subject, TranslationKey][]
@@ -49,6 +51,7 @@ export function ProjectsPage(): JSX.Element {
   const [submitting, setSubmitting] = useState(false)
   const [deleteCandidate, setDeleteCandidate] = useState<{ id: string; name: string } | null>(null)
   const navigate = useNavigate()
+  const { uiStyle } = useUiStyle()
   const [searchParams, setSearchParams] = useSearchParams()
 
   // `/projects?new=1` (from the homepage) opens the create dialog directly.
@@ -144,10 +147,16 @@ export function ProjectsPage(): JSX.Element {
               </Button>
             }
           />
+        ) : uiStyle === 'lab' ? (
+          <ProjectTable
+            projects={sorted}
+            onRename={(p) => openRename(p.id, p.name)}
+            onDelete={(p) => setDeleteCandidate({ id: p.id, name: p.name })}
+          />
         ) : (
-          <ul className="hairline-list stagger-in max-w-5xl overflow-hidden rounded-2xl border border-border/80 bg-card">
+          <ul className="stagger-in max-w-4xl border-t-[1.5px] border-foreground">
             {sorted.map((p) => (
-              <li key={p.id}>
+              <li key={p.id} className="border-b border-border">
                 <ProjectRow
                   project={p}
                   onRename={() => openRename(p.id, p.name)}
@@ -314,9 +323,9 @@ function ProjectActionsMenu({
 }
 
 /**
- * One project per row, matching the homepage list: the row opens the project,
- * the trailing menu holds rename / delete (kept outside the link so the two
- * controls never nest).
+ * Lecture: one project per ruled row, the name set in the serif. The row opens
+ * the project; the trailing menu holds rename / delete (kept outside the link
+ * so the two controls never nest).
  */
 function ProjectRow({
   project,
@@ -329,24 +338,18 @@ function ProjectRow({
 }): JSX.Element {
   const { t } = useTranslation()
   return (
-    <div className="group flex items-center gap-2 pr-3 transition-colors hover:bg-accent/50">
+    <div className="group flex items-center gap-2">
       <Link
         to={`/projects/${project.id}`}
-        className="focus-ring flex min-w-0 flex-1 items-center gap-4 rounded-lg py-4 pl-5"
+        className="focus-ring flex min-w-0 flex-1 items-center gap-4 rounded-sm py-4"
       >
-        <span
-          aria-hidden
-          className="grid h-11 w-11 shrink-0 place-items-center rounded-lg bg-theme-primary-soft text-base font-semibold text-secondary-foreground"
-        >
-          {project.name.slice(0, 1)}
-        </span>
         <span className="min-w-0 flex-1">
           <TruncatedText
             as="span"
             text={project.name}
-            className="block text-[15px] font-medium text-foreground"
+            className="block font-heading text-[19px] font-bold leading-snug text-foreground transition-colors duration-200 group-hover:text-primary"
           />
-          <span className="block truncate text-[13px] text-muted-foreground">
+          <span className="mt-0.5 block truncate text-[13px] text-muted-foreground">
             {t(SUBJECT_LABEL_KEYS[project.subject])} ·{' '}
             {t('projects.updatedAt', { date: relativeTime(project.updatedAt) })}
             {project.description ? ` · ${project.description}` : ''}
@@ -354,10 +357,88 @@ function ProjectRow({
         </span>
         <ArrowRight
           aria-hidden
-          className="h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200 motion-safe:group-hover:translate-x-0.5"
+          className="h-4 w-4 shrink-0 text-primary transition-transform duration-200 motion-safe:group-hover:translate-x-0.5"
         />
       </Link>
       <ProjectActionsMenu project={project} onRename={onRename} onDelete={onDelete} />
+    </div>
+  )
+}
+
+/** Lab: a hairline table — name, subject chip, mono date, actions. */
+function ProjectTable({
+  projects,
+  onRename,
+  onDelete,
+}: {
+  projects: Project[]
+  onRename: (project: Project) => void
+  onDelete: (project: Project) => void
+}): JSX.Element {
+  const { t } = useTranslation()
+  const head = 'px-3.5 py-2 text-left font-medium'
+  const cell = 'border-t border-border px-3.5 py-2.5 align-middle'
+  return (
+    <div className="max-w-5xl overflow-x-auto border border-border bg-card">
+      <table className="data-num w-full min-w-[520px] border-collapse text-[13.5px]">
+        <thead className={LAB_TABLE_HEAD_CLASS}>
+          <tr>
+            <th scope="col" className={head}>
+              {t('projects.table.name')}
+            </th>
+            <th scope="col" className={cn(head, 'w-40')}>
+              {t('projects.table.subject')}
+            </th>
+            <th scope="col" className={cn(head, 'w-32')}>
+              {t('projects.table.updated')}
+            </th>
+            <th scope="col" className={cn(head, 'w-12')}>
+              <span className="sr-only">{t('projects.actions')}</span>
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          {projects.map((project) => (
+            <tr key={project.id} className="transition-colors duration-150 hover:bg-accent/50">
+              <td className={cell}>
+                <Link
+                  to={`/projects/${project.id}`}
+                  className="focus-ring block min-w-0 rounded-sm"
+                >
+                  <TruncatedText
+                    as="span"
+                    text={project.name}
+                    className="font-medium text-foreground"
+                  />
+                  {project.description && (
+                    <span className="block truncate text-xs text-muted-foreground">
+                      {project.description}
+                    </span>
+                  )}
+                </Link>
+              </td>
+              <td className={cell}>
+                <span className={LAB_CHIP_CLASS}>{t(SUBJECT_LABEL_KEYS[project.subject])}</span>
+              </td>
+              <td className={cn(cell, 'font-mono text-xs text-muted-foreground')}>
+                <time
+                  dateTime={new Date(project.updatedAt).toISOString()}
+                  title={relativeTime(project.updatedAt)}
+                >
+                  {formatDate(project.updatedAt)}
+                </time>
+              </td>
+              <td className={cn(cell, 'px-1.5 text-right')}>
+                <ProjectActionsMenu
+                  project={project}
+                  onRename={() => onRename(project)}
+                  onDelete={() => onDelete(project)}
+                />
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   )
 }
