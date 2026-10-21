@@ -47,10 +47,27 @@ function isTextEntry(target: EventTarget | null): boolean {
   return target instanceof HTMLElement && target.isContentEditable
 }
 
-/** A control whose own Enter means something else (except the option rows). */
+/** Open menus, listboxes, popovers and dialogs keep their own keys (typeahead, Enter). */
+const OVERLAY_SELECTOR =
+  '[role="menu"], [role="menubar"], [role="listbox"], [role="combobox"], [data-radix-popper-content-wrapper], [role="dialog"], [role="alertdialog"]'
+
+function insideOverlay(node: EventTarget | Element | null): boolean {
+  return node instanceof Element && Boolean(node.closest(OVERLAY_SELECTOR))
+}
+
+/** The option row the event came from, if any. */
+function optionRow(target: EventTarget | null): Element | null {
+  return target instanceof Element ? target.closest('[data-quiz-option]') : null
+}
+
+/** An option row that is already the chosen one (pressed / checked). */
+function isChosenRow(row: Element): boolean {
+  return row.getAttribute('aria-pressed') === 'true' || row.getAttribute('aria-checked') === 'true'
+}
+
+/** A control whose own Enter means something else. */
 function ownsEnter(target: EventTarget | null): boolean {
   if (!(target instanceof Element)) return false
-  if (target.closest('[data-quiz-option]')) return false
   return Boolean(
     target.closest(
       'button, a[href], summary, [role="button"], [role="checkbox"], [role="radio"], [role="tab"], [role="menuitem"], [role="option"], [role="slider"]',
@@ -70,8 +87,10 @@ export interface QuizKeyboardOptions {
 
 /**
  * A–F / 1–6 pick an option (multi-select toggles), Enter submits. Never while
- * focus is in a text field, a modifier is held, an IME is composing or a dialog
- * has focus; Enter on another button keeps that button's own meaning.
+ * focus is in a text field, a modifier is held, an IME is composing or a menu,
+ * listbox, popover or dialog has focus. Enter / Space on a focused option row
+ * select it like any button; Enter submits from an already-chosen row or when
+ * focus is not on a button.
  */
 export function useQuizKeyboard(options: QuizKeyboardOptions): void {
   const latest = useRef(options)
@@ -84,11 +103,13 @@ export function useQuizKeyboard(options: QuizKeyboardOptions): void {
       if (event.ctrlKey || event.metaKey || event.altKey || event.shiftKey) return
       const target = event.target
       if (isTextEntry(target)) return
-      if (target instanceof Element && target.closest('[role="dialog"], [role="alertdialog"]'))
-        return
+      if (insideOverlay(target) || insideOverlay(document.activeElement)) return
 
       if (event.key === 'Enter') {
-        if (ownsEnter(target)) return
+        const row = optionRow(target)
+        // Enter on an option picks it (native button click); only on the
+        // already-chosen option does it submit.
+        if (row ? !isChosenRow(row) : ownsEnter(target)) return
         event.preventDefault()
         onSubmit()
         return

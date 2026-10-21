@@ -385,7 +385,7 @@ function StudyFocus({ overview }: { overview: HomeOverview }): JSX.Element {
               'lab:border lab:border-border lab:bg-card lab:p-5 lab:hover:border-primary/40',
             )}
           >
-            <p className="text-[13px] text-muted-foreground lab:font-mono lab:text-[11px] lab:uppercase lab:tracking-[0.06em]">
+            <p className="min-w-0 break-words text-[13px] text-muted-foreground [overflow-wrap:anywhere] lab:font-mono lab:text-[11px] lab:uppercase lab:tracking-[0.06em]">
               {focus.kicker}
             </p>
             <p className="mt-2 break-words font-heading text-foreground transition-colors duration-200 lecture:text-[26px] lecture:font-bold lecture:leading-snug lecture:group-hover:text-primary lab:text-[20px] lab:font-semibold lab:leading-tight">
@@ -593,7 +593,7 @@ function CourseTable({
     <section aria-labelledby="home-courses">
       <CoursesHeading total={projects.length} />
       <div className="overflow-x-auto border border-border bg-card">
-        <table className="data-num w-full min-w-[560px] border-collapse text-[13.5px]">
+        <table className="data-num w-full min-w-[560px] table-fixed border-collapse text-[13.5px]">
           <thead className={LAB_TABLE_HEAD_CLASS}>
             <tr>
               <th scope="col" className={head}>

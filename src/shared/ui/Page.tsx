@@ -52,7 +52,12 @@ export function PageHeader({
             )}
           </div>
         </div>
-        {actions && <div className="flex shrink-0 flex-wrap items-center gap-2">{actions}</div>}
+        {/* Actions may shrink (min-w-0), so a long button label truncates instead of squeezing the title. */}
+        {actions && (
+          <div className="flex min-w-0 max-w-full flex-wrap items-center gap-2 sm:max-w-[50%] sm:justify-end [&>*]:min-w-0 [&>*]:max-w-full">
+            {actions}
+          </div>
+        )}
       </div>
       {/* Lecture: the course sections form a second bar under the top bar. */}
       {nav && (

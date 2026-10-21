@@ -1,7 +1,14 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useDeferredValue, useEffect, useMemo, useState } from 'react'
 import { Download, Loader2, Search, Trash2, Upload } from 'lucide-react'
 import { Button } from '@/shared/ui/Button'
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/shared/ui/Dialog'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/shared/ui/Dialog'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -16,13 +23,14 @@ import { downloadText } from '@/shared/lib/download'
 import type { ExportFormat, VocabEntry, WordView } from '@/entities/vocab/types'
 import type { VocabService } from '@/services/vocabService'
 import { toast } from '@/features/toast/toastStore'
-import { useTranslation, type TranslationKey } from '@/i18n'
+import { formatNumber, useTranslation, type TranslationKey } from '@/i18n'
 
-const FORMATS: Array<{ format: ExportFormat; labelKey: TranslationKey; hintKey: TranslationKey }> = [
-  { format: 'anki', labelKey: 'vocab.export.anki', hintKey: 'vocab.export.ankiHint' },
-  { format: 'csv', labelKey: 'vocab.export.csv', hintKey: 'vocab.export.csvHint' },
-  { format: 'txt', labelKey: 'vocab.export.txt', hintKey: 'vocab.export.txtHint' },
-]
+const FORMATS: Array<{ format: ExportFormat; labelKey: TranslationKey; hintKey: TranslationKey }> =
+  [
+    { format: 'anki', labelKey: 'vocab.export.anki', hintKey: 'vocab.export.ankiHint' },
+    { format: 'csv', labelKey: 'vocab.export.csv', hintKey: 'vocab.export.csvHint' },
+    { format: 'txt', labelKey: 'vocab.export.txt', hintKey: 'vocab.export.txtHint' },
+  ]
 
 /** Export a book, everything learned, or the mistake list, for another app. */
 export function ExportMenu({
@@ -42,7 +50,11 @@ export function ExportMenu({
       const file = await service.export(target, format)
       downloadText(file.filename, file.content, file.mimeType)
     } catch (err) {
-      toast({ variant: 'error', title: t('vocab.exportFailed'), description: (err as Error).message })
+      toast({
+        variant: 'error',
+        title: t('vocab.exportFailed'),
+        description: (err as Error).message,
+      })
     }
   }
   return (
@@ -56,7 +68,11 @@ export function ExportMenu({
       <DropdownMenuContent align="end" className="w-72">
         <DropdownMenuLabel>{t('vocab.export.title')}</DropdownMenuLabel>
         {FORMATS.map(({ format, labelKey, hintKey }) => (
-          <DropdownMenuItem key={format} onSelect={() => void run(format)} className="flex-col items-start gap-0.5">
+          <DropdownMenuItem
+            key={format}
+            onSelect={() => void run(format)}
+            className="flex-col items-start gap-0.5"
+          >
             <span className="font-medium">{t(labelKey)}</span>
             <span className="text-xs text-muted-foreground">{t(hintKey)}</span>
           </DropdownMenuItem>
@@ -104,13 +120,22 @@ export function ImportDialog({
         variant: 'success',
         title: t('vocab.imported', { count: result.added }),
         ...(result.skipped || result.withoutMeaning
-          ? { description: t('vocab.importedDetail', { skipped: result.skipped, missing: result.withoutMeaning }) }
+          ? {
+              description: t('vocab.importedDetail', {
+                skipped: result.skipped,
+                missing: result.withoutMeaning,
+              }),
+            }
           : {}),
       })
       onImported(result.book.id)
       onOpenChange(false)
     } catch (err) {
-      toast({ variant: 'error', title: t('vocab.importFailed'), description: (err as Error).message })
+      toast({
+        variant: 'error',
+        title: t('vocab.importFailed'),
+        description: (err as Error).message,
+      })
     } finally {
       setBusy(false)
     }
@@ -126,7 +151,12 @@ export function ImportDialog({
         <div className="space-y-4">
           <div className="space-y-1.5">
             <Label htmlFor="vocab-import-name">{t('vocab.importName')}</Label>
-            <Input id="vocab-import-name" value={name} onChange={(event) => setName(event.target.value)} placeholder={t('vocab.importDefaultName')} />
+            <Input
+              id="vocab-import-name"
+              value={name}
+              onChange={(event) => setName(event.target.value)}
+              placeholder={t('vocab.importDefaultName')}
+            />
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="vocab-import-text">{t('vocab.importWords')}</Label>
@@ -142,7 +172,12 @@ export function ImportDialog({
           <label className="inline-flex cursor-pointer items-center gap-2 text-sm text-muted-foreground hover:text-foreground">
             <Upload className="h-4 w-4" />
             {t('vocab.importFile')}
-            <input type="file" accept=".txt,.csv,.tsv,text/plain,text/csv" className="sr-only" onChange={(event) => void readFile(event.target.files?.[0])} />
+            <input
+              type="file"
+              accept=".txt,.csv,.tsv,text/plain,text/csv"
+              className="sr-only"
+              onChange={(event) => void readFile(event.target.files?.[0])}
+            />
           </label>
         </div>
         <DialogFooter>
@@ -191,7 +226,10 @@ export function WordListDialog({
     setLoading(true)
     setQuery('')
     setLimit(PAGE)
-    void Promise.all([service.bookWords(bookId), editable ? service.bookEntries(bookId) : Promise.resolve([])])
+    void Promise.all([
+      service.bookWords(bookId),
+      editable ? service.bookEntries(bookId) : Promise.resolve([]),
+    ])
       .then(([words, stored]) => {
         if (cancelled) return
         setViews(words)
@@ -203,9 +241,18 @@ export function WordListDialog({
     }
   }, [bookId, editable, service])
 
-  const needle = query.trim().toLowerCase()
+  // Filter against a deferred copy so typing stays responsive on 15k-word
+  // books; a new query starts again from the first page.
+  const deferredQuery = useDeferredValue(query)
+  const needle = deferredQuery.trim().toLowerCase()
+  useEffect(() => setLimit(PAGE), [needle])
   const matching = useMemo(
-    () => (needle ? views.filter((view) => view.word.includes(needle) || view.meanings.some((m) => m.includes(needle))) : views),
+    () =>
+      needle
+        ? views.filter(
+            (view) => view.word.includes(needle) || view.meanings.some((m) => m.includes(needle)),
+          )
+        : views,
     [views, needle],
   )
   const entryOf = (word: string) => entries.find((entry) => entry.word === word)
@@ -223,11 +270,19 @@ export function WordListDialog({
       <DialogContent className="flex max-h-[85vh] max-w-2xl flex-col">
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
-          <DialogDescription>{t('vocab.wordCount', { count: views.length })}</DialogDescription>
+          <DialogDescription>
+            {t('vocab.wordCount', { count: views.length, n: formatNumber(views.length) })}
+          </DialogDescription>
         </DialogHeader>
         <div className="relative">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t('vocab.searchWords')} aria-label={t('vocab.searchWords')} className="pl-9" />
+          <Input
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder={t('vocab.searchWords')}
+            aria-label={t('vocab.searchWords')}
+            className="pl-9"
+          />
         </div>
         <div className="-mx-6 min-h-0 flex-1 overflow-y-auto border-t border-border/70 px-6">
           {loading ? (
@@ -244,18 +299,31 @@ export function WordListDialog({
                       <span translate="no" className="notranslate font-medium">
                         {view.word}
                       </span>
-                      {view.phonetic && <span className="ml-2 text-xs text-muted-foreground">/{view.phonetic}/</span>}
+                      {view.phonetic && (
+                        <span className="ml-2 text-xs text-muted-foreground">
+                          /{view.phonetic}/
+                        </span>
+                      )}
                     </p>
-                    <p className="text-sm text-muted-foreground">{view.meanings.join('；') || t('vocab.noMeaning')}</p>
+                    <p className="text-sm text-muted-foreground">
+                      {view.meanings.join('；') || t('vocab.noMeaning')}
+                    </p>
                     {view.context && (
                       <p className="line-clamp-2 text-xs italic text-muted-foreground">
                         {view.context.text}
-                        {view.context.page !== undefined ? ` · ${t('vocab.page', { page: view.context.page })}` : ''}
+                        {view.context.page !== undefined
+                          ? ` · ${t('vocab.page', { page: view.context.page })}`
+                          : ''}
                       </p>
                     )}
                   </div>
                   {editable && (
-                    <Button variant="ghost" size="icon" aria-label={t('vocab.removeWord')} onClick={() => void remove(view.word)}>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      aria-label={t('vocab.removeWord')}
+                      onClick={() => void remove(view.word)}
+                    >
                       <Trash2 className="h-4 w-4" />
                     </Button>
                   )}

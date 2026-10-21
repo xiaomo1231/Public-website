@@ -54,9 +54,18 @@ const MIN_HEIGHT = 220
 const MARGIN = 12
 
 /** Keep the whole window inside the viewport, so its input is never hidden. */
-export function clampRect(rect: NoteWindowRect, viewport = { width: window.innerWidth, height: window.innerHeight }): NoteWindowRect {
-  const width = Math.min(Math.max(rect.width, MIN_WIDTH), Math.max(MIN_WIDTH, viewport.width - MARGIN * 2))
-  const height = Math.min(Math.max(rect.height, MIN_HEIGHT), Math.max(MIN_HEIGHT, viewport.height - MARGIN * 2))
+export function clampRect(
+  rect: NoteWindowRect,
+  viewport = { width: window.innerWidth, height: window.innerHeight },
+): NoteWindowRect {
+  const width = Math.min(
+    Math.max(rect.width, MIN_WIDTH),
+    Math.max(MIN_WIDTH, viewport.width - MARGIN * 2),
+  )
+  const height = Math.min(
+    Math.max(rect.height, MIN_HEIGHT),
+    Math.max(MIN_HEIGHT, viewport.height - MARGIN * 2),
+  )
   return {
     width,
     height,
@@ -66,7 +75,12 @@ export function clampRect(rect: NoteWindowRect, viewport = { width: window.inner
 }
 
 /** Beside the selection: to its right when there is room, else to its left. */
-export function rectNearAnchor(anchor: { left: number; top: number; width: number; height: number }): NoteWindowRect {
+export function rectNearAnchor(anchor: {
+  left: number
+  top: number
+  width: number
+  height: number
+}): NoteWindowRect {
   const { width, height } = DEFAULT_WINDOW_SIZE
   const right = anchor.left + anchor.width + 16
   const x = right + width + MARGIN <= window.innerWidth ? right : anchor.left - width - 16
@@ -101,11 +115,19 @@ interface FloatingQAState {
   closeSet: (setId: string) => void
 }
 
+function sameRect(a: NoteWindowRect, b: NoteWindowRect): boolean {
+  return a.x === b.x && a.y === b.y && a.width === b.width && a.height === b.height
+}
+
 /** Minimise the windows furthest back until at most `MAX_OPEN_WINDOWS` show. */
 function enforceLimit(windows: FloatingQAWindow[]): FloatingQAWindow[] {
   const open = windows.filter((window) => !window.minimized).sort((a, b) => a.z - b.z)
-  const excess = new Set(open.slice(0, Math.max(0, open.length - MAX_OPEN_WINDOWS)).map((window) => window.id))
-  return excess.size ? windows.map((window) => (excess.has(window.id) ? { ...window, minimized: true } : window)) : windows
+  const excess = new Set(
+    open.slice(0, Math.max(0, open.length - MAX_OPEN_WINDOWS)).map((window) => window.id),
+  )
+  return excess.size
+    ? windows.map((window) => (excess.has(window.id) ? { ...window, minimized: true } : window))
+    : windows
 }
 
 export const useFloatingQA = create<FloatingQAState>((set) => ({
@@ -121,24 +143,43 @@ export const useFloatingQA = create<FloatingQAState>((set) => ({
   },
   close: (id) => set((state) => ({ windows: state.windows.filter((window) => window.id !== id) })),
   focus: (id) =>
-    set((state) => ({
-      nextZ: state.nextZ + 1,
-      windows: enforceLimit(
-        state.windows.map((window) => (window.id === id ? { ...window, z: state.nextZ, minimized: false } : window)),
-      ),
-    })),
+    set((state) => {
+      // Already the open window in front: nothing to change (no re-render).
+      const target = state.windows.find((window) => window.id === id)
+      if (target && !target.minimized && state.windows.every((window) => window.z <= target.z))
+        return state
+      return {
+        nextZ: state.nextZ + 1,
+        windows: enforceLimit(
+          state.windows.map((window) =>
+            window.id === id ? { ...window, z: state.nextZ, minimized: false } : window,
+          ),
+        ),
+      }
+    }),
   setMinimized: (id, minimized) =>
     set((state) => ({
       nextZ: state.nextZ + 1,
       windows: enforceLimit(
         state.windows.map((window) =>
-          window.id === id ? { ...window, minimized, ...(minimized ? {} : { z: state.nextZ }) } : window,
+          window.id === id
+            ? { ...window, minimized, ...(minimized ? {} : { z: state.nextZ }) }
+            : window,
         ),
       ),
     })),
   setRect: (id, rect) =>
-    set((state) => ({ windows: state.windows.map((window) => (window.id === id ? { ...window, rect } : window)) })),
+    set((state) => {
+      const current = state.windows.find((window) => window.id === id)
+      if (!current || sameRect(current.rect, rect)) return state
+      return {
+        windows: state.windows.map((window) => (window.id === id ? { ...window, rect } : window)),
+      }
+    }),
   update: (id, patch) =>
-    set((state) => ({ windows: state.windows.map((window) => (window.id === id ? { ...window, ...patch } : window)) })),
-  closeSet: (setId) => set((state) => ({ windows: state.windows.filter((window) => window.passage.setId !== setId) })),
+    set((state) => ({
+      windows: state.windows.map((window) => (window.id === id ? { ...window, ...patch } : window)),
+    })),
+  closeSet: (setId) =>
+    set((state) => ({ windows: state.windows.filter((window) => window.passage.setId !== setId) })),
 }))

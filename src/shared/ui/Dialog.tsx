@@ -36,7 +36,7 @@ export const DialogOverlay = forwardRef<
   <DialogPrimitive.Overlay
     ref={ref}
     className={cn(
-      'fixed inset-0 z-50 bg-black/50 backdrop-blur-sm data-[state=open]:animate-fade data-[state=closed]:animate-fade-out',
+      'fixed inset-0 z-50 bg-black/50 data-[state=closed]:animate-fade-out data-[state=open]:animate-fade',
       className,
     )}
     {...props}
@@ -65,13 +65,13 @@ export const DialogContent = forwardRef<
       <DialogPrimitive.Content
         ref={ref}
         className={cn(
-          'fixed left-[50%] top-[50%] z-50 grid max-h-[calc(100vh-2rem)] w-[calc(100vw-2rem)] max-w-lg translate-x-[-50%] translate-y-[-50%] gap-4 overflow-y-auto rounded-3xl border border-border/70 bg-card p-6 shadow-lift data-[state=open]:animate-dialog-in data-[state=closed]:animate-dialog-out',
+          'fixed left-[50%] top-[50%] z-50 grid max-h-[calc(100vh-2rem)] w-[calc(100vw-2rem)] max-w-lg translate-x-[-50%] translate-y-[-50%] gap-4 overflow-y-auto rounded-3xl border border-border/70 bg-card p-6 shadow-lift data-[state=closed]:animate-dialog-out data-[state=open]:animate-dialog-in',
           className,
         )}
         {...props}
       >
         {content}
-        <DialogPrimitive.Close className="absolute right-3 top-3 rounded-full p-1.5 opacity-70 ring-offset-background transition-[opacity,background-color,transform] duration-200 hover:bg-accent hover:opacity-100 focus-ring disabled:pointer-events-none motion-safe:hover:rotate-90">
+        <DialogPrimitive.Close className="focus-ring absolute right-3 top-3 rounded-full p-1.5 opacity-70 ring-offset-background transition-[opacity,background-color] duration-200 hover:bg-accent hover:opacity-100 disabled:pointer-events-none">
           <X className="h-4 w-4" />
           <span className="sr-only">{t('common.close')}</span>
         </DialogPrimitive.Close>

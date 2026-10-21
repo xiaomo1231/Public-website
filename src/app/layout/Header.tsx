@@ -126,9 +126,9 @@ export function HeaderControls(): JSX.Element {
         <DropdownMenuTrigger asChild>
           <Button variant="ghost" size="sm">
             <span className="grid h-7 w-7 place-items-center rounded-full bg-muted text-xs font-semibold uppercase">
-              {profile?.name?.[0] ?? 'S'}
+              {(profile?.name ? Array.from(profile.name)[0] : undefined) ?? 'S'}
             </span>
-            <span className="hidden max-w-[12rem] truncate sm:inline">
+            <span className="hidden max-w-[8rem] truncate xl:inline">
               {profile?.name ?? t('header.account')}
             </span>
           </Button>

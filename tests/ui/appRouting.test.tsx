@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { act, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
@@ -139,6 +140,41 @@ describe('app shell per interface style', () => {
     render(<RouterProvider router={router} />)
     expect(screen.getByRole('navigation', { name: 'Main navigation' })).toBeInTheDocument()
     expect(screen.queryByTestId('mobile-nav')).toBeNull()
+  })
+
+  it('switching interface style keeps the current page mounted (state and focus survive)', async () => {
+    useThemeStore.getState().setUiStyle('lecture')
+    seedProjects([PROJECT])
+    let mounts = 0
+    function Counter(): JSX.Element {
+      const [count, setCount] = useState(0)
+      useEffect(() => {
+        mounts += 1
+      }, [])
+      return (
+        <button type="button" onClick={() => setCount((c) => c + 1)}>
+          Count {count}
+        </button>
+      )
+    }
+    const router = createMemoryRouter(
+      [{ path: '/', element: <AppShell />, children: [{ index: true, element: <Counter /> }] }],
+      { initialEntries: ['/'] },
+    )
+    render(<RouterProvider router={router} />)
+    const user = userEvent.setup()
+    await user.click(screen.getByRole('button', { name: 'Count 0' }))
+    const button = screen.getByRole('button', { name: 'Count 1' })
+    expect(document.activeElement).toBe(button)
+
+    act(() => useThemeStore.getState().setUiStyle('lab'))
+    expect(screen.getByTestId('mobile-nav')).toHaveAttribute('inert')
+    expect(screen.getByRole('button', { name: 'Count 1' })).toBe(button)
+    act(() => useThemeStore.getState().setUiStyle('lecture'))
+    expect(screen.queryByTestId('mobile-nav')).toBeNull()
+    expect(screen.getByRole('button', { name: 'Count 1' })).toBe(button)
+    expect(document.activeElement).toBe(button)
+    expect(mounts).toBe(1)
   })
 })
 

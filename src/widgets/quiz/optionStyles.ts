@@ -1,4 +1,5 @@
 import { cn } from '@/shared/lib/utils'
+import type { TranslationKey } from '@/i18n'
 
 /**
  * Answer rows for choice questions, in both interface styles.
@@ -20,8 +21,9 @@ export interface OptionState {
 
 export function optionRowClass({ selected, correct, wrong }: OptionState): string {
   return cn(
-    'relative flex w-full items-center gap-3 rounded-lg border px-3 py-2 text-left text-sm focus-ring',
-    'transition-[color,background-color,border-color,transform] duration-press ease-out motion-safe:active:scale-[0.98] disabled:active:scale-100',
+    'relative flex w-full items-center gap-3 rounded-lg border px-3 py-2 text-left text-sm focus-ring focus-visible:z-[2]',
+    // Only the press feedback animates; selection colours snap so keyboard picks read instantly.
+    'transition-transform duration-press ease-out motion-safe:active:scale-[0.98] disabled:active:scale-100',
     'lecture:rounded-xl lecture:bg-card lecture:px-[18px] lecture:py-3.5 lecture:text-base lecture:leading-relaxed',
     'lab:-mt-px lab:rounded-none lab:bg-card lab:px-3.5 lab:py-2.5 lab:text-[15px]',
     selected
@@ -37,7 +39,7 @@ export function optionRowClass({ selected, correct, wrong }: OptionState): strin
 /** The A / B / C key at the start of a row. `square` marks multi-select rows. */
 export function optionKeyClass(selected: boolean, square = false): string {
   return cn(
-    'data-num grid h-6 w-6 shrink-0 place-items-center rounded-full text-xs font-semibold transition-[color,background-color,border-color] duration-press ease-out',
+    'data-num grid h-6 w-6 shrink-0 place-items-center rounded-full text-xs font-semibold',
     'lecture:font-heading lecture:text-base lecture:font-bold lecture:text-muted-foreground',
     'lab:rounded-sm lab:border lab:border-input lab:font-mono lab:text-muted-foreground',
     square && 'lecture:rounded-md lecture:border lecture:border-input lecture:text-sm',
@@ -47,4 +49,19 @@ export function optionKeyClass(selected: boolean, square = false): string {
       square &&
       'lecture:border-primary-strong lecture:bg-primary-strong lecture:text-primary-foreground',
   )
+}
+
+/**
+ * Screen-reader status of a graded row (the check / cross icon is aria-hidden),
+ * or null when the row needs no status.
+ */
+export function gradedOptionStatusKey(
+  revealed: boolean | undefined,
+  selected: boolean,
+  isCorrect: boolean,
+): TranslationKey | null {
+  if (!revealed) return null
+  if (selected)
+    return isCorrect ? 'answerInput.srYourAnswerCorrect' : 'answerInput.srYourAnswerWrong'
+  return isCorrect ? 'answerInput.srCorrectAnswer' : null
 }

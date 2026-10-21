@@ -34,7 +34,8 @@ export const TabsList = forwardRef<
         aria-hidden
         data-animate={animate}
         className={cn(
-          'slide-indicator rounded-md bg-card shadow-soft lecture:rounded-none lecture:border-b-2 lecture:border-primary lecture:bg-transparent lecture:shadow-none',
+          // Lecture: the underline snaps, like the other lecture underlines.
+          'slide-indicator rounded-md bg-card shadow-soft lecture:rounded-none lecture:border-b-2 lecture:border-primary lecture:bg-transparent lecture:shadow-none lecture:!transition-none',
           !ready && 'hidden',
         )}
         style={style}
@@ -52,7 +53,7 @@ export const TabsTrigger = forwardRef<
   <TabsPrimitive.Trigger
     ref={ref}
     className={cn(
-      'focus-ring relative inline-flex items-center justify-center gap-1.5 whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium ring-offset-background transition-colors duration-200 hover:text-foreground disabled:pointer-events-none disabled:opacity-50 data-[state=active]:bg-card data-[state=active]:text-foreground data-[state=active]:shadow-soft group-data-[indicator=ready]/tabs:data-[state=active]:bg-transparent group-data-[indicator=ready]/tabs:data-[state=active]:shadow-none lecture:h-full lecture:rounded-none lecture:px-0.5 lecture:py-0 lecture:data-[state=active]:bg-transparent lecture:data-[state=active]:shadow-none',
+      'focus-ring relative inline-flex items-center justify-center gap-1.5 whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium ring-offset-background transition-colors duration-200 hover:text-foreground disabled:pointer-events-none disabled:opacity-50 data-[state=active]:bg-card data-[state=active]:text-foreground data-[state=active]:shadow-soft group-data-[indicator=ready]/tabs:data-[state=active]:bg-transparent group-data-[indicator=ready]/tabs:data-[state=active]:shadow-none lecture:h-full lecture:rounded-none lecture:px-0.5 lecture:py-0 lecture:focus-visible:ring-inset lecture:focus-visible:ring-offset-0 lecture:data-[state=active]:bg-transparent lecture:data-[state=active]:shadow-none',
       className,
     )}
     {...props}

@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest'
 /**
  * Guards the visual-refresh infrastructure:
  *  - every colour theme defines the semantic tokens in both light and dark;
- *  - the decorative motion (graph draw, brand sheen, progress reveal) is declared;
+ *  - the decorative motion (brand mark, progress reveal) is declared;
  *  - `prefers-reduced-motion: reduce` removes movement (entrances fade,
  *    decorative motion stops) without killing every transition.
  *
@@ -104,8 +104,7 @@ describe('theme tokens', () => {
 })
 
 describe('decorative motion', () => {
-  it('declares the graph-draw and progress-reveal keyframes', () => {
-    expect(css).toContain('@keyframes graph-draw')
+  it('declares the progress-reveal keyframes', () => {
     expect(css).toContain('@keyframes progress-reveal')
   })
 
@@ -122,11 +121,9 @@ describe('decorative motion', () => {
       '.animate-rise',
       '.animate-dialog-in',
       '.animate-pop-in',
-      '.animate-toast-in',
+      '.toast-motion',
       '.progress-reveal',
-      '.graph-draw',
       '.animate-tab-in',
-      '.animate-float',
       '.stagger-in > *',
     ]) {
       expect(body, `${selector} not handled`).toContain(selector)
@@ -141,7 +138,15 @@ describe('decorative motion', () => {
 describe('radius scale', () => {
   // One monotonic scale: a larger step name must never render smaller (the
   // old config had rounded-xl at 12px but rounded-md at 12.4px).
-  const STEPS = ['--radius-sm', '--radius-xs', '--radius-md', '--radius-lg', '--radius-xl', '--radius-2xl', '--radius-3xl']
+  const STEPS = [
+    '--radius-sm',
+    '--radius-xs',
+    '--radius-md',
+    '--radius-lg',
+    '--radius-xl',
+    '--radius-2xl',
+    '--radius-3xl',
+  ]
 
   it('defines every step and keeps them strictly increasing', () => {
     const root = blockFor(':root')
@@ -151,7 +156,9 @@ describe('radius scale', () => {
       return Number.parseFloat(raw!)
     })
     for (let i = 1; i < values.length; i++) {
-      expect(values[i]!, `${STEPS[i]} should be larger than ${STEPS[i - 1]}`).toBeGreaterThan(values[i - 1]!)
+      expect(values[i]!, `${STEPS[i]} should be larger than ${STEPS[i - 1]}`).toBeGreaterThan(
+        values[i - 1]!,
+      )
     }
   })
 

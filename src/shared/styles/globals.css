@@ -443,7 +443,8 @@
    * Sliding highlight (see `useSlidingIndicator`): one pill that glides to the
    * active tab / nav link. Positioned by inline transform + size; it only
    * transitions once the first position has painted, so it never sweeps in
-   * from the corner on load.
+   * from the corner on load. Only `transform` glides; size snaps (animating
+   * width / height would relayout every frame).
    */
   .slide-indicator {
     position: absolute;
@@ -452,10 +453,7 @@
     pointer-events: none;
   }
   .slide-indicator[data-animate='true'] {
-    transition:
-      transform var(--duration-ui) var(--ease-out),
-      width var(--duration-ui) var(--ease-out),
-      height var(--duration-ui) var(--ease-out);
+    transition: transform var(--duration-ui) var(--ease-out);
   }
 
   /*
@@ -464,22 +462,19 @@
    * when done, so hover lifts keep working afterwards.
    */
   .stagger-in > * {
-    animation: stagger-rise 250ms var(--ease-out) backwards;
+    animation: stagger-rise 200ms var(--ease-out) backwards;
   }
   .stagger-in > :nth-child(2) {
-    animation-delay: 40ms;
+    animation-delay: 30ms;
   }
   .stagger-in > :nth-child(3) {
-    animation-delay: 80ms;
+    animation-delay: 60ms;
   }
   .stagger-in > :nth-child(4) {
+    animation-delay: 90ms;
+  }
+  .stagger-in > :nth-child(n + 5) {
     animation-delay: 120ms;
-  }
-  .stagger-in > :nth-child(5) {
-    animation-delay: 160ms;
-  }
-  .stagger-in > :nth-child(n + 6) {
-    animation-delay: 200ms;
   }
 
   /* A quiet divider for lists that should not become a stack of cards. */
@@ -487,9 +482,13 @@
     border-top: 1px solid hsl(var(--border) / 0.7);
   }
 
-  /* Progress fill reveals once on mount; the value itself stays authoritative. */
+  /*
+   * Progress fill slides in once on mount; the value itself stays
+   * authoritative. The keyframe has only a `from`, so it ends on the
+   * indicator's own inline translateX(-x%) instead of replacing it.
+   */
   .progress-reveal {
-    animation: progress-reveal 0.9s var(--ease-out) both;
+    animation: progress-reveal 500ms var(--ease-out) backwards;
   }
 
   /*
@@ -497,7 +496,7 @@
    * known. It carries no value — it must never be read as a percentage.
    */
   .progress-indeterminate {
-    animation: progress-indeterminate 1.4s ease-in-out infinite;
+    animation: progress-indeterminate 1.4s linear infinite;
   }
 
   /*
@@ -528,19 +527,6 @@
     font-feature-settings: 'tnum' 1;
   }
 
-  /* One authored moment: a plotted line draws itself in once. */
-  .graph-draw {
-    stroke-dasharray: var(--graph-len, 600);
-    stroke-dashoffset: var(--graph-len, 600);
-    animation: graph-draw 1.6s var(--ease-out) forwards;
-  }
-  /*
-   * A brief ring on a value that just changed (function switch / reset). It is
-   * a state cue, not a loop; the number itself is never delayed.
-   */
-  .value-flash {
-    animation: value-flash 0.55s ease-out;
-  }
   @media (min-width: 1024px) {
     .floating-sidebar {
       border-radius: var(--radius-3xl);
@@ -548,10 +534,35 @@
   }
 }
 
-/* The plotted line draws itself in once, then stays put. */
-@keyframes graph-draw {
+/*
+ * Toasts enter with a transition from @starting-style, so a swipe or a quick
+ * dismiss can take over mid-flight instead of waiting for a keyframe. The
+ * exit stays an animation (Radix keeps the toast mounted until it ends) and
+ * has only a `to`, so it starts from wherever the toast currently is.
+ * `translate` composes with the swipe offset, which moves `transform`.
+ */
+.toast-motion {
+  transition:
+    translate 260ms var(--ease-out),
+    transform 200ms var(--ease-out),
+    opacity 260ms var(--ease-out);
+}
+.toast-motion[data-swipe='move'] {
+  transition: none;
+}
+@starting-style {
+  .toast-motion[data-state='open'] {
+    opacity: 0;
+    translate: calc(100% + 1rem) 0;
+  }
+}
+.toast-motion[data-state='closed'] {
+  animation: toast-out 180ms var(--ease-out) both;
+}
+@keyframes toast-out {
   to {
-    stroke-dashoffset: 0;
+    opacity: 0;
+    translate: 30% 0;
   }
 }
 
@@ -577,7 +588,7 @@
 @keyframes stagger-rise {
   from {
     opacity: 0;
-    transform: translateY(10px);
+    transform: translateY(4px);
   }
   to {
     opacity: 1;
@@ -585,23 +596,10 @@
   }
 }
 
-/* A ring that fades out, marking a value that just changed. */
-@keyframes value-flash {
-  from {
-    box-shadow: 0 0 0 2px hsl(var(--theme-accent) / 0.55);
-  }
-  to {
-    box-shadow: 0 0 0 2px transparent;
-  }
-}
-
 /* Reveal a progress fill from the left, without touching its real value. */
 @keyframes progress-reveal {
   from {
-    clip-path: inset(0 100% 0 0);
-  }
-  to {
-    clip-path: inset(0 0 0 0);
+    transform: translateX(-100%);
   }
 }
 
@@ -618,8 +616,8 @@
 /*
  * Reduced motion: fewer, gentler animations, not none. Movement goes away
  * (entrances become a short fade, transform transitions stop, decorative
- * loops stop); colour / opacity transitions and the box-shadow
- * `value-flash` stay, because they explain state without moving anything.
+ * loops stop); colour / opacity transitions stay, because they explain
+ * state without moving anything.
  */
 @media (prefers-reduced-motion: reduce) {
   *,
@@ -633,23 +631,24 @@
   .animate-tab-in,
   .animate-dialog-in,
   .animate-pop-in,
-  .animate-toast-in,
-  .stagger-in > *,
-  .floating-qa-enter {
+  .stagger-in > * {
     animation: reduced-fade-in 200ms var(--ease-out) both !important;
   }
   .animate-dialog-out,
   .animate-pop-out,
-  .animate-toast-out {
+  .toast-motion[data-state='closed'] {
     animation: reduced-fade-out 160ms var(--ease-out) both !important;
   }
 
   /* Purely decorative motion is switched off. */
-  .animate-float,
   .progress-reveal,
-  .progress-indeterminate,
-  .graph-draw {
+  .progress-indeterminate {
     animation: none !important;
+  }
+
+  /* Toasts: the slide snaps, the fade stays. */
+  .toast-motion {
+    transition: opacity 200ms var(--ease-out) !important;
   }
 
   /* Transforms snap; colour and opacity keep their transitions. */
@@ -661,11 +660,6 @@
     transition-property:
       color, background-color, border-color, outline-color, text-decoration-color, fill, stroke,
       opacity, box-shadow !important;
-  }
-
-  /* Keep the plotted line fully drawn when its animation is switched off. */
-  .graph-draw {
-    stroke-dashoffset: 0 !important;
   }
 
   /* A still, visible bar instead of a sweep when motion is reduced. */
@@ -732,7 +726,17 @@
  * face (serif in lecture, the UI sans in lab).
  */
 @layer base {
-  [data-ui-style='lab'] body {
+  /*
+   * A fixed layer behind everything (z-index -1 in the root stacking context;
+   * body's own background is propagated to the canvas below it), instead of
+   * `background-attachment: fixed`, which repaints the whole page on scroll.
+   */
+  [data-ui-style='lab'] body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
     background-image:
       linear-gradient(hsl(var(--grid-coarse)) 1px, transparent 1px),
       linear-gradient(90deg, hsl(var(--grid-coarse)) 1px, transparent 1px),
@@ -743,6 +747,5 @@
       40px 40px,
       8px 8px,
       8px 8px;
-    background-attachment: fixed;
   }
 }

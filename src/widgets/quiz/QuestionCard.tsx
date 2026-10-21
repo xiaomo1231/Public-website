@@ -56,11 +56,11 @@ export function QuestionCard({
   const keyboardChoice = isKeyboardChoice(question)
 
   return (
-    <Card className="overflow-hidden lecture:border-transparent lecture:bg-transparent lecture:shadow-none">
+    <Card className="lecture:border-transparent lecture:bg-transparent lecture:shadow-none">
       {/* lecture: one quiet meta line. lab: a hairline strip of mono readout cells. */}
       <div className="flex flex-wrap items-center gap-x-4 gap-y-1 px-6 pt-6 text-[13px] text-muted-foreground lecture:px-0 lecture:pt-0 lab:gap-0 lab:border-b lab:px-0 lab:pt-0 lab:font-mono lab:text-[11.5px]">
         <span className={META_CELL}>
-          <span className="data-num lab:hidden">
+          <span className="data-num lab:sr-only">
             {t('question.label', { number: index + 1, total })}
           </span>
           <span className="data-num hidden lab:inline" aria-hidden>
@@ -121,7 +121,7 @@ export function QuestionCard({
         )}
       </CardContent>
 
-      <div className="flex flex-wrap items-center gap-2 px-6 pb-6 lecture:gap-2.5 lecture:px-0 lecture:pt-3 lab:border-t lab:bg-background lab:py-3">
+      <div className="flex flex-wrap items-center gap-2 px-6 pb-6 lecture:gap-2.5 lecture:px-0 lecture:pt-3 lab:rounded-b-[inherit] lab:border-t lab:bg-background lab:py-3">
         {!answered ? (
           <>
             <Button onClick={() => onSubmit(hintIndex)} disabled={busy || !value.trim()}>

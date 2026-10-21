@@ -74,6 +74,7 @@ function renderWalkthrough(): Text {
         data-walkthrough-project="p1"
         data-walkthrough-set="s1"
         data-selection-title="HW3"
+        tabIndex={-1}
       >
         <section data-walkthrough-section="q:q1" data-section-title="Question 1">
           <p data-testid="step">First do R2 minus 2 R1, then scale.</p>
@@ -96,7 +97,12 @@ describe('questions about the walkthrough', () => {
     const dialog = await screen.findByRole('dialog', { name: /R2 minus 2 R1/ })
     expect(await screen.findByText('It clears the entry below the pivot.')).toBeInTheDocument()
     expect(askMock).toHaveBeenCalledWith(
-      expect.objectContaining({ contextKind: 'walkthrough', selectedText: 'R2 minus 2 R1', sectionHeading: 'Question 1', topicTitle: 'HW3' }),
+      expect.objectContaining({
+        contextKind: 'walkthrough',
+        selectedText: 'R2 minus 2 R1',
+        sectionHeading: 'Question 1',
+        topicTitle: 'HW3',
+      }),
     )
     // Placed beside the selection, in its own fixed position.
     expect(dialog.style.left).not.toBe('')
@@ -106,12 +112,16 @@ describe('questions about the walkthrough', () => {
     expect(askMock).toHaveBeenLastCalledWith(
       expect.objectContaining({
         question: 'Why row 1?',
-        history: [{ question: 'Explain this passage.', answer: 'It clears the entry below the pivot.' }],
+        history: [
+          { question: 'Explain this passage.', answer: 'It clears the entry below the pivot.' },
+        ],
       }),
     )
 
     await user.click(screen.getByRole('button', { name: 'Save' }))
-    await waitFor(async () => expect(await new WalkthroughRepository(db).listNotes('s1')).toHaveLength(1))
+    await waitFor(async () =>
+      expect(await new WalkthroughRepository(db).listNotes('s1')).toHaveLength(1),
+    )
     const [note] = await new WalkthroughRepository(db).listNotes('s1')
     expect(note).toMatchObject({
       projectId: 'p1',
@@ -138,16 +148,50 @@ describe('questions about the walkthrough', () => {
     expect(await new WalkthroughRepository(db).listNotes('s1')).toEqual([])
   })
 
+  it('minimises with Escape into the dock and focuses its chip; closing returns focus to the article', async () => {
+    const user = userEvent.setup()
+    const text = renderWalkthrough()
+    select(text, 9, 22)
+    await user.click(await screen.findByRole('button', { name: 'Ask AI' }))
+    const input = await screen.findByLabelText('Your question')
+    input.focus()
+    await user.keyboard('{Escape}')
+    expect(screen.queryByRole('dialog')).toBeNull()
+    const dock = screen.getByRole('region', { name: /./ })
+    const chip = dock.querySelector('[data-dock-chip]')
+    expect(document.activeElement).toBe(chip)
+    await user.click(screen.getByRole('button', { name: 'Close' }))
+    expect(document.activeElement).toBe(
+      document.querySelector('[data-selection-context="walkthrough"]'),
+    )
+  })
+
   it('keeps at most three windows open and tucks older ones into the dock', () => {
     const passage = {
-      projectId: 'p1', setId: 's1', setTitle: 'HW3', sectionId: 'q:q1', sectionTitle: 'Question 1',
-      quote: 'R2', anchor: { text: 'R2', prefix: '', suffix: '' }, surrounding: '', language: 'en' as const,
+      projectId: 'p1',
+      setId: 's1',
+      setTitle: 'HW3',
+      sectionId: 'q:q1',
+      sectionTitle: 'Question 1',
+      quote: 'R2',
+      anchor: { text: 'R2', prefix: '', suffix: '' },
+      surrounding: '',
+      language: 'en' as const,
     }
     const store = useFloatingQA.getState()
-    const ids = [1, 2, 3, 4].map(() => store.open({ passage, turns: [], rect: { x: 10, y: 10, width: 400, height: 400 } }))
+    const ids = [1, 2, 3, 4].map(() =>
+      store.open({ passage, turns: [], rect: { x: 10, y: 10, width: 400, height: 400 } }),
+    )
     const windows = useFloatingQA.getState().windows
-    expect(windows.filter((window) => window.minimized).map((window) => window.id)).toEqual([ids[0]])
+    expect(windows.filter((window) => window.minimized).map((window) => window.id)).toEqual([
+      ids[0],
+    ])
     useFloatingQA.getState().focus(ids[0]!)
-    expect(useFloatingQA.getState().windows.filter((window) => window.minimized).map((window) => window.id)).toEqual([ids[1]])
+    expect(
+      useFloatingQA
+        .getState()
+        .windows.filter((window) => window.minimized)
+        .map((window) => window.id),
+    ).toEqual([ids[1]])
   })
 })

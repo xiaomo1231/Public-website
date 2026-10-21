@@ -7,7 +7,12 @@ import { useProject } from '@/features/project/useProjects'
 import { MathField } from '@/widgets/mathInput/MathField'
 import { OrderingInput } from './OrderingInput'
 import { FillBlankInput, MatchingInput, MultipleSelectInput } from './ExamFormatInputs'
-import { optionKeyClass, optionListClass, optionRowClass } from './optionStyles'
+import {
+  gradedOptionStatusKey,
+  optionKeyClass,
+  optionListClass,
+  optionRowClass,
+} from './optionStyles'
 import { useTranslation, type TranslationKey } from '@/i18n'
 
 export interface AnswerInputProps {
@@ -215,6 +220,7 @@ function MultipleChoiceInput({
   disabled,
   revealed,
 }: AnswerInputProps): JSX.Element {
+  const { t } = useTranslation()
   const options = question.options ?? []
   return (
     <div className={optionListClass}>
@@ -222,6 +228,7 @@ function MultipleChoiceInput({
         const selected = value === option.id || value === option.label
         const isCorrect =
           option.id === question.correctAnswer || option.label === question.correctAnswer
+        const status = gradedOptionStatusKey(revealed, selected, isCorrect)
         return (
           <button
             key={option.id}
@@ -246,6 +253,7 @@ function MultipleChoiceInput({
               )}
             </span>
             <span className="min-w-0 break-words">{option.label}</span>
+            {status && <span className="sr-only">{` (${t(status)})`}</span>}
           </button>
         )
       })}
@@ -281,10 +289,12 @@ function TrueFalseInput({
       {options.map((o) => {
         const selected = local.toLowerCase() === o.value.toLowerCase()
         const isCorrect = revealed && correct === o.bool
+        const status = gradedOptionStatusKey(revealed, selected, correct === o.bool)
         return (
           <button
             key={o.value}
             type="button"
+            data-quiz-option
             disabled={disabled}
             onClick={() => {
               setLocal(o.value)
@@ -301,6 +311,7 @@ function TrueFalseInput({
             )}
           >
             {t(o.labelKey)}
+            {status && <span className="sr-only">{` (${t(status)})`}</span>}
           </button>
         )
       })}

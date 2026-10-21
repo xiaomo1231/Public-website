@@ -254,7 +254,7 @@ export function QuizResultPage(): JSX.Element {
                 ].map((row) => (
                   <div
                     key={row.key}
-                    className="flex items-center justify-between gap-3 py-1.5 lecture:border-b lecture:border-border lecture:py-2 lecture:last:border-b-0 lab:flex-col lab:items-start lab:justify-start lab:gap-1.5 lab:border-b lab:p-4 lab:sm:border-b-0 lab:[&:not(:last-child)]:border-r"
+                    className="flex min-w-0 items-center justify-between gap-3 py-1.5 lecture:border-b lecture:border-border lecture:py-2 lecture:last:border-b-0 lab:flex-col lab:items-start lab:justify-start lab:gap-1.5 lab:border-b lab:p-4 lab:sm:border-b-0 lab:[&:not(:last-child)]:border-r"
                   >
                     <dt
                       className={cn(
@@ -265,7 +265,7 @@ export function QuizResultPage(): JSX.Element {
                       <span className="lab:hidden">{row.icon}</span>
                       {row.label}
                     </dt>
-                    <dd className="data-num font-medium lecture:font-heading lab:font-mono lab:text-[22px]">
+                    <dd className="data-num min-w-0 max-w-full break-words font-medium tabular-nums lecture:font-heading lab:font-mono lab:text-[clamp(15px,2.2vw,22px)] lab:leading-tight">
                       {row.value}
                     </dd>
                   </div>

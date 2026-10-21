@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
 import { cn } from '@/shared/lib/utils'
+import { formatNumber, useTranslation } from '@/i18n'
 
 /**
  * Shared presentation for the two interface styles' "numbers at a glance".
@@ -37,6 +38,7 @@ export function FigureStrip({
   label: string
   className?: string
 }): JSX.Element | null {
+  const { language } = useTranslation()
   if (items.length === 0) return null
   return (
     <dl
@@ -81,7 +83,9 @@ export function FigureStrip({
               item.tone === 'accent' ? 'text-primary' : 'text-foreground',
             )}
           >
-            {item.value ?? '—'}
+            {typeof item.value === 'number'
+              ? formatNumber(item.value, language)
+              : (item.value ?? '—')}
             {item.unit !== undefined && (
               <small className="ml-1 font-normal text-muted-foreground lecture:text-[15px] lab:text-xs">
                 {item.unit}

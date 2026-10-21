@@ -20,7 +20,9 @@ const CARD_VARIANTS: Record<CardVariant, string> = {
   default: 'border-border/80 bg-card shadow-soft',
   elevated: 'border-border/70 bg-card shadow-lift',
   interactive:
-    'border-border/80 bg-card shadow-soft transition-[box-shadow,border-color] duration-200 hover:border-primary/30 hover:shadow-lift',
+    // The lift shadow lives on a pseudo-element whose opacity fades in, so
+    // hover never animates box-shadow (a repaint every frame).
+    "relative border-border/80 bg-card shadow-soft transition-[border-color] duration-200 after:pointer-events-none after:absolute after:inset-[-1px] after:rounded-[inherit] after:opacity-0 after:shadow-lift after:transition-opacity after:duration-200 after:content-[''] hover:border-primary/30 hover:after:opacity-100",
   accent: 'border-theme-primary/25 bg-theme-primary-soft/45 shadow-soft',
   plain: 'border-transparent bg-transparent shadow-none',
 }

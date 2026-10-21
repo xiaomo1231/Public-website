@@ -30,11 +30,12 @@ import { Math as TeX } from '@/shared/ui/Math'
 import { Progress } from '@/shared/ui/Progress'
 import { RichText } from '@/shared/ui/RichText'
 import { cn } from '@/shared/lib/utils'
+import { prefersReducedMotion } from '@/shared/lib/motion'
 import { useTranslation, type TranslationKey } from '@/i18n'
 import { FloatingQALayer } from './FloatingQALayer'
 import { WalkthroughNotesDialog } from './WalkthroughNotesDialog'
 import { WalkthroughPrint, type PrintableSection } from './WalkthroughPrint'
-import { caretAt, locatePassage, markPassages, revealPassage } from './passage'
+import { caretAt, locatePassages, markPassages, revealPassage } from './passage'
 
 type T = ReturnType<typeof useTranslation>['t']
 
@@ -87,19 +88,26 @@ export function HomeworkWalkthroughPanel({
   ).length
   const needsWork = entries.filter((entry) => entry.needsWork).length
 
+  // Changes only when some section's rendered text may have changed — not on
+  // progress ticks or other walkthrough state updates.
+  const textKey = entries
+    .map((entry) => `${entry.id}:${entry.section?.status ?? ''}:${entry.section?.generatedAt ?? 0}`)
+    .join('|')
+    .concat(`|${uiLanguage}`)
+
   // Mark saved passages; remember which ones are still in the text.
   useEffect(() => {
     if (!revealed) return
-    const ranges = new Map<string, Range>()
-    for (const note of notes) {
-      const range = locatePassage(note.sectionId, note.anchor)
-      if (range) ranges.set(note.id, range)
-    }
+    const ranges = locatePassages(notes)
     noteRanges.current = ranges
     markPassages('walkthrough-note', [...ranges.values()])
-    setLocated(new Set(ranges.keys()))
+    setLocated((previous) =>
+      previous.size === ranges.size && [...ranges.keys()].every((id) => previous.has(id))
+        ? previous
+        : new Set(ranges.keys()),
+    )
     return () => markPassages('walkthrough-note', [])
-  }, [notes, state, revealed])
+  }, [notes, textKey, revealed])
 
   function onArticleClick(event: MouseEvent): void {
     const selection = window.getSelection()
@@ -282,16 +290,21 @@ export function HomeworkWalkthroughPanel({
       ) : (
         <div className="grid gap-6 lg:grid-cols-[12rem_minmax(0,1fr)] lecture:lg:gap-12">
           <nav aria-label={t('homework.walkthrough.toc')} className="hidden lg:block">
-            <ol className="sticky top-4 space-y-1 text-sm lecture:space-y-0 lab:space-y-px lab:border lab:bg-card lab:p-1">
+            <ol className="sticky top-4 max-h-[calc(100vh-4rem)] space-y-1 overflow-y-auto text-sm lecture:space-y-0 lab:space-y-px lab:border lab:bg-card lab:p-1">
               {entries.map((entry) => (
                 <li key={entry.id}>
                   <a
                     href={`#wt-${entry.id}`}
                     onClick={(event) => {
                       event.preventDefault()
-                      document
-                        .getElementById(`wt-${entry.id}`)
-                        ?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+                      const target = document.getElementById(`wt-${entry.id}`)
+                      if (!target) return
+                      target.scrollIntoView({
+                        behavior: prefersReducedMotion() ? 'auto' : 'smooth',
+                        block: 'start',
+                      })
+                      // Move focus too, so keyboard and screen-reader users land there.
+                      target.focus({ preventScroll: true })
                     }}
                     className={cn(
                       'focus-ring block truncate rounded px-2 py-1 transition-colors duration-150 hover:bg-muted',
@@ -325,9 +338,11 @@ export function HomeworkWalkthroughPanel({
                 data-walkthrough-set={set.id}
                 data-selection-title={set.title}
                 onClick={onArticleClick}
-                className="space-y-12 lab:space-y-10"
+                // Focus returns here when a question window closes.
+                tabIndex={-1}
+                className="space-y-12 outline-none lab:space-y-10"
               >
-                <h1 className="font-heading text-2xl font-semibold tracking-tight lecture:text-[32px] lecture:font-bold lecture:leading-snug lecture:tracking-normal lab:text-[22px]">
+                <h1 className="break-words font-heading text-2xl font-semibold tracking-tight [overflow-wrap:anywhere] lecture:text-[32px] lecture:font-bold lecture:leading-snug lecture:tracking-normal lab:text-[22px]">
                   {set.title}
                 </h1>
                 {entries.map((entry) => (
@@ -423,7 +438,9 @@ function WalkthroughSectionView({
       id={`wt-${entry.id}`}
       data-walkthrough-section={entry.id}
       data-section-title={title}
-      className="scroll-mt-6 space-y-4"
+      // Focus target for the contents links.
+      tabIndex={-1}
+      className="scroll-mt-6 space-y-4 outline-none"
     >
       <div className="flex flex-wrap items-center gap-2 border-b pb-2 lecture:border-b-0 lecture:pb-0">
         <h2 className="flex items-baseline gap-2.5 font-heading text-xl font-semibold lecture:text-[22px] lecture:font-bold lab:text-base">

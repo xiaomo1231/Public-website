@@ -2,7 +2,12 @@ import { Check, X } from 'lucide-react'
 import { optionLetter, type Question } from '@/entities/question/types'
 import { Input } from '@/shared/ui/Input'
 import { cn } from '@/shared/lib/utils'
-import { optionKeyClass, optionListClass, optionRowClass } from './optionStyles'
+import {
+  gradedOptionStatusKey,
+  optionKeyClass,
+  optionListClass,
+  optionRowClass,
+} from './optionStyles'
 import { toggleOptionValue } from './quizKeyboard'
 import { useTranslation } from '@/i18n'
 
@@ -33,6 +38,7 @@ export function MultipleSelectInput({
       <div className={optionListClass}>
         {options.map((option, i) => {
           const selected = chosen.has(option.id)
+          const status = gradedOptionStatusKey(revealed, selected, Boolean(option.isCorrect))
           return (
             <button
               key={option.id}
@@ -58,6 +64,7 @@ export function MultipleSelectInput({
                 )}
               </span>
               <span className="min-w-0 break-words">{option.label}</span>
+              {status && <span className="sr-only">{` (${t(status)})`}</span>}
             </button>
           )
         })}

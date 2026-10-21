@@ -1,12 +1,7 @@
 import * as ToastPrimitive from '@radix-ui/react-toast'
 import { cva, type VariantProps } from 'class-variance-authority'
 import { X } from 'lucide-react'
-import {
-  forwardRef,
-  type ComponentPropsWithoutRef,
-  type ElementRef,
-  type ReactNode,
-} from 'react'
+import { forwardRef, type ComponentPropsWithoutRef, type ElementRef, type ReactNode } from 'react'
 import { cn } from '@/shared/lib/utils'
 import { useToastStore } from '@/features/toast/toastStore'
 import { useTranslation } from '@/i18n'
@@ -29,14 +24,16 @@ export const ToastViewport = forwardRef<
 ToastViewport.displayName = ToastPrimitive.Viewport.displayName
 
 const toastVariants = cva(
-  'group pointer-events-auto relative flex w-full items-center justify-between gap-3 overflow-hidden rounded-xl border p-4 pr-8 shadow-lift transition-[transform,opacity] data-[state=open]:animate-toast-in data-[state=closed]:animate-toast-out data-[swipe=move]:translate-x-[var(--radix-toast-swipe-move-x)] data-[swipe=move]:transition-none data-[swipe=cancel]:translate-x-0 data-[swipe=end]:translate-x-[var(--radix-toast-swipe-end-x)]',
+  'group pointer-events-auto relative flex w-full items-center justify-between gap-3 overflow-hidden rounded-xl border p-4 pr-8 shadow-lift toast-motion data-[swipe=move]:translate-x-[var(--radix-toast-swipe-move-x)] data-[swipe=cancel]:translate-x-0 data-[swipe=end]:translate-x-[var(--radix-toast-swipe-end-x)]',
   {
     variants: {
       variant: {
         default: 'border bg-background text-foreground',
-        success: 'border-emerald-500/40 bg-emerald-50 text-emerald-900 dark:bg-emerald-950 dark:text-emerald-100',
+        success:
+          'border-emerald-500/40 bg-emerald-50 text-emerald-900 dark:bg-emerald-950 dark:text-emerald-100',
         error: 'border-destructive/40 bg-destructive/10 text-destructive',
-        warning: 'border-amber-500/40 bg-amber-50 text-amber-900 dark:bg-amber-950 dark:text-amber-100',
+        warning:
+          'border-amber-500/40 bg-amber-50 text-amber-900 dark:bg-amber-950 dark:text-amber-100',
         info: 'border-blue-500/40 bg-blue-50 text-blue-900 dark:bg-blue-950 dark:text-blue-100',
       },
     },
@@ -45,7 +42,8 @@ const toastVariants = cva(
 )
 
 export interface ToastProps
-  extends Omit<ComponentPropsWithoutRef<typeof ToastPrimitive.Root>, 'title'>,
+  extends
+    Omit<ComponentPropsWithoutRef<typeof ToastPrimitive.Root>, 'title'>,
     VariantProps<typeof toastVariants> {
   title?: ReactNode
   description?: ReactNode
@@ -61,7 +59,9 @@ export const Toast = forwardRef<ElementRef<typeof ToastPrimitive.Root>, ToastPro
         {...props}
       >
         <div className="grid gap-1">
-          {title && <ToastPrimitive.Title className="text-sm font-semibold">{title}</ToastPrimitive.Title>}
+          {title && (
+            <ToastPrimitive.Title className="text-sm font-semibold">{title}</ToastPrimitive.Title>
+          )}
           {description && (
             <ToastPrimitive.Description className="text-sm opacity-90">
               {description}
@@ -71,7 +71,7 @@ export const Toast = forwardRef<ElementRef<typeof ToastPrimitive.Root>, ToastPro
         </div>
         <ToastPrimitive.Close
           aria-label={t('common.close')}
-          className="absolute right-2 top-2 rounded-lg p-1 opacity-60 transition-opacity hover:opacity-100 focus-ring"
+          className="focus-ring absolute right-2 top-2 rounded-lg p-1 opacity-60 transition-opacity hover:opacity-100"
         >
           <X className="h-4 w-4" aria-hidden />
         </ToastPrimitive.Close>

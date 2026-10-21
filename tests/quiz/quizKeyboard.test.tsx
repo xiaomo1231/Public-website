@@ -108,9 +108,65 @@ describe('quiz keyboard', () => {
     fireEvent.keyDown(document.body, { key: 'a' })
     fireEvent.keyDown(screen.getByRole('button', { name: /show hint/i }), { key: 'Enter' })
     expect(onSubmit).not.toHaveBeenCalled()
-    // Enter on a focused option row submits.
+    // Enter on the already-chosen option row submits.
     fireEvent.keyDown(screen.getByText('3').closest('button')!, { key: 'Enter' })
     expect(onSubmit).toHaveBeenCalledTimes(1)
+  })
+
+  it('leaves Enter / Space on an unchosen option row to the button (selects it)', () => {
+    const onSubmit = vi.fn()
+    render(<Harness q={question()} onSubmit={onSubmit} />)
+    fireEvent.keyDown(document.body, { key: 'a' })
+    const row = screen.getByText('5').closest('button')!
+    row.focus()
+    // Not prevented → the browser turns it into a click on the focused row.
+    expect(fireEvent.keyDown(row, { key: 'Enter' })).toBe(true)
+    expect(fireEvent.keyDown(row, { key: ' ' })).toBe(true)
+    expect(onSubmit).not.toHaveBeenCalled()
+    fireEvent.click(row)
+    expect(row).toHaveAttribute('aria-pressed', 'true')
+    fireEvent.keyDown(row, { key: 'Enter' })
+    expect(onSubmit).toHaveBeenCalledTimes(1)
+  })
+
+  it('does nothing with Enter on an option row when nothing is chosen yet', () => {
+    const onSubmit = vi.fn()
+    render(<Harness q={question()} onSubmit={onSubmit} />)
+    const row = screen.getByText('3').closest('button')!
+    expect(fireEvent.keyDown(row, { key: 'Enter' })).toBe(true)
+    expect(onSubmit).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    ['menu', { role: 'menu' }],
+    ['menubar', { role: 'menubar' }],
+    ['listbox', { role: 'listbox' }],
+    ['combobox', { role: 'combobox' }],
+    ['popover', { 'data-radix-popper-content-wrapper': '' }],
+    ['dialog', { role: 'dialog' }],
+    ['alertdialog', { role: 'alertdialog' }],
+  ])('ignores keys while a %s has focus', (_name, attrs) => {
+    const onChange = vi.fn()
+    const onSubmit = vi.fn()
+    render(<Harness q={question()} onSubmit={onSubmit} onChange={onChange} />)
+    const overlay = document.createElement('div')
+    for (const [k, v] of Object.entries(attrs)) overlay.setAttribute(k, v)
+    const item = document.createElement('div')
+    item.tabIndex = -1
+    overlay.appendChild(item)
+    document.body.appendChild(overlay)
+    // Event on the overlay item itself.
+    fireEvent.keyDown(item, { key: 'e' })
+    fireEvent.keyDown(item, { key: 'a' })
+    // Focus inside the overlay while the event lands on body.
+    item.focus()
+    fireEvent.keyDown(document.body, { key: 'b' })
+    fireEvent.keyDown(document.body, { key: 'Enter' })
+    expect(onChange).not.toHaveBeenCalled()
+    expect(onSubmit).not.toHaveBeenCalled()
+    overlay.remove()
+    fireEvent.keyDown(document.body, { key: 'b' })
+    expect(onChange).toHaveBeenCalledTimes(1)
   })
 
   it('toggles options of a multi-select question', () => {

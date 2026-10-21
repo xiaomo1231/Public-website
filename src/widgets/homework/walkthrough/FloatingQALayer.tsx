@@ -1,4 +1,5 @@
 import {
+  memo,
   useEffect,
   useLayoutEffect,
   useMemo,
@@ -37,6 +38,7 @@ import { friendlyAIError } from '@/shared/lib/aiErrors'
 import { cn } from '@/shared/lib/utils'
 import { EASE_OUT, prefersReducedMotion } from '@/shared/lib/motion'
 import { useTranslation } from '@/i18n'
+import type { WalkthroughNoteTurn } from '@/entities/homework/walkthrough'
 import { revealPassage } from './passage'
 
 /** The floating question windows of one assignment, plus the dock of minimised ones. */
@@ -76,8 +78,11 @@ export function FloatingQALayer({ setId }: { setId: string }): JSX.Element {
           />
         ))}
       {minimized.length > 0 && (
+        // Above the windows (41–43) so they can never cover the chips, below
+        // dialogs (z-50).
         <div
-          className="fixed bottom-4 right-4 z-40 flex max-w-[60vw] flex-wrap justify-end gap-2"
+          role="region"
+          className="fixed bottom-4 right-4 z-[44] flex max-w-[60vw] flex-wrap justify-end gap-2"
           aria-label={t('walkthroughQA.dock')}
         >
           {minimized.map((window) => (
@@ -87,6 +92,7 @@ export function FloatingQALayer({ setId }: { setId: string }): JSX.Element {
             >
               <button
                 type="button"
+                data-dock-chip={window.id}
                 className="focus-ring flex max-w-[14rem] items-center gap-1.5 truncate"
                 onClick={() => focus(window.id)}
                 title={windowTitle(window, t)}
@@ -104,7 +110,10 @@ export function FloatingQALayer({ setId }: { setId: string }): JSX.Element {
                   size="icon"
                   className="h-6 w-6"
                   aria-label={t('common.close')}
-                  onClick={() => close(window.id)}
+                  onClick={() => {
+                    close(window.id)
+                    returnFocusAfterClose(window.id, window.passage.setId)
+                  }}
                 >
                   <X className="h-3 w-3" />
                 </Button>
@@ -133,7 +142,56 @@ function windowTitle(window: FloatingQAWindow, t: T): string {
  */
 const enteredWindows = new Set<string>()
 
-function FloatingQAWindowView({
+/** Where focus goes back to when a window closes: what was focused when it opened. */
+const returnFocusTargets = new Map<string, HTMLElement>()
+
+/**
+ * After closing a window, focus what was focused before it opened, or the
+ * walkthrough article when that element is gone (e.g. the selection toolbar).
+ */
+function returnFocusAfterClose(id: string, setId: string): void {
+  const previous = returnFocusTargets.get(id)
+  returnFocusTargets.delete(id)
+  enteredWindows.delete(id)
+  if (
+    previous?.isConnected &&
+    previous !== document.body &&
+    !previous.closest('[data-floating-qa]')
+  ) {
+    previous.focus({ preventScroll: true })
+    return
+  }
+  document
+    .querySelector<HTMLElement>(
+      `[data-selection-context="walkthrough"][data-walkthrough-set="${CSS.escape(setId)}"]`,
+    )
+    ?.focus({ preventScroll: true })
+}
+
+/** The conversation so far; only re-renders when a turn is added. */
+const TurnList = memo(function TurnList({ turns }: { turns: WalkthroughNoteTurn[] }): JSX.Element {
+  return (
+    <>
+      {turns.map((turn, index) => (
+        <div key={index} className="space-y-2">
+          <p className="ml-auto w-fit max-w-full rounded-lg bg-primary/10 px-2 py-1 text-[13px] text-foreground lecture:ml-0 lecture:bg-transparent lecture:px-0 lecture:text-muted-foreground lab:rounded-none lab:bg-theme-primary-soft">
+            {turn.question}
+          </p>
+          <RichText
+            text={turn.answer}
+            format="markdown"
+            className="space-y-2"
+            paragraphClassName="text-[14px] leading-[1.7]"
+          />
+        </div>
+      ))}
+    </>
+  )
+})
+
+// Each window re-renders only when its own record (or its stacking rank)
+// changes, not when a sibling moves, resizes or receives an answer.
+const FloatingQAWindowView = memo(function FloatingQAWindowView({
   win,
   layer,
 }: {
@@ -152,8 +210,15 @@ function FloatingQAWindowView({
   // Opening: grow in from the side nearest the selection, once per window.
   useLayoutEffect(() => {
     const element = rootRef.current
-    if (enteredWindows.has(win.id)) return
+    if (enteredWindows.has(win.id)) {
+      // Restored from the dock: take focus from the (now gone) dock chip.
+      element?.focus({ preventScroll: true })
+      return
+    }
     enteredWindows.add(win.id)
+    const active = document.activeElement
+    if (active instanceof HTMLElement && active !== document.body)
+      returnFocusTargets.set(win.id, active)
     if (!element || typeof element.animate !== 'function') return
     const reduced = prefersReducedMotion()
     element.style.transformOrigin = win.enterOrigin ?? 'center top'
@@ -172,8 +237,10 @@ function FloatingQAWindowView({
   useEffect(
     () => () => {
       // Forget a closed window (a minimised one is still in the store).
-      if (!useFloatingQA.getState().windows.some((window) => window.id === win.id))
+      if (!useFloatingQA.getState().windows.some((window) => window.id === win.id)) {
         enteredWindows.delete(win.id)
+        returnFocusTargets.delete(win.id)
+      }
     },
     [win.id],
   )
@@ -196,10 +263,10 @@ function FloatingQAWindowView({
   }, [win.turns.length, win.pending])
 
   /*
-   * Drag and resize. A move only writes a transform to the window while the
-   * pointer is down and commits the final place to the store on release, so
-   * dragging re-renders nothing. A resize must reflow anyway; it commits at
-   * most once per animation frame.
+   * Drag and resize. While the pointer is down a move only writes a transform
+   * and a resize only writes width / height to the window element; the final
+   * rect is committed to the store on release, so neither gesture re-renders
+   * anything until it ends.
    */
   function startGesture(event: ReactPointerEvent, kind: 'move' | 'resize'): void {
     if (event.button !== 0) return
@@ -208,11 +275,6 @@ function FloatingQAWindowView({
     focus(win.id)
     const origin = { x: event.clientX, y: event.clientY, rect: win.rect }
     let latest = origin.rect
-    let frame = 0
-    const commitResize = (): void => {
-      frame = 0
-      setRect(win.id, latest)
-    }
     // Listen on the window: the pointer may leave the handle while dragging.
     const onMove = (move: PointerEvent): void => {
       if (move.buttons === 0) {
@@ -226,20 +288,19 @@ function FloatingQAWindowView({
           ? { ...origin.rect, x: origin.rect.x + dx, y: origin.rect.y + dy }
           : { ...origin.rect, width: origin.rect.width + dx, height: origin.rect.height + dy },
       )
+      const element = rootRef.current
+      if (!element) return
       if (kind === 'move') {
-        const element = rootRef.current
-        if (element)
-          element.style.transform = `translate(${latest.x - origin.rect.x}px, ${latest.y - origin.rect.y}px)`
-      } else if (!frame) {
-        frame = requestAnimationFrame(commitResize)
+        element.style.transform = `translate(${latest.x - origin.rect.x}px, ${latest.y - origin.rect.y}px)`
+      } else {
+        element.style.width = `${latest.width}px`
+        element.style.height = `${latest.height}px`
       }
     }
     function onUp(): void {
       window.removeEventListener('pointermove', onMove)
       window.removeEventListener('pointerup', onUp)
       window.removeEventListener('pointercancel', onUp)
-      if (frame) cancelAnimationFrame(frame)
-      frame = 0
       // Commit before dropping the transform, so the window never jumps back.
       flushSync(() => setRect(win.id, latest))
       if (rootRef.current) rootRef.current.style.transform = ''
@@ -299,9 +360,22 @@ function FloatingQAWindowView({
     }
   }
 
+  function closeNow(): void {
+    close(win.id)
+    returnFocusAfterClose(win.id, win.passage.setId)
+  }
+
   function requestClose(): void {
     if (!win.noteId && win.turns.length > 0) setConfirmClose(true)
-    else close(win.id)
+    else closeNow()
+  }
+
+  /** Minimise into the dock and move focus to this window's dock chip. */
+  function minimize(): void {
+    flushSync(() => setMinimized(win.id, true))
+    document
+      .querySelector<HTMLElement>(`[data-dock-chip="${CSS.escape(win.id)}"]`)
+      ?.focus({ preventScroll: true })
   }
 
   const saved = Boolean(win.noteId)
@@ -312,12 +386,13 @@ function FloatingQAWindowView({
       ref={rootRef}
       role="dialog"
       aria-label={title}
+      tabIndex={-1}
       data-floating-qa
       onPointerDownCapture={() => focus(win.id)}
       onKeyDown={(event) => {
         if (event.key === 'Escape') {
           event.stopPropagation()
-          setMinimized(win.id, true)
+          minimize()
         }
       }}
       style={{
@@ -327,7 +402,7 @@ function FloatingQAWindowView({
         height: win.rect.height,
         zIndex: layer,
       }}
-      className="fixed flex flex-col overflow-hidden rounded-xl border bg-card text-card-foreground shadow-2xl lecture:rounded-2xl lecture:border-input lecture:shadow-lift lab:rounded-none lab:border-input lab:shadow-lift"
+      className="fixed flex flex-col overflow-hidden rounded-xl border bg-card text-card-foreground shadow-2xl outline-none lecture:rounded-2xl lecture:border-input lecture:shadow-lift lab:rounded-none lab:border-input lab:shadow-lift"
     >
       <div
         className="flex cursor-move select-none items-center gap-2 border-b bg-muted/40 px-3 py-2 lecture:bg-transparent lecture:px-3.5 lecture:py-2.5 lab:bg-background lab:py-1.5"
@@ -352,7 +427,7 @@ function FloatingQAWindowView({
           className="h-7 w-7"
           aria-label={t('walkthroughQA.minimize')}
           onPointerDown={(event) => event.stopPropagation()}
-          onClick={() => setMinimized(win.id, true)}
+          onClick={minimize}
         >
           <Minus className="h-3.5 w-3.5" />
         </Button>
@@ -389,19 +464,7 @@ function FloatingQAWindowView({
         ref={scrollRef}
         className="min-h-0 flex-1 space-y-3 overflow-y-auto px-3 py-2 lecture:px-4"
       >
-        {win.turns.map((turn, index) => (
-          <div key={index} className="space-y-2">
-            <p className="ml-auto w-fit max-w-full rounded-lg bg-primary/10 px-2 py-1 text-[13px] text-foreground lecture:ml-0 lecture:bg-transparent lecture:px-0 lecture:text-muted-foreground lab:rounded-none lab:bg-theme-primary-soft">
-              {turn.question}
-            </p>
-            <RichText
-              text={turn.answer}
-              format="markdown"
-              className="space-y-2"
-              paragraphClassName="text-[14px] leading-[1.7]"
-            />
-          </div>
-        ))}
+        <TurnList turns={win.turns} />
         {win.pending && (
           <div className="space-y-2">
             <p className="ml-auto w-fit max-w-full rounded-lg bg-primary/10 px-2 py-1 text-[13px] text-foreground lecture:ml-0 lecture:bg-transparent lecture:px-0 lecture:text-muted-foreground lab:rounded-none lab:bg-theme-primary-soft">
@@ -431,13 +494,13 @@ function FloatingQAWindowView({
             <Button size="sm" variant="ghost" onClick={() => setConfirmClose(false)}>
               {t('common.cancel')}
             </Button>
-            <Button size="sm" variant="outline" onClick={() => close(win.id)}>
+            <Button size="sm" variant="outline" onClick={closeNow}>
               {t('walkthroughQA.discard')}
             </Button>
             <Button
               size="sm"
               disabled={busyAction !== null}
-              onClick={() => void save().then((ok) => ok && close(win.id))}
+              onClick={() => void save().then((ok) => ok && closeNow())}
             >
               {t('walkthroughQA.saveAndClose')}
             </Button>
@@ -518,4 +581,4 @@ function FloatingQAWindowView({
       />
     </div>
   )
-}
+})

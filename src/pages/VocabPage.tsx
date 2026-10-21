@@ -46,7 +46,7 @@ import {
 } from '@/entities/vocab/types'
 import { toast } from '@/features/toast/toastStore'
 import { friendlyAIError } from '@/shared/lib/aiErrors'
-import { useTranslation, type TranslationKey } from '@/i18n'
+import { formatNumber, useTranslation, type TranslationKey } from '@/i18n'
 
 type T = ReturnType<typeof useTranslation>['t']
 
@@ -318,7 +318,7 @@ function BookChooser({
               {book.id === RECOMMENDED_BOOK && <Badge>{t('vocab.recommended')}</Badge>}
             </span>
             <span className="block text-xs text-muted-foreground">
-              {t('vocab.wordCount', { count: book.wordCount })}
+              {t('vocab.wordCount', { count: book.wordCount, n: formatNumber(book.wordCount) })}
             </span>
           </button>
         ))}
@@ -361,7 +361,10 @@ function TodayCard({
       alive = false
     }
   }, [service, stats])
-  const pad = (value: number) => String(value).padStart(2, '0')
+  const { language } = useTranslation()
+  // Two-digit readouts ("07"); larger values get locale grouping (14,912).
+  const pad = (value: number) =>
+    value < 10 ? String(value).padStart(2, '0') : formatNumber(value, language)
   return (
     <Card className="lecture:rounded-none lecture:border-0 lecture:bg-transparent lecture:shadow-none lab:border-0 lab:bg-transparent">
       <CardContent className="space-y-5 p-6 lecture:p-0 lab:p-0">
@@ -486,6 +489,7 @@ function Stat({
   label: string
   strong?: boolean
 }): JSX.Element {
+  const { language } = useTranslation()
   return (
     <div className="lecture:border-l lecture:pl-4 lecture:first:border-l-0 lecture:first:pl-0">
       <div
@@ -494,7 +498,7 @@ function Stat({
           strong && 'text-theme-primary lecture:text-foreground',
         )}
       >
-        {value}
+        {typeof value === 'number' ? formatNumber(value, language) : value}
       </div>
       <div className="text-xs text-muted-foreground lecture:text-[13px] lab:font-mono lab:text-[10.5px] lab:uppercase lab:tracking-wider">
         {label}
@@ -515,6 +519,7 @@ function Readout({
   total?: number
   children?: ReactNode
 }): JSX.Element {
+  const { language } = useTranslation()
   return (
     <div className="border-b border-r px-3.5 py-3 sm:border-b-0 sm:last:!border-r-0 [&:nth-child(2n)]:border-r-0 sm:[&:nth-child(2n)]:border-r [&:nth-child(n+3)]:border-b-0">
       <p className="font-mono text-[10.5px] uppercase tracking-wider text-muted-foreground">
@@ -522,7 +527,9 @@ function Readout({
       </p>
       <p className="mt-1.5 font-mono text-[22px] font-medium tabular-nums">
         {value}
-        {total !== undefined && <small className="text-xs text-muted-foreground">/{total}</small>}
+        {total !== undefined && (
+          <small className="text-xs text-muted-foreground">/{formatNumber(total, language)}</small>
+        )}
       </p>
       {children}
     </div>
@@ -549,22 +556,24 @@ function BookRow({
   return (
     <div className="flex flex-wrap items-center gap-3 px-6 py-3 lecture:px-0 lab:px-3.5 lab:py-2.5">
       <div className="min-w-0 flex-1 space-y-1 sm:lab:grid sm:lab:grid-cols-[minmax(0,1fr)_6rem_10rem] sm:lab:items-center sm:lab:gap-3 sm:lab:space-y-0">
-        <p className="flex items-center gap-2 text-sm font-medium lecture:font-heading lecture:text-base">
-          {bookName(book, t)}
+        <p className="flex min-w-0 items-center gap-2 text-sm font-medium lecture:font-heading lecture:text-base">
+          <span className="min-w-0 break-words [overflow-wrap:anywhere]">{bookName(book, t)}</span>
           {current && (
             <Badge
               variant="outline"
-              className="lab:border-primary/40 lab:font-mono lab:text-primary"
+              className="shrink-0 lab:border-primary/40 lab:font-mono lab:text-primary"
             >
               {t('vocab.current')}
             </Badge>
           )}
           {book.id === RECOMMENDED_BOOK && !current && (
-            <Badge variant="outline">{t('vocab.recommended')}</Badge>
+            <Badge variant="outline" className="shrink-0">
+              {t('vocab.recommended')}
+            </Badge>
           )}
         </p>
         <span className="hidden font-mono text-[13px] tabular-nums text-muted-foreground sm:lab:block">
-          {t('vocab.wordCount', { count: book.wordCount })}
+          {t('vocab.wordCount', { count: book.wordCount, n: formatNumber(book.wordCount) })}
         </span>
         <div className="flex items-center gap-2 lab:flex-col-reverse lab:items-stretch lab:gap-1">
           <Progress

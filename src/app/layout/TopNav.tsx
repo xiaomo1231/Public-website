@@ -13,18 +13,23 @@ export function TopNav(): JSX.Element {
   const { t } = useTranslation()
   const location = useLocation()
 
+  // Not sticky / translucent: the page scrolls in the sibling PageContainer,
+  // so the bar never overlaps content and a backdrop blur would cost for nothing.
   return (
-    <header className="sticky top-0 z-30 flex h-14 shrink-0 items-center gap-6 border-b bg-background/90 px-4 backdrop-blur-sm sm:px-6 lg:px-8">
+    <header className="flex h-14 shrink-0 items-center gap-4 border-b bg-background px-4 sm:px-6 lg:px-8">
       <NavLink to="/dashboard" className="focus-ring flex shrink-0 items-center gap-2.5 rounded-md">
         <span aria-hidden className="font-heading text-lg font-bold leading-none text-foreground">
           学
         </span>
-        <span className="hidden text-sm font-semibold text-foreground sm:inline">
+        <span className="hidden whitespace-nowrap text-sm font-semibold text-foreground lg:inline">
           {t('app.name')}
         </span>
       </NavLink>
 
-      <nav aria-label={t('nav.main')} className="ml-auto flex items-center gap-1">
+      <nav
+        aria-label={t('nav.main')}
+        className="ml-auto flex min-w-0 items-center gap-1 overflow-x-auto [scrollbar-width:none]"
+      >
         {NAV_ITEMS.map((item) => {
           const active = isNavItemActive(item, location.pathname)
           return (
@@ -33,7 +38,8 @@ export function TopNav(): JSX.Element {
               to={item.to}
               aria-current={active ? 'page' : undefined}
               className={cn(
-                'focus-ring relative flex h-14 items-center px-3 text-sm transition-colors duration-200',
+                // Inset ring: the nav scrolls sideways, so an outer ring would be clipped.
+                'relative flex h-14 shrink-0 items-center whitespace-nowrap px-3 text-sm transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring',
                 active
                   ? 'font-medium text-foreground after:absolute after:inset-x-3 after:bottom-0 after:h-0.5 after:bg-primary'
                   : 'text-muted-foreground hover:text-foreground',

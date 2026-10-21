@@ -126,18 +126,6 @@ export default {
           from: { opacity: '1', scale: '1' },
           to: { opacity: '0', scale: '0.96' },
         },
-        'toast-in': {
-          from: { opacity: '0', translate: 'calc(100% + 1rem) 0' },
-          to: { opacity: '1', translate: '0 0' },
-        },
-        'toast-out': {
-          from: { opacity: '1', translate: '0 0' },
-          to: { opacity: '0', translate: '30% 0' },
-        },
-        float: {
-          '0%, 100%': { translate: '0 0' },
-          '50%': { translate: '0 -5px' },
-        },
       },
       /*
        * Curves come from the motion tokens in globals.css. `ease-out` is the
@@ -164,9 +152,6 @@ export default {
         'dialog-out': 'dialog-out 0.16s var(--ease-out) both',
         'pop-in': 'pop-in var(--duration-pop) var(--ease-out) both',
         'pop-out': 'pop-out 0.12s var(--ease-out) both',
-        'toast-in': 'toast-in 260ms var(--ease-out) both',
-        'toast-out': 'toast-out 180ms var(--ease-out) both',
-        float: 'float 4.5s ease-in-out infinite',
       },
       fontFamily: {
         // Text fonts first, then dedicated symbol / maths fallbacks so that

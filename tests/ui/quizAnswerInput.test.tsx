@@ -120,3 +120,44 @@ describe('AnswerInput — other types unchanged', () => {
     expect(screen.getByPlaceholderText('e.g. x^3/3 + C')).toBeInTheDocument()
   })
 })
+
+describe('AnswerInput — graded rows are announced', () => {
+  it('names the correct answer and the chosen wrong answer for screen readers', () => {
+    render(
+      <AnswerInput
+        question={question({ options: options(['3', '4', '5'], 1), correctAnswer: 'opt-2' })}
+        value="opt-1"
+        onChange={() => undefined}
+        disabled
+        revealed
+      />,
+    )
+    expect(screen.getByRole('button', { name: /3.*your answer, wrong/ })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /4.*correct answer/ })).toBeInTheDocument()
+    expect(screen.getByText('5').closest('button')).not.toHaveAccessibleName(/answer/)
+  })
+
+  it('marks a chosen correct answer as correct', () => {
+    render(
+      <AnswerInput
+        question={question({ options: options(['3', '4'], 1), correctAnswer: 'opt-2' })}
+        value="opt-2"
+        onChange={() => undefined}
+        disabled
+        revealed
+      />,
+    )
+    expect(screen.getByRole('button', { name: /4.*your answer, correct/ })).toBeInTheDocument()
+  })
+
+  it('adds nothing before grading', () => {
+    render(
+      <AnswerInput
+        question={question({ options: options(['3', '4'], 1), correctAnswer: 'opt-2' })}
+        value="opt-1"
+        onChange={() => undefined}
+      />,
+    )
+    expect(screen.queryByText(/your answer/)).toBeNull()
+  })
+})

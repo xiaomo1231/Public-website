@@ -34,7 +34,9 @@ beforeEach(() => {
   vi.mocked(buildAIServices).mockReset()
   vi.mocked(buildAIServices).mockResolvedValue({
     translation: {
-      translate: vi.fn().mockResolvedValue({ translation: '译文', contextNote: '', alternatives: [] }),
+      translate: vi
+        .fn()
+        .mockResolvedValue({ translation: '译文', contextNote: '', alternatives: [] }),
     },
     contextualTutor: { ask: vi.fn().mockResolvedValue({ answer: 'ok' }) },
   } as never)
@@ -102,27 +104,34 @@ function popup(): HTMLElement {
   return element as HTMLElement
 }
 
+/** The popup's position, written as a `translate3d` transform. */
+function placement(element: HTMLElement): { left: number; top: number } {
+  const match = /translate3d\((-?[\d.]+)px, (-?[\d.]+)px/.exec(element.style.transform)
+  if (!match) throw new Error(`no transform: "${element.style.transform}"`)
+  return { left: Number(match[1]), top: Number(match[2]) }
+}
+
 describe('SelectionTranslator — popup positioning', () => {
   it('flips below a selection near the top of the viewport', async () => {
     renderToolbar()
     selectNode(screen.getByTestId('passage'), { top: 5, left: 480, width: 40, height: 10 })
     await screen.findByRole('button', { name: 'Translate' })
     // 5 + 10 + gap(8) = 23, i.e. below the selection rather than clipped above.
-    expect(popup().style.top).toBe('23px')
+    expect(placement(popup()).top).toBe(23)
   })
 
   it('shows above a selection near the bottom of the viewport', async () => {
     renderToolbar()
     selectNode(screen.getByTestId('passage'), { top: 760, left: 480, width: 40, height: 20 })
     await screen.findByRole('button', { name: 'Translate' })
-    expect(Number.parseInt(popup().style.top, 10)).toBeLessThan(760)
+    expect(placement(popup()).top).toBeLessThan(760)
   })
 
   it('clamps a left-edge selection inside the viewport', async () => {
     renderToolbar()
     selectNode(screen.getByTestId('passage'), { top: 400, left: 0, width: 10, height: 20 })
     await screen.findByRole('button', { name: 'Translate' })
-    expect(popup().style.left).toBe('8px')
+    expect(placement(popup()).left).toBe(8)
   })
 
   it('repositions when the content grows after Translate', async () => {
@@ -139,7 +148,7 @@ describe('SelectionTranslator — popup positioning', () => {
     act(() => ControlledResizeObserver.instances[0]!.emit())
 
     // spaceBelow = (800 - 8) - (300 + 20 + 8) = 464, so a 400px popup fits below.
-    expect(element.style.top).toBe('328px')
+    expect(placement(element).top).toBe(328)
   })
 
   it('repositions on window resize and clamps its height', async () => {
@@ -151,13 +160,13 @@ describe('SelectionTranslator — popup positioning', () => {
     const element = popup()
     Object.defineProperty(element, 'scrollHeight', { configurable: true, value: 400 })
     act(() => ControlledResizeObserver.instances[0]!.emit())
-    expect(element.style.top).toBe('328px')
+    expect(placement(element).top).toBe(328)
 
     Object.defineProperty(window, 'innerHeight', { configurable: true, value: 500 })
     act(() => {
       window.dispatchEvent(new Event('resize'))
     })
-    expect(element.style.top).not.toBe('328px')
+    expect(placement(element).top).not.toBe(328)
     // spaceAbove = 300 - gap(8) - margin(8) = 284.
     expect(element.style.maxHeight).toBe('284px')
     expect(element.style.overflowY).toBe('auto')
@@ -181,6 +190,38 @@ describe('SelectionTranslator — popup positioning', () => {
 
     unmount()
     expect(removeSpy.mock.calls.some(([type]) => type === 'resize')).toBe(true)
+  })
+
+  it('waits for the pointer release before processing a dragged selection', async () => {
+    renderToolbar()
+    act(() => {
+      window.dispatchEvent(new Event('pointerdown'))
+    })
+    selectNode(screen.getByTestId('passage'), { top: 300, left: 400, width: 40, height: 20 })
+    await new Promise((resolve) => setTimeout(resolve, 200))
+    expect(screen.queryByRole('button', { name: 'Translate' })).toBeNull()
+    act(() => {
+      window.dispatchEvent(new Event('pointerup'))
+    })
+    expect(await screen.findByRole('button', { name: 'Translate' })).toBeInTheDocument()
+  })
+
+  it('repositions on scroll once per animation frame', async () => {
+    installResizeObserver()
+    const frames: FrameRequestCallback[] = []
+    vi.spyOn(window, 'requestAnimationFrame').mockImplementation((callback) => {
+      frames.push(callback)
+      return frames.length
+    })
+    renderToolbar()
+    selectNode(screen.getByTestId('passage'), { top: 300, left: 400, width: 40, height: 20 })
+    await screen.findByRole('button', { name: 'Translate' })
+    act(() => {
+      window.dispatchEvent(new Event('scroll'))
+      window.dispatchEvent(new Event('scroll'))
+      window.dispatchEvent(new Event('scroll'))
+    })
+    expect(frames).toHaveLength(1)
   })
 
   it('keeps a long translation inside a scrollable popup', async () => {

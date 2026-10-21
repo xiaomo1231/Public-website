@@ -9,7 +9,6 @@ import { LoadingState } from '@/shared/ui/LoadingState'
 import { PageContainer, PageContent, PageHeader } from '@/shared/ui/Page'
 import { SectionHeading } from '@/shared/ui/Section'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/shared/ui/Tabs'
-import { TruncatedText } from '@/shared/ui/TruncatedText'
 import { ProjectDocumentsTab } from '@/widgets/documents/ProjectDocumentsTab'
 import { CourseAnalysisPanel } from '@/widgets/documentAnalysis/CourseAnalysisPanel'
 import { RenameProjectDialog } from '@/widgets/project/RenameProjectDialog'
@@ -99,7 +98,7 @@ export function ProjectDetailPage(): JSX.Element {
             {t(SUBJECT_LABEL_KEYS[project.subject])}
           </span>
         }
-        title={<TruncatedText text={project.name} className="min-w-0 max-w-full" />}
+        title={project.name}
         description={
           <>
             <span className="block">{project.description || t('projectDetail.subtitle')}</span>
@@ -118,10 +117,15 @@ export function ProjectDetailPage(): JSX.Element {
             {course?.nextStep.kind === 'tutor' &&
             course.nextStep.topicId &&
             course.nextStep.topicName ? (
-              <Button asChild>
-                <Link to={`/projects/${project.id}/tutor/${course.nextStep.topicId}`}>
-                  <GraduationCap className="h-4 w-4" />
-                  {t('projectDetail.continueReading', { topic: course.nextStep.topicName })}
+              <Button asChild className="min-w-0 max-w-full">
+                <Link
+                  to={`/projects/${project.id}/tutor/${course.nextStep.topicId}`}
+                  title={t('projectDetail.continueReading', { topic: course.nextStep.topicName })}
+                >
+                  <GraduationCap className="h-4 w-4 shrink-0" />
+                  <span className="min-w-0 max-w-[22rem] truncate">
+                    {t('projectDetail.continueReading', { topic: course.nextStep.topicName })}
+                  </span>
                 </Link>
               </Button>
             ) : (

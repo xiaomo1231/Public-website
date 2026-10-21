@@ -380,7 +380,7 @@ function ProjectTable({
   const cell = 'border-t border-border px-3.5 py-2.5 align-middle'
   return (
     <div className="max-w-5xl overflow-x-auto border border-border bg-card">
-      <table className="data-num w-full min-w-[520px] border-collapse text-[13.5px]">
+      <table className="data-num w-full min-w-[520px] table-fixed border-collapse text-[13.5px]">
         <thead className={LAB_TABLE_HEAD_CLASS}>
           <tr>
             <th scope="col" className={head}>
@@ -411,7 +411,10 @@ function ProjectTable({
                     className="font-medium text-foreground"
                   />
                   {project.description && (
-                    <span className="block truncate text-xs text-muted-foreground">
+                    <span
+                      className="block truncate text-xs text-muted-foreground"
+                      title={project.description}
+                    >
                       {project.description}
                     </span>
                   )}

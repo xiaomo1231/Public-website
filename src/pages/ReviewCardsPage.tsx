@@ -31,7 +31,8 @@ import {
   type ReviewGrade,
 } from '@/entities/reviewCard/types'
 import { toast } from '@/features/toast/toastStore'
-import { useTranslation, type TranslationKey } from '@/i18n'
+import { ProgressiveList } from '@/shared/ui/ProgressiveList'
+import { formatNumber, useTranslation, type TranslationKey } from '@/i18n'
 import { cn } from '@/shared/lib/utils'
 
 type T = ReturnType<typeof useTranslation>['t']
@@ -288,22 +289,26 @@ export function ReviewCardsPage(): JSX.Element {
             ) : (
               stats && (
                 <Card className="lecture:rounded-none lecture:border-x-0 lecture:border-b lecture:border-t-[1.5px] lecture:border-b-border lecture:border-t-foreground lecture:bg-transparent lecture:shadow-none">
-                  <CardContent className="grid gap-6 p-6 lecture:px-0 lecture:py-4 lab:gap-0 lab:p-0 sm:grid-cols-[repeat(4,minmax(0,1fr))_auto] sm:items-center sm:lab:divide-x [&>*]:lab:px-3.5 [&>*]:lab:py-3">
+                  <CardContent className="grid gap-6 p-6 lecture:px-0 lecture:py-4 lab:gap-0 lab:p-0 sm:grid-cols-4 sm:items-center sm:lab:divide-x xl:grid-cols-[repeat(4,minmax(0,1fr))_auto] [&>*]:lab:px-3.5 [&>*]:lab:py-3">
                     <Stat value={stats.due} label={t('cards.statDue')} strong />
                     <Stat value={stats.total} label={t('cards.statTotal')} />
                     <Stat value={stats.fresh} label={t('cards.statFresh')} />
                     <Stat value={stats.mature} label={t('cards.statMature')} />
-                    {stats.due > 0 ? (
-                      <Button onClick={() => void startReview()}>
-                        {t('cards.startReview', { count: stats.due })}
-                      </Button>
-                    ) : (
-                      <p className="text-sm text-muted-foreground">
-                        {cards[0]
-                          ? t('cards.noneDue', { span: formatSpan(cards[0].due - now, t) })
-                          : null}
-                      </p>
-                    )}
+                    {/* Own row below the four stats until xl, so the "next card due…"
+                        sentence never squeezes them at tablet widths. */}
+                    <div className="min-w-0 sm:col-span-4 sm:lab:!border-l-0 sm:lab:border-t xl:col-span-1 xl:lab:!border-l xl:lab:border-t-0">
+                      {stats.due > 0 ? (
+                        <Button onClick={() => void startReview()}>
+                          {t('cards.startReview', { count: stats.due })}
+                        </Button>
+                      ) : (
+                        <p className="break-words text-sm text-muted-foreground">
+                          {cards[0]
+                            ? t('cards.noneDue', { span: formatSpan(cards[0].due - now, t) })
+                            : null}
+                        </p>
+                      )}
+                    </div>
                   </CardContent>
                 </Card>
               )
@@ -328,56 +333,61 @@ export function ReviewCardsPage(): JSX.Element {
                   />
                 </div>
               </CardHeader>
-              <CardContent className="divide-y divide-border/70 p-0 lecture:divide-border lecture:border-t">
+              <CardContent className="p-0 lecture:border-t">
                 {visible.length === 0 ? (
                   <p className="px-6 py-8 text-center text-sm text-muted-foreground">
                     {t('cards.noMatch')}
                   </p>
                 ) : (
-                  visible.map((card) => (
-                    <div
-                      key={card.id}
-                      className="flex items-start gap-3 px-6 py-3 lecture:px-0 lab:px-3.5 lab:py-2.5"
-                    >
-                      <div className="min-w-0 flex-1 space-y-1">
-                        <p className="break-words text-sm font-medium lecture:text-[15px]">
-                          {card.front}
-                        </p>
-                        <p className="line-clamp-2 break-words text-sm text-muted-foreground">
-                          {card.back}
-                        </p>
-                        <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                          <Badge variant="outline">
-                            {t(`cards.source.${card.source}` as TranslationKey)}
-                          </Badge>
-                          <span className="tabular-nums lab:font-mono">
-                            {dueLabel(card, now, t)}
-                          </span>
-                          {card.lapses > 0 && (
+                  <ProgressiveList
+                    items={visible}
+                    pageSize={100}
+                    className="divide-y divide-border/70 lecture:divide-border"
+                    renderItem={(card) => (
+                      <div
+                        key={card.id}
+                        className="flex items-start gap-3 px-6 py-3 lecture:px-0 lab:px-3.5 lab:py-2.5"
+                      >
+                        <div className="min-w-0 flex-1 space-y-1">
+                          <p className="break-words text-sm font-medium lecture:text-[15px]">
+                            {card.front}
+                          </p>
+                          <p className="line-clamp-2 break-words text-sm text-muted-foreground">
+                            {card.back}
+                          </p>
+                          <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                            <Badge variant="outline">
+                              {t(`cards.source.${card.source}` as TranslationKey)}
+                            </Badge>
                             <span className="tabular-nums lab:font-mono">
-                              {t('cards.lapses', { count: card.lapses })}
+                              {dueLabel(card, now, t)}
                             </span>
-                          )}
+                            {card.lapses > 0 && (
+                              <span className="tabular-nums lab:font-mono">
+                                {t('cards.lapses', { count: card.lapses })}
+                              </span>
+                            )}
+                          </div>
                         </div>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          aria-label={t('cards.edit')}
+                          onClick={() => setEditing(card)}
+                        >
+                          <Pencil className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          aria-label={t('cards.delete')}
+                          onClick={() => setDeleting(card)}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
                       </div>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        aria-label={t('cards.edit')}
-                        onClick={() => setEditing(card)}
-                      >
-                        <Pencil className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        aria-label={t('cards.delete')}
-                        onClick={() => setDeleting(card)}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  ))
+                    )}
+                  />
                 )}
               </CardContent>
             </Card>
@@ -574,6 +584,7 @@ function Stat({
   label: string
   strong?: boolean
 }): JSX.Element {
+  const { language } = useTranslation()
   return (
     <div className="sm:lecture:[&:not(:first-child)]:border-l sm:lecture:[&:not(:first-child)]:pl-6">
       <div
@@ -582,7 +593,7 @@ function Stat({
           strong && 'text-theme-primary lecture:text-foreground',
         )}
       >
-        {value}
+        {formatNumber(value, language)}
       </div>
       <div className="text-xs text-muted-foreground lecture:text-[13px] lab:font-mono lab:text-[10.5px] lab:uppercase lab:tracking-wider">
         {label}

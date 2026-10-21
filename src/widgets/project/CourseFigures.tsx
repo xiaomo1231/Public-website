@@ -69,6 +69,7 @@ export function CourseFigures({
             label: t('projectDetail.fig.pending'),
             value: course.activeMistakes + open,
             sub: t('projectDetail.fig.pendingSub', {
+              count: course.activeMistakes,
               mistakes: course.activeMistakes,
               homework: open,
             }),

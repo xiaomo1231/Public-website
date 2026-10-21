@@ -65,35 +65,68 @@ export function useSlidingIndicator<T extends HTMLElement>(
       onMeasureRef.current?.(next)
     }
 
+    /*
+     * Animation is enabled once the first position has painted. `enabled`
+     * tracks that, so a resize-triggered snap only restores what was there.
+     */
+    let enabled = false
+    let initFrame = 0
+    let frame = 0
+    let restoreFrame = 0
+    const enable = () => {
+      enabled = true
+      setAnimate(true)
+    }
+
     // With a start position, paint it once before measuring so the move is
     // animated; otherwise jump to the first measurement without a transition.
-    let frame = 0
     if (options.initialRect) {
-      frame = requestAnimationFrame(() => {
-        setAnimate(true)
-        frame = requestAnimationFrame(measure)
+      initFrame = requestAnimationFrame(() => {
+        enable()
+        initFrame = requestAnimationFrame(measure)
       })
     } else {
       measure()
-      frame = requestAnimationFrame(() => setAnimate(true))
+      initFrame = requestAnimationFrame(enable)
+    }
+
+    // Active item / label changed: measure on the next frame (batched), and
+    // let the move glide.
+    const scheduleMeasure = () => {
+      cancelAnimationFrame(frame)
+      frame = requestAnimationFrame(measure)
+    }
+    // Layout changed (window / container resize): snap to the new position.
+    // Animation is switched off for the measuring frame and restored after.
+    const snapMeasure = () => {
+      cancelAnimationFrame(frame)
+      cancelAnimationFrame(restoreFrame)
+      frame = requestAnimationFrame(() => {
+        const wasEnabled = enabled
+        setAnimate(false)
+        measure()
+        if (wasEnabled) restoreFrame = requestAnimationFrame(enable)
+      })
     }
 
     const mutations =
-      typeof MutationObserver === 'undefined' ? null : new MutationObserver(measure)
+      typeof MutationObserver === 'undefined' ? null : new MutationObserver(scheduleMeasure)
     mutations?.observe(container, {
       subtree: true,
       childList: true,
+      characterData: true,
       attributes: true,
       attributeFilter: ['data-state', 'data-active', 'aria-current'],
     })
-    const resizes = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(measure)
-    if (resizes) {
-      resizes.observe(container)
-      for (const child of Array.from(container.children)) resizes.observe(child)
-    }
+    // The container only: label changes are caught by the mutation observer
+    // above (characterData / childList), and they resize the container too.
+    const resizes = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(snapMeasure)
+    resizes?.observe(container)
 
     return () => {
+      cancelAnimationFrame(initFrame)
       cancelAnimationFrame(frame)
+      cancelAnimationFrame(restoreFrame)
       mutations?.disconnect()
       resizes?.disconnect()
     }

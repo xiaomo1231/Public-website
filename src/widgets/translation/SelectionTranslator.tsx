@@ -1,7 +1,10 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { Languages, Lightbulb, Loader2, MessageCircleQuestion, X } from 'lucide-react'
 import { Button } from '@/shared/ui/Button'
-import { ContextualTutorPopup, type ContextualTutorContext } from '@/widgets/tutor/ContextualTutorPopup'
+import {
+  ContextualTutorPopup,
+  type ContextualTutorContext,
+} from '@/widgets/tutor/ContextualTutorPopup'
 import { buildAIServices } from '@/services/aiServices'
 import { useAuth } from '@/features/auth/useAuth'
 import { useCurrentProject } from '@/features/project/useCurrentProject'
@@ -59,6 +62,28 @@ interface TranslationResult {
 /** Longest selection worth sending; beyond this the learner is told to narrow it. */
 const MAX_SELECTION = 600
 
+/** Idle pause after which a selection that changed without a release counts as settled. */
+const SELECTION_SETTLE_MS = 120
+
+/** The part of a popup position that affects rendering. */
+type PopupLayout = Pick<PopupPosition, 'side' | 'maxHeight'>
+
+function layoutOf(position: PopupPosition): PopupLayout {
+  return {
+    side: position.side,
+    ...(position.maxHeight !== undefined ? { maxHeight: position.maxHeight } : {}),
+  }
+}
+
+function translateFor(position: Pick<PopupPosition, 'left' | 'top'>): string {
+  return `translate3d(${position.left}px, ${position.top}px, 0)`
+}
+
+/** Identity of a selected range, to ignore repeated events for the same selection. */
+function selectionKey(range: Range, text: string): string {
+  return `${range.startOffset}:${range.endOffset}:${text}`
+}
+
 /** The current visual viewport, falling back to the layout viewport. */
 function readViewport(): {
   width: number
@@ -92,12 +117,17 @@ export function SelectionTranslator(): JSX.Element | null {
   const [action, setAction] = useState<SelectionAction | null>(null)
   const [translation, setTranslation] = useState<TranslationResult | null>(null)
   const [translating, setTranslating] = useState(false)
-  const [position, setPosition] = useState<PopupPosition | null>(null)
+  // Only the side and height clamp live in state; left/top are written to the
+  // element as a transform so scrolling never re-renders the popup.
+  const [layout, setLayout] = useState<PopupLayout | null>(null)
   const { profile } = useAuth()
   const currentProject = useCurrentProject()
   const containerRef = useRef<HTMLDivElement>(null)
   // Mirrors state so the selection listener never reads a stale closure.
   const translatingRef = useRef(false)
+  // Identity of the selection the popup currently shows, so a late
+  // selectionchange for the same range does not reset the chosen action.
+  const shownKeyRef = useRef<string | null>(null)
 
   useEffect(() => {
     translatingRef.current = translating
@@ -107,24 +137,46 @@ export function SelectionTranslator(): JSX.Element | null {
     setSelection(null)
     setAction(null)
     setTranslation(null)
-    setPosition(null)
+    setLayout(null)
+    shownKeyRef.current = null
   }, [])
 
   useEffect(() => {
-    function onSelectionChange(): void {
-      if (translatingRef.current) return
-      const sel = window.getSelection()
-      // A collapsed selection is handled by the outside-click listener, which
-      // knows whether the click landed inside our own popup.
-      if (!sel || sel.isCollapsed || sel.rangeCount === 0) return
+    // Dragging a selection fires selectionchange on every pointer move. Those
+    // events only remember the range; the expensive work (layout reads, DOM
+    // walks, state updates) runs once the selection settles — on pointer /
+    // key release, or after a short idle pause (touch handles, programmatic).
+    let pending: Range | null = null
+    let pointerDown = false
+    let timer: ReturnType<typeof setTimeout> | undefined
 
-      const range = sel.getRangeAt(0)
+    function clearTimer(): void {
+      if (timer !== undefined) clearTimeout(timer)
+      timer = undefined
+    }
+
+    function flush(): void {
+      clearTimer()
+      const next = pending
+      pending = null
+      if (next) processSelection(next)
+    }
+
+    function processSelection(range: Range): void {
+      if (translatingRef.current) return
       // Selecting text inside our own popup (e.g. in the textarea) must not
       // replace the context or close the conversation.
       if (containerRef.current?.contains(range.commonAncestorContainer)) return
 
-      const text = sel.toString().trim()
+      // Prefer the live selection's text (it follows rendering, e.g. skips the
+      // hidden KaTeX annotation); fall back to the stored range.
+      const sel = window.getSelection()
+      const live = sel && !sel.isCollapsed && sel.rangeCount > 0 && sel.getRangeAt(0) === range
+      const text = (live ? sel.toString() : range.toString()).trim()
       if (!text) return
+
+      const key = selectionKey(range, text)
+      if (key === shownKeyRef.current) return
 
       // jsdom (and some embedded webviews) do not implement Range rects.
       const rect =
@@ -132,7 +184,9 @@ export function SelectionTranslator(): JSX.Element | null {
           ? range.getBoundingClientRect()
           : { left: 0, top: 0, width: 0, height: 0 }
       const route = parseTopicRoute(window.location.pathname)
-      const homeworkScope = elementFor(range.startContainer)?.closest('[data-selection-context="homework"]')
+      const homeworkScope = elementFor(range.startContainer)?.closest(
+        '[data-selection-context="homework"]',
+      )
       const homeworkProject = homeworkScope ? parseProjectRoute(window.location.pathname) : null
       const mobile = window.innerWidth < 640
       const anchor: PopupAnchor = {
@@ -148,8 +202,12 @@ export function SelectionTranslator(): JSX.Element | null {
       const topicTitle = homeworkScope?.getAttribute('data-selection-title') || getTopicTitle(range)
       const walkthrough = readWalkthroughSelection(range)
 
+      shownKeyRef.current = key
+      // The layout effect below measures the real popup and places it (as a
+      // transform) before the first paint.
       setAction(null)
       setTranslation(null)
+      setLayout(null)
       setSelection({
         text,
         surrounding,
@@ -174,24 +232,46 @@ export function SelectionTranslator(): JSX.Element | null {
         mobile,
         ...(walkthrough ? { walkthrough } : {}),
       })
-      // Provisional placement with an unknown size; the layout effect below
-      // measures the real popup and refines it before the first paint.
-      const viewport = readViewport()
-      setPosition(
-        computeSelectionPopupPosition({
-          anchor,
-          popupWidth: 0,
-          popupHeight: 0,
-          viewportWidth: viewport.width,
-          viewportHeight: viewport.height,
-          viewportOffsetTop: viewport.offsetTop,
-          viewportOffsetLeft: viewport.offsetLeft,
-          mobile,
-        }),
-      )
     }
+
+    function onSelectionChange(): void {
+      if (translatingRef.current) return
+      const sel = window.getSelection()
+      // A collapsed selection is handled by the outside-click listener, which
+      // knows whether the click landed inside our own popup.
+      if (!sel || sel.isCollapsed || sel.rangeCount === 0) {
+        pending = null
+        clearTimer()
+        return
+      }
+      pending = sel.getRangeAt(0)
+      clearTimer()
+      // While the pointer is down the selection is still being dragged; the
+      // release flushes it.
+      if (!pointerDown) timer = setTimeout(flush, SELECTION_SETTLE_MS)
+    }
+
+    function onPointerDown(): void {
+      pointerDown = true
+    }
+    function onRelease(): void {
+      pointerDown = false
+      if (pending) flush()
+    }
+
     document.addEventListener('selectionchange', onSelectionChange)
-    return () => document.removeEventListener('selectionchange', onSelectionChange)
+    window.addEventListener('pointerdown', onPointerDown, true)
+    window.addEventListener('pointerup', onRelease, true)
+    window.addEventListener('pointercancel', onRelease, true)
+    window.addEventListener('keyup', onRelease, true)
+    return () => {
+      clearTimer()
+      document.removeEventListener('selectionchange', onSelectionChange)
+      window.removeEventListener('pointerdown', onPointerDown, true)
+      window.removeEventListener('pointerup', onRelease, true)
+      window.removeEventListener('pointercancel', onRelease, true)
+      window.removeEventListener('keyup', onRelease, true)
+    }
   }, [])
 
   useEffect(() => {
@@ -248,14 +328,12 @@ export function SelectionTranslator(): JSX.Element | null {
       viewportOffsetLeft: viewport.offsetLeft,
       mobile: selection.mobile,
     })
-    setPosition((previous) =>
-      previous &&
-      previous.left === next.left &&
-      previous.top === next.top &&
-      previous.side === next.side &&
-      previous.maxHeight === next.maxHeight
+    if (element) element.style.transform = translateFor(next)
+    // Re-render only when the side or the height clamp actually changes.
+    setLayout((previous) =>
+      previous && previous.side === next.side && previous.maxHeight === next.maxHeight
         ? previous
-        : next,
+        : layoutOf(next),
     )
   }, [selection, closeAll])
 
@@ -268,18 +346,28 @@ export function SelectionTranslator(): JSX.Element | null {
         ? new ResizeObserver(() => reposition())
         : null
     if (element) observer?.observe(element)
+    // Scroll fires many times per frame; measure at most once per frame.
+    let frame = 0
+    const onScroll = (): void => {
+      if (frame) return
+      frame = requestAnimationFrame(() => {
+        frame = 0
+        reposition()
+      })
+    }
     window.addEventListener('resize', reposition)
     // Capture-phase scroll catches scrolling containers, not just the window.
-    window.addEventListener('scroll', reposition, true)
+    window.addEventListener('scroll', onScroll, { capture: true, passive: true })
     const vv = window.visualViewport
     vv?.addEventListener('resize', reposition)
-    vv?.addEventListener('scroll', reposition)
+    vv?.addEventListener('scroll', onScroll, { passive: true })
     return () => {
+      if (frame) cancelAnimationFrame(frame)
       observer?.disconnect()
       window.removeEventListener('resize', reposition)
-      window.removeEventListener('scroll', reposition, true)
+      window.removeEventListener('scroll', onScroll, true)
       vv?.removeEventListener('resize', reposition)
-      vv?.removeEventListener('scroll', reposition)
+      vv?.removeEventListener('scroll', onScroll)
     }
   }, [selection, action, translation, translating, reposition])
 
@@ -358,31 +446,33 @@ export function SelectionTranslator(): JSX.Element | null {
 
   if (!selection) return null
 
-  const contextualContext: ContextualTutorContext | null =
-    selection.projectId
-      ? {
-          projectId: selection.projectId,
-          ...(selection.topicId ? { topicId: selection.topicId } : {}),
-          ...(selection.contextKind ? { contextKind: selection.contextKind } : {}),
-          ...(selection.topicTitle ? { topicTitle: selection.topicTitle } : {}),
-          ...(selection.sectionHeading ? { sectionHeading: selection.sectionHeading } : {}),
-          selectedText: selection.canonicalLatex ?? selection.text,
-          surroundingContext: selection.surrounding,
-          language: selection.language,
-          fromVisual: selection.fromVisual,
-        }
-      : null
+  const contextualContext: ContextualTutorContext | null = selection.projectId
+    ? {
+        projectId: selection.projectId,
+        ...(selection.topicId ? { topicId: selection.topicId } : {}),
+        ...(selection.contextKind ? { contextKind: selection.contextKind } : {}),
+        ...(selection.topicTitle ? { topicTitle: selection.topicTitle } : {}),
+        ...(selection.sectionHeading ? { sectionHeading: selection.sectionHeading } : {}),
+        selectedText: selection.canonicalLatex ?? selection.text,
+        surroundingContext: selection.surrounding,
+        language: selection.language,
+        fromVisual: selection.fromVisual,
+      }
+    : null
 
   return (
     <div
       ref={containerRef}
+      // left/top stay 0; the position is the transform written by `reposition`
+      // (not in this style object, so React never resets it).
       style={{
-        left: position?.left ?? 0,
-        top: position?.top ?? 0,
-        ...(position?.maxHeight !== undefined
-          ? { maxHeight: position.maxHeight, overflowY: 'auto' as const }
+        left: 0,
+        top: 0,
+        ...(layout?.maxHeight !== undefined
+          ? { maxHeight: layout.maxHeight, overflowY: 'auto' as const }
           : {}),
       }}
+      data-side={layout?.side}
       className="fixed z-50 max-w-[calc(100vw-1.5rem)]"
     >
       {selection.tooLong ? (

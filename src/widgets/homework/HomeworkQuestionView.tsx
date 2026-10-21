@@ -384,7 +384,7 @@ export function HomeworkQuestionView({
             type="button"
             variant="outline"
             size="sm"
-            className="bg-background/90 backdrop-blur"
+            className="bg-background"
             onClick={() =>
               document.getElementById(questionAnchorId)?.scrollIntoView({ block: 'start' })
             }

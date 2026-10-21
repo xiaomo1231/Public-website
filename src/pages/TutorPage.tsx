@@ -201,7 +201,7 @@ export function TutorPage(): JSX.Element {
           <details> under it, so neither can squeeze the reading measure.
         */}
         <div className="grid gap-8 lab:gap-0 lab:border lab:bg-card lg:lab:grid-cols-[200px_minmax(0,1fr)] min-[1200px]:lecture:grid-cols-[minmax(150px,1fr)_minmax(0,680px)_minmax(200px,1fr)] min-[1200px]:lecture:gap-12 xl:lab:grid-cols-[200px_minmax(0,1fr)_248px]">
-          <aside className="min-w-0 space-y-3 lecture:mx-auto lecture:w-full lecture:max-w-[680px] lab:space-y-0 lab:border-b lab:py-3.5 lg:lab:border-b-0 lg:lab:border-r min-[1200px]:lecture:sticky min-[1200px]:lecture:top-8 min-[1200px]:lecture:mx-0 min-[1200px]:lecture:w-[180px] min-[1200px]:lecture:max-w-none min-[1200px]:lecture:self-start min-[1200px]:lecture:justify-self-end">
+          <aside className="min-w-0 space-y-3 lecture:mx-auto lecture:w-full lecture:max-w-[680px] lab:space-y-0 lab:border-b lab:py-3.5 lg:lab:border-b-0 lg:lab:border-r min-[1200px]:lecture:sticky min-[1200px]:lecture:top-8 min-[1200px]:lecture:mx-0 min-[1200px]:lecture:max-h-[calc(100vh-4rem)] min-[1200px]:lecture:w-full min-[1200px]:lecture:max-w-[180px] min-[1200px]:lecture:self-start min-[1200px]:lecture:justify-self-end min-[1200px]:lecture:overflow-y-auto">
             <div className="empty:hidden lab:px-3 lab:pb-3">
               <CourseStructurePanel
                 projectId={projectId}
@@ -217,7 +217,9 @@ export function TutorPage(): JSX.Element {
                 <span className="hidden tabular-nums lab:inline"> / {visibleTopics.length}</span>
               </h2>
               <p className="sr-only">{t('tutor.pickTopic')}</p>
-              <ul className="space-y-1 lecture:space-y-0 lab:space-y-0 max-[1199px]:lecture:grid max-[1199px]:lecture:grid-cols-2 max-[1199px]:lecture:gap-x-6">
+              {/* Above the lesson (lecture below 1200px) a long contents list scrolls in
+                  its own box instead of pushing the lesson down. */}
+              <ul className="space-y-1 lecture:space-y-0 lab:space-y-0 max-[1199px]:lecture:grid max-[1199px]:lecture:max-h-[min(18rem,40vh)] max-[1199px]:lecture:grid-cols-2 max-[1199px]:lecture:gap-x-6 max-[1199px]:lecture:overflow-y-auto">
                 {visibleTopics.map((topic) => {
                   const current = activeTopic?.id === topic.id
                   const covered = coveredIds.has(topic.id)
@@ -334,7 +336,7 @@ export function TutorPage(): JSX.Element {
           </section>
 
           {/* lecture: sticky marginalia beside the column. lab: the inspector cell. */}
-          <aside className="hidden min-w-0 lab:py-3.5 min-[1200px]:lecture:sticky min-[1200px]:lecture:top-8 min-[1200px]:lecture:block min-[1200px]:lecture:w-[220px] min-[1200px]:lecture:self-start xl:lab:block">
+          <aside className="hidden min-w-0 lab:py-3.5 min-[1200px]:lecture:sticky min-[1200px]:lecture:top-8 min-[1200px]:lecture:block min-[1200px]:lecture:max-h-[calc(100vh-4rem)] min-[1200px]:lecture:w-full min-[1200px]:lecture:max-w-[220px] min-[1200px]:lecture:self-start min-[1200px]:lecture:overflow-y-auto xl:lab:block">
             {symbolsPanel}
           </aside>
         </div>
@@ -370,7 +372,10 @@ function LessonReadouts({
       value: (
         <>
           {String(minutes).padStart(2, '0')}
-          <small className="text-xs font-normal text-muted-foreground"> min</small>
+          <small className="text-xs font-normal text-muted-foreground">
+            {' '}
+            {t('tutor.readout.minutesUnit')}
+          </small>
         </>
       ),
       sub: t('tutor.readout.readingSub', { count: countLessonWords(text) }),

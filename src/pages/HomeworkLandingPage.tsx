@@ -618,7 +618,7 @@ function HomeworkProgressBar({ value, label }: { value?: number; label: string }
         <div className="progress-indeterminate h-full w-1/3 rounded-full bg-primary" />
       ) : (
         <div
-          className="h-full w-full rounded-full bg-primary transition-transform duration-300 ease-out"
+          className="h-full w-full rounded-full bg-primary transition-transform duration-200 ease-out"
           style={{ transform: `translateX(-${100 - Math.max(0, Math.min(100, value))}%)` }}
         />
       )}

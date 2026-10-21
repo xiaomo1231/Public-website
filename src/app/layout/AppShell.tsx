@@ -24,7 +24,7 @@ export function AppShell(): JSX.Element {
    * not when only its params do (next slide, next topic), and never remounts
    * the page — it is a Web Animation on the wrapper, so page state is
    * untouched. A short opacity-only fade (no travel), so frequent navigation
-   * stays calm. Skipped under reduced motion and where WAAPI is missing.
+   * stays calm (shorter under reduced motion). Skipped where WAAPI is missing.
    */
   const matches = useMatches()
   const routeId = matches[matches.length - 1]?.id
@@ -35,8 +35,11 @@ export function AppShell(): JSX.Element {
     previousRouteId.current = routeId
     const el = pageRef.current
     if (!el || typeof el.animate !== 'function') return
-    if (prefersReducedMotion()) return
-    el.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 150, easing: EASE_OUT })
+    // Reduced motion keeps the fade (no movement involved), just shorter.
+    el.animate([{ opacity: 0 }, { opacity: 1 }], {
+      duration: prefersReducedMotion() ? 120 : 150,
+      easing: EASE_OUT,
+    })
   }, [routeId])
 
   /*
@@ -54,7 +57,12 @@ export function AppShell(): JSX.Element {
     if (!drawer) return
     if (mobileNavOpen) drawer.removeAttribute('inert')
     else drawer.setAttribute('inert', '')
-  }, [mobileNavOpen])
+    // `uiStyle`: the drawer only exists in lab, so re-apply when it mounts.
+  }, [mobileNavOpen, uiStyle])
+  // The drawer belongs to lab; leaving lab closes it.
+  useEffect(() => {
+    if (uiStyle !== 'lab') setMobileNavOpen(false)
+  }, [uiStyle])
   useEffect(() => {
     if (!mobileNavOpen) return
     const active = document.activeElement
@@ -90,27 +98,23 @@ export function AppShell(): JSX.Element {
     return () => window.removeEventListener('resize', onResize)
   }, [])
 
-  if (uiStyle === 'lecture') {
-    // Lecture: one bar across the top, the page as a single column below it.
-    return (
-      <div className="relative flex h-full min-h-screen w-full flex-col bg-background text-foreground">
-        <a
-          href="#main-content"
-          className="focus-ring sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-[60] focus:rounded-full focus:bg-primary-strong focus:px-4 focus:py-2 focus:text-sm focus:font-medium focus:text-primary-foreground"
-        >
-          {t('common.skipToContent')}
-        </a>
-        <TopNav />
-        <div ref={pageRef} className="flex min-h-0 flex-1 flex-col">
-          <Outlet />
-        </div>
-      </div>
-    )
-  }
+  const lab = uiStyle === 'lab'
 
-  // Lab: the side rail, attached to the edge, over the millimetre grid.
+  /*
+   * One stable tree for both interface styles. The side rail and the mobile
+   * drawer are toggled around it, and Header / TopNav swap inside the same
+   * column, so `<Outlet />` (and the fading `pageRef` wrapper) keep the same
+   * element path: switching style never remounts the current page (a Settings
+   * draft and focus survive).
+   */
   return (
-    <div className={cn('relative flex h-full min-h-screen w-full text-foreground')}>
+    <div
+      className={cn(
+        'relative flex h-full min-h-screen w-full text-foreground',
+        // Lab: transparent over the millimetre grid (painted on body::before).
+        !lab && 'bg-background',
+      )}
+    >
       <a
         href="#main-content"
         className="focus-ring sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-[60] focus:rounded-full focus:bg-primary-strong focus:px-4 focus:py-2 focus:text-sm focus:font-medium focus:text-primary-foreground"
@@ -119,54 +123,62 @@ export function AppShell(): JSX.Element {
       </a>
 
       {/*
-        Desktop sidebar. It collapses to zero width; the content is only
-        mounted while expanded so nothing hidden stays keyboard-focusable. The
-        width transition is short and disabled under reduced-motion.
+        Lab desktop sidebar. It collapses to zero width; the content is only
+        mounted while expanded so nothing hidden stays keyboard-focusable. It
+        snaps (no width transition), since the content cannot animate with it.
       */}
-      <div
-        className={cn(
-          'relative z-10 hidden shrink-0 overflow-hidden transition-[width] duration-200 ease-out motion-reduce:transition-none lg:block',
-          navCollapsed ? 'w-0' : 'w-56',
-        )}
-        aria-hidden={navCollapsed}
-      >
-        {!navCollapsed && <Sidebar onCollapse={() => setNavCollapsed(true)} />}
-      </div>
-
-      {/* Mobile drawer */}
-      <div
-        ref={drawerRef}
-        className={cn(
-          'fixed inset-0 z-40 lg:hidden',
-          mobileNavOpen ? 'pointer-events-auto' : 'pointer-events-none',
-        )}
-        aria-hidden={!mobileNavOpen}
-        data-testid="mobile-nav"
-      >
+      {lab && (
         <div
           className={cn(
-            'absolute inset-0 bg-black/50 backdrop-blur-[2px] transition-opacity duration-300',
-            mobileNavOpen ? 'opacity-100' : 'opacity-0',
+            'relative z-10 hidden shrink-0 overflow-hidden lg:block',
+            navCollapsed ? 'w-0' : 'w-56',
           )}
-          onClick={() => setMobileNavOpen(false)}
-        />
-        <div
-          ref={drawerPanelRef}
-          tabIndex={-1}
-          className={cn(
-            'absolute inset-y-0 left-0 outline-none transition-transform duration-300 ease-out',
-            mobileNavOpen ? 'translate-x-0' : '-translate-x-full',
-          )}
+          aria-hidden={navCollapsed}
         >
-          <Sidebar onNavigate={() => setMobileNavOpen(false)} />
+          {!navCollapsed && <Sidebar onCollapse={() => setNavCollapsed(true)} />}
         </div>
-      </div>
+      )}
 
-      <div className="relative z-10 flex min-w-0 flex-1 flex-col">
-        <Header
-          onOpenMobileNav={() => setMobileNavOpen(true)}
-          {...(navCollapsed ? { onExpandNav: () => setNavCollapsed(false) } : {})}
-        />
+      {/* Lab mobile drawer */}
+      {lab && (
+        <div
+          ref={drawerRef}
+          className={cn(
+            'fixed inset-0 z-40 lg:hidden',
+            mobileNavOpen ? 'pointer-events-auto' : 'pointer-events-none',
+          )}
+          aria-hidden={!mobileNavOpen}
+          data-testid="mobile-nav"
+        >
+          <div
+            className={cn(
+              'absolute inset-0 bg-black/50 transition-opacity duration-200 ease-out',
+              mobileNavOpen ? 'opacity-100' : 'opacity-0',
+            )}
+            onClick={() => setMobileNavOpen(false)}
+          />
+          <div
+            ref={drawerPanelRef}
+            tabIndex={-1}
+            className={cn(
+              'absolute inset-y-0 left-0 outline-none transition-transform duration-[280ms] ease-drawer',
+              mobileNavOpen ? 'translate-x-0' : '-translate-x-full',
+            )}
+          >
+            <Sidebar onNavigate={() => setMobileNavOpen(false)} />
+          </div>
+        </div>
+      )}
+
+      <div className={cn('relative flex min-w-0 flex-1 flex-col', lab && 'z-10')}>
+        {lab ? (
+          <Header
+            onOpenMobileNav={() => setMobileNavOpen(true)}
+            {...(navCollapsed ? { onExpandNav: () => setNavCollapsed(false) } : {})}
+          />
+        ) : (
+          <TopNav />
+        )}
         <div ref={pageRef} className="flex min-h-0 flex-1 flex-col">
           <Outlet />
         </div>

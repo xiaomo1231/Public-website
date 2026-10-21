@@ -411,7 +411,7 @@ function TopicTable({
   const cell = 'border-t border-border px-3 py-2 align-top'
   return (
     <div className="overflow-x-auto border border-border bg-card">
-      <table className="data-num w-full min-w-[520px] border-collapse text-[13px]">
+      <table className="data-num w-full min-w-[520px] table-fixed border-collapse text-[13px]">
         <thead className={LAB_TABLE_HEAD_CLASS}>
           <tr>
             <th scope="col" className={cn(head, 'w-14')}>

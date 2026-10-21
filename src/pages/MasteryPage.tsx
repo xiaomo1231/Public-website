@@ -159,7 +159,7 @@ export function MasteryPage(): JSX.Element {
                       className="space-y-1 lecture:py-3 lab:grid lab:items-center lab:gap-x-3 lab:space-y-0 lab:px-3.5 lab:py-2.5 sm:lab:grid-cols-[minmax(0,1fr)_8rem_3rem]"
                     >
                       <div className="flex flex-wrap items-center gap-2 text-sm lab:contents">
-                        <span className="font-medium lecture:text-[15px] lab:font-normal">
+                        <span className="min-w-0 break-words font-medium [overflow-wrap:anywhere] lecture:text-[15px] lab:font-normal">
                           {row.knowledgePoint}{' '}
                           <span className={cn('text-xs font-normal', tone.className)}>
                             {t(tone.bandKey)}
