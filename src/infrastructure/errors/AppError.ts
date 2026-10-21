@@ -38,6 +38,16 @@ export class StorageError extends AppError {
   }
 }
 
+export type BackupErrorCode = 'BACKUP_INVALID' | 'BACKUP_NEWER_VERSION' | 'BACKUP_STORAGE_FULL'
+
+/** A backup file could not be inspected or restored; local data is unchanged. */
+export class BackupError extends AppError {
+  declare readonly code: BackupErrorCode
+  constructor(message: string, code: BackupErrorCode, cause?: unknown) {
+    super(message, code, cause)
+  }
+}
+
 export class AuthError extends AppError {
   constructor(message: string, code = 'AUTH_ERROR') {
     super(message, code)

@@ -188,6 +188,7 @@ Upload → validation → (blob 落 IndexedDB `documentBlobs`) → processingJob
 - 图片走**本地 OCR**（tesseract.js），不联网。
 - 批处理并发 2，单文件错误隔离。
 - **文件大小**：无固定产品上限。`MAX_FILE_BYTES` = 2 GB 只是浏览器单次读入 ArrayBuffer 的技术上限；保存前 `ensureStorageFor`（`infrastructure/files/storageSpace.ts`）用 `navigator.storage.estimate()` 检查剩余配额（文件 × 1.2 余量，浏览器无法估算时放行），保存事务遇 `QuotaExceededError` 转为“存储空间已满”提示（事务回滚，不留半成品）。数据管理的存储统计按 `documents.sizeBytes` 累加，不再把所有原文件读进内存；导出用 `exportFile()` 逐个文件拼接 Blob（内容与 `JSON.stringify(exportAll())` 相同），避免超大字符串。
+- **从备份恢复（完整替换）**：设置 → 数据管理「从备份恢复」。`DataManagementService.inspectBackup(file)` 只读检查并返回摘要（备份时间、数据版本、项目 / 文档 / 文件与字节数 / 测验 / 错题 / 单词 / 复习卡片、被忽略的表、缺主键而丢弃的行、无法恢复的文件）；`restoreFromFile(file, { onProgress })` 先检查，再用 `ensureStorageFor(文件字节 + 表数据)` 查配额，然后在**一个 rw 事务**里清空除 `cryptoKeys` 外的全部表并写入备份：任何失败（截断 / 坏 base64 / 写入错误 / 配额满）整体回滚，原数据不变。文件用 `infrastructure/backup/backupReader.ts` 流式读取（按切片 + 流式 `TextDecoder`，逐行 `JSON.parse`，每个文件的 base64 分段校验 / 解码），不会整份读成字符串；读文件经事务对象的 `waitFor`（Dexie.waitFor 的机制）保持事务存活，写入经 `tx.table()`（扫描中大量原生 await 后 Dexie 的隐式事务 zone 不可靠）。数据版本高于当前 `db.verno` 拒绝（`BACKUP_NEWER_VERSION`）；未知表忽略并报告；`user` / `settings` 只收 `singleton`。**API 密钥不在备份里**，恢复后为空（界面提示重新填写，完成后整页重新加载）；`referenceImages` / `referenceImageBlobs`（联网参考图片缓存，不导出）恢复时清空。导出的文件条目从本版起带 `projectId`（旧键不变）；旧备份缺 `projectId` 时按 `documents` / `visualSources` 行补回，补不回的文件跳过并计数。导出覆盖的表在 `EXPORTED_TABLES`，有意不导出的在 `NOT_EXPORTED_TABLES`（`cryptoKeys` / `referenceImages` / `referenceImageBlobs`），测试保证每张表都在其中之一。没有大小上限（单个文件仍受浏览器 ArrayBuffer 上限约束）。
 - 结构识别只在 `materialType === 'textbook'` 时执行；无信号时退化为单个 `General Course Material`（`confidence: 'low'`），**不发明章节**。
 
 ### 课程内容持久化与 freshness（`CourseContent`）
@@ -444,6 +445,7 @@ docs/             architecture.md
 | 7z.6 | 两种界面风格：讲义（默认）/ 精密实验室；风格 token 与配色分层、`lecture:` / `lab:` 变体、全站页面重排、测验键盘作答                                                                                                                      | 已提交（未发布）                                                                                                               |
 | 7z.7 | 界面验收修复：切换风格不重载、动画与滚动性能、测验键盘与读屏、表格与长文本、焦点与层级、删除首页函数图                                                                                                                                   | 已提交（未发布）                                                                                                               |
 | 7z.8 | 全站审查修复（本轮）：路由级代码分割（页面按需加载）、死代码与无用文案清理、测试噪音与慢测试、文档同步                                                                                                                                   | 进行中（未发布）                                                                                                               |
+| 7z.9 | 从备份恢复（完整替换）：流式读取与校验、单事务原子替换、导出文件条目带 `projectId`（兼容旧备份）                                                                                                                                         | 进行中（未发布）                                                                                                               |
 | 8    | Dashboard 强化                                                                                                                                                                                                                           | 部分交付（v0.2.8：视觉与交互函数图；v0.3.1：构图与动效打磨；指标类未做）；交互函数图已删除，视觉方向已被 7z.6 两种界面风格取代 |
 | 9    | PWA · a11y · 导入导出打磨                                                                                                                                                                                                                | 未开始                                                                                                                         |
 
@@ -516,7 +518,7 @@ docs/             architecture.md
 ### 已知限制
 
 - 需自备 AI API；不配置时仅上传与本地处理可用（状态是 `no-provider`，不是 failed）。
-- 数据绑定浏览器 origin；换地址/清站点数据会看不到数据，需用「数据管理 → 导出数据」备份。
+- 数据绑定浏览器 origin；换地址/清站点数据会看不到数据，需用「数据管理 → 导出数据」备份，再用「从备份恢复」导回。恢复是**完整替换**（不合并），不恢复 API 密钥（需重新填写）与联网参考图片缓存（可重新查找）。
 - 数学等价判断有边界，极复杂表达式返回「无法自动判定」，不计入成绩。
 - OCR 质量取决于图片清晰度；手写内容提取效果有限。
 - 课程分析为项目级（覆盖该项目全部已处理文档），非逐文档结果，也非章节级。

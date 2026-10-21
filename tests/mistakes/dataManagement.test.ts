@@ -154,8 +154,20 @@ describe('DataManagementService', () => {
     expect(JSON.stringify(bundle)).not.toContain('legacy-secret')
     expect(JSON.stringify(bundle)).not.toContain('encrypted-secret')
     expect(bundle.blobs).toEqual([
-      { id: 'doc', kind: 'document', mimeType: 'application/pdf', bytesBase64: 'AAF//w==' },
-      { id: 'figure', kind: 'visualSource', mimeType: 'image/png', bytesBase64: 'AAF//w==' },
+      {
+        id: 'doc',
+        kind: 'document',
+        mimeType: 'application/pdf',
+        projectId: project.id,
+        bytesBase64: 'AAF//w==',
+      },
+      {
+        id: 'figure',
+        kind: 'visualSource',
+        mimeType: 'image/png',
+        projectId: project.id,
+        bytesBase64: 'AAF//w==',
+      },
     ])
   })
 

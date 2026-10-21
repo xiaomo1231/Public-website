@@ -1484,6 +1484,54 @@ export const zhCN: Record<TranslationKey, string> = {
   'data.deleteAllAction': '删除全部',
   'data.clearAction': '清空设置',
 
+  'backup.title': '从备份恢复',
+  'backup.description':
+    '用之前「导出数据」得到的 .json 文件替换本机的全部数据。恢复前会先检查文件，确认后才会写入。',
+  'backup.choose': '选择备份文件',
+  'backup.inspecting': '正在检查备份…',
+  'backup.inspectFailed': '无法使用这个备份',
+  'backup.dialogTitle': '从备份恢复？',
+  'backup.file': '{name}（{size}）',
+  'backup.exportedAt': '备份时间',
+  'backup.schemaVersion': '数据版本',
+  'backup.unknownDate': '未知',
+  'backup.projects': '项目',
+  'backup.documents': '文档',
+  'backup.files': '文件与图片',
+  'backup.filesValue': '{count} 个 · {size}',
+  'backup.quizzes': '测验',
+  'backup.mistakes': '错题',
+  'backup.vocabWords': '已学单词',
+  'backup.reviewCards': '复习卡片',
+  'backup.warnIgnoredTables': '备份中有本版本不认识的数据（{names}），将被忽略。',
+  'backup.warnDroppedRows': '{count} 条记录缺少编号，将被跳过。',
+  'backup.warnSkippedFiles': '{count} 个文件无法确定所属的课程或已损坏，将被跳过。',
+  'backup.replaceWarning': '本机现有数据会被全部替换，无法撤销。',
+  'backup.notRestored':
+    '备份不包含 API 密钥和联网参考图片：恢复后需要在「设置 → AI」重新填写 API 密钥，参考图片可在课时中重新查找。',
+  'backup.exportFirst': '先导出当前数据',
+  'backup.acknowledge': '我已了解：本机现有数据会被备份内容替换',
+  'backup.restore': '恢复',
+  'backup.restoring': '正在恢复…',
+  'backup.stage.checking': '正在检查备份文件',
+  'backup.stage.writing': '正在写入数据',
+  'backup.stage.files': '正在写入文件',
+  'backup.filesProgress': '{done} / {total} 个文件',
+  'backup.doneTitle': '恢复完成',
+  'backup.doneBody':
+    '数据已从备份恢复。备份不包含 API 密钥，请在「设置 → AI」中重新填写。点击「完成」后应用会重新加载。',
+  'backup.finish': '完成',
+  'backup.failedTitle': '恢复失败',
+  'backup.unchanged': '本机数据没有被改动。',
+  'backup.errors.invalid':
+    '这个文件不是完整的备份（可能下载未完成、被截断或被修改过）。请用「导出数据」重新生成备份后再试。',
+  'backup.errors.newerVersion':
+    '备份来自更新版本的应用（数据版本 {backup}，当前 {current}），请先更新应用后再恢复。',
+  'backup.errors.storageFull':
+    '浏览器存储空间已满，恢复没有完成。可以清理浏览器中其他网站的数据，或在空间更大的设备上恢复。',
+  'backup.errors.restoreFailed':
+    '恢复时出错（{reason}）。可以重试；若仍失败，请重新导出备份后再恢复。',
+
   'deleteProject.title': '删除项目',
   'deleteProject.description':
     '永久删除该项目及其中的全部内容 —— 文档、分块、测验、错题、导师会话和课程分析。此操作无法撤销。',

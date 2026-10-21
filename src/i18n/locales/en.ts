@@ -1599,6 +1599,56 @@ export const en = {
   'data.deleteAllAction': 'Delete everything',
   'data.clearAction': 'Clear settings',
 
+  'backup.title': 'Restore from backup',
+  'backup.description':
+    'Replace all local data with a .json file made by “Export data”. The file is checked first; nothing is written until you confirm.',
+  'backup.choose': 'Choose backup file',
+  'backup.inspecting': 'Checking backup…',
+  'backup.inspectFailed': 'This backup cannot be used',
+  'backup.dialogTitle': 'Restore from backup?',
+  'backup.file': '{name} ({size})',
+  'backup.exportedAt': 'Backed up',
+  'backup.schemaVersion': 'Data version',
+  'backup.unknownDate': 'unknown',
+  'backup.projects': 'Projects',
+  'backup.documents': 'Documents',
+  'backup.files': 'Files and images',
+  'backup.filesValue': '{count} · {size}',
+  'backup.quizzes': 'Quizzes',
+  'backup.mistakes': 'Mistakes',
+  'backup.vocabWords': 'Words learned',
+  'backup.reviewCards': 'Review cards',
+  'backup.warnIgnoredTables':
+    'The backup contains data this version does not know ({names}); it will be ignored.',
+  'backup.warnDroppedRows': '{count} records have no id and will be skipped.',
+  'backup.warnSkippedFiles':
+    '{count} files belong to no known course or are damaged and will be skipped.',
+  'backup.replaceWarning': 'All data on this device will be replaced. This cannot be undone.',
+  'backup.notRestored':
+    'Backups contain no API key and no web reference images: re-enter the API key in Settings → AI afterwards; reference images can be searched again from a lesson.',
+  'backup.exportFirst': 'Export current data first',
+  'backup.acknowledge': 'I understand that the data on this device will be replaced by the backup',
+  'backup.restore': 'Restore',
+  'backup.restoring': 'Restoring…',
+  'backup.stage.checking': 'Checking the backup file',
+  'backup.stage.writing': 'Writing data',
+  'backup.stage.files': 'Writing files',
+  'backup.filesProgress': '{done} / {total} files',
+  'backup.doneTitle': 'Restore complete',
+  'backup.doneBody':
+    'Your data was restored from the backup. Backups contain no API key, so re-enter it in Settings → AI. The app reloads when you click Done.',
+  'backup.finish': 'Done',
+  'backup.failedTitle': 'Restore failed',
+  'backup.unchanged': 'The data on this device was not changed.',
+  'backup.errors.invalid':
+    'This file is not a complete backup (the download may be unfinished, truncated or edited). Make a new backup with “Export data” and try again.',
+  'backup.errors.newerVersion':
+    'This backup comes from a newer version of the app (data version {backup}, this version {current}). Update the app first, then restore.',
+  'backup.errors.storageFull':
+    'Browser storage is full, so the restore did not finish. Free space by clearing other sites’ data in the browser, or restore on a device with more space.',
+  'backup.errors.restoreFailed':
+    'Restoring failed ({reason}). Try again; if it keeps failing, export a new backup and restore that.',
+
   'deleteProject.title': 'Delete a project',
   'deleteProject.description':
     'Permanently removes the project and everything inside it — documents, chunks, quizzes, mistakes, tutor sessions, and course analysis. This cannot be undone.',

@@ -8,6 +8,7 @@ import { LoadingState } from '@/shared/ui/LoadingState'
 import { ConfirmDialog } from '@/shared/ui/ConfirmDialog'
 import { DataManagementService, type DataInventory } from '@/services/dataManagementService'
 import { DeleteProjectDialog } from './DeleteProjectDialog'
+import { RestoreBackupSection } from './RestoreBackupSection'
 import { useSettingsStore } from '@/features/settings/settingsStore'
 import { SettingsService } from '@/services/settingsService'
 import { useProjectStore } from '@/features/project/projectStore'
@@ -192,6 +193,8 @@ export function DataManagementPanel({
             {t('data.deleteAll')}
           </Button>
         </div>
+
+        <RestoreBackupSection onExport={handleExport} exporting={exporting} />
 
         <p className="text-xs text-muted-foreground">
           {t('data.privacy')}
