@@ -35,6 +35,9 @@ import {
 } from '@/shared/ui/Dialog'
 import { TruncatedText } from '@/shared/ui/TruncatedText'
 import { friendlyAIError } from '@/shared/lib/aiErrors'
+import { isGenerationInterruption } from '@/shared/lib/generationControl'
+import { useGenerationRun } from '@/shared/lib/useGenerationRun'
+import { GenerationControls } from '@/shared/ui/GenerationControls'
 import { useTranslation, type TranslationKey } from '@/i18n'
 
 const NONE = '__none__'
@@ -150,6 +153,14 @@ export function HomeworkAnswerDialog({
   const [generationProgress, setGenerationProgress] = useState<AnswerGenerationProgress | null>(
     null,
   )
+  // Generation the student can pause; it keeps running when the dialog closes.
+  const generation = useGenerationRun()
+  /** A paused generation: what is left (`null` = whatever still needs it). */
+  const [paused, setPaused] = useState<{
+    remainingIds: string[] | null
+    done: number
+    total: number
+  } | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
   const [confirmDelete, setConfirmDelete] = useState(false)
@@ -255,24 +266,59 @@ export function HomeworkAnswerDialog({
         setNotice(t('homework.answer.unmatched', { count: 0 }))
         return
       }
-      const result = await service.generateAnswerContent(set.id, undefined, setGenerationProgress)
-      onChanged()
-      // Reload first: `load()` clears the notice, so set it afterwards.
-      await load()
-      setNotice(
-        result.generated === 0 && result.failed === 0
-          ? t('homework.answer.upToDate')
-          : t('homework.answer.generatedSummary', {
-              generated: result.generated,
-              failed: result.failed,
-              skipped: result.skipped ?? 0,
-            }),
-      )
+      await generate(undefined, 'all')
     } catch (err) {
       setError(friendlyAIError(err))
     } finally {
       setBusy(false)
       setGenerationProgress(null)
+    }
+  }
+
+  /**
+   * Generate help from the professor answer — for the questions that need it
+   * (`ids` undefined) or an explicit list. Pausing keeps every finished
+   * question; 继续 then does only the rest.
+   */
+  async function generate(ids: readonly string[] | undefined, kind: 'all' | 'one'): Promise<void> {
+    const run = generation.start()
+    setPaused(null)
+    let last: AnswerGenerationProgress | null = null
+    try {
+      const result = await service.generateAnswerContent(
+        set.id,
+        ids,
+        (progress) => {
+          last = progress
+          setGenerationProgress(progress)
+        },
+        { control: run },
+      )
+      onChanged()
+      // Reload first: `load()` clears the notice, so set it afterwards.
+      await load()
+      if (result.paused) {
+        const snapshot = last as AnswerGenerationProgress | null
+        setPaused({
+          remainingIds: ids ? result.remainingIds : null,
+          done: snapshot?.completed ?? 0,
+          total: snapshot?.total ?? result.remainingIds.length,
+        })
+        return
+      }
+      setNotice(
+        kind === 'all' && result.generated === 0 && result.failed === 0
+          ? t('homework.answer.upToDate')
+          : t('homework.answer.generatedSummary', {
+              generated: result.generated,
+              failed: result.failed,
+              skipped: kind === 'all' ? (result.skipped ?? 0) : 0,
+            }),
+      )
+    } catch (err) {
+      if (!isGenerationInterruption(err, run)) throw err
+    } finally {
+      run.finish()
     }
   }
 
@@ -282,20 +328,22 @@ export function HomeworkAnswerDialog({
     setNotice(null)
     setGenerationProgress(null)
     try {
-      const result = await service.generateAnswerContent(
-        set.id,
-        [questionId],
-        setGenerationProgress,
-      )
-      onChanged()
-      await load()
-      setNotice(
-        t('homework.answer.generatedSummary', {
-          generated: result.generated,
-          failed: result.failed,
-          skipped: 0,
-        }),
-      )
+      await generate([questionId], 'one')
+    } catch (err) {
+      setError(friendlyAIError(err))
+    } finally {
+      setBusy(false)
+      setGenerationProgress(null)
+    }
+  }
+
+  async function handleResume(): Promise<void> {
+    if (!paused) return
+    setBusy(true)
+    setError(null)
+    setNotice(null)
+    try {
+      await generate(paused.remainingIds ?? undefined, paused.remainingIds ? 'one' : 'all')
     } catch (err) {
       setError(friendlyAIError(err))
     } finally {
@@ -440,6 +488,17 @@ export function HomeworkAnswerDialog({
             {notice}
           </div>
         )}
+        {paused && !generation.active && (
+          <div className="rounded-lg border border-border/70 bg-muted/20 p-3">
+            <GenerationControls
+              kind="parts"
+              state={generation.state === 'stopped' ? 'stopped' : 'paused'}
+              done={paused.done}
+              total={paused.total}
+              {...(busy ? {} : { onResume: () => void handleResume() })}
+            />
+          </div>
+        )}
         {generationProgress && generationProgress.total > 0 && (
           <div
             className="space-y-2 rounded-lg border border-border/70 bg-muted/20 p-3"
@@ -451,15 +510,27 @@ export function HomeworkAnswerDialog({
                 total: generationProgress.total,
               })}
             </p>
-            <Progress
-              value={(100 * generationProgress.completed) / generationProgress.total}
-              aria-label={t('homework.answer.generationProgressLabel')}
-              aria-valuenow={Math.round(
-                (100 * generationProgress.completed) / generationProgress.total,
+            <div className="flex flex-wrap items-center gap-3">
+              <Progress
+                className="min-w-[8rem] flex-1"
+                value={(100 * generationProgress.completed) / generationProgress.total}
+                aria-label={t('homework.answer.generationProgressLabel')}
+                aria-valuenow={Math.round(
+                  (100 * generationProgress.completed) / generationProgress.total,
+                )}
+                aria-valuemin={0}
+                aria-valuemax={100}
+              />
+              {generation.active && generation.run && (
+                <GenerationControls
+                  kind="parts"
+                  state={generation.state}
+                  stopRequested={generation.run.stopRequested}
+                  onPause={generation.requestPause}
+                  onStopNow={generation.stopNow}
+                />
               )}
-              aria-valuemin={0}
-              aria-valuemax={100}
-            />
+            </div>
             <p className="text-xs text-muted-foreground">
               {t('homework.answer.generationCanClose')}
             </p>

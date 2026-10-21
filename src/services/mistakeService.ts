@@ -218,6 +218,17 @@ export class MistakeService {
     return this.repo.update(id, { analysisStatus: 'failed', analysisError: error })
   }
 
+  /** Put back the analysis state a stopped run found (a stop is not a failure). */
+  async restoreAnalysisState(
+    id: string,
+    previous: Pick<Mistake, 'analysisStatus' | 'analysisError'>,
+  ): Promise<Mistake> {
+    return this.repo.update(id, {
+      analysisStatus: previous.analysisStatus,
+      analysisError: previous.analysisError,
+    })
+  }
+
   async markAnalysisRunning(id: string): Promise<Mistake> {
     return this.repo.update(id, { analysisStatus: 'analyzing', analysisError: undefined })
   }

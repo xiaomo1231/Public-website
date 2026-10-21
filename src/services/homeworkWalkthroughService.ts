@@ -3,7 +3,7 @@ import type { AppDatabase } from '@/infrastructure/db/database'
 import { getDb } from '@/infrastructure/db/database'
 import type { ChatMessage } from '@/infrastructure/ai/types'
 import { prompts } from '@/infrastructure/ai/prompts'
-import { TimeoutError as AITimeoutError } from '@/infrastructure/ai/errors'
+import { AbortedError, TimeoutError as AITimeoutError } from '@/infrastructure/ai/errors'
 import { AppError, NotFoundError } from '@/infrastructure/errors/AppError'
 import { HomeworkRepository } from '@/entities/homework/repository'
 import { UserRepository } from '@/entities/user/repository'
@@ -29,6 +29,12 @@ import { WalkthroughRepository } from '@/entities/homework/walkthroughRepository
 import type { HomeworkQuestion, HomeworkSet } from '@/entities/homework/types'
 import type { SubjectContext } from '@/entities/project/types'
 import { friendlyAIError } from '@/shared/lib/aiErrors'
+import {
+  createGenerationRun,
+  isAbortError,
+  type GenerationControl,
+  type GenerationRun,
+} from '@/shared/lib/generationControl'
 import { t } from '@/i18n'
 import { HomeworkService } from './homeworkService'
 import { loadProjectSubjectContext } from './projectSubject'
@@ -67,6 +73,13 @@ export interface WalkthroughProgress {
 export interface WalkthroughRunResult {
   generated: number
   failed: number
+  /**
+   * The run was paused or stopped before everything was written. The finished
+   * sections are saved; `resume()` writes only what is left.
+   */
+  paused?: boolean
+  /** The interruption was an immediate stop (in-flight requests aborted). */
+  stopped?: boolean
   /** Set when the provider refused the account (no credit, bad key). */
   fatalError?: string
 }
@@ -74,10 +87,25 @@ export interface WalkthroughRunResult {
 interface Run {
   promise: Promise<WalkthroughRunResult>
   progress: WalkthroughProgress
+  control: GenerationControl
+}
+
+/** How a paused run ended, so the panel can offer 继续 and resume exactly. */
+export interface WalkthroughPausedRun {
+  stopped: boolean
+  done: number
+  total: number
+  /**
+   * A paused "regenerate everything" run: sections written at or after this
+   * time were already rewritten by it and are not redone on resume.
+   */
+  forceSince?: number
 }
 
 /** Module scope: services are rebuilt per page, a run must outlive that. */
 const runs = new Map<string, Run>()
+/** Paused runs, for this page visit (the saved sections themselves persist). */
+const pausedRuns = new Map<string, WalkthroughPausedRun>()
 const listeners = new Set<() => void>()
 
 function emit(): void {
@@ -87,6 +115,18 @@ function emit(): void {
 export function subscribeWalkthroughRuns(listener: () => void): () => void {
   listeners.add(listener)
   return () => listeners.delete(listener)
+}
+
+/** The controller of the run in progress (pause / stop it from any mounted panel). */
+export function walkthroughRunControl(setId: string): GenerationRun | undefined {
+  const control = runs.get(setId)?.control
+  return control && 'requestPause' in control ? (control as GenerationRun) : undefined
+}
+
+/** The run that was paused during this page visit, if any. */
+export function walkthroughPausedRun(setId: string): WalkthroughPausedRun | undefined {
+  const paused = pausedRuns.get(setId)
+  return paused ? { ...paused } : undefined
 }
 
 export function walkthroughRunProgress(setId: string): WalkthroughProgress | undefined {
@@ -155,23 +195,60 @@ export class HomeworkWalkthroughService {
    * Write what is missing, failed or out of date (everything with `force`).
    * Concurrent calls for the same assignment share one run.
    */
-  generate(setId: string, options: { force?: boolean } = {}): Promise<WalkthroughRunResult> {
+  generate(
+    setId: string,
+    options: {
+      force?: boolean
+      /** With `force`: sections written at or after this time are kept. */
+      forceSince?: number
+      /** Pause / stop control; a run of its own is created when absent. */
+      control?: GenerationControl
+    } = {},
+  ): Promise<WalkthroughRunResult> {
     const existing = runs.get(setId)
     if (existing) return existing.promise
+    const control = options.control ?? createGenerationRun()
+    const forceSince = options.force ? (options.forceSince ?? Date.now()) : undefined
+    pausedRuns.delete(setId)
     const progress: WalkthroughProgress = { total: 0, done: 0, failed: 0, running: [] }
-    const promise = this.run(setId, options.force ?? false, progress).finally(() => {
-      runs.delete(setId)
-      emit()
-    })
-    runs.set(setId, { promise, progress })
+    const promise = this.run(setId, forceSince, progress, control)
+      .then((result) => {
+        if (result.paused) {
+          pausedRuns.set(setId, {
+            stopped: result.stopped === true,
+            done: progress.done,
+            total: progress.total,
+            ...(forceSince !== undefined ? { forceSince } : {}),
+          })
+        }
+        return result
+      })
+      .finally(() => {
+        runs.delete(setId)
+        emit()
+      })
+    runs.set(setId, { promise, progress, control })
     emit()
     return promise
   }
 
+  /** Continue a paused run with only what is left (a plain update otherwise). */
+  resume(
+    setId: string,
+    options: { control?: GenerationControl } = {},
+  ): Promise<WalkthroughRunResult> {
+    const paused = pausedRuns.get(setId)
+    return this.generate(setId, {
+      ...(paused?.forceSince !== undefined ? { force: true, forceSince: paused.forceSince } : {}),
+      ...(options.control ? { control: options.control } : {}),
+    })
+  }
+
   private async run(
     setId: string,
-    force: boolean,
+    forceSince: number | undefined,
     progress: WalkthroughProgress,
+    control: GenerationControl,
   ): Promise<WalkthroughRunResult> {
     const ai = this.requireAI()
     const state = await this.state(setId)
@@ -184,10 +261,16 @@ export class HomeworkWalkthroughService {
       setId,
       language: state.language,
     }
+    // A forced run redoes every section it has not rewritten yet, so a resumed
+    // "regenerate everything" never redoes what it already wrote.
+    const redo = (entry: WalkthroughPlanEntry): boolean =>
+      entry.needsWork ||
+      (forceSince !== undefined &&
+        !(entry.section?.status !== 'failed' && (entry.section?.generatedAt ?? 0) >= forceSince))
     const questionEntries = state.plan.filter((entry) => entry.kind === 'question')
-    const todo = questionEntries.filter((entry) => force || entry.needsWork)
+    const todo = questionEntries.filter(redo)
     const frameEntries = state.plan.filter((entry) => entry.kind !== 'question')
-    const frameNeeded = force || todo.length > 0 || frameEntries.some((entry) => entry.needsWork)
+    const frameNeeded = todo.length > 0 || frameEntries.some(redo)
     progress.total = todo.length + (frameNeeded ? 1 : 0)
     emit()
 
@@ -196,6 +279,8 @@ export class HomeworkWalkthroughService {
       state.questions.map((question, index) => [question.id, questionLabel(question, index)]),
     )
     let fatal: string | undefined
+    /** Parts left undone because the run was paused or stopped. */
+    let interrupted = false
     /** The assignment was deleted during the run: stop asking, write nothing. */
     let gone = false
     const save = async (section: WalkthroughSection): Promise<void> => {
@@ -204,17 +289,37 @@ export class HomeworkWalkthroughService {
 
     const queue = [...todo]
     const worker = async (): Promise<void> => {
-      for (let entry = queue.shift(); entry; entry = queue.shift()) {
+      while (queue.length > 0) {
         if (fatal || gone) return
+        // A pause lets the sections in flight finish; no new one starts.
+        if (!control.shouldContinue()) {
+          interrupted = true
+          return
+        }
+        const entry = queue.shift()!
         progress.running.push(entry.id)
         emit()
         const label = labels.get(entry.question!.id) ?? '?'
+        let aborted = false
         try {
-          const section = await this.writeQuestionSection(ai, entry, label, state.language, subject)
+          const section = await this.writeQuestionSection(
+            ai,
+            entry,
+            label,
+            state.language,
+            subject,
+            control.signal,
+          )
           // "Not enough information" is a finished answer, not a failure.
           await save(section)
           result.generated += 1
         } catch (err) {
+          if (isAbortError(err, control.signal)) {
+            // Stopped: not a failure, nothing is written, it stays to do.
+            aborted = true
+            interrupted = true
+            continue
+          }
           const kind = classifyHomeworkError(err)
           if (isAccountFatalError(kind)) fatal = friendlyAIError(err)
           result.failed += 1
@@ -225,7 +330,7 @@ export class HomeworkWalkthroughService {
           }
         } finally {
           progress.running = progress.running.filter((id) => id !== entry.id)
-          progress.done += 1
+          if (!aborted) progress.done += 1
           emit()
         }
       }
@@ -234,16 +339,25 @@ export class HomeworkWalkthroughService {
       Array.from({ length: Math.min(SECTION_CONCURRENCY, queue.length) }, () => worker()),
     )
 
-    if (frameNeeded && !fatal && !gone) {
+    if (frameNeeded && !fatal && !gone && (interrupted || !control.shouldContinue())) {
+      // The opening and summary come last; a paused run leaves them to do.
+      interrupted = true
+    } else if (frameNeeded && !fatal && !gone) {
       progress.running.push('overview', 'summary')
       emit()
+      let aborted = false
       try {
-        const frame = await this.writeFrame(ai, setId, state, labels, subject)
+        const frame = await this.writeFrame(ai, setId, state, labels, subject, control.signal)
         if (frame) {
           for (const section of frame) await save(section)
           result.generated += 1
         }
       } catch (err) {
+        if (isAbortError(err, control.signal)) {
+          aborted = true
+          interrupted = true
+          return this.finishInterrupted(base.id, state, result, fatal, control)
+        }
         if (isAccountFatalError(classifyHomeworkError(err))) fatal = friendlyAIError(err)
         result.failed += 1
         progress.failed += 1
@@ -254,13 +368,31 @@ export class HomeworkWalkthroughService {
         }
       } finally {
         progress.running = []
-        progress.done += 1
+        if (!aborted) progress.done += 1
         emit()
       }
     }
 
+    if (interrupted) return this.finishInterrupted(base.id, state, result, fatal, control)
     await this.repo.keepSections(base.id, new Set(state.plan.map((entry) => entry.id)))
     return fatal ? { ...result, fatalError: fatal } : result
+  }
+
+  /** End an interrupted run: the finished sections are saved, the rest stays to do. */
+  private async finishInterrupted(
+    id: string,
+    state: WalkthroughState,
+    result: WalkthroughRunResult,
+    fatal: string | undefined,
+    control: GenerationControl,
+  ): Promise<WalkthroughRunResult> {
+    await this.repo.keepSections(id, new Set(state.plan.map((entry) => entry.id)))
+    return {
+      ...result,
+      paused: true,
+      ...(control.signal.aborted ? { stopped: true } : {}),
+      ...(fatal ? { fatalError: fatal } : {}),
+    }
   }
 
   private async writeQuestionSection(
@@ -269,6 +401,7 @@ export class HomeworkWalkthroughService {
     label: string,
     language: WalkthroughLanguage,
     subject: SubjectContext | undefined,
+    signal?: AbortSignal,
   ): Promise<WalkthroughSection> {
     const question = entry.question!
     const deferred =
@@ -299,7 +432,7 @@ export class HomeworkWalkthroughService {
         }),
       },
     ]
-    const data = await requestSectionJSON(ai, messages)
+    const data = await requestSectionJSON(ai, messages, signal)
     const normalized = prompts.homeworkWalkthrough.normalizeQuestionSection(data)
     if (!normalized) throw new AppError(t('homework.walkthrough.invalid'), 'INVALID_RESPONSE')
     const now = Date.now()
@@ -338,6 +471,7 @@ export class HomeworkWalkthroughService {
     state: WalkthroughState,
     labels: ReadonlyMap<string, string>,
     subject: SubjectContext | undefined,
+    signal?: AbortSignal,
   ): Promise<WalkthroughSection[] | null> {
     const stored = await this.repo.get(walkthroughId(setId, state.language))
     const byId = new Map((stored?.sections ?? []).map((section) => [section.id, section]))
@@ -369,7 +503,9 @@ export class HomeworkWalkthroughService {
         }),
       },
     ]
-    const frame = prompts.homeworkWalkthrough.normalizeFrame(await requestSectionJSON(ai, messages))
+    const frame = prompts.homeworkWalkthrough.normalizeFrame(
+      await requestSectionJSON(ai, messages, signal),
+    )
     if (!frame) throw new AppError(t('homework.walkthrough.invalid'), 'INVALID_RESPONSE')
     const frameHash = state.plan.find((entry) => entry.kind === 'overview')!.inputHash
     const now = Date.now()
@@ -428,7 +564,11 @@ function failedSection(
  * provider that rejects the size gets half; brief outages are retried twice.
  * Each attempt has its own deadline even while the stream keeps trickling.
  */
-async function requestSectionJSON(ai: AIService, messages: ChatMessage[]): Promise<unknown> {
+async function requestSectionJSON(
+  ai: AIService,
+  messages: ChatMessage[],
+  runSignal?: AbortSignal,
+): Promise<unknown> {
   const inputChars = messages.reduce((sum, message) => sum + message.content.length, 0)
   const userCap =
     Number.isFinite(ai.maxOutputTokens) && ai.maxOutputTokens > 0 ? ai.maxOutputTokens : Infinity
@@ -448,8 +588,16 @@ async function requestSectionJSON(ai: AIService, messages: ChatMessage[]): Promi
   for (;;) {
     attempts += 1
     tried.add(budget)
+    if (runSignal?.aborted) throw new AbortedError()
     const controller = new AbortController()
-    const timer = setTimeout(() => controller.abort(), SECTION_DEADLINE_MS)
+    let timedOut = false
+    const timer = setTimeout(() => {
+      timedOut = true
+      controller.abort()
+    }, SECTION_DEADLINE_MS)
+    // The run's stop aborts this attempt too.
+    const onRunAbort = (): void => controller.abort()
+    runSignal?.addEventListener('abort', onRunAbort)
     try {
       const { data } = await ai.streamJSON<unknown>(messages, undefined, {
         maxTokens: budget,
@@ -457,7 +605,9 @@ async function requestSectionJSON(ai: AIService, messages: ChatMessage[]): Promi
       })
       return data
     } catch (err) {
-      const failure = controller.signal.aborted ? new AITimeoutError(SECTION_DEADLINE_MS) : err
+      // Stopped by the student: never a timeout, never retried.
+      if (runSignal?.aborted) throw new AbortedError()
+      const failure = timedOut ? new AITimeoutError(SECTION_DEADLINE_MS) : err
       const kind = classifyHomeworkError(failure)
       if (attempts >= SECTION_MAX_ATTEMPTS) throw failure
       if (kind === 'truncated') {
@@ -472,11 +622,13 @@ async function requestSectionJSON(ai: AIService, messages: ChatMessage[]): Promi
       } else if (isRetryableHomeworkError(kind) && retries < MAX_TRANSIENT_RETRIES) {
         retries += 1
         await new Promise((resolve) => setTimeout(resolve, RETRY_BASE_DELAY_MS * 2 ** retries))
+        if (runSignal?.aborted) throw new AbortedError()
       } else {
         throw failure
       }
     } finally {
       clearTimeout(timer)
+      runSignal?.removeEventListener('abort', onRunAbort)
     }
   }
 }

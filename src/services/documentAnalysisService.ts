@@ -39,6 +39,44 @@ import { tokenize } from './classProgressService'
 import { isReferenceOnlyMaterial, resolveMaterialType } from '@/entities/document/types'
 import { normalizeMathNotation } from '@/infrastructure/files/mathNotation'
 import { t } from '@/i18n'
+import { fnv1a } from '@/shared/lib/hash'
+import {
+  GenerationPausedError,
+  isGenerationInterruption,
+  resolveControl,
+  type GenerationControl,
+} from '@/shared/lib/generationControl'
+
+/**
+ * Parts of a multi-part analysis that already came back, for this page visit
+ * only. A paused (or failed) run commits nothing — the analysis is stored as a
+ * whole — so 「继续」 reuses these and only requests the remaining parts. Keyed
+ * by the exact request (prompt version + subject + system and user prompt);
+ * a reload loses them.
+ */
+const analyzedParts = new Map<string, DocumentAnalysisOutput>()
+/** Bound on remembered parts (each is a whole part's structured output). */
+const MAX_REMEMBERED_PARTS = 64
+
+function rememberPart(key: string, output: DocumentAnalysisOutput): void {
+  analyzedParts.delete(key)
+  analyzedParts.set(key, output)
+  while (analyzedParts.size > MAX_REMEMBERED_PARTS) {
+    const oldest = analyzedParts.keys().next().value
+    if (oldest === undefined) break
+    analyzedParts.delete(oldest)
+  }
+}
+
+/** Test helper — forget every remembered part. */
+export function clearAnalyzedPartsForTesting(): void {
+  analyzedParts.clear()
+}
+
+/** How many parts are remembered (tests / diagnostics). */
+export function rememberedAnalysisPartCount(): number {
+  return analyzedParts.size
+}
 
 /** Parts of a long course analysed at the same time. */
 const ANALYSIS_CONCURRENCY = 2
@@ -80,6 +118,8 @@ export interface DocumentAnalysisProgress {
   stage: 'collecting' | 'extracting' | 'analyzing' | 'storing' | 'done' | 'failed'
   progress: number
   message?: string
+  /** Parts finished / planned, for a multi-part analysis. */
+  parts?: { done: number; total: number }
 }
 
 export type AnalysisProgressListener = (p: DocumentAnalysisProgress) => void
@@ -133,9 +173,16 @@ export class DocumentAnalysisService {
     options: {
       onProgress?: AnalysisProgressListener
       signal?: AbortSignal
+      /**
+       * Pause / stop. A pause lets the parts in flight finish (they are kept
+       * in memory for a later run) and then throws `GenerationPausedError`;
+       * nothing is committed and the stored analysis stays as it was.
+       */
+      control?: GenerationControl
       sideWrites?: AtomicSideWrites
     } = {},
   ): Promise<CourseAnalysisRepository> {
+    const control = resolveControl(options.control, options.signal)
     // Also verifies the project exists. The subject is read here, from the
     // project itself, so every path (manual or automatic) analyses with it.
     await this.projects.get(projectId)
@@ -264,7 +311,8 @@ export class DocumentAnalysisService {
         subject,
         language,
         documentNames: analysisDocs.map((d) => d.name),
-        ...(options.signal ? { signal: options.signal } : {}),
+        promptVersion,
+        control,
         ...(onProgress ? { onProgress } : {}),
       })
       output = mergeDocumentAnalyses(
@@ -283,6 +331,24 @@ export class DocumentAnalysisService {
         })
       }
     } catch (err) {
+      if (isGenerationInterruption(err, control)) {
+        // Paused or stopped: not a failure. Put back whatever was there before
+        // this run (or nothing), so no row is left `analyzing` or `failed`.
+        if (!keepReadyRow) {
+          await this.db.transaction('rw', this.db.projects, this.db.courseAnalyses, async () => {
+            const current = await this.analyses.getByProject(projectId)
+            if (current?.id !== analysisId || current.status !== 'analyzing') return
+            // A project deleted during the run must not get its row back.
+            if (seed && (await this.db.projects.get(projectId)))
+              await this.db.courseAnalyses.put(seed)
+            else await this.db.courseAnalyses.delete(analysisId)
+          })
+        }
+        logger.info('Course analysis paused; the stored analysis is unchanged', { projectId })
+        throw err instanceof GenerationPausedError
+          ? err
+          : new GenerationPausedError(control.signal.aborted)
+      }
       // A failed refresh must never destroy an analysis that is already usable.
       // The ready row was never touched, so there is nothing to restore; let
       // the caller surface the error.
@@ -513,65 +579,101 @@ export class DocumentAnalysisService {
       subject: Parameters<typeof prompts.subjectProfile.withSubject>[1]
       language: 'zh' | 'en' | 'mixed'
       documentNames: string[]
-      signal?: AbortSignal
+      promptVersion: string
+      control: GenerationControl
       onProgress?: AnalysisProgressListener
     },
   ): Promise<DocumentAnalysisOutput[]> {
+    const { control } = context
     const total = segments.length
     const outputs: DocumentAnalysisOutput[] = new Array(total)
-    let next = 0
+    const requests = segments.map((segment, index): { messages: ChatMessage[]; key: string } => {
+      const messages: ChatMessage[] = [
+        {
+          role: 'system',
+          content: prompts.subjectProfile.withSubject(
+            prompts.documentAnalyzer.buildSystemPrompt(),
+            context.subject,
+          ),
+        },
+        {
+          role: 'user',
+          content: prompts.documentAnalyzer.buildUserPrompt({
+            documentName:
+              total === 1
+                ? context.documentNames.join(', ')
+                : segment.documents.map((d) => d.name).join(', '),
+            documentText: segmentText(segment, format),
+            language: context.language,
+            ...(total > 1 ? { part: { index: index + 1, total, label: segment.label } } : {}),
+          }),
+        },
+      ]
+      const text = messages.map((message) => message.content).join('\n\n')
+      // Two independent hashes plus the length make an accidental collision
+      // between two different parts practically impossible.
+      const key = `${context.promptVersion}|${text.length}|${fnv1a(text)}|${fnv1a(`${text.length}:${text}`)}`
+      return { messages, key }
+    })
+    // Parts a paused run already read are reused, never requested again.
     let done = 0
+    requests.forEach((request, index) => {
+      const cached = analyzedParts.get(request.key)
+      if (cached) {
+        outputs[index] = cached
+        done++
+      }
+    })
+    const report = (): void => {
+      if (total <= 1) return
+      context.onProgress?.({
+        stage: 'analyzing',
+        progress: 30 + Math.floor((done / total) * 50),
+        message: t('stage.askingAiPart', { current: done, total }),
+        parts: { done, total },
+      })
+    }
+    report()
+    const queue = requests.map((_, index) => index).filter((index) => !outputs[index])
     let failed = false
+    let interrupted = false
     const worker = async () => {
-      while (!failed && next < total) {
-        const index = next++
-        const segment = segments[index]!
+      while (!failed && queue.length > 0) {
+        if (!control.shouldContinue()) {
+          interrupted = true
+          return
+        }
+        const index = queue.shift()!
+        const request = requests[index]!
         try {
-          outputs[index] = await this.requestAnalysis(
-            [
-              {
-                role: 'system',
-                content: prompts.subjectProfile.withSubject(
-                  prompts.documentAnalyzer.buildSystemPrompt(),
-                  context.subject,
-                ),
-              },
-              {
-                role: 'user',
-                content: prompts.documentAnalyzer.buildUserPrompt({
-                  documentName:
-                    total === 1
-                      ? context.documentNames.join(', ')
-                      : segment.documents.map((d) => d.name).join(', '),
-                  documentText: segmentText(segment, format),
-                  language: context.language,
-                  ...(total > 1 ? { part: { index: index + 1, total, label: segment.label } } : {}),
-                }),
-              },
-            ],
-            {
-              projectId: context.projectId,
-              part: index + 1,
-              parts: total,
-              ...(context.signal ? { signal: context.signal } : {}),
-            },
-          )
+          outputs[index] = await this.requestAnalysis(request.messages, {
+            projectId: context.projectId,
+            part: index + 1,
+            parts: total,
+            signal: control.signal,
+          })
         } catch (err) {
+          // An aborted part is an interruption, not a failure.
+          if (isGenerationInterruption(err, control)) {
+            interrupted = true
+            return
+          }
           // Stop handing out parts; the run fails as a whole.
           failed = true
           throw err
         }
+        // Kept for a later run, in case this one is paused or fails elsewhere.
+        if (total > 1) rememberPart(request.key, outputs[index]!)
         done++
-        if (total > 1) {
-          context.onProgress?.({
-            stage: 'analyzing',
-            progress: 30 + Math.floor((done / total) * 50),
-            message: t('stage.askingAiPart', { current: done, total }),
-          })
-        }
+        report()
       }
     }
-    await Promise.all(Array.from({ length: Math.min(ANALYSIS_CONCURRENCY, total) }, worker))
+    await Promise.all(Array.from({ length: Math.min(ANALYSIS_CONCURRENCY, queue.length) }, worker))
+    if (interrupted || outputs.filter(Boolean).length < total) {
+      throw new GenerationPausedError(control.signal.aborted)
+    }
+    // Committed as a whole now: the remembered parts are no longer needed.
+    for (const request of requests) analyzedParts.delete(request.key)
     return outputs
   }
 

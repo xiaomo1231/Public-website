@@ -20,6 +20,13 @@ import { splitHomeworkSubparts } from '@/entities/homework/splitQuestion'
 import type { DocumentChunk } from '@/entities/chunk/types'
 import type { SourceReference } from '@/entities/courseAnalysis/types'
 import { friendlyAIError } from '@/shared/lib/aiErrors'
+import { fnv1a } from '@/shared/lib/hash'
+import {
+  isAbortError,
+  resolveControl,
+  wasInterrupted,
+  type GenerationControl,
+} from '@/shared/lib/generationControl'
 import { getUILanguage, t } from '@/i18n'
 import { HomeworkRepository } from '@/entities/homework/repository'
 import {
@@ -117,6 +124,62 @@ interface GeneratedQuestionResult {
   question?: HomeworkQuestion
   kind?: HomeworkErrorKind
   skipped?: boolean
+  /** Stopped by the student: the question kept its previous status and content. */
+  interrupted?: boolean
+}
+
+/** Result of (re-)reading an assignment. `paused` — stopped early by the student. */
+export interface HomeworkRunResult {
+  set: HomeworkSet
+  summary: ReanalysisSummary
+  paused?: boolean
+}
+
+/** Options for a run the student can pause or stop. */
+export interface HomeworkRunOptions {
+  control?: GenerationControl
+}
+
+/** Options for a single request the student can stop. */
+export interface HomeworkRequestOptions {
+  signal?: AbortSignal
+}
+
+/**
+ * Batches a paused recognition already read, so 「继续」 only asks for the
+ * rest. Memory only: a reload reads them again. Cleared once a run finishes.
+ */
+const recognizedBatches = new Map<string, { normalized: NormalizedQuestion[]; invalid: boolean }>()
+
+function recognizedBatchKey(documentId: string, batch: readonly DocumentChunk[]): string {
+  const fingerprint = fnv1a(batch.map((chunk) => `${chunk.id}${chunk.text}`).join(''))
+  return `${documentId}:${HOMEWORK_ANALYZER_PROMPT_VERSION}:${batch.length}:${fingerprint}`
+}
+
+function forgetRecognizedBatches(documentId: string): void {
+  for (const key of [...recognizedBatches.keys()]) {
+    if (key.startsWith(`${documentId}:`)) recognizedBatches.delete(key)
+  }
+}
+
+/** One signal that aborts when any of the given ones does. */
+function linkSignals(...signals: Array<AbortSignal | undefined>): {
+  signal: AbortSignal
+  dispose: () => void
+} {
+  const controller = new AbortController()
+  const cleanups: Array<() => void> = []
+  for (const signal of signals) {
+    if (!signal) continue
+    if (signal.aborted) {
+      controller.abort(signal.reason)
+      break
+    }
+    const onAbort = (): void => controller.abort(signal.reason)
+    signal.addEventListener('abort', onAbort)
+    cleanups.push(() => signal.removeEventListener('abort', onAbort))
+  }
+  return { signal: controller.signal, dispose: () => cleanups.forEach((cleanup) => cleanup()) }
 }
 
 export interface AnswerGenerationProgress {
@@ -128,10 +191,7 @@ export interface AnswerGenerationProgress {
 }
 
 /** Coalesce concurrent re-analyses of the same set / regenerations of a question. */
-const setRuns = new Map<
-  string,
-  Promise<{ set: HomeworkSet; summary: ReanalysisSummary } | undefined>
->()
+const setRuns = new Map<string, Promise<HomeworkRunResult | undefined>>()
 const questionRuns = new Map<string, Promise<GeneratedQuestionResult>>()
 const reviewRuns = new Map<string, Promise<HomeworkReviewGuide>>()
 /**
@@ -156,6 +216,8 @@ interface BatchAnalysis {
   failedRanges: number
   /** First batch failure, surfaced when no question could be read at all. */
   firstError?: unknown
+  /** The student paused / stopped: some batches were not read. */
+  paused?: boolean
 }
 
 /**
@@ -229,6 +291,7 @@ export class HomeworkService {
     questionId: string,
     draft: string,
     language: 'zh' | 'en',
+    options: HomeworkRequestOptions = {},
   ): Promise<HomeworkAnswerCheck> {
     const submittedDraft = draft.trim()
     if (!submittedDraft) throw new AppError(t('homework.check.empty'), 'VALIDATION_ERROR')
@@ -304,7 +367,10 @@ export class HomeworkService {
         messages[0]!.content.length + messages[1]!.content.length,
         ai.maxOutputTokens,
       )
-      const { data } = await ai.streamJSON<unknown>(messages, undefined, { maxTokens: budget })
+      const { data } = await ai.streamJSON<unknown>(messages, undefined, {
+        maxTokens: budget,
+        ...(options.signal ? { signal: options.signal } : {}),
+      })
       const assessed = prompts.homeworkAnswerCheck.normalizeAssessment(data)
       if (!assessed) throw new AppError(t('homework.check.invalid'), 'INVALID_RESPONSE')
       if (assessed.status === 'insufficient') {
@@ -339,6 +405,7 @@ export class HomeworkService {
     questionId: string,
     language: 'zh' | 'en',
     force = false,
+    options: HomeworkRequestOptions = {},
   ): Promise<HomeworkReviewGuide> {
     const question = await this.homework.getQuestion(questionId)
     if (!question) throw new AppError(t('homework.questionMissing'), 'NOT_FOUND')
@@ -363,6 +430,7 @@ export class HomeworkService {
       inputHash,
       reviewVersion,
       subject,
+      options.signal,
     ).finally(() => reviewRuns.delete(runKey))
     reviewRuns.set(runKey, run)
     return run
@@ -374,6 +442,7 @@ export class HomeworkService {
     inputHash: string,
     promptVersion: string,
     subject: SubjectInput,
+    signal?: AbortSignal,
   ): Promise<HomeworkReviewGuide> {
     const ai = this.requireAI()
     const deferredAnswer =
@@ -403,7 +472,10 @@ export class HomeworkService {
       messages[0]!.content.length + messages[1]!.content.length,
       ai.maxOutputTokens,
     )
-    const { data } = await ai.streamJSON<unknown>(messages, undefined, { maxTokens: budget })
+    const { data } = await ai.streamJSON<unknown>(messages, undefined, {
+      maxTokens: budget,
+      ...(signal ? { signal } : {}),
+    })
     const normalized = prompts.homeworkReview.normalizeReviewOutput(data)
     if (!normalized) throw new AppError(t('homework.review.invalid'), 'INVALID_RESPONSE')
     if (normalized.status === 'insufficient') {
@@ -443,24 +515,27 @@ export class HomeworkService {
    * check-and-create share one transaction over `homeworkSets` (so two racing
    * callers cannot both insert), and same-tab concurrency is coalesced first.
    */
-  createFromDocument(documentId: string): Promise<HomeworkSet> {
+  createFromDocument(documentId: string, options: HomeworkRunOptions = {}): Promise<HomeworkSet> {
     const running = documentRuns.get(documentId)
     if (running) return running
-    const run = this.runCreateFromDocument(documentId).finally(() =>
+    const run = this.runCreateFromDocument(documentId, options.control).finally(() =>
       documentRuns.delete(documentId),
     )
     documentRuns.set(documentId, run)
     return run
   }
 
-  private async runCreateFromDocument(documentId: string): Promise<HomeworkSet> {
+  private async runCreateFromDocument(
+    documentId: string,
+    control?: GenerationControl,
+  ): Promise<HomeworkSet> {
     const document = await this.loadDocument(documentId)
     if (resolveMaterialType(document.materialType) !== 'homework') {
       throw new AppError(t('homework.notHomework'), 'NOT_HOMEWORK')
     }
     const { set, created } = await this.ensureSetForDocument(document)
     if (!created) return set
-    const { set: finalSet } = await this.runAnalysis(set)
+    const { set: finalSet } = await this.runAnalysis(set, resolveControl(control))
     return finalSet
   }
 
@@ -880,8 +955,11 @@ export class HomeworkService {
   }
 
   /** Regenerate ONE question's help from its stored professor answer. */
-  generateAnswerForQuestion(questionId: string): Promise<HomeworkQuestion | undefined> {
-    return this.startAnswerGenerate(questionId).then((result) => result.question)
+  generateAnswerForQuestion(
+    questionId: string,
+    options: HomeworkRequestOptions = {},
+  ): Promise<HomeworkQuestion | undefined> {
+    return this.startAnswerGenerate(questionId, options.signal).then((result) => result.question)
   }
 
   /**
@@ -893,7 +971,17 @@ export class HomeworkService {
     setId: string,
     questionIds?: readonly string[],
     onProgress?: (progress: AnswerGenerationProgress) => void,
-  ): Promise<{ generated: number; failed: number; skipped: number }> {
+    options: HomeworkRunOptions = {},
+  ): Promise<{
+    generated: number
+    failed: number
+    skipped: number
+    /** Paused / stopped by the student before every question was done. */
+    paused: boolean
+    /** Questions not done yet: pass them back to continue (explicit lists). */
+    remainingIds: string[]
+  }> {
+    const control = resolveControl(options.control)
     const set = await this.homework.getSet(setId)
     if (!set) throw new NotFoundError('HomeworkSet', setId)
     const questions = (await this.homework.listQuestions(setId)).filter(
@@ -924,17 +1012,23 @@ export class HomeworkService {
     let stopKind: HomeworkErrorKind | undefined
     let timeoutFailures = 0
     const queue = [...targets]
+    const interrupted: string[] = []
     const report = (): void =>
       onProgress?.({ completed, total: targets.length, generated, failed, skipped })
     report()
-    while (queue.length > 0 && !stopKind) {
+    while (queue.length > 0 && !stopKind && control.shouldContinue()) {
       // Finish the current pair before scheduling more. This avoids sending a
       // third request while the second is still deciding whether the provider
       // is timing out or rate-limiting the whole batch.
       const batch = queue.splice(0, ANSWER_CONTENT_CONCURRENCY)
       await Promise.all(
         batch.map(async (question) => {
-          const result = await this.startAnswerGenerate(question.id)
+          const result = await this.startAnswerGenerate(question.id, control.signal)
+          // Stopped by the student: not done, not failed; it keeps its content.
+          if (result.interrupted) {
+            interrupted.push(question.id)
+            return
+          }
           if (result.skipped) skipped += 1
           else if (result.question?.generationStatus === 'ready' && result.question.answerBased)
             generated += 1
@@ -949,6 +1043,16 @@ export class HomeworkService {
           report()
         }),
       )
+    }
+    const paused = wasInterrupted(control) && (queue.length > 0 || interrupted.length > 0)
+    if (paused) {
+      return {
+        generated,
+        failed,
+        skipped,
+        paused: true,
+        remainingIds: [...interrupted, ...queue.map((question) => question.id)],
+      }
     }
     if (stopKind && queue.length > 0) {
       const message =
@@ -969,7 +1073,7 @@ export class HomeworkService {
       }
       report()
     }
-    return { generated, failed, skipped }
+    return { generated, failed, skipped, paused: false, remainingIds: [] }
   }
 
   /**
@@ -978,12 +1082,68 @@ export class HomeworkService {
    * questions are added, and unmatched old questions are retired (never
    * deleted). Concurrent calls for the same set are coalesced.
    */
-  retrySet(setId: string): Promise<{ set: HomeworkSet; summary: ReanalysisSummary } | undefined> {
+  retrySet(
+    setId: string,
+    options: HomeworkRunOptions = {},
+  ): Promise<HomeworkRunResult | undefined> {
     const running = setRuns.get(setId)
     if (running) return running
-    const run = this.runRetry(setId).finally(() => setRuns.delete(setId))
+    const run = this.runRetry(setId, resolveControl(options.control)).finally(() =>
+      setRuns.delete(setId),
+    )
     setRuns.set(setId, run)
     return run
+  }
+
+  /**
+   * 「继续」 for a paused (or interrupted) assignment: only what is left. A run
+   * paused while preparing help generates the questions still pending; one
+   * paused while reading questions reads again, reusing the batches this page
+   * visit already read.
+   */
+  resumeSet(
+    setId: string,
+    options: HomeworkRunOptions = {},
+  ): Promise<HomeworkRunResult | undefined> {
+    const running = setRuns.get(setId)
+    if (running) return running
+    const run = this.runResume(setId, resolveControl(options.control)).finally(() =>
+      setRuns.delete(setId),
+    )
+    setRuns.set(setId, run)
+    return run
+  }
+
+  private async runResume(
+    setId: string,
+    control: GenerationControl,
+  ): Promise<HomeworkRunResult | undefined> {
+    const set = await this.homework.getSet(setId)
+    if (!set) return undefined
+    if (set.progress?.stage !== 'generating') return this.runRetry(setId, control)
+    const pendingIds = (await this.listQuestions(setId))
+      .filter((question) => question.generationStatus === 'pending')
+      .map((question) => question.id)
+    const offset = set.progress.completed
+    if (pendingIds.length === 0) {
+      await this.finishSet(setId)
+      return { set: (await this.homework.getSet(setId)) ?? set, summary: EMPTY_REANALYSIS_SUMMARY }
+    }
+    const generating = await this.homework.updateSet(setId, {
+      status: 'analyzing',
+      errorMessage: undefined,
+      progress: {
+        stage: 'generating',
+        completed: offset,
+        total: offset + pendingIds.length,
+        updatedAt: Date.now(),
+      },
+    })
+    if (!generating) return undefined
+    const { failed, paused } = await this.generatePending(setId, pendingIds, control, offset)
+    if (!paused) await this.finishSet(setId)
+    const finalSet = (await this.homework.getSet(setId)) ?? generating
+    return { set: finalSet, summary: { ...EMPTY_REANALYSIS_SUMMARY, failed }, paused }
   }
 
   /**
@@ -992,8 +1152,11 @@ export class HomeworkService {
    * hint progress is clamped to the new hint count. Concurrent calls for the
    * same question are coalesced.
    */
-  generateContent(questionId: string): Promise<HomeworkQuestion | undefined> {
-    return this.startGenerate(questionId).then((result) => result.question)
+  generateContent(
+    questionId: string,
+    options: HomeworkRequestOptions = {},
+  ): Promise<HomeworkQuestion | undefined> {
+    return this.startGenerate(questionId, options.signal).then((result) => result.question)
   }
 
   /**
@@ -1001,10 +1164,15 @@ export class HomeworkService {
    * single-question "Regenerate" button both go through here, so a manual retry
    * while a batch is running never fires the same request twice.
    */
-  private startGenerate(questionId: string): Promise<GeneratedQuestionResult> {
+  private startGenerate(
+    questionId: string,
+    signal?: AbortSignal,
+  ): Promise<GeneratedQuestionResult> {
     const running = questionRuns.get(questionId)
     if (running) return running
-    const run = this.runGenerateContent(questionId).finally(() => questionRuns.delete(questionId))
+    const run = this.runGenerateContent(questionId, signal).finally(() =>
+      questionRuns.delete(questionId),
+    )
     questionRuns.set(questionId, run)
     return run
   }
@@ -1014,10 +1182,13 @@ export class HomeworkService {
    * Shares the question coalescing map with the ordinary generation, so the two
    * can never run on the same question at the same time.
    */
-  private startAnswerGenerate(questionId: string): Promise<GeneratedQuestionResult> {
+  private startAnswerGenerate(
+    questionId: string,
+    signal?: AbortSignal,
+  ): Promise<GeneratedQuestionResult> {
     const running = questionRuns.get(questionId)
     if (running) return running
-    const run = this.runGenerateAnswerContent(questionId).finally(() =>
+    const run = this.runGenerateAnswerContent(questionId, signal).finally(() =>
       questionRuns.delete(questionId),
     )
     questionRuns.set(questionId, run)
@@ -1053,7 +1224,11 @@ export class HomeworkService {
   }
 
   /** One turn of the per-question help conversation. */
-  async ask(questionId: string, message: string): Promise<HomeworkMessage> {
+  async ask(
+    questionId: string,
+    message: string,
+    options: HomeworkRequestOptions = {},
+  ): Promise<HomeworkMessage> {
     const question = await this.homework.getQuestion(questionId)
     if (!question) throw new AppError(t('homework.questionMissing'), 'NOT_FOUND')
     const trimmed = message.trim()
@@ -1083,7 +1258,10 @@ export class HomeworkService {
         }),
       },
     ]
-    const reply = await this.requireAI().chat(messages)
+    const reply = await this.requireAI().chat(
+      messages,
+      options.signal ? { signal: options.signal } : undefined,
+    )
     const content = (reply.content ?? '').trim()
     if (!content) throw new AppError(t('homework.emptyReply'), 'EMPTY_TUTOR_RESPONSE')
 
@@ -1111,15 +1289,20 @@ export class HomeworkService {
 
   private async runRetry(
     setId: string,
-  ): Promise<{ set: HomeworkSet; summary: ReanalysisSummary } | undefined> {
+    control: GenerationControl,
+  ): Promise<HomeworkRunResult | undefined> {
     const existing = await this.homework.getSet(setId)
     if (!existing) return undefined
+    // What a paused re-read restores: the questions are untouched, so the set
+    // goes back to how it was (a first read with nothing yet stays `paused`).
+    let previous: HomeworkSet | undefined
     // Re-check inside the write so a delete that lands mid-flight is not
     // resurrected by this status update.
     let analyzing: HomeworkSet | undefined
     await this.db.transaction('rw', this.db.homeworkSets, async () => {
       const current = await this.homework.getSet(setId)
       if (!current) return
+      previous = current
       analyzing = {
         ...current,
         status: 'analyzing',
@@ -1130,12 +1313,14 @@ export class HomeworkService {
       await this.homework.upsertSet(analyzing)
     })
     if (!analyzing) return undefined
-    return this.runAnalysis(analyzing)
+    return this.runAnalysis(analyzing, control, previous)
   }
 
   private async runAnalysis(
     set: HomeworkSet,
-  ): Promise<{ set: HomeworkSet; summary: ReanalysisSummary }> {
+    control: GenerationControl,
+    previous?: HomeworkSet,
+  ): Promise<HomeworkRunResult> {
     const document = await this.loadDocumentOrNull(set.documentId)
     if (!document) {
       return {
@@ -1163,10 +1348,22 @@ export class HomeworkService {
 
     let analysis: BatchAnalysis
     try {
-      analysis = await this.analyzeBatches(document, chunks, async (completed, total) => {
-        await this.setProgress(set.id, { stage: 'identifying', completed, total })
-      })
+      analysis = await this.analyzeBatches(
+        document,
+        chunks,
+        async (completed, total) => {
+          await this.setProgress(set.id, { stage: 'identifying', completed, total })
+        },
+        control,
+      )
     } catch (err) {
+      if (isAbortError(err, control.signal)) {
+        return {
+          set: await this.pauseIdentifying(set, previous),
+          summary: EMPTY_REANALYSIS_SUMMARY,
+          paused: true,
+        }
+      }
       // A provider-level failure (no provider, connect failure) or an account
       // fatal error (out of credit / rejected key) aborts before any commit:
       // every existing question and student record stays untouched.
@@ -1175,6 +1372,17 @@ export class HomeworkService {
         summary: EMPTY_REANALYSIS_SUMMARY,
       }
     }
+
+    // Paused while reading: the commit is all or nothing, so nothing is written;
+    // the batches read so far wait in memory for 「继续」.
+    if (analysis.paused) {
+      return {
+        set: await this.pauseIdentifying(set, previous),
+        summary: EMPTY_REANALYSIS_SUMMARY,
+        paused: true,
+      }
+    }
+    forgetRecognizedBatches(document.id)
 
     const incoming = analysis.questions
     if (incoming.length === 0) {
@@ -1216,13 +1424,44 @@ export class HomeworkService {
     // flight at once (a long sequential chain is the main source of the wait).
     // Each failure is isolated and only affects its own question.
     let failed = 0
+    let paused = false
     if (pendingIds.length > 0) {
-      failed = await this.generatePending(set.id, pendingIds)
+      const generated = await this.generatePending(set.id, pendingIds, control)
+      failed = generated.failed
+      paused = generated.paused
     }
-    await this.finishSet(set.id)
+    if (!paused) await this.finishSet(set.id)
 
     const finalSet = (await this.homework.getSet(set.id)) ?? set
-    return { set: finalSet, summary: { ...summary, failed } }
+    return { set: finalSet, summary: { ...summary, failed }, ...(paused ? { paused } : {}) }
+  }
+
+  /**
+   * End a recognition the student paused. Questions are untouched: a re-read
+   * of an assignment that already has questions returns to its previous
+   * status; a first read keeps `paused` with how far it got.
+   */
+  private async pauseIdentifying(set: HomeworkSet, previous?: HomeworkSet): Promise<HomeworkSet> {
+    const current = await this.homework.getSet(set.id)
+    if (!current) return set
+    const restore: Partial<HomeworkSet> =
+      previous && previous.status !== 'analyzing' && previous.questionCount > 0
+        ? {
+            status: previous.status,
+            errorMessage: previous.errorMessage,
+            analysisNote: previous.analysisNote,
+            progress: previous.progress,
+          }
+        : {
+            status: 'paused',
+            errorMessage: undefined,
+            progress: current.progress ?? {
+              stage: 'identifying',
+              completed: 0,
+              updatedAt: Date.now(),
+            },
+          }
+    return (await this.homework.updateSet(set.id, restore)) ?? current
   }
 
   /** Remember that the walkthrough's spoiler notice was dismissed for this set. */
@@ -1250,19 +1489,30 @@ export class HomeworkService {
    * it; questions that never ran are marked failed with the same actionable
    * reason so they keep a retry button rather than spinning forever.
    */
-  private async generatePending(setId: string, ids: readonly string[]): Promise<number> {
-    const total = ids.length
+  private async generatePending(
+    setId: string,
+    ids: readonly string[],
+    control: GenerationControl,
+    offset = 0,
+  ): Promise<{ failed: number; paused: boolean }> {
+    const total = offset + ids.length
     const queue = [...ids]
-    let completed = 0
+    let completed = offset
     let failed = 0
+    let interrupted = 0
     let fatal: HomeworkErrorKind | undefined
 
     const worker = async (): Promise<void> => {
-      while (queue.length > 0 && !fatal) {
+      while (queue.length > 0 && !fatal && control.shouldContinue()) {
         const id = queue.shift()!
-        const { question, kind } = await this.startGenerate(id)
-        if (question?.generationStatus === 'failed') failed += 1
-        if (kind && isAccountFatalError(kind)) fatal = kind
+        const result = await this.startGenerate(id, control.signal)
+        // Stopped mid-request: the question stays pending, nothing is failed.
+        if (result.interrupted) {
+          interrupted += 1
+          continue
+        }
+        if (result.question?.generationStatus === 'failed') failed += 1
+        if (result.kind && isAccountFatalError(result.kind)) fatal = result.kind
         completed += 1
         await this.setProgress(setId, { stage: 'generating', completed, total })
       }
@@ -1282,8 +1532,17 @@ export class HomeworkService {
         })
         if (updated) failed += 1
       }
+      return { failed, paused: false }
     }
-    return failed
+    if (wasInterrupted(control) && (queue.length > 0 || interrupted > 0)) {
+      // The remaining questions stay `pending`; 「继续」 picks them up.
+      await this.homework.updateSet(setId, {
+        status: 'paused',
+        progress: { stage: 'generating', completed, total, updatedAt: Date.now() },
+      })
+      return { failed, paused: true }
+    }
+    return { failed, paused: false }
   }
 
   /**
@@ -1299,8 +1558,10 @@ export class HomeworkService {
     document: Document,
     chunks: readonly DocumentChunk[],
     onProgress?: (completed: number, total: number) => void | Promise<void>,
+    control: GenerationControl = resolveControl(),
   ): Promise<BatchAnalysis> {
     const ai = this.requireAI()
+    let paused = false
     const system = prompts.homeworkAnalyzer.buildSystemPrompt()
     const { batches, droppedChunks } = planAnalyzerBatches(chunks)
 
@@ -1330,7 +1591,10 @@ export class HomeworkService {
         { role: 'system', content: system },
         { role: 'user', content: buildUser(batch, reminder) },
       ]
-      const { data } = await ai.streamJSON<unknown>(messages, undefined, { maxTokens: budget })
+      const { data } = await ai.streamJSON<unknown>(messages, undefined, {
+        maxTokens: budget,
+        signal: control.signal,
+      })
       return {
         raw: countCandidateQuestions(data),
         normalized: normalizeQuestions(data, batch, document),
@@ -1355,6 +1619,7 @@ export class HomeworkService {
         try {
           return await runBatch(batch, budget, reminder)
         } catch (err) {
+          if (isAbortError(err, control.signal)) throw err
           if (retries >= MAX_REQUEST_RETRIES) throw err
           const kind = classifyHomeworkError(err)
           if (kind === 'output-limit') {
@@ -1387,17 +1652,41 @@ export class HomeworkService {
     let firstError: unknown
 
     const processBatch = async (batch: readonly DocumentChunk[], depth: number): Promise<void> => {
+      // A batch a paused run already read (this page visit) costs nothing.
+      const key = recognizedBatchKey(document.id, batch)
+      const known = recognizedBatches.get(key)
+      if (known) {
+        collected.push(...known.normalized)
+        if (known.invalid) invalidSourceRanges += 1
+        state.completed += 1
+        await emit()
+        return
+      }
+      if (!control.shouldContinue()) {
+        paused = true
+        return
+      }
       try {
         let result = await runBatchResilient(batch)
+        let invalid = false
         if (result.raw > 0 && result.normalized.length === 0) {
           // The model proposed questions but the source ids did not match any
           // real chunk. Try once more with an explicit reminder; still invalid
           // ids are never guessed into the database.
           result = await runBatchResilient(batch, ANALYZER_CORRECTION_REMINDER)
-          if (result.raw > 0 && result.normalized.length === 0) invalidSourceRanges += 1
+          if (result.raw > 0 && result.normalized.length === 0) {
+            invalidSourceRanges += 1
+            invalid = true
+          }
         }
         collected.push(...result.normalized)
+        recognizedBatches.set(key, { normalized: result.normalized, invalid })
       } catch (err) {
+        // Stopped by the student: not a failed range, and nothing to report.
+        if (isAbortError(err, control.signal)) {
+          paused = true
+          return
+        }
         const kind = classifyHomeworkError(err)
         // No credit / rejected key: stop the whole run so we stop hammering.
         if (isAccountFatalError(kind)) throw err
@@ -1434,6 +1723,7 @@ export class HomeworkService {
       invalidSourceRanges,
       failedRanges,
       ...(firstError !== undefined ? { firstError } : {}),
+      ...(paused ? { paused } : {}),
     }
   }
 
@@ -1639,14 +1929,18 @@ export class HomeworkService {
     return { summary, pendingIds }
   }
 
-  private async runGenerateContent(questionId: string): Promise<GeneratedQuestionResult> {
+  private async runGenerateContent(
+    questionId: string,
+    signal?: AbortSignal,
+  ): Promise<GeneratedQuestionResult> {
     const question = await this.homework.getQuestion(questionId)
     if (!question) return {}
     // A question confirmed against the professor answer always regenerates
     // from that answer, including after a re-analysis marks its content stale.
     if (question.answerStatus === 'matched' && (question.answerText ?? '').trim().length > 0) {
-      return this.runGenerateAnswerContent(questionId)
+      return this.runGenerateAnswerContent(questionId, signal)
     }
+    if (signal?.aborted) return { question, interrupted: true }
     await this.homework.updateQuestion(questionId, {
       generationStatus: 'pending',
       generationError: undefined,
@@ -1666,11 +1960,14 @@ export class HomeworkService {
             subject,
             'combined',
             splitHomeworkSubparts(question.prompt).length >= 2 ? 1 : 6,
+            undefined,
+            signal,
           ),
         )
       } catch (err) {
         const kind = classifyHomeworkError(err)
         const parts = splitHomeworkSubparts(question.prompt)
+        if (isAbortError(err, signal)) throw err
         if ((kind === 'truncated' || kind === 'output-limit') && parts.length >= 2) {
           // A ten-part exercise can exceed one model response even at the
           // student's 32k setting (providers impose their own smaller cap).
@@ -1679,7 +1976,14 @@ export class HomeworkService {
           for (const part of parts) {
             results.push({
               label: part.label,
-              ...(await prepareHomeworkQuestion(ai, part.prompt, '', currentLanguage(), subject)),
+              ...(await prepareHomeworkQuestion(
+                ai,
+                part.prompt,
+                '',
+                currentLanguage(),
+                subject,
+                signal,
+              )),
             })
           }
           const hintGroups: string[][] = [[], [], [], []]
@@ -1704,6 +2008,8 @@ export class HomeworkService {
             sourceText,
             currentLanguage(),
             subject,
+            undefined,
+            signal,
           )
         } else {
           throw err
@@ -1718,6 +2024,15 @@ export class HomeworkService {
       )
       return { question: updated }
     } catch (err) {
+      // Stopped by the student: back to how it was (pending stays pending, a
+      // ready question keeps its help). Never recorded as a failure.
+      if (isAbortError(err, signal)) {
+        const restored = await this.homework.updateQuestion(questionId, {
+          generationStatus: question.generationStatus,
+          generationError: question.generationError,
+        })
+        return { question: restored, interrupted: true }
+      }
       // Keep the row (and any previous hints/solution + all student fields).
       const updated = await this.homework.updateQuestion(questionId, {
         generationStatus: 'failed',
@@ -1733,9 +2048,13 @@ export class HomeworkService {
    * kept in `previousSolution` so it is never silently overwritten; on failure
    * the existing hints/solution and every student field stay untouched.
    */
-  private async runGenerateAnswerContent(questionId: string): Promise<GeneratedQuestionResult> {
+  private async runGenerateAnswerContent(
+    questionId: string,
+    signal?: AbortSignal,
+  ): Promise<GeneratedQuestionResult> {
     const question = await this.homework.getQuestion(questionId)
     if (!question) return {}
+    if (signal?.aborted) return { question, interrupted: true }
     const answer = (question.answerText ?? '').trim()
     if (!answer) return { question }
     if (isDeferredProfessorAnswer(answer)) {
@@ -1754,6 +2073,8 @@ export class HomeworkService {
     })
     const controller = new AbortController()
     const deadline = setTimeout(() => controller.abort(), ANSWER_GENERATION_DEADLINE_MS)
+    // The deadline and the student's stop both cancel the request.
+    const linked = linkSignals(controller.signal, signal)
     try {
       const ai = this.requireAI()
       const sourceText = await this.sourceText(question)
@@ -1770,10 +2091,11 @@ export class HomeworkService {
             'combined',
             2,
             answer,
-            controller.signal,
+            linked.signal,
           ),
         )
       } catch (err) {
+        if (signal?.aborted) throw err
         const kind = classifyHomeworkError(err)
         if (
           kind !== 'truncated' &&
@@ -1792,11 +2114,12 @@ export class HomeworkService {
           currentLanguage(),
           subject,
           answer,
-          controller.signal,
+          linked.signal,
         )
       }
       const previousSolution =
         !question.answerBased && (question.solution ?? '').trim() ? question.solution : undefined
+      if (signal?.aborted) throw new DOMException('Generation stopped', 'AbortError')
       if (controller.signal.aborted) throw new AITimeoutError(ANSWER_GENERATION_DEADLINE_MS)
       const updated = await this.homework.applyAnswerBasedContent(
         questionId,
@@ -1807,6 +2130,13 @@ export class HomeworkService {
       )
       return { question: updated }
     } catch (err) {
+      if (signal?.aborted) {
+        const restored = await this.homework.updateQuestion(questionId, {
+          generationStatus: question.generationStatus,
+          generationError: question.generationError,
+        })
+        return { question: restored, interrupted: true }
+      }
       const failure = controller.signal.aborted
         ? new AITimeoutError(ANSWER_GENERATION_DEADLINE_MS)
         : err
@@ -1817,6 +2147,7 @@ export class HomeworkService {
       return { question: updated, kind: classifyHomeworkError(failure) }
     } finally {
       clearTimeout(deadline)
+      linked.dispose()
     }
   }
 
@@ -1988,6 +2319,7 @@ async function requestHomeworkQuestionJSON(
       return data
     } catch (err) {
       lastError = err
+      if (isAbortError(err, signal)) throw err
       const kind = classifyHomeworkError(err)
       if (kind === 'output-limit') {
         const smaller = Math.max(Math.min(MIN_OUTPUT_TOKENS, userCap), Math.floor(budget / 2))
@@ -2020,14 +2352,33 @@ async function prepareHomeworkQuestion(
   sourceText: string,
   language: 'zh' | 'en',
   subject: SubjectInput,
+  signal?: AbortSignal,
 ): Promise<{ hints: string[]; solution: string }> {
   try {
     return normalizeQuestionContent(
-      await requestHomeworkQuestionJSON(ai, question, sourceText, language, subject, 'combined'),
+      await requestHomeworkQuestionJSON(
+        ai,
+        question,
+        sourceText,
+        language,
+        subject,
+        'combined',
+        6,
+        undefined,
+        signal,
+      ),
     )
   } catch (err) {
-    if (classifyHomeworkError(err) !== 'truncated') throw err
-    return prepareHomeworkQuestionInStages(ai, question, sourceText, language, subject)
+    if (isAbortError(err, signal) || classifyHomeworkError(err) !== 'truncated') throw err
+    return prepareHomeworkQuestionInStages(
+      ai,
+      question,
+      sourceText,
+      language,
+      subject,
+      undefined,
+      signal,
+    )
   }
 }
 

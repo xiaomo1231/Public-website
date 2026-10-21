@@ -23,6 +23,8 @@ export interface TutorVisualizationInput {
   lessonContent: string
   /** The course subject; offers the chemistry / biology figures where relevant. */
   subject?: Subject
+  /** Stops the request with the lesson it belongs to. */
+  signal?: AbortSignal
 }
 
 /** Graphs are small; a modest cap keeps the call cheap and bounded. */
@@ -64,7 +66,10 @@ export class TutorVisualizationService {
         Number.isFinite(configured) && configured > 0
           ? Math.min(MAX_VISUALIZATION_TOKENS, configured)
           : MAX_VISUALIZATION_TOKENS
-      const { data } = await this.ai.chatJSON<VisualizationDraftOutput>(messages, { maxTokens })
+      const { data } = await this.ai.chatJSON<VisualizationDraftOutput>(messages, {
+        maxTokens,
+        ...(input.signal ? { signal: input.signal } : {}),
+      })
       const { visualizations, rejected } = normalizeVisualizations(data)
       if (rejected.length > 0) {
         logger.debug('Tutor visualizations rejected during validation', {

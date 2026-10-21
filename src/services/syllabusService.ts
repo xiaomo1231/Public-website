@@ -22,10 +22,51 @@ import { prompts } from '@/infrastructure/ai/prompts'
 import { AppError } from '@/infrastructure/errors/AppError'
 import { logger } from '@/infrastructure/logger/logger'
 import { t } from '@/i18n'
+import {
+  isAbortError,
+  resolveControl,
+  type GenerationControl,
+} from '@/shared/lib/generationControl'
 import type { AIService } from './aiService'
 
 /** Exam topics sent per AI matching request. */
 const MATCH_BATCH = 40
+
+/** Outcome of one AI matching run. */
+export interface SyllabusMatchRun {
+  /** Exam topics the AI matched in this run (all batches, also earlier paused ones). */
+  matched: number
+  /** Exam topics asked about so far / in total. */
+  done: number
+  total: number
+  /** The run stopped early on a pause or stop; `resume` continues it. */
+  paused: boolean
+}
+
+/**
+ * Exam topics already asked about by a paused AI matching run, per document
+ * and scope. Kept for this page visit only (their matches are saved per batch;
+ * this only lets 「继续」 skip them, including during a forced rematch).
+ */
+const pausedMatches = new Map<string, { asked: Set<string>; matched: number }>()
+
+function matchKey(documentId: string, scopeId?: string): string {
+  return `${documentId}::${scopeId ?? '*'}`
+}
+
+/** Progress of a paused AI matching run, if one is waiting to be continued. */
+export function pausedSyllabusMatch(
+  documentId: string,
+  scopeId?: string,
+): { done: number } | undefined {
+  const entry = pausedMatches.get(matchKey(documentId, scopeId))
+  return entry ? { done: entry.asked.size } : undefined
+}
+
+/** Test hook: forget paused matching runs. */
+export function clearPausedSyllabusMatchesForTesting(): void {
+  pausedMatches.clear()
+}
 /** Roles a document may be re-labelled from (others carry their own links). */
 const CONVERTIBLE = new Set(['textbook', 'user_notes', 'lecture_transcript'])
 /** Roles that are a knowledge source of their own. */
@@ -127,8 +168,10 @@ export class SyllabusService {
   async extractWithAi(
     documentId: string,
     ai: AIService,
-    options: { signal?: AbortSignal } = {},
+    options: { signal?: AbortSignal; control?: GenerationControl } = {},
   ): Promise<{ data: SyllabusData; dropped: number }> {
+    // One request: a stop aborts it and nothing is saved.
+    const signal = options.control?.signal ?? options.signal
     const document = await this.syllabusDocument(documentId)
     const chunks = (await this.chunks.listByDocument(documentId)).map(toChunkInput)
     if (chunks.length === 0) throw new AppError(t('syllabus.errors.noText'), 'NO_TEXT')
@@ -143,8 +186,9 @@ export class SyllabusService {
           }),
         },
       ],
-      { maxTokens: 4096, ...(options.signal ? { signal: options.signal } : {}) },
+      { maxTokens: 4096, ...(signal ? { signal } : {}) },
     )
+    signal?.throwIfAborted()
     const { scopes, dropped } = readAiSyllabus(output, chunks)
     if (dropped > 0) logger.info('Syllabus AI topics not found in the document', { dropped })
     if (scopes.length === 0) {
@@ -293,51 +337,98 @@ export class SyllabusService {
   async matchWithAi(
     documentId: string,
     ai: AIService,
-    options: { scopeId?: string; signal?: AbortSignal } = {},
+    options: {
+      scopeId?: string
+      signal?: AbortSignal
+      control?: GenerationControl
+      resume?: boolean
+    } = {},
   ): Promise<number> {
+    return (await this.matchWithAiRun(documentId, ai, options)).matched
+  }
+
+  /**
+   * `matchWithAi` with its progress. Each batch's matches are saved as soon as
+   * the batch is answered, so a pause (finish the batch in flight, ask no
+   * more) or a stop (abort it) keeps everything already matched. With
+   * `resume`, the exam topics a paused run already asked about are skipped —
+   * also in a forced rematch — so 「继续」 only asks about the rest.
+   */
+  async matchWithAiRun(
+    documentId: string,
+    ai: AIService,
+    options: {
+      scopeId?: string
+      signal?: AbortSignal
+      control?: GenerationControl
+      resume?: boolean
+    } = {},
+  ): Promise<SyllabusMatchRun> {
+    const control = resolveControl(options.control, options.signal)
     const document = await this.syllabusDocument(documentId)
     const courseTopics = await this.analyses.listTopics(document.projectId)
     if (courseTopics.length === 0) {
       throw new AppError(t('syllabus.errors.noCourseTopics'), 'NO_ANALYSIS')
     }
+    const key = matchKey(documentId, options.scopeId)
+    const previous = options.resume ? pausedMatches.get(key) : undefined
+    pausedMatches.delete(key)
+    const asked = new Set(previous?.asked ?? [])
+    let matched = previous?.matched ?? 0
     const scopes = (document.syllabus?.scopes ?? []).filter(
       (scope) => !options.scopeId || scope.id === options.scopeId,
     )
-    const asked = scopes.flatMap((scope) => scope.topics)
+    const all = scopes.flatMap((scope) => scope.topics)
+    const total = all.length
+    const remaining = all.filter((item) => !asked.has(item.id))
     // Short ids keep the prompt small and the answer easy to validate.
-    const examIds = new Map(asked.map((item, index) => [`e${index + 1}`, item.id]))
+    const examIds = new Map(remaining.map((item, index) => [`e${index + 1}`, item.id]))
     const topicIds = new Map(courseTopics.map((topic, index) => [`t${index + 1}`, topic.id]))
     const courseList = courseTopics.map((topic, index) => ({
       id: `t${index + 1}`,
       name: topic.name,
       ...(topic.description ? { description: topic.description } : {}),
     }))
-    const found = new Map<string, string[]>()
     const examEntries = [...examIds.entries()]
+    let paused = false
     for (let i = 0; i < examEntries.length; i += MATCH_BATCH) {
-      options.signal?.throwIfAborted()
+      if (!control.shouldContinue()) {
+        paused = true
+        break
+      }
       const batch = examEntries.slice(i, i + MATCH_BATCH)
-      const { data } = await ai.chatJSON<unknown>(
-        [
-          { role: 'system', content: prompts.examTopicMatch.buildSystemPrompt() },
-          {
-            role: 'user',
-            content: prompts.examTopicMatch.buildUserPrompt({
-              examTopics: batch.map(([shortId, id]) => ({
-                id: shortId,
-                text: asked.find((item) => item.id === id)!.text,
-              })),
-              courseTopics: courseList,
-            }),
-          },
-        ],
-        { maxTokens: 2048, ...(options.signal ? { signal: options.signal } : {}) },
-      )
+      let data: unknown
+      try {
+        ;({ data } = await ai.chatJSON<unknown>(
+          [
+            { role: 'system', content: prompts.examTopicMatch.buildSystemPrompt() },
+            {
+              role: 'user',
+              content: prompts.examTopicMatch.buildUserPrompt({
+                examTopics: batch.map(([shortId, id]) => ({
+                  id: shortId,
+                  text: remaining.find((item) => item.id === id)!.text,
+                })),
+                courseTopics: courseList,
+              }),
+            },
+          ],
+          { maxTokens: 2048, signal: control.signal },
+        ))
+      } catch (err) {
+        // A stopped batch is an interruption, not a failure: earlier batches stay saved.
+        if (isAbortError(err, control.signal)) {
+          paused = true
+          break
+        }
+        throw err
+      }
       const matches = readAiMatches(
         data,
         batch.map(([shortId]) => shortId),
         [...topicIds.keys()],
       )
+      const found = new Map<string, string[]>()
       for (const [shortId, ids] of matches) {
         if (ids.length === 0) continue
         found.set(
@@ -345,19 +436,22 @@ export class SyllabusService {
           ids.map((id) => topicIds.get(id)!),
         )
       }
+      await this.mutate(documentId, (current) => ({
+        ...current,
+        scopes: current.scopes.map((scope) => ({
+          ...scope,
+          topics: scope.topics.map((item) => {
+            const ids = found.get(item.id)
+            return ids ? { ...item, topicIds: ids, matchedBy: 'ai' as const } : item
+          }),
+        })),
+        matchedAt: Date.now(),
+      }))
+      matched += found.size
+      for (const [, id] of batch) asked.add(id)
     }
-    await this.mutate(documentId, (data) => ({
-      ...data,
-      scopes: data.scopes.map((scope) => ({
-        ...scope,
-        topics: scope.topics.map((item) => {
-          const ids = found.get(item.id)
-          return ids ? { ...item, topicIds: ids, matchedBy: 'ai' as const } : item
-        }),
-      })),
-      matchedAt: Date.now(),
-    }))
-    return found.size
+    if (paused) pausedMatches.set(key, { asked, matched })
+    return { matched, done: asked.size, total, paused }
   }
 
   // ---- reading -----------------------------------------------------------

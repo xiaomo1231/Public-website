@@ -96,7 +96,12 @@ describe('HomeworkQuestionView professor answer', () => {
     expect(await screen.findByText('Addition combines two quantities.')).toBeInTheDocument()
     expect(screen.getByText('Add the units.')).toBeInTheDocument()
     expect(screen.getByText('The sum is 9.')).toBeInTheDocument()
-    expect(service.getOrGenerateReviewGuide).toHaveBeenCalledWith('q1', 'en')
+    expect(service.getOrGenerateReviewGuide).toHaveBeenCalledWith(
+      'q1',
+      'en',
+      false,
+      expect.anything(),
+    )
     expect(screen.getByText(/Professor answer \(verbatim\)/)).toBeInTheDocument()
     expect(
       screen.getByText(/Professor answer \(verbatim\)/).closest('details'),
@@ -148,7 +153,9 @@ describe('HomeworkQuestionView professor answer', () => {
     const user = userEvent.setup()
     const { generateAnswerForQuestion, generateContent } = renderView('review')
     await user.click(screen.getByRole('button', { name: /Regenerate hints/ }))
-    await waitFor(() => expect(generateAnswerForQuestion).toHaveBeenCalledWith('q1'))
+    await waitFor(() =>
+      expect(generateAnswerForQuestion).toHaveBeenCalledWith('q1', expect.anything()),
+    )
     expect(generateContent).not.toHaveBeenCalled()
   })
 

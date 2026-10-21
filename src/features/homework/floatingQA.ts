@@ -1,5 +1,6 @@
 import { buildAIServices } from '@/services/aiServices'
 import { WalkthroughNoteService } from '@/services/walkthroughNoteService'
+import { buildWalkthroughContext } from '@/services/walkthroughContext'
 import type { WalkthroughNote } from '@/entities/homework/walkthrough'
 import { friendlyAIError } from '@/shared/lib/aiErrors'
 import { t } from '@/i18n'
@@ -89,12 +90,37 @@ export function openNote(note: WalkthroughNote, setTitle: string, language: 'zh'
   })
 }
 
+/** The request of each window waiting for an answer, so 停止 can abort it. */
+const inFlight = new Map<string, AbortController>()
+
+/**
+ * Stop the answer a window is waiting for. Nothing is saved for it — no turn,
+ * no error — and the question is returned so it can be asked again.
+ */
+export function stopInWindow(id: string): string | undefined {
+  const controller = inFlight.get(id)
+  if (!controller) return undefined
+  inFlight.delete(id)
+  controller.abort()
+  const win = useFloatingQA.getState().windows.find((item) => item.id === id)
+  const question = win?.pending
+  if (win) useFloatingQA.getState().update(id, { pending: undefined, error: undefined })
+  return question
+}
+
+/** Whether a window is waiting for an answer that can be stopped. */
+export function isAskingInWindow(id: string): boolean {
+  return inFlight.has(id)
+}
+
 export async function askInWindow(id: string, question: string): Promise<void> {
   const store = useFloatingQA.getState()
   const win = store.windows.find((item) => item.id === id)
   const text = question.trim()
   if (!win || win.pending || !text) return
   store.update(id, { pending: text, error: undefined, start: undefined })
+  const controller = new AbortController()
+  inFlight.set(id, controller)
   try {
     const services = await buildAIServices()
     if (!services) {
@@ -102,17 +128,29 @@ export async function askInWindow(id: string, question: string): Promise<void> {
       return
     }
     const { passage } = win
+    // The whole section as written (with its matrices and equations), not only
+    // the paragraph around the selection. Local and fast.
+    const surroundingContext = await buildWalkthroughContext({
+      setId: passage.setId,
+      sectionId: passage.sectionId,
+      quote: passage.quote,
+      surrounding: passage.surrounding,
+    })
+    if (controller.signal.aborted) return
     const { answer } = await services.contextualTutor.ask({
       projectId: passage.projectId,
       contextKind: 'walkthrough',
       topicTitle: passage.setTitle,
       sectionHeading: passage.sectionTitle,
       selectedText: passage.latex ?? passage.quote,
-      surroundingContext: passage.surrounding,
+      surroundingContext,
       question: text,
       language: passage.language,
       history: win.turns.map((turn) => ({ question: turn.question, answer: turn.answer })),
+      signal: controller.signal,
     })
+    // Stopped while the answer was arriving: it is dropped, nothing is saved.
+    if (controller.signal.aborted) return
     const turn = { question: text, answer, at: Date.now() }
     const current = useFloatingQA.getState().windows.find((item) => item.id === id)
     if (current)
@@ -124,7 +162,11 @@ export async function askInWindow(id: string, question: string): Promise<void> {
       notifyNoteChanges()
     }
   } catch (err) {
+    // A stop is not a failure: `stopInWindow` already cleared the window.
+    if (controller.signal.aborted) return
     useFloatingQA.getState().update(id, { pending: undefined, error: friendlyAIError(err) })
+  } finally {
+    if (inFlight.get(id) === controller) inFlight.delete(id)
   }
 }
 

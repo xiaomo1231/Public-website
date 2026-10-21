@@ -8,6 +8,7 @@ import type { ChatMessage } from '@/infrastructure/ai/types'
 import type { Mistake, MistakeAnalysis, MistakeType } from '@/entities/mistake/types'
 import { MISTAKE_TYPES } from '@/entities/mistake/types'
 import { collectSourceSnippets } from './sourceContext'
+import { isAbortError } from '@/shared/lib/generationControl'
 import { AppError } from '@/infrastructure/errors/AppError'
 import { t } from '@/i18n'
 import { loadProjectSubjectContext } from './projectSubject'
@@ -63,8 +64,14 @@ export class MistakeAnalysisService {
     await this.mistakes.markAnalysisRunning(mistakeId)
     try {
       const analysis = await this.runAnalysis(mistake, opts)
+      opts.signal?.throwIfAborted()
       return this.mistakes.saveAnalysis(mistakeId, analysis)
     } catch (err) {
+      if (isAbortError(err, opts.signal)) {
+        // Stopped: the mistake goes back to exactly how it was.
+        await this.mistakes.restoreAnalysisState(mistakeId, mistake)
+        throw err
+      }
       const message = err instanceof Error ? err.message : t('errors.analysisFailed')
       await this.mistakes.markAnalysisFailed(mistakeId, message)
       throw err

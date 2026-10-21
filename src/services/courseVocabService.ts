@@ -17,6 +17,11 @@ import { projectTargetLanguage } from './projectTargetLanguage'
 import { isEnglish, primaryLanguage } from '@/shared/lib/language'
 import { vocabIndex } from './vocabService'
 import { t } from '@/i18n'
+import {
+  isAbortError,
+  resolveControl,
+  type GenerationControl,
+} from '@/shared/lib/generationControl'
 
 /** Terms kept per extraction (most frequent first). */
 export const COURSE_TERM_LIMIT = 150
@@ -30,6 +35,14 @@ export interface CourseVocabResult {
   glossed: number
   /** Words still without a meaning (no AI, or the AI could not say). */
   unglossed: number
+  total: number
+  /** The glossing was paused / stopped before every batch ran (finished batches are saved). */
+  paused: boolean
+}
+
+/** Gloss progress: AI batches finished / planned in this run. */
+export interface CourseVocabProgress {
+  done: number
   total: number
 }
 
@@ -60,12 +73,21 @@ export class CourseVocabService {
   /**
    * Pick the course terms out of the material (adding new ones to the course
    * book, refreshing counts of known ones), then gloss what still has no
-   * meaning.
+   * meaning. The book and its entries are saved before glossing starts and
+   * every finished gloss batch is saved at once, so a pause, a stop or a
+   * closed tab keeps what was done; running it again glosses only the words
+   * still without a meaning.
    */
   async extract(
     projectId: string,
-    options: { signal?: AbortSignal; now?: number } = {},
+    options: {
+      signal?: AbortSignal
+      control?: GenerationControl
+      onProgress?: (progress: CourseVocabProgress) => void
+      now?: number
+    } = {},
   ): Promise<CourseVocabResult> {
+    const control = resolveControl(options.control, options.signal)
     const now = options.now ?? Date.now()
     const project = await this.projects.get(projectId)
     const documents = selectAnalysisDocuments(await this.documents.listByProject(projectId))
@@ -170,22 +192,23 @@ export class CourseVocabService {
     }
 
     const entries = [...byTerm.values()]
-    const { glossed, dropped } = await this.gloss(
+    await this.repo.putBook(book)
+    await this.repo.putEntries(entries)
+    const { glossed, dropped, paused } = await this.gloss(
       entries,
       await loadProjectSubject(projectId),
       language,
-      options.signal,
+      control,
+      options.onProgress,
     )
     const kept = entries.filter((entry) => !dropped.has(entry.id))
-    await this.repo.putBook(book)
-    await this.repo.putEntries(kept)
-    for (const id of dropped) await this.repo.deleteEntry(id)
     return {
       book,
       added: kept.filter((entry) => fresh.has(entry.id)).length,
       glossed,
       unglossed: kept.filter((entry) => entry.meanings.length === 0).length,
       total: kept.length,
+      paused,
     }
   }
 
@@ -197,14 +220,19 @@ export class CourseVocabService {
     entries: VocabEntry[],
     subject: string | undefined,
     language: string | undefined,
-    signal?: AbortSignal,
-  ): Promise<{ glossed: number; dropped: Set<string> }> {
+    control: GenerationControl,
+    onProgress?: (progress: CourseVocabProgress) => void,
+  ): Promise<{ glossed: number; dropped: Set<string>; paused: boolean }> {
     const dropped = new Set<string>()
     let glossed = 0
     const missing = entries.filter((entry) => entry.meanings.length === 0)
-    if (!this.ai || missing.length === 0) return { glossed, dropped }
+    if (!this.ai || missing.length === 0) return { glossed, dropped, paused: false }
+    const total = Math.ceil(missing.length / GLOSS_BATCH)
+    let done = 0
+    onProgress?.({ done, total })
     for (let i = 0; i < missing.length; i += GLOSS_BATCH) {
-      signal?.throwIfAborted()
+      // Paused or stopped: the batches already glossed are saved.
+      if (!control.shouldContinue()) return { glossed, dropped, paused: true }
       const batch = missing.slice(i, i + GLOSS_BATCH)
       try {
         const { data } = await this.ai.chatJSON<unknown>(
@@ -227,28 +255,39 @@ export class CourseVocabService {
               }),
             },
           ],
-          { maxTokens: 2048, ...(signal ? { signal } : {}) },
+          { maxTokens: 2048, signal: control.signal },
         )
         const glosses = prompts.vocabGloss.readGlosses(
           data,
           batch.map((entry) => entry.word),
         )
+        const changed: VocabEntry[] = []
+        const removed: string[] = []
         for (const entry of batch) {
           const gloss = glosses.get(entry.word)
-          if (gloss === null) dropped.add(entry.id)
-          else if (gloss) {
+          if (gloss === null) {
+            dropped.add(entry.id)
+            removed.push(entry.id)
+          } else if (gloss) {
             entry.meanings = [gloss.meaning]
             if (gloss.phonetic && !entry.phonetic) entry.phonetic = gloss.phonetic
             entry.glossBy = 'ai'
             glossed++
+            changed.push(entry)
           }
         }
+        // Saved per batch: a later pause or stop keeps it.
+        if (changed.length > 0) await this.repo.putEntries(changed)
+        for (const id of removed) await this.repo.deleteEntry(id)
       } catch (err) {
-        if (signal?.aborted) throw err
+        // A stopped request is an interruption, not a failure.
+        if (isAbortError(err, control.signal)) return { glossed, dropped, paused: true }
         // The words stay, without a meaning; the next extraction tries again.
         logger.warn('Course vocabulary gloss failed', { error: (err as Error)?.message })
       }
+      done += 1
+      onProgress?.({ done, total })
     }
-    return { glossed, dropped }
+    return { glossed, dropped, paused: false }
   }
 }

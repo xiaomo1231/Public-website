@@ -20,6 +20,7 @@ import type { Mistake, MistakeStats, MistakeStatus, MistakeType } from '@/entiti
 import { MISTAKE_TYPES, MISTAKE_TYPE_LABEL_KEYS } from '@/entities/mistake/types'
 import type { DifficultyLevel } from '@/infrastructure/ai/prompts/types'
 import { toast } from '@/features/toast/toastStore'
+import { isAbortError } from '@/shared/lib/generationControl'
 import { friendlyAIError } from '@/shared/lib/aiErrors'
 import { SEARCH_DEBOUNCE_MS, useDebouncedValue } from '@/shared/lib/useDebouncedValue'
 import { useTranslation } from '@/i18n'
@@ -91,17 +92,22 @@ export function MistakeBookPage(): JSX.Element {
     })
   }, [projectId, loadRows])
 
-  async function handleAnalyze(id: string) {
+  async function handleAnalyze(id: string, signal?: AbortSignal) {
     const bundle = await buildAIServices()
     if (!bundle) {
       toast({ variant: 'error', title: t('mistakes.noProvider') })
       return
     }
     try {
-      await bundle.mistakeAnalysis.analyze(id)
+      await bundle.mistakeAnalysis.analyze(id, signal ? { signal } : {})
       await reloadAll()
       toast({ variant: 'success', title: t('mistakes.analysisReady') })
     } catch (err) {
+      // Stopped by the student: the mistake is back as it was, no error.
+      if (isAbortError(err, signal)) {
+        await reloadAll()
+        return
+      }
       const msg = friendlyAIError(err)
       toast({ variant: 'error', title: t('mistakes.analysisFailed'), description: msg })
       await reloadAll()

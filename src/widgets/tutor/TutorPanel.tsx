@@ -27,6 +27,9 @@ import type { DifficultyLevel, TutorEvaluation } from '@/infrastructure/ai/promp
 import type { TutorQuestion, TutorSession } from '@/entities/tutorSession/types'
 import { friendlyTutorError } from '@/shared/lib/aiErrors'
 import type { TutorService } from '@/services/tutorService'
+import { isAbortError } from '@/shared/lib/generationControl'
+import { useGenerationRun } from '@/shared/lib/useGenerationRun'
+import { GenerationControls } from '@/shared/ui/GenerationControls'
 
 export interface TutorPanelProps {
   projectId: string
@@ -62,12 +65,16 @@ export function TutorPanel(props: TutorPanelProps): JSX.Element {
   const [lastQuestion, setLastQuestion] = useState<TutorQuestion | undefined>()
   const [lastEvaluation, setLastEvaluation] = useState<TutorEvaluation | undefined>()
   const [intro, setIntro] = useState('')
+  /** The student stopped the last request; nothing was recorded for it. */
+  const [stopped, setStopped] = useState(false)
+  // Every tutor turn is one request: Stop aborts it, leaving the page aborts it.
+  const generation = useGenerationRun({ abortOnUnmount: true })
 
   useEffect(() => {
     let cancelled = false
     // Unmounting (topic or language change) cancels the in-flight
     // introduction / first question instead of paying for a hidden run.
-    const controller = new AbortController()
+    const run = generation.start()
     void (async () => {
       try {
         setBusy(true)
@@ -103,7 +110,7 @@ export function TutorPanel(props: TutorPanelProps): JSX.Element {
           onDelta: (text) => {
             if (!cancelled) setIntro((prev) => prev + text)
           },
-          signal: controller.signal,
+          signal: run.signal,
         })
         if (cancelled) return
         setSession(next.session)
@@ -111,15 +118,23 @@ export function TutorPanel(props: TutorPanelProps): JSX.Element {
         setRevealedHints(0)
         setLastEvaluation(undefined)
         if (next.questionError) setActionError(next.questionError)
+        // Stopped while the first question was being written.
+        if (run.signal.aborted && !next.session.pendingQuestion) setStopped(true)
       } catch (err) {
-        if (!cancelled) setError(friendlyTutorError(err))
+        if (cancelled) return
+        if (isAbortError(err, run.signal)) {
+          // Nothing of a stopped introduction was saved; drop the streamed part.
+          setIntro('')
+          setStopped(true)
+        } else setError(friendlyTutorError(err))
       } finally {
+        run.finish()
         if (!cancelled) setBusy(false)
       }
     })()
     return () => {
       cancelled = true
-      controller.abort()
+      run.stopNow()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -130,16 +145,50 @@ export function TutorPanel(props: TutorPanelProps): JSX.Element {
     if (!bundle) return
     setBusy(true)
     setActionError(null)
+    setStopped(false)
     setAnswer('')
     setRevealedHints(0)
     setLastEvaluation(undefined)
+    const run = generation.start()
     try {
-      const result = await bundle.tutor.askQuestion(session.id)
+      const result = await bundle.tutor.askQuestion(session.id, run.signal)
       setSession(result.session)
       setLastQuestion(result.session.pendingQuestion)
     } catch (err) {
-      setActionError(friendlyTutorError(err))
+      if (isAbortError(err, run.signal)) setStopped(true)
+      else setActionError(friendlyTutorError(err))
     } finally {
+      run.finish()
+      setBusy(false)
+    }
+  }
+
+  /** Redo a stopped introduction (nothing of it was saved). */
+  async function beginAgain() {
+    if (!session) return
+    const bundle = await buildTutorBundle()
+    if (!bundle) return
+    setBusy(true)
+    setStopped(false)
+    setActionError(null)
+    setIntro('')
+    const run = generation.start()
+    try {
+      const next = await bundle.tutor.beginTopic(session.id, {
+        onDelta: (text) => setIntro((prev) => prev + text),
+        signal: run.signal,
+      })
+      setSession(next.session)
+      setLastQuestion(next.session.pendingQuestion)
+      if (next.questionError) setActionError(next.questionError)
+      if (run.signal.aborted && !next.session.pendingQuestion) setStopped(true)
+    } catch (err) {
+      if (isAbortError(err, run.signal)) {
+        setIntro('')
+        setStopped(true)
+      } else setActionError(friendlyTutorError(err))
+    } finally {
+      run.finish()
       setBusy(false)
     }
   }
@@ -171,14 +220,18 @@ export function TutorPanel(props: TutorPanelProps): JSX.Element {
     if (!bundle) return
     setBusy(true)
     setActionError(null)
+    setStopped(false)
+    const run = generation.start()
     try {
-      const result = await bundle.tutor.submitAnswer(session.id, answer.trim())
+      const result = await bundle.tutor.submitAnswer(session.id, answer.trim(), run.signal)
       setSession(result.session)
       setLastEvaluation(result.turn.evaluation as TutorEvaluation | undefined)
       setLastQuestion(undefined)
     } catch (err) {
-      setActionError(friendlyTutorError(err))
+      // Stopped: the answer stays in the box and nothing was recorded.
+      if (!isAbortError(err, run.signal)) setActionError(friendlyTutorError(err))
     } finally {
+      run.finish()
       setBusy(false)
     }
   }
@@ -209,6 +262,9 @@ export function TutorPanel(props: TutorPanelProps): JSX.Element {
   // back to the persisted turn so it survives a remount.
   const persistedIntro = session.turns.find((turn) => turn.kind === 'introduction')?.content ?? ''
   const introText = intro || persistedIntro
+  const stopControl = (
+    <GenerationControls kind="single" state={generation.state} onStopNow={generation.stopNow} />
+  )
 
   return (
     <div className="space-y-4 lecture:space-y-6">
@@ -315,6 +371,7 @@ export function TutorPanel(props: TutorPanelProps): JSX.Element {
                 )}
                 {t('tutor.submitAnswer')}
               </Button>
+              {busy && stopControl}
               <Button
                 variant="outline"
                 onClick={revealHint}
@@ -352,11 +409,28 @@ export function TutorPanel(props: TutorPanelProps): JSX.Element {
         <Card>
           <CardContent className="flex items-center gap-2 p-4 text-[15px] text-muted-foreground">
             <Loader2 className="h-4 w-4 animate-spin" /> {t('tutor.workingOnQuestion')}
+            <span className="ml-auto">{stopControl}</span>
           </CardContent>
         </Card>
       )}
 
-      {!lastQuestion && !lastEvaluation && !busy && introText && !actionError && (
+      {stopped && !busy && !lastQuestion && (
+        <Card>
+          <CardContent className="flex flex-wrap items-center justify-between gap-2 p-4">
+            <p role="status" className="text-[15px] text-muted-foreground">
+              {t('generation.stoppedKept')}
+            </p>
+            <Button
+              variant="outline"
+              onClick={() => void (persistedIntro ? nextQuestion() : beginAgain())}
+            >
+              {persistedIntro ? t('tutor.retryQuestion') : t('common.retry')}
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
+      {!lastQuestion && !lastEvaluation && !busy && introText && !actionError && !stopped && (
         <EmptyState title={t('tutor.thinking')} description={t('tutor.generatingFirst')} />
       )}
     </div>

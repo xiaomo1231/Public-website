@@ -290,7 +290,12 @@ describe('HomeworkAnswerDialog — answer matching', () => {
     expect(await screen.findByText(/The model response was cut off/)).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Retry this question' }))
     await waitFor(() =>
-      expect(generateAnswerContent).toHaveBeenCalledWith('s1', ['q1'], expect.any(Function)),
+      expect(generateAnswerContent).toHaveBeenCalledWith(
+        's1',
+        ['q1'],
+        expect.any(Function),
+        expect.anything(),
+      ),
     )
   })
 })

@@ -206,6 +206,9 @@ describe('TutorLessonView — visualization section', () => {
       fromCache: true,
       streaming: false,
       regenerating: false,
+      generation: null,
+      stop: () => undefined,
+      stopped: false,
       regenerate: vi.fn().mockResolvedValue(undefined),
     }
   }
@@ -733,6 +736,9 @@ describe('TutorLessonView — visualization placement', () => {
       fromCache: true,
       streaming: false,
       regenerating: false,
+      generation: null,
+      stop: () => undefined,
+      stopped: false,
       regenerate: vi.fn().mockResolvedValue(undefined),
     }
   }

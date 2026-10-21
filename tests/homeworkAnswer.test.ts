@@ -504,11 +504,23 @@ describe('HomeworkService — professor answer key', () => {
     await vi.waitFor(() => expect(started).toBe(2))
     expect(progress[0]).toBe(0)
     release()
-    expect(await run).toEqual({ generated: 3, failed: 0, skipped: 0 })
+    expect(await run).toEqual({
+      generated: 3,
+      failed: 0,
+      skipped: 0,
+      paused: false,
+      remainingIds: [],
+    })
     expect(started).toBe(3)
     expect(progress.at(-1)).toBe(3)
 
-    expect(await svc.generateAnswerContent(setId)).toEqual({ generated: 0, failed: 0, skipped: 3 })
+    expect(await svc.generateAnswerContent(setId)).toEqual({
+      generated: 0,
+      failed: 0,
+      skipped: 3,
+      paused: false,
+      remainingIds: [],
+    })
     expect(started).toBe(3)
   })
 
@@ -557,7 +569,13 @@ describe('HomeworkService — professor answer key', () => {
       throw new RateLimitedError()
     })
     const svc = service({ streamJSON, maxOutputTokens: 2048 } as unknown as AIService)
-    expect(await svc.generateAnswerContent(setId)).toEqual({ generated: 0, failed: 3, skipped: 0 })
+    expect(await svc.generateAnswerContent(setId)).toEqual({
+      generated: 0,
+      failed: 3,
+      skipped: 0,
+      paused: false,
+      remainingIds: [],
+    })
     expect(streamJSON).toHaveBeenCalledTimes(2)
     expect((await repo.getQuestion('q3'))?.generationError).toMatch(/rate limit|限流/i)
   })
@@ -572,7 +590,13 @@ describe('HomeworkService — professor answer key', () => {
       throw new TimeoutError(120_000)
     })
     const svc = service({ streamJSON, maxOutputTokens: 2048 } as unknown as AIService)
-    expect(await svc.generateAnswerContent(setId)).toEqual({ generated: 0, failed: 3, skipped: 0 })
+    expect(await svc.generateAnswerContent(setId)).toEqual({
+      generated: 0,
+      failed: 3,
+      skipped: 0,
+      paused: false,
+      remainingIds: [],
+    })
     expect(streamJSON).toHaveBeenCalledTimes(2)
     expect((await repo.getQuestion('q3'))?.generationError).toMatch(/long|time|超时|过长/i)
   })

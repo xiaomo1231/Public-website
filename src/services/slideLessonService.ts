@@ -26,6 +26,7 @@ import { normalizeMathNotation } from '@/infrastructure/files/mathNotation'
 import { AppError, NotFoundError } from '@/infrastructure/errors/AppError'
 import { friendlyAIError } from '@/shared/lib/aiErrors'
 import { t } from '@/i18n'
+import { isAbortError } from '@/shared/lib/generationControl'
 import { logger } from '@/infrastructure/logger/logger'
 import type { AIService } from './aiService'
 import type { ChatMessage } from '@/infrastructure/ai/types'
@@ -247,7 +248,13 @@ export class SlideLessonService {
   generate(input: GenerateSlideLessonInput): Promise<SlideLessonResult> {
     const runKey = slideLessonKeyString(input)
     const existing = inFlight.get(runKey)
-    if (existing) return existing
+    if (existing) {
+      // The viewer who started it stopped it: start a request of our own.
+      return existing.catch((err: unknown) => {
+        if (isAbortError(err) && !input.signal?.aborted) return this.generate(input)
+        throw err
+      })
+    }
     const run = this.resolveGenerate(input).finally(() => inFlight.delete(runKey))
     inFlight.set(runKey, run)
     return run
@@ -350,7 +357,13 @@ export class SlideLessonService {
     try {
       return await this.runGenerate(input, content, contentHash, promptVersion, subject)
     } catch (err) {
-      if (stored && stored.status === 'ready' && (stored.content ?? '').trim().length > 0) {
+      const usable = stored && stored.status === 'ready' && (stored.content ?? '').trim().length > 0
+      // Stopped by the student: nothing is written, nothing is a failure.
+      if (isAbortError(err, input.signal)) {
+        if (stored && usable) return { lesson: stored, fromCache: true }
+        throw err
+      }
+      if (stored && usable) {
         return {
           lesson: stored,
           fromCache: true,

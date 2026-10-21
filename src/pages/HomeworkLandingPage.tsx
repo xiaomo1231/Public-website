@@ -50,6 +50,9 @@ import { DocumentUploadDialog } from '@/widgets/documents/DocumentUploadDialog'
 import { HomeworkAnswerDialog } from '@/widgets/homework/HomeworkAnswerDialog'
 import { ProjectFlowNav } from '@/widgets/project/ProjectFlowNav'
 import { useHomeworkService } from '@/features/homework/useHomeworkService'
+import { startHomeworkRun, useHomeworkRun } from '@/features/homework/homeworkRuns'
+import { isGenerationInterruption } from '@/shared/lib/generationControl'
+import { GenerationControls } from '@/shared/ui/GenerationControls'
 import { toast } from '@/features/toast/toastStore'
 import { friendlyAIError } from '@/shared/lib/aiErrors'
 import { cn, relativeTime } from '@/shared/lib/utils'
@@ -66,6 +69,7 @@ const STATUS_VARIANT = {
   analyzing: 'secondary',
   ready: 'default',
   failed: 'destructive',
+  paused: 'outline',
 } as const
 
 /** An `analyzing` set older than this, with no run in flight, is interrupted. */
@@ -166,11 +170,17 @@ export function HomeworkLandingPage(): JSX.Element {
     attempted.current.add(pending.id)
     setBusyDocumentId(pending.id)
     setError(null)
+    const run = startHomeworkRun(pending.id)
     void service
-      .createFromDocument(pending.id)
+      .createFromDocument(pending.id, { control: run })
       .then(() => load())
-      .catch((err) => setError(friendlyAIError(err)))
-      .finally(() => setBusyDocumentId(null))
+      .catch((err) => {
+        if (!isGenerationInterruption(err, run)) setError(friendlyAIError(err))
+      })
+      .finally(() => {
+        run.finish()
+        setBusyDocumentId(null)
+      })
   }, [service, projectId, documents, sets, load])
 
   /** Refresh: read the latest local state only — never calls the AI. */
@@ -179,25 +189,35 @@ export function HomeworkLandingPage(): JSX.Element {
     await load()
   }, [load])
 
-  /** Re-analyze: an explicit AI run, only if one is not already in flight. */
-  const reanalyze = useCallback(
-    async (set: HomeworkSet) => {
+  /**
+   * Re-analyze (`retry`) or continue a paused run (`resume`, only what is
+   * left): an explicit AI run the student can pause, only one at a time.
+   */
+  const runSet = useCallback(
+    async (set: HomeworkSet, kind: 'retry' | 'resume') => {
       if (!service || service.isSetRunning(set.id)) return
       setBusyDocumentId(set.documentId)
       setError(null)
       setSummary(null)
+      const run = startHomeworkRun(set.documentId)
       try {
-        const result = await service.retrySet(set.id)
-        if (result) setSummary(result.summary)
+        const result =
+          kind === 'retry'
+            ? await service.retrySet(set.id, { control: run })
+            : await service.resumeSet(set.id, { control: run })
+        if (result && !result.paused && kind === 'retry') setSummary(result.summary)
         await load()
       } catch (err) {
-        setError(friendlyAIError(err))
+        if (!isGenerationInterruption(err, run)) setError(friendlyAIError(err))
       } finally {
+        run.finish()
         setBusyDocumentId(null)
       }
     },
     [service, load],
   )
+  const reanalyze = useCallback((set: HomeworkSet) => runSet(set, 'retry'), [runSet])
+  const resume = useCallback((set: HomeworkSet) => runSet(set, 'resume'), [runSet])
 
   /**
    * An answer file finished uploading. Link it to the assignment that started
@@ -418,15 +438,32 @@ export function HomeworkLandingPage(): JSX.Element {
                               <Button
                                 variant="outline"
                                 className="w-full"
-                                onClick={() => void reanalyze(set)}
+                                onClick={() => void resume(set)}
                                 disabled={running}
                               >
                                 <RotateCcw className="h-4 w-4" />
                                 {t('homework.retryAnalyze')}
                               </Button>
                             ) : (
-                              <SetProgress set={set} />
+                              <div className="flex flex-wrap items-end gap-2">
+                                <div className="min-w-[10rem] flex-1">
+                                  <SetProgress set={set} />
+                                </div>
+                                <SetRunControls set={set} />
+                              </div>
                             )
+                          ) : set.status === 'paused' ? (
+                            <div className="space-y-2">
+                              <SetRunControls set={set} onResume={() => void resume(set)} />
+                              {set.questionCount > 0 && (
+                                <Button asChild variant="outline" className="w-full">
+                                  <Link to={`/projects/${projectId}/homework/${set.id}`}>
+                                    {t('homework.open')}
+                                    <ArrowRight className="h-4 w-4" />
+                                  </Link>
+                                </Button>
+                              )}
+                            </div>
                           ) : (
                             <Button asChild className="w-full">
                               <Link to={`/projects/${projectId}/homework/${set.id}`}>
@@ -567,6 +604,47 @@ export function HomeworkLandingPage(): JSX.Element {
         </DialogContent>
       </Dialog>
     </PageContainer>
+  )
+}
+
+/**
+ * Pause / stop while an assignment is read or prepared, 继续 once paused. A
+ * paused set read from storage (after a reload) offers 继续 without a run.
+ */
+function SetRunControls({
+  set,
+  onResume,
+}: {
+  set: HomeworkSet
+  onResume?: () => void
+}): JSX.Element | null {
+  const { t } = useTranslation()
+  const { run, state } = useHomeworkRun(set.documentId)
+  const live = state === 'running' || state === 'pausing'
+  if (set.status === 'paused' && !live) {
+    const total = set.progress?.total
+    return (
+      <GenerationControls
+        kind="parts"
+        state={state === 'stopped' ? 'stopped' : 'paused'}
+        done={set.progress?.completed ?? 0}
+        {...(typeof total === 'number' ? { total } : {})}
+        {...(onResume ? { onResume } : {})}
+        {...(set.progress?.stage !== 'generating'
+          ? { pausedHint: t('homework.pausedIdentifyingHint') }
+          : {})}
+      />
+    )
+  }
+  if (!live || !run) return null
+  return (
+    <GenerationControls
+      kind="parts"
+      state={state}
+      stopRequested={run.stopRequested}
+      onPause={() => run.requestPause()}
+      onStopNow={() => run.stopNow()}
+    />
   )
 }
 

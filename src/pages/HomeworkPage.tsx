@@ -23,6 +23,9 @@ import { HomeworkQuestionView } from '@/widgets/homework/HomeworkQuestionView'
 import { HomeworkWalkthroughPanel } from '@/widgets/homework/walkthrough/HomeworkWalkthroughPanel'
 import { ProjectFlowNav } from '@/widgets/project/ProjectFlowNav'
 import { useHomeworkService } from '@/features/homework/useHomeworkService'
+import { startHomeworkRun, useHomeworkRun } from '@/features/homework/homeworkRuns'
+import { isGenerationInterruption } from '@/shared/lib/generationControl'
+import { GenerationControls } from '@/shared/ui/GenerationControls'
 import { friendlyAIError } from '@/shared/lib/aiErrors'
 import { cn } from '@/shared/lib/utils'
 import { useTranslation } from '@/i18n'
@@ -105,6 +108,10 @@ export function HomeworkPage(): JSX.Element {
     }
   }, [load])
 
+  // The assignment's pausable run (re-read / continue), if one exists.
+  const runHandle = useHomeworkRun(set?.documentId)
+  const runLive = runHandle.state === 'running' || runHandle.state === 'pausing'
+
   const index = useMemo(() => questions.findIndex((q) => q.id === activeId), [questions, activeId])
   const active = index >= 0 ? questions[index] : (questions[0] ?? null)
 
@@ -121,21 +128,30 @@ export function HomeworkPage(): JSX.Element {
     nav.scrollLeft = Math.max(0, nav.scrollLeft + delta)
   }, [active?.id])
 
-  async function retrySet(): Promise<void> {
-    if (!service || !assignmentId) return
+  /** Re-read the assignment, or continue a paused run with only what is left. */
+  async function runSet(kind: 'retry' | 'resume' = 'retry'): Promise<void> {
+    if (!service || !assignmentId || !set) return
     setRetrying(true)
     setError(null)
     setSummary(null)
+    const run = startHomeworkRun(set.documentId)
+    runHandle.attach(run)
     try {
-      const result = await service.retrySet(assignmentId)
-      if (result) setSummary(result.summary)
+      const result =
+        kind === 'retry'
+          ? await service.retrySet(assignmentId, { control: run })
+          : await service.resumeSet(assignmentId, { control: run })
+      if (result && !result.paused && kind === 'retry') setSummary(result.summary)
       await load()
     } catch (err) {
-      setError(friendlyAIError(err))
+      if (!isGenerationInterruption(err, run)) setError(friendlyAIError(err))
     } finally {
+      run.finish()
       setRetrying(false)
+      await load().catch(() => undefined)
     }
   }
+  const retrySet = (): Promise<void> => runSet('retry')
 
   async function restore(id: string): Promise<void> {
     if (!service) return
@@ -207,6 +223,15 @@ export function HomeworkPage(): JSX.Element {
                 )}
                 {t('homework.reanalyze')}
               </Button>
+            )}
+            {runLive && runHandle.run && (
+              <GenerationControls
+                kind="parts"
+                state={runHandle.state}
+                stopRequested={runHandle.run.stopRequested}
+                onPause={runHandle.requestPause}
+                onStopNow={runHandle.stopNow}
+              />
             )}
             <Button asChild variant="outline">
               <Link to={`/projects/${projectId}/homework`}>
@@ -291,9 +316,29 @@ export function HomeworkPage(): JSX.Element {
               </Card>
             )}
 
+            {set.status === 'paused' && !runLive && (
+              <Card className="border-border/70">
+                <CardContent className="p-3">
+                  <GenerationControls
+                    kind="parts"
+                    state={runHandle.state === 'stopped' ? 'stopped' : 'paused'}
+                    done={set.progress?.completed ?? 0}
+                    {...(typeof set.progress?.total === 'number'
+                      ? { total: set.progress.total }
+                      : {})}
+                    onResume={() => void runSet('resume')}
+                    {...(set.progress?.stage !== 'generating'
+                      ? { pausedHint: t('homework.pausedIdentifyingHint') }
+                      : {})}
+                  />
+                </CardContent>
+              </Card>
+            )}
+
             {view === 'walkthrough' && questions.length > 0 ? (
               <HomeworkWalkthroughPanel set={set} mode={mode} />
-            ) : questions.length === 0 ? (
+            ) : questions.length === 0 && set.status === 'paused' ? null : questions.length ===
+              0 ? (
               <Card>
                 <CardContent className="flex items-center gap-2 p-6 text-sm text-muted-foreground">
                   <Loader2 className="h-4 w-4 animate-spin" aria-hidden />

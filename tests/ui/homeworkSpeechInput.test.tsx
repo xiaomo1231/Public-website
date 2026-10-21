@@ -122,7 +122,11 @@ describe('homework speech input', () => {
     expect(recognition.stop).toHaveBeenCalledOnce()
     act(() => recognition.onend?.())
     await user.click(screen.getByRole('button', { name: 'Send' }))
-    expect(service.ask).toHaveBeenCalledWith('q1', 'Please explain step one carefully and step two')
+    expect(service.ask).toHaveBeenCalledWith(
+      'q1',
+      'Please explain step one carefully and step two',
+      expect.anything(),
+    )
     expect(screen.getByLabelText('Your working')).toHaveValue('saved working')
   })
 

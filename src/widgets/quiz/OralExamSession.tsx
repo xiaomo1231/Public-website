@@ -37,6 +37,9 @@ import { cn } from '@/shared/lib/utils'
 import { QuestionSource } from './QuestionSource'
 import { ShortAnswerFeedback } from './ShortAnswerFeedback'
 import { useTranslation } from '@/i18n'
+import { isAbortError } from '@/shared/lib/generationControl'
+import { useGenerationRun } from '@/shared/lib/useGenerationRun'
+import { GenerationControls } from '@/shared/ui/GenerationControls'
 
 export interface OralExamSessionProps {
   projectId: string
@@ -73,6 +76,7 @@ export function OralExamSession({
   const [loaded, setLoaded] = useState(false)
   const [answer, setAnswer] = useState('')
   const [busy, setBusy] = useState(false)
+  const checkRun = useGenerationRun({ abortOnUnmount: true })
   const [disputing, setDisputing] = useState<string | null>(null)
   const [international, setInternational] = useState(false)
   const timerSeconds = quiz.config.oral?.timerSeconds
@@ -136,10 +140,25 @@ export function OralExamSession({
     try {
       // Graded point by point when an AI is configured; otherwise kept, not scored.
       const graded = (await buildAIServices())?.quiz ?? null
-      const result = await (graded ?? service).submitAnswer(quiz.id, current.id, answer, {
-        durationMs: Date.now() - startedAt.current,
-        ...(graded ? { gradeShortAnswer: true } : {}),
-      })
+      // The AI check can be stopped; a stopped check submits nothing.
+      const run = graded ? checkRun.start() : null
+      let result
+      try {
+        result = await (graded ?? service).submitAnswer(quiz.id, current.id, answer, {
+          durationMs: Date.now() - startedAt.current,
+          ...(graded ? { gradeShortAnswer: true } : {}),
+          ...(run ? { signal: run.signal } : {}),
+        })
+      } catch (err) {
+        if (run && isAbortError(err, run.signal)) {
+          toast({ variant: 'info', title: t('quiz.checkStopped') })
+          return
+        }
+        throw err
+      } finally {
+        run?.finish()
+        checkRun.reset()
+      }
       setAttempts((previous) => new Map(previous).set(current.id, result.attempt))
       setAnswer('')
       startedAt.current = Date.now()
@@ -401,6 +420,11 @@ export function OralExamSession({
                 {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
                 {busy ? t('oral.grading') : t('oral.submit')}
               </Button>
+              <GenerationControls
+                kind="single"
+                state={checkRun.state}
+                onStopNow={checkRun.stopNow}
+              />
             </div>
             <p
               role="status"

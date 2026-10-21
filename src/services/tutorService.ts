@@ -24,6 +24,7 @@ import type {
 } from '@/infrastructure/ai/prompts/types'
 import type { TutorQuestion, TutorSession, TutorTurn } from '@/entities/tutorSession/types'
 import { AppError } from '@/infrastructure/errors/AppError'
+import { isAbortError } from '@/shared/lib/generationControl'
 import { logger } from '@/infrastructure/logger/logger'
 import { normalizeMathNotation } from '@/infrastructure/files/mathNotation'
 import { friendlyTutorError } from '@/shared/lib/aiErrors'
@@ -76,8 +77,8 @@ export interface TutorActionResult {
 }
 
 /** True when the error is a user/tool cancellation rather than a failure. */
-function isAbort(err: unknown): boolean {
-  return err instanceof Error && err.name === 'AbortError'
+function isAbort(err: unknown, signal?: AbortSignal): boolean {
+  return isAbortError(err, signal)
 }
 
 const DIFFICULTY_ORDER: DifficultyLevel[] = [
@@ -293,7 +294,7 @@ export class TutorService {
     try {
       return await this.askQuestion(session.id, opts.signal)
     } catch (err) {
-      if (isAbort(err)) {
+      if (isAbort(err, opts.signal)) {
         return { session: await this.getSession(session.id), turn: introTurn, finished: false }
       }
       logger.warn('Tutor question generation failed; continuing with the introduction', {
@@ -479,6 +480,8 @@ export class TutorService {
         studentAnswer,
         await loadProjectSubjectContext(session.projectId, this.db),
       )
+      // Stopped while the scoring points were checked: record nothing.
+      signal?.throwIfAborted()
       evaluationTyped = tutorEvaluationFromScore(scored, question.expectedAnswer)
     } else {
       const sources = await this.collectSources(session)

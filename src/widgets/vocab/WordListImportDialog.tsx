@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { BookOpen, Loader2 } from 'lucide-react'
 import { Button } from '@/shared/ui/Button'
 import {
@@ -19,6 +19,8 @@ import { buildAIServices } from '@/services/aiServices'
 import { TextbookWordListService, type WordListCandidate } from '@/services/textbookWordList'
 import { friendlyAIError } from '@/shared/lib/aiErrors'
 import { useTranslation } from '@/i18n'
+import { useGenerationRun } from '@/shared/lib/useGenerationRun'
+import { GenerationControls } from '@/shared/ui/GenerationControls'
 
 /** Rows shown per page of the confirmation list (long textbook lists have 1000+ words). */
 export const WORD_LIST_PAGE_SIZE = 100
@@ -55,11 +57,16 @@ export function WordListImportDialog({
   const [skipped, setSkipped] = useState<Set<string>>(new Set())
   const [page, setPage] = useState(0)
   const [failedParts, setFailedParts] = useState(0)
-  const abort = useRef<AbortController | null>(null)
+  /** Parts read / planned; `paused` while some are still unread. */
+  const [parts, setParts] = useState({ done: 0, total: 0, paused: false })
+  const generation = useGenerationRun({ abortOnUnmount: true })
+  const { stopNow, reset } = generation
 
   useEffect(() => {
     if (!open) {
-      abort.current?.abort()
+      stopNow()
+      reset()
+      setParts({ done: 0, total: 0, paused: false })
       setPhase('idle')
       setRows([])
       setSkipped(new Set())
@@ -69,12 +76,12 @@ export function WordListImportDialog({
     } else if (documentId) {
       setChosen(documentId)
     }
-  }, [open, documentId])
+  }, [open, documentId, stopNow, reset])
 
+  /** Read the word list; after a pause, only the parts still unread are requested. */
   const read = async () => {
     if (!chosen) return
-    const controller = new AbortController()
-    abort.current = controller
+    const run = generation.start()
     setPhase('reading')
     setProgress(0)
     try {
@@ -83,19 +90,36 @@ export function WordListImportDialog({
         projectId,
         chosen,
         {
-          signal: controller.signal,
-          onProgress: (done, total) => setProgress(Math.round((done / total) * 100)),
+          control: run,
+          onProgress: (done, total) => {
+            setProgress(Math.round((done / total) * 100))
+            setParts((prev) => ({ ...prev, done, total }))
+          },
         },
       )
-      setRows(result.candidates)
+      run.finish()
+      // Continuing a paused read keeps the edits and unticks made so far.
+      const key = (row: WordListCandidate) => `${row.article ?? ''} ${row.term}`
+      const before = new Map(rows.map((row) => [key(row), row]))
+      const next = result.candidates.map((row) => {
+        const old = before.get(key(row))
+        return old ? { ...row, gloss: old.gloss } : row
+      })
+      const skippedKeys = new Set(rows.filter((row) => skipped.has(row.id)).map(key))
+      setRows(next)
+      setSkipped(new Set(next.filter((row) => skippedKeys.has(key(row))).map((row) => row.id)))
       setFailedParts(result.failedParts)
-      setSkipped(new Set())
-      setPage(0)
+      setParts({ done: result.doneParts, total: result.totalParts, paused: result.paused })
+      if (rows.length === 0) setPage(0)
       setPhase('review')
     } catch (err) {
-      if (controller.signal.aborted) return
+      run.finish()
+      if (run.stopRequested || run.signal.aborted) {
+        setPhase(rows.length > 0 ? 'review' : 'idle')
+        return
+      }
       toast({ variant: 'error', title: t('wordList.failed'), description: friendlyAIError(err) })
-      setPhase('idle')
+      setPhase(rows.length > 0 ? 'review' : 'idle')
     }
   }
 
@@ -178,11 +202,20 @@ export function WordListImportDialog({
               </div>
             )}
             {phase === 'reading' && (
-              <div className="space-y-1" aria-live="polite">
-                <Progress value={progress} className="h-1.5" />
-                <p className="text-xs text-muted-foreground">
-                  {t('wordList.reading', { percent: progress })}
-                </p>
+              <div className="flex flex-wrap items-center gap-3" aria-live="polite">
+                <div className="min-w-0 flex-1 space-y-1">
+                  <Progress value={progress} className="h-1.5" />
+                  <p className="text-xs text-muted-foreground">
+                    {t('wordList.reading', { percent: progress })}
+                  </p>
+                </div>
+                <GenerationControls
+                  kind="parts"
+                  state={generation.state}
+                  stopRequested={generation.run?.stopRequested ?? false}
+                  onPause={generation.requestPause}
+                  onStopNow={generation.stopNow}
+                />
               </div>
             )}
             <p className="text-xs text-muted-foreground">{t('wordList.privacy')}</p>
@@ -191,6 +224,19 @@ export function WordListImportDialog({
 
         {(phase === 'review' || phase === 'saving') && (
           <div className="space-y-3">
+            {phase === 'review' && parts.paused && (
+              <div className="flex flex-wrap items-center gap-2">
+                <p className="min-w-0 flex-1 text-xs text-muted-foreground">
+                  {t('wordList.pausedNote', { done: parts.done, total: parts.total })}
+                </p>
+                <GenerationControls
+                  kind="parts"
+                  state="paused"
+                  hideStatus
+                  onResume={() => void read()}
+                />
+              </div>
+            )}
             {rows.length === 0 ? (
               <p className="text-sm text-muted-foreground">{t('wordList.none')}</p>
             ) : (

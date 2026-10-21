@@ -40,6 +40,9 @@ function state(overrides: Partial<UseTutorLessonState> = {}): UseTutorLessonStat
     fromCache: true,
     streaming: false,
     regenerating: false,
+    generation: null,
+    stop: () => undefined,
+    stopped: false,
     regenerate: vi.fn().mockResolvedValue(undefined),
     ...overrides,
   }

@@ -17,8 +17,15 @@ import type {
   QuizConfig,
   QuizDifficulty,
   QuizKnowledgeStat,
+  QuizResumeSlot,
+  QuizResumeState,
   QuizScore,
 } from '@/entities/quiz/types'
+import {
+  isAbortError,
+  resolveControl,
+  type GenerationControl,
+} from '@/shared/lib/generationControl'
 import type { DifficultyLevel } from '@/infrastructure/ai/prompts/types'
 import { prompts } from '@/infrastructure/ai/prompts'
 import type {
@@ -102,6 +109,12 @@ export interface QuizServiceDeps {
 export interface GenerateQuizOptions {
   onProgress?: (stage: string, progress: number) => void
   signal?: AbortSignal
+  /**
+   * Pause / stop. A pause (or a stop, which also aborts the batch in flight)
+   * ends the run with the quiz `paused`: the questions generated so far are
+   * stored and `continueQuiz` fills the rest. A bare `signal` behaves the same.
+   */
+  control?: GenerationControl
 }
 
 export interface SubmitAnswerResult {
@@ -130,7 +143,16 @@ const MIN_QUIZ_SNIPPETS = 8
 const MAX_QUIZ_SNIPPETS = 24
 
 /** `group` points into the quiz's topic groups (a mixed review spreads its questions over topics). */
-type PlanEntry = { type: QuestionType; difficulty: DifficultyLevel; group?: number }
+type PlanEntry = { slot: number; type: QuestionType; difficulty: DifficultyLevel; group?: number }
+
+function toResumeSlot({ slot, type, difficulty, group }: PlanEntry): QuizResumeSlot {
+  return { slot, type, difficulty, ...(group !== undefined ? { group } : {}) }
+}
+
+/** Quizzes this tab is generating right now (a stale `generating` row elsewhere is recovered). */
+const generatingQuizzes = new Set<string>()
+/** A `generating` row untouched this long, and not running here, was interrupted. */
+const STALE_GENERATION_MS = 10 * 60_000
 
 /** What one part of a quiz is about: a topic's knowledge points and source passages. */
 interface QuizGroup {
@@ -431,16 +453,7 @@ export class QuizService {
     // unknown id fails as "not found" rather than as a misleading domain error.
     if (this.projects) await this.projects.get(projectId)
     // Oral-exam rehearsal: drawn topics with follow-ups, stored as short answers.
-    if (config.mode === 'oral') {
-      return new OralExamService({
-        ai: this.ai,
-        db: this.db,
-        questions: this.questions,
-        quizzes: this.quizzes,
-        analyses: this.analyses,
-        chunks: this.chunks,
-      }).generate(projectId, config, options)
-    }
+    if (config.mode === 'oral') return this.oral().generate(projectId, config, options)
 
     const analysis = await this.analyses.getByProject(projectId)
     if (!analysis || analysis.status !== 'ready') {
@@ -449,6 +462,7 @@ export class QuizService {
     if (config.count < 1 || config.count > 30) {
       throw new AppError(t('errors.questionCountRange'), 'INVALID_COUNT')
     }
+    const control = resolveControl(options.control, options.signal)
 
     const topic = config.topicId ? await this.analyses.getTopic(config.topicId) : undefined
     const topicName = topic?.name ?? config.topicName ?? t('quiz.mixedReviewName')
@@ -462,7 +476,11 @@ export class QuizService {
       { ...config, types: offeredQuizTypes(config.types, subjectContext) },
       config.count,
     )
-    const plan = difficultyPlan.map((difficulty, i) => ({ difficulty, type: typePlan[i]! }))
+    const plan: PlanEntry[] = difficultyPlan.map((difficulty, i) => ({
+      slot: i,
+      difficulty,
+      type: typePlan[i]!,
+    }))
 
     const quiz: Quiz = {
       id: crypto.randomUUID(),
@@ -476,6 +494,7 @@ export class QuizService {
       promptVersion: prompts.quizGenerator.VERSION,
     }
     await this.quizzes.upsert(quiz)
+    generatingQuizzes.add(quiz.id)
 
     try {
       options.onProgress?.('collecting', 10)
@@ -497,12 +516,8 @@ export class QuizService {
         group.snippets = scopeSnippetsByStructure(group.snippets, scope)
       })
       plan.forEach((entry, i) => {
-        if (groups.length > 1) (entry as PlanEntry).group = i % groups.length
+        if (groups.length > 1) entry.group = i % groups.length
       })
-      // Only ids actually offered to the model can ever be cited.
-      const snippetIndex = new Map(
-        groups.flatMap((group) => group.snippets).map((s) => [s.chunkId, s]),
-      )
 
       options.onProgress?.('generating', 30)
       // How the professor writes questions (never what is tested). Absent when
@@ -514,83 +529,282 @@ export class QuizService {
       const preference =
         config.questionLanguage ??
         (await new UserRepository(this.db).get().catch(() => undefined))?.questionLanguage
-      const generated = await this.generateInBatches(
-        plan,
-        groups,
-        {
-          topicName,
-          topicDescription,
-          language: quizLanguage(preference, analysis.language),
-          ...(professorStyleContext ? { professorStyleContext } : {}),
-        },
-        subjectContext,
-        options.signal,
-      )
-
-      options.onProgress?.('storing', 80)
-      const stored = await this.questions.addMany(
-        generated.map(({ question: q, entry }, i) => {
-          const group = groups[entry.group ?? 0]
-          const topicId = group?.topicId ?? topic?.id
-          const fallbackPoint =
-            group?.knowledgePoints[0] ?? knowledgePoints[i % Math.max(1, knowledgePoints.length)]
-          return {
-            projectId,
-            ...(topicId ? { topicId } : {}),
-            knowledgePoint:
-              q.knowledgePoint || fallbackPoint || topic?.name || config.topicName || 'General',
-            // The question's own (validated) type: a dropped question must never
-            // shift the types of the ones after it.
-            type: q.type,
-            difficulty: entry.difficulty,
-            prompt: q.prompt,
-            // Models put the answer first; the order the student sees is random.
-            ...(q.options ? { options: shuffled(q.options) } : {}),
-            correctAnswer: q.correctAnswer,
-            ...(q.unit ? { unit: q.unit } : {}),
-            ...(q.rubric?.length
-              ? { rubric: q.rubric.map((text, index) => ({ id: `p${index + 1}`, text })) }
-              : {}),
-            ...(q.orderItems?.length ? { orderItems: q.orderItems } : {}),
-            ...(q.matchItems?.length ? { matchItems: q.matchItems } : {}),
-            ...(q.blanks?.length ? { blanks: q.blanks } : {}),
-            ...(q.gender ? { gender: q.gender } : {}),
-            ...(q.paradigm ? { paradigm: q.paradigm } : {}),
-            ...(q.solution ? { solution: q.solution } : {}),
-            hints: q.hints ?? [],
-            // An exam topic without course material has no source to cite.
-            sourceRefs: group?.aiOnly
-              ? []
-              : resolveSourceReferences(q.sourceChunkId, q.quote, snippetIndex),
-            ...(group?.aiOnly ? { origin: 'ai_without_source' as const } : {}),
-            promptVersion: prompts.quizGenerator.VERSION,
-          }
-        }),
-      )
-
-      const ready: Quiz = {
-        ...quiz,
-        // The title states how many questions there really are.
-        title: t('quiz.topicTitle', { topic: topicName, count: stored.length }),
-        questionIds: stored.map((q) => q.id),
-        status: 'ready',
+      // Everything needed to fill the plan later is on the row from the start,
+      // so a pause (or a closed tab) keeps the questions already generated.
+      const resume: QuizResumeState = {
+        pending: plan.map(toResumeSlot),
+        questionSlots: [],
+        groups: groups.map((group) => ({
+          ...(group.topicId ? { topicId: group.topicId } : {}),
+          ...(group.aiOnly ? { aiOnly: true } : {}),
+          knowledgePoints: group.knowledgePoints,
+          snippetChunkIds: group.snippets.map((snippet) => snippet.chunkId),
+        })),
+        knowledgePoints,
+        topicName,
+        topicDescription,
+        language: quizLanguage(preference, analysis.language),
+        ...(professorStyleContext ? { professorStyleContext } : {}),
+        updatedAt: Date.now(),
       }
-      if (stored.length < config.count) {
-        logger.warn('Quiz has fewer questions than requested', {
-          quizId: quiz.id,
-          requested: config.count,
-          generated: stored.length,
-        })
-      }
-      await this.quizzes.upsert(ready)
-      options.onProgress?.('done', 100)
-      logger.info('Quiz generated', { quizId: ready.id, count: stored.length })
-      return ready
+      const withResume: Quiz = { ...quiz, resume }
+      await this.quizzes.upsert(withResume)
+      return await this.fillPlan(withResume, groups, subjectContext, control, options.onProgress)
     } catch (err) {
       const message = err instanceof Error ? err.message : t('errors.quizGenerationFailed')
-      await this.quizzes.upsert({ ...quiz, status: 'failed', errorMessage: message })
+      const latest = (await this.quizzes.get(quiz.id)) ?? quiz
+      await this.quizzes.upsert({ ...latest, status: 'failed', errorMessage: message })
       throw err
+    } finally {
+      generatingQuizzes.delete(quiz.id)
     }
+  }
+
+  /**
+   * 「继续出题」: fill the remaining slots of a paused quiz (same batching and
+   * top-up rules), then make it takeable. Pausing again keeps what was added;
+   * a failed continuation leaves it paused with its questions.
+   */
+  async continueQuiz(quizId: string, options: GenerateQuizOptions = {}): Promise<Quiz> {
+    const quiz = await this.getQuiz(quizId)
+    if (quiz.status !== 'paused') return quiz
+    if (quiz.config.mode === 'oral') return this.oral().continue(quiz, options)
+    const resume = quiz.resume
+    if (!resume) throw new AppError(t('quiz.paused.interrupted'), 'QUIZ_GENERATION_FAILED')
+    const analysis = await this.analyses.getByProject(quiz.projectId)
+    if (!analysis || analysis.status !== 'ready') {
+      throw new AppError(t('errors.analysisMissing'), 'NO_ANALYSIS')
+    }
+    const control = resolveControl(options.control, options.signal)
+    const { errorMessage: _previous, ...rest } = quiz
+    void _previous
+    const generating: Quiz = { ...rest, status: 'generating' }
+    await this.quizzes.upsert(generating)
+    generatingQuizzes.add(quiz.id)
+    try {
+      options.onProgress?.('collecting', 10)
+      // The groups' passages, reloaded by the chunk ids chosen when it started.
+      const candidates = await loadQuizCandidates({
+        documentIds: analysis.documentIds,
+        chunks: this.chunks,
+        documents: new DocumentRepository(this.db),
+        ...(quiz.config.chapterId ? { chapterId: quiz.config.chapterId } : {}),
+        ...(quiz.config.sectionId ? { sectionId: quiz.config.sectionId } : {}),
+      })
+      const byId = new Map(candidates.map((snippet) => [snippet.chunkId, snippet]))
+      const groups: QuizGroup[] = resume.groups.map((group) => ({
+        ...(group.topicId ? { topicId: group.topicId } : {}),
+        ...(group.aiOnly ? { aiOnly: true } : {}),
+        knowledgePoints: group.knowledgePoints,
+        snippets: group.snippetChunkIds
+          .map((id) => byId.get(id))
+          .filter((snippet): snippet is SourceSnippet => snippet !== undefined),
+      }))
+      const subject = await loadProjectSubjectContext(quiz.projectId)
+      options.onProgress?.('generating', 30)
+      return await this.fillPlan(generating, groups, subject, control, options.onProgress)
+    } catch (err) {
+      const latest = (await this.quizzes.get(quiz.id)) ?? quiz
+      await this.quizzes.upsert({
+        ...latest,
+        status: 'paused',
+        ...(err instanceof Error ? { errorMessage: err.message } : {}),
+      })
+      throw err
+    } finally {
+      generatingQuizzes.delete(quiz.id)
+    }
+  }
+
+  /**
+   * A quiz left `generating` by a closed tab or a crash (no request of this
+   * tab is working on it and its row has not moved for a while) is not stuck:
+   * one that recorded its plan becomes `paused` (its questions stay and can
+   * be continued); an older row without a plan becomes `failed`.
+   */
+  async recoverInterruptedQuizzes(projectId: string, now = Date.now()): Promise<number> {
+    let recovered = 0
+    for (const quiz of await this.quizzes.listByProject(projectId)) {
+      if (quiz.status !== 'generating' || generatingQuizzes.has(quiz.id)) continue
+      const touched = quiz.resume?.updatedAt ?? quiz.oralResume?.updatedAt ?? quiz.startedAt
+      if (now - touched < STALE_GENERATION_MS) continue
+      await this.quizzes.upsert(
+        quiz.resume || quiz.oralResume
+          ? { ...quiz, status: 'paused' }
+          : { ...quiz, status: 'failed', errorMessage: t('quiz.paused.interrupted') },
+      )
+      recovered += 1
+    }
+    return recovered
+  }
+
+  private oral(): OralExamService {
+    return new OralExamService({
+      ai: this.ai,
+      db: this.db,
+      questions: this.questions,
+      quizzes: this.quizzes,
+      analyses: this.analyses,
+      chunks: this.chunks,
+      generating: generatingQuizzes,
+    })
+  }
+
+  /**
+   * Generate the quiz's pending slots, storing each batch's questions on the
+   * row as soon as they exist. Ends `ready` (questions in plan order), or
+   * `paused` when the control asked to stop starting new batches.
+   */
+  private async fillPlan(
+    quiz: Quiz,
+    groups: QuizGroup[],
+    subject: SubjectInput,
+    control: GenerationControl,
+    onProgress?: (stage: string, progress: number) => void,
+  ): Promise<Quiz> {
+    const resume = quiz.resume!
+    const topic = quiz.config.topicId
+      ? await this.analyses.getTopic(quiz.config.topicId)
+      : undefined
+    // Only ids actually offered to the model can ever be cited.
+    const snippetIndex = new Map(
+      groups.flatMap((group) => group.snippets).map((s) => [s.chunkId, s]),
+    )
+    const existing = await this.questions.listByIds(quiz.questionIds)
+    let current: Quiz = quiz
+    const total = quiz.config.count
+    const toInput = (question: GeneratedQuizQuestion, entry: PlanEntry, i: number) => {
+      const group = groups[entry.group ?? 0]
+      const topicId = group?.topicId ?? topic?.id
+      const fallbackPoint =
+        group?.knowledgePoints[0] ??
+        resume.knowledgePoints[i % Math.max(1, resume.knowledgePoints.length)]
+      return {
+        projectId: quiz.projectId,
+        ...(topicId ? { topicId } : {}),
+        knowledgePoint:
+          question.knowledgePoint ||
+          fallbackPoint ||
+          topic?.name ||
+          quiz.config.topicName ||
+          'General',
+        // The question's own (validated) type: a dropped question must never
+        // shift the types of the ones after it.
+        type: question.type,
+        difficulty: entry.difficulty,
+        prompt: question.prompt,
+        // Models put the answer first; the order the student sees is random.
+        ...(question.options ? { options: shuffled(question.options) } : {}),
+        correctAnswer: question.correctAnswer,
+        ...(question.unit ? { unit: question.unit } : {}),
+        ...(question.rubric?.length
+          ? { rubric: question.rubric.map((text, index) => ({ id: `p${index + 1}`, text })) }
+          : {}),
+        ...(question.orderItems?.length ? { orderItems: question.orderItems } : {}),
+        ...(question.matchItems?.length ? { matchItems: question.matchItems } : {}),
+        ...(question.blanks?.length ? { blanks: question.blanks } : {}),
+        ...(question.gender ? { gender: question.gender } : {}),
+        ...(question.paradigm ? { paradigm: question.paradigm } : {}),
+        ...(question.solution ? { solution: question.solution } : {}),
+        hints: question.hints ?? [],
+        // An exam topic without course material has no source to cite.
+        sourceRefs: group?.aiOnly
+          ? []
+          : resolveSourceReferences(question.sourceChunkId, question.quote, snippetIndex),
+        ...(group?.aiOnly ? { origin: 'ai_without_source' as const } : {}),
+        promptVersion: prompts.quizGenerator.VERSION,
+      }
+    }
+
+    const outcome = await this.generateInBatches(
+      resume.pending.map((entry) => ({ ...entry })),
+      groups,
+      {
+        topicName: resume.topicName,
+        topicDescription: resume.topicDescription,
+        language: resume.language,
+        ...(resume.professorStyleContext
+          ? { professorStyleContext: resume.professorStyleContext }
+          : {}),
+      },
+      subject,
+      control,
+      existing.map((question) => question.prompt),
+      async (delivered, pending) => {
+        const stored = await this.questions.addMany(
+          delivered.map(({ question, entry }, i) =>
+            toInput(question, entry, current.questionIds.length + i),
+          ),
+        )
+        const latest = current.resume!
+        current = {
+          ...current,
+          questionIds: [...current.questionIds, ...stored.map((q) => q.id)],
+          resume: {
+            ...latest,
+            pending: pending.map(toResumeSlot),
+            questionSlots: [...latest.questionSlots, ...delivered.map(({ entry }) => entry.slot)],
+            updatedAt: Date.now(),
+          },
+        }
+        await this.quizzes.upsert(current)
+        onProgress?.(
+          'generating',
+          30 + Math.round((50 * Math.min(total, current.questionIds.length)) / Math.max(1, total)),
+        )
+      },
+    )
+
+    if (outcome.paused) {
+      const paused: Quiz = {
+        ...current,
+        status: 'paused',
+        resume: {
+          ...current.resume!,
+          pending: outcome.pending.map(toResumeSlot),
+          updatedAt: Date.now(),
+        },
+      }
+      await this.quizzes.upsert(paused)
+      logger.info('Quiz generation paused', {
+        quizId: paused.id,
+        generated: paused.questionIds.length,
+        pending: outcome.pending.length,
+      })
+      return paused
+    }
+    if (current.questionIds.length === 0) {
+      throw outcome.lastError ?? new AppError(t('errors.noUsableQuestions'), 'MALFORMED_QUIZ')
+    }
+
+    onProgress?.('storing', 80)
+    // Keep the plan's order (difficulty ramps up through an adaptive quiz).
+    const slots = current.resume!.questionSlots
+    const ordered = current.questionIds
+      .map((id, i) => ({ id, slot: slots[i] ?? i }))
+      .sort((a, b) => a.slot - b.slot)
+      .map(({ id }) => id)
+    const { resume: _finished, errorMessage: _error, ...rest } = current
+    void _finished
+    void _error
+    const ready: Quiz = {
+      ...rest,
+      // The title states how many questions there really are.
+      title: t('quiz.topicTitle', { topic: resume.topicName, count: ordered.length }),
+      questionIds: ordered,
+      status: 'ready',
+    }
+    if (ordered.length < quiz.config.count) {
+      logger.warn('Quiz has fewer questions than requested', {
+        quizId: quiz.id,
+        requested: quiz.config.count,
+        generated: ordered.length,
+      })
+    }
+    await this.quizzes.upsert(ready)
+    onProgress?.('done', 100)
+    logger.info('Quiz generated', { quizId: ready.id, count: ordered.length })
+    return ready
   }
 
   /**
@@ -599,6 +813,10 @@ export class QuizService {
    * whatever a batch did not deliver. Each question is matched to the plan
    * entry of its own type, so a dropped question leaves a gap to top up
    * instead of shifting the plan.
+   *
+   * `onBatch` stores a batch's questions as soon as they exist, with the slots
+   * still to generate. The control is checked before every batch: on a pause
+   * (or an aborted batch) the remaining slots are returned as `pending`.
    */
   private async generateInBatches(
     plan: PlanEntry[],
@@ -608,9 +826,14 @@ export class QuizService {
       'plan' | 'sourceSnippets' | 'knowledgePoints'
     >,
     subject: SubjectInput,
-    signal?: AbortSignal,
-  ): Promise<Array<{ question: GeneratedQuizQuestion; entry: PlanEntry }>> {
-    const delivered: Array<{ question: GeneratedQuizQuestion; entry: PlanEntry }> = []
+    control: GenerationControl,
+    alreadyAsked: string[],
+    onBatch: (
+      delivered: Array<{ question: GeneratedQuizQuestion; entry: PlanEntry }>,
+      pending: PlanEntry[],
+    ) => Promise<void>,
+  ): Promise<{ paused: boolean; pending: PlanEntry[]; lastError: unknown }> {
+    const asked = [...alreadyAsked]
     const allowedTypes = new Set(plan.map((entry) => entry.type))
     let pending = [...plan]
     let lastError: unknown = null
@@ -619,14 +842,16 @@ export class QuizService {
       for (let i = 0; i < pending.length; i += QUIZ_BATCH_SIZE)
         batches.push(pending.slice(i, i + QUIZ_BATCH_SIZE))
       const missing: PlanEntry[] = []
+      const remaining = (from: number): PlanEntry[] => [...missing, ...batches.slice(from).flat()]
       for (const [index, batch] of batches.entries()) {
-        signal?.throwIfAborted()
+        if (!control.shouldContinue()) return { paused: true, pending: remaining(index), lastError }
         const { knowledgePoints, snippets } = this.batchMaterial(
           batch,
           groups,
           index,
           batches.length,
         )
+        const delivered: Array<{ question: GeneratedQuizQuestion; entry: PlanEntry }> = []
         try {
           const questions = await this.generateWithRetry(
             {
@@ -634,12 +859,10 @@ export class QuizService {
               knowledgePoints,
               plan: batch,
               sourceSnippets: snippets,
-              ...(delivered.length > 0
-                ? { avoidRepeating: delivered.map((d) => d.question.prompt) }
-                : {}),
+              ...(asked.length > 0 ? { avoidRepeating: [...asked] } : {}),
             },
             subject,
-            signal,
+            control.signal,
           )
           const open = [...batch]
           for (const question of questions) {
@@ -653,19 +876,22 @@ export class QuizService {
           }
           missing.push(...open)
         } catch (err) {
+          // A stop aborts the batch: an interruption, never a failure.
+          if (isAbortError(err, control.signal)) {
+            return { paused: true, pending: remaining(index), lastError }
+          }
           // Already retried inside `generateWithRetry`; top-up rounds only ask
           // for questions a successful request left out.
-          if (signal?.aborted) throw err
           lastError = err
+        }
+        if (delivered.length > 0) {
+          asked.push(...delivered.map((d) => d.question.prompt))
+          await onBatch(delivered, remaining(index + 1))
         }
       }
       pending = missing
     }
-    if (delivered.length === 0) {
-      throw lastError ?? new AppError(t('errors.noUsableQuestions'), 'MALFORMED_QUIZ')
-    }
-    // Keep the plan's order (difficulty ramps up through an adaptive quiz).
-    return delivered.sort((a, b) => plan.indexOf(a.entry) - plan.indexOf(b.entry))
+    return { paused: false, pending, lastError }
   }
 
   /**
@@ -843,6 +1069,8 @@ export class QuizService {
         })
         return questions
       } catch (err) {
+        // A stopped request is not retried and not reported as a failure.
+        if (isAbortError(err, signal)) throw err
         lastError = err
         logger.warn('Quiz generation attempt failed', { attempt, error: (err as Error)?.message })
       }
@@ -1121,6 +1349,10 @@ export class QuizService {
 
   async startQuiz(quizId: string): Promise<Quiz> {
     const quiz = await this.getQuiz(quizId)
+    // An unfinished quiz is taken only once 「继续出题」 has completed it.
+    if (quiz.status === 'paused' || quiz.status === 'generating') {
+      throw new AppError(t('quiz.paused.notTakeable'), 'QUIZ_PAUSED')
+    }
     const next: Quiz = { ...quiz, status: 'in_progress' }
     await this.quizzes.upsert(next)
     return next
@@ -1143,6 +1375,11 @@ export class QuizService {
        * points and check unmatched fill-blank terms for exact equivalents.
        */
       gradeShortAnswer?: boolean
+      /**
+       * Stops the AI check. A stopped check cancels the whole submission:
+       * the error is rethrown and no attempt is recorded.
+       */
+      signal?: AbortSignal
     } = {},
   ): Promise<SubmitAnswerResult> {
     const quiz = await this.getQuiz(quizId)
@@ -1155,6 +1392,7 @@ export class QuizService {
             question,
             userAnswer.trim(),
             await loadProjectSubjectContext(quiz.projectId, this.db),
+            opts.signal ? { signal: opts.signal } : {},
           )
         : evaluateDeterministic(
             question,
@@ -1166,10 +1404,15 @@ export class QuizService {
     // Blanks that did not match locally may be exact synonyms: the AI says
     // which (only when one is configured); the score stays local.
     if (question.type === 'fill_blank' && opts.gradeShortAnswer && evaluation.isCorrect === false) {
-      evaluation = await checkBlanksWithAi(this.ai, question, evaluation)
+      evaluation = await checkBlanksWithAi(
+        this.ai,
+        question,
+        evaluation,
+        opts.signal ? { signal: opts.signal } : {},
+      )
     }
     if (evaluation.isCorrect === null && opts.aiFallback && question.type !== 'short_answer') {
-      evaluation = await this.evaluateWithAI(question, userAnswer, evaluation)
+      evaluation = await this.evaluateWithAI(question, userAnswer, evaluation, opts.signal)
     }
 
     const attempt: QuestionAttempt = {
@@ -1230,6 +1473,7 @@ export class QuizService {
     question: Question,
     userAnswer: string,
     fallback: QuestionEvaluation,
+    signal?: AbortSignal,
   ): Promise<QuestionEvaluation> {
     try {
       const messages: ChatMessage[] = [
@@ -1247,7 +1491,7 @@ export class QuizService {
         isCorrect: boolean
         feedback?: string
         confidence?: number
-      }>(messages)
+      }>(messages, signal ? { signal } : undefined)
       return {
         isCorrect: Boolean(data.isCorrect),
         method: 'ai',
@@ -1258,6 +1502,7 @@ export class QuizService {
         note: t('errors.judgedByAi'),
       }
     } catch (err) {
+      if (isAbortError(err, signal)) throw err
       logger.warn('AI answer evaluation failed; keeping unverified', {
         error: (err as Error)?.message,
       })

@@ -1,4 +1,4 @@
-import { Fragment, useMemo, useState } from 'react'
+import { Fragment, useMemo, useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import {
   AlertTriangle,
@@ -38,6 +38,9 @@ import { Input } from '@/shared/ui/Input'
 import { LoadingState } from '@/shared/ui/LoadingState'
 import { SectionHeading } from '@/shared/ui/Section'
 import { friendlyAIError } from '@/shared/lib/aiErrors'
+import { GenerationControls } from '@/shared/ui/GenerationControls'
+import { useGenerationRun } from '@/shared/lib/useGenerationRun'
+import { isGenerationInterruption } from '@/shared/lib/generationControl'
 import { cn } from '@/shared/lib/utils'
 import { useTranslation, type TranslationKey } from '@/i18n'
 
@@ -84,6 +87,14 @@ export function ExamTopicsPanel({ projectId }: { projectId: string }): JSX.Eleme
 
   const [prompt, setPrompt] = useState<PromptRequest | null>(null)
   const service = useMemo(() => new SyllabusService(), [])
+  // AI extraction is one request (停止); AI matching runs in batches (暂停 / 继续).
+  const extractRun = useGenerationRun({ abortOnUnmount: true })
+  const matchRun = useGenerationRun()
+  const [matchTarget, setMatchTarget] = useState<{
+    key: string
+    done: number
+    total: number
+  } | null>(null)
 
   const scopes: ScopeRef[] = useMemo(
     () =>
@@ -149,22 +160,50 @@ export function ExamTopicsPanel({ projectId }: { projectId: string }): JSX.Eleme
 
   const extractWithAi = (document: Document) =>
     run(`ai:${document.id}`, async () => {
-      const result = await withAi((ai) => service.extractWithAi(document.id, ai))
-      if (!result) return
-      toast({
-        variant: 'success',
-        title: t('syllabus.extracted', { count: countExamTopics(result.data) }),
-        ...(result.dropped > 0
-          ? { description: t('syllabus.aiDropped', { count: result.dropped }) }
-          : {}),
-      })
+      const control = extractRun.start()
+      try {
+        const result = await withAi((ai) => service.extractWithAi(document.id, ai, { control }))
+        extractRun.reset()
+        if (!result) return
+        toast({
+          variant: 'success',
+          title: t('syllabus.extracted', { count: countExamTopics(result.data) }),
+          ...(result.dropped > 0
+            ? { description: t('syllabus.aiDropped', { count: result.dropped }) }
+            : {}),
+        })
+      } catch (err) {
+        // Stopped: the earlier list stays as it was.
+        if (!isGenerationInterruption(err, control)) throw err
+      } finally {
+        control.finish()
+      }
     })
 
-  const matchWithAi = (document: Document, scopeId: string) =>
+  /** Match a scope's exam topics; `resume` continues a paused run with the rest. */
+  const matchWithAi = (document: Document, scopeId: string, resume = false) =>
     run(`match:${document.id}`, async () => {
-      const found = await withAi((ai) => service.matchWithAi(document.id, ai, { scopeId }))
-      if (found === undefined) return
-      toast({ variant: 'success', title: t('syllabus.aiMatched', { count: found }) })
+      const control = matchRun.start()
+      setMatchTarget({ key: `${document.id}::${scopeId}`, done: 0, total: 0 })
+      try {
+        const result = await withAi((ai) =>
+          service.matchWithAiRun(document.id, ai, { scopeId, control, resume }),
+        )
+        if (!result) {
+          matchRun.reset()
+          return
+        }
+        setMatchTarget({
+          key: `${document.id}::${scopeId}`,
+          done: result.done,
+          total: result.total,
+        })
+        if (result.paused) return
+        matchRun.reset()
+        toast({ variant: 'success', title: t('syllabus.aiMatched', { count: result.matched }) })
+      } finally {
+        control.finish()
+      }
     })
 
   const markAsSyllabus = (document: Document) =>
@@ -297,6 +336,14 @@ export function ExamTopicsPanel({ projectId }: { projectId: string }): JSX.Eleme
                       {t('syllabus.aiExtract')}
                     </Button>
                   )}
+                  {busy === `ai:${document.id}` && (
+                    <GenerationControls
+                      kind="single"
+                      state={extractRun.state}
+                      onStopNow={extractRun.stopNow}
+                      hideStatus
+                    />
+                  )}
                   <Button
                     variant="ghost"
                     size="sm"
@@ -364,6 +411,25 @@ export function ExamTopicsPanel({ projectId }: { projectId: string }): JSX.Eleme
               onConfirm={setConfirm}
               onPrompt={setPrompt}
               onAiMatch={() => void matchWithAi(selected.document, selected.scope.id)}
+              matchControls={
+                matchTarget?.key === selected.key ? (
+                  <GenerationControls
+                    kind="parts"
+                    state={matchRun.state}
+                    done={matchTarget.done}
+                    total={matchTarget.total}
+                    stopRequested={matchRun.run?.stopRequested ?? false}
+                    onPause={matchRun.requestPause}
+                    onStopNow={matchRun.stopNow}
+                    {...(busy === null
+                      ? {
+                          onResume: () =>
+                            void matchWithAi(selected.document, selected.scope.id, true),
+                        }
+                      : {})}
+                  />
+                ) : null
+              }
               canAiMatch={(overview?.topics.length ?? 0) > 0}
               service={service}
             />
@@ -415,6 +481,7 @@ function ScopeView({
   onConfirm,
   onPrompt,
   onAiMatch,
+  matchControls,
   canAiMatch,
   service,
 }: {
@@ -426,6 +493,8 @@ function ScopeView({
   onConfirm: (value: { title: string; description: string; run: () => Promise<void> }) => void
   onPrompt: (value: PromptRequest) => void
   onAiMatch: () => void
+  /** Pause / continue for a running or paused AI match of this scope. */
+  matchControls?: ReactNode
   canAiMatch: boolean
   service: SyllabusService
 }): JSX.Element {
@@ -496,6 +565,7 @@ function ScopeView({
               {t('syllabus.aiMatch')}
             </Button>
           )}
+          {matchControls}
           <Button
             variant="ghost"
             size="sm"

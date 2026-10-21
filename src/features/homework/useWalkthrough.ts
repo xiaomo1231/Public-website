@@ -2,8 +2,11 @@ import { useCallback, useEffect, useState } from 'react'
 import { buildHomeworkWalkthroughService } from '@/services/aiServices'
 import {
   subscribeWalkthroughRuns,
+  walkthroughPausedRun,
+  walkthroughRunControl,
   walkthroughRunProgress,
   type HomeworkWalkthroughService,
+  type WalkthroughPausedRun,
   type WalkthroughProgress,
   type WalkthroughRunResult,
   type WalkthroughState,
@@ -11,6 +14,8 @@ import {
 import { WalkthroughNoteService } from '@/services/walkthroughNoteService'
 import type { WalkthroughNote } from '@/entities/homework/walkthrough'
 import { friendlyAIError } from '@/shared/lib/aiErrors'
+import type { GenerationRun, GenerationRunState } from '@/shared/lib/generationControl'
+import { useGenerationRun } from '@/shared/lib/useGenerationRun'
 import { subscribeNoteChanges } from './floatingQA'
 
 export interface UseWalkthrough {
@@ -20,6 +25,16 @@ export interface UseWalkthrough {
   loading: boolean
   error: string | null
   generate: (force?: boolean) => Promise<WalkthroughRunResult | null>
+  /** Continue a paused run with only what is left. */
+  resume: () => Promise<WalkthroughRunResult | null>
+  /** The run in progress (`running` / `pausing`), or how the last one ended. */
+  runState: GenerationRunState | null
+  /** An immediate stop was requested for the run in progress. */
+  stopRequested: boolean
+  /** A run paused during this page visit (finished / planned parts). */
+  paused: WalkthroughPausedRun | undefined
+  requestPause: () => void
+  stopNow: () => void
 }
 
 /**
@@ -33,6 +48,11 @@ export function useWalkthrough(setId: string): UseWalkthrough {
   const [progress, setProgress] = useState<WalkthroughProgress | undefined>(() =>
     walkthroughRunProgress(setId),
   )
+  const [paused, setPaused] = useState<WalkthroughPausedRun | undefined>(() =>
+    walkthroughPausedRun(setId),
+  )
+  const control = useGenerationRun()
+  const { attach, start: startRun } = control
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -70,28 +90,81 @@ export function useWalkthrough(setId: string): UseWalkthrough {
     () =>
       subscribeWalkthroughRuns(() => {
         setProgress(walkthroughRunProgress(setId))
+        setPaused(walkthroughPausedRun(setId))
+        // A run started elsewhere (or before a remount) can still be paused here.
+        const running = walkthroughRunControl(setId)
+        if (running) attach(running)
         void reload()
       }),
-    [reload, setId],
+    [attach, reload, setId],
   )
+
+  useEffect(() => {
+    const running = walkthroughRunControl(setId)
+    if (running) attach(running)
+  }, [attach, setId])
 
   useEffect(() => subscribeNoteChanges(() => void reloadNotes()), [reloadNotes])
 
-  const generate = useCallback(
-    async (force = false) => {
+  const start = useCallback(
+    async (
+      launch: (
+        service: HomeworkWalkthroughService,
+        run: GenerationRun,
+      ) => Promise<WalkthroughRunResult>,
+    ) => {
       if (!service) return null
       setError(null)
+      const run = startRun()
       try {
-        return await service.generate(setId, { force })
+        const result = await launch(service, run)
+        run.finish()
+        return result
       } catch (err) {
+        run.finish()
         setError(friendlyAIError(err))
         return null
       } finally {
+        setPaused(walkthroughPausedRun(setId))
         await reload()
       }
     },
-    [service, setId, reload],
+    [service, setId, reload, startRun],
   )
 
-  return { state, notes, progress, loading: loading || !service, error, generate }
+  const generate = useCallback(
+    (force = false) => start((svc, run) => svc.generate(setId, { force, control: run })),
+    [start, setId],
+  )
+  const resume = useCallback(
+    () => start((svc, run) => svc.resume(setId, { control: run })),
+    [start, setId],
+  )
+
+  // The run state shown: the live run, else a paused run of this visit.
+  const live = control.state === 'running' || control.state === 'pausing'
+  const runState: GenerationRunState | null = live
+    ? control.state
+    : progress
+      ? 'running'
+      : paused
+        ? paused.stopped
+          ? 'stopped'
+          : 'paused'
+        : null
+
+  return {
+    state,
+    notes,
+    progress,
+    loading: loading || !service,
+    error,
+    generate,
+    resume,
+    runState,
+    stopRequested: control.run?.stopRequested ?? false,
+    paused,
+    requestPause: control.requestPause,
+    stopNow: control.stopNow,
+  }
 }

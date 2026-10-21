@@ -49,6 +49,7 @@ import { normalizeExtractedText } from '@/infrastructure/files/textEncoding'
 import { normalizeMathNotation } from '@/infrastructure/files/mathNotation'
 import { looksLikeUnreliableVisualText } from '@/infrastructure/files/visualDetection'
 import { AppError } from '@/infrastructure/errors/AppError'
+import { isAbortError } from '@/shared/lib/generationControl'
 import { logger } from '@/infrastructure/logger/logger'
 import { t } from '@/i18n'
 import { fnv1a } from '@/shared/lib/hash'
@@ -189,7 +190,7 @@ export class TutorLessonService {
   ): Promise<TutorLessonResult> {
     const key = keyOf(input)
     const existing = inFlight.get(key)
-    if (existing) return existing
+    if (existing) return this.joinOrRetry(existing, input, () => this.getOrGenerate(input, options))
     return this.track(key, () => this.resolve(input, options))
   }
 
@@ -209,8 +210,26 @@ export class TutorLessonService {
     if (existing) await existing.catch(() => undefined)
     // Another regenerate may have registered while we waited: join it.
     const pending = inFlight.get(key)
-    if (pending) return pending
+    if (pending) return this.joinOrRetry(pending, input, () => this.regenerate(input, options))
     return this.track(key, () => this.generate(input, options))
+  }
+
+  /**
+   * Join a request someone else started. When that viewer stopped it, the
+   * joiner (who did not ask to stop) starts its own request instead of
+   * inheriting the cancellation; the stopped entry has already left the map.
+   */
+  private async joinOrRetry(
+    running: Promise<TutorLessonResult>,
+    input: TutorLessonInput,
+    retry: () => Promise<TutorLessonResult>,
+  ): Promise<TutorLessonResult> {
+    try {
+      return await running
+    } catch (err) {
+      if (isAbortError(err) && !input.signal?.aborted) return retry()
+      throw err
+    }
   }
 
   private track(key: string, start: () => Promise<TutorLessonResult>): Promise<TutorLessonResult> {
@@ -266,6 +285,11 @@ export class TutorLessonService {
     try {
       return await this.generate(input, options)
     } catch (err) {
+      // A stopped refresh is not a failure: keep showing what is stored.
+      if (isAbortError(err, input.signal)) {
+        if (stored && stored.content.trim().length > 0) return { lesson: stored, fromCache: true }
+        throw err
+      }
       // Never surface a failed refresh as a blank page when we already have
       // something readable on disk.
       if (stored && stored.content.trim().length > 0) {
@@ -393,6 +417,8 @@ export class TutorLessonService {
     // local gate skips it entirely when the lesson has nothing plottable, so
     // set theory and prose lessons cost no extra tokens.
     const visualizations = await this.generateVisualizations(content, input, topic, subject)
+    // Stopped while the figures were requested: store nothing.
+    input.signal?.throwIfAborted()
 
     const now = Date.now()
     const lesson: TutorLesson = {
@@ -494,6 +520,7 @@ export class TutorLessonService {
       language: input.language,
       lessonContent: content,
       ...(subject ? { subject } : {}),
+      ...(input.signal ? { signal: input.signal } : {}),
     })
   }
 

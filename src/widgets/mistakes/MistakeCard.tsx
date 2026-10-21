@@ -20,11 +20,14 @@ import { QuestionSource } from '@/widgets/quiz/QuestionSource'
 import { relativeTime } from '@/shared/lib/utils'
 import { cn } from '@/shared/lib/utils'
 import { useTranslation } from '@/i18n'
+import { useGenerationRun } from '@/shared/lib/useGenerationRun'
+import { GenerationControls } from '@/shared/ui/GenerationControls'
 import { DIFFICULTY_LABEL_KEYS } from '@/infrastructure/ai/prompts/types'
 
 export interface MistakeCardProps {
   mistake: Mistake
-  onAnalyze: (id: string) => Promise<void>
+  /** The signal stops the analysis (the mistake is then left as it was). */
+  onAnalyze: (id: string, signal?: AbortSignal) => Promise<void>
   onMarkUnderstood: (id: string) => Promise<void>
   onArchive: (id: string) => Promise<void>
   onRestore: (id: string) => Promise<void>
@@ -48,6 +51,17 @@ export function MistakeCard({
   const [expanded, setExpanded] = useState(false)
   const [busy, setBusy] = useState<string | null>(null)
   const [confirmDelete, setConfirmDelete] = useState(false)
+  const analysisRun = useGenerationRun({ abortOnUnmount: true })
+  const analyze = () => {
+    const generation = analysisRun.start()
+    return run('analyze', () =>
+      onAnalyze(mistake.id, generation.signal).finally(() => generation.finish()),
+    )
+  }
+  const stopControl =
+    busy === 'analyze' ? (
+      <GenerationControls kind="single" state={analysisRun.state} onStopNow={analysisRun.stopNow} />
+    ) : null
 
   async function run(key: string, fn: () => Promise<void>) {
     setBusy(key)
@@ -126,7 +140,10 @@ export function MistakeCard({
               onPractice={() => run('practice', () => onPractice(mistake.id, 'same_concept'))}
             />
           ) : mistake.analysisStatus === 'analyzing' ? (
-            <AnalysisPlaceholder message={t('mistakeCard.analysing')} />
+            <div className="space-y-2">
+              <AnalysisPlaceholder message={t('mistakeCard.analysing')} />
+              {stopControl}
+            </div>
           ) : mistake.analysisStatus === 'failed' ? (
             <div className="space-y-2">
               <AnalysisPlaceholder
@@ -135,7 +152,7 @@ export function MistakeCard({
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => run('analyze', () => onAnalyze(mistake.id))}
+                onClick={() => void analyze()}
                 disabled={busy === 'analyze'}
               >
                 {busy === 'analyze' ? (
@@ -145,15 +162,12 @@ export function MistakeCard({
                 )}
                 {t('mistakeCard.retry')}
               </Button>
+              {stopControl}
             </div>
           ) : (
             <div className="space-y-2">
               <AnalysisPlaceholder message={t('mistakeCard.runAnalysis')} />
-              <Button
-                size="sm"
-                onClick={() => run('analyze', () => onAnalyze(mistake.id))}
-                disabled={busy === 'analyze'}
-              >
+              <Button size="sm" onClick={() => void analyze()} disabled={busy === 'analyze'}>
                 {busy === 'analyze' ? (
                   <Loader2 className="h-4 w-4 animate-spin" />
                 ) : (
@@ -161,6 +175,7 @@ export function MistakeCard({
                 )}
                 {t('mistakeCard.explain')}
               </Button>
+              {stopControl}
             </div>
           )}
 

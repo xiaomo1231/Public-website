@@ -4,6 +4,7 @@ import { Button } from '@/shared/ui/Button'
 import { Card, CardContent } from '@/shared/ui/Card'
 import { ConfirmDialog } from '@/shared/ui/ConfirmDialog'
 import { LoadingState } from '@/shared/ui/LoadingState'
+import { GenerationControls } from '@/shared/ui/GenerationControls'
 import { RichText } from '@/shared/ui/RichText'
 import { VisualSourceFigure } from '@/widgets/source/VisualSourceFigure'
 import { TutorVisualizationFigure } from '@/widgets/tutor/TutorVisualizationFigure'
@@ -69,6 +70,39 @@ export function TutorLessonView({
         <LoadingState
           label={state.lesson ? t('tutor.loadingSaved') : t('tutor.generatingLesson')}
         />
+        <GenerationControls
+          kind="single"
+          state={state.generation}
+          onStopNow={state.stop}
+          hideStatus
+          className="justify-center"
+        />
+      </div>
+    )
+  }
+
+  if (state.stopped && !state.lesson) {
+    return (
+      <div className={COLUMN_CLASS}>
+        <Card>
+          <CardContent className="space-y-4 p-5">
+            <p role="status" className="text-sm text-muted-foreground">
+              {t('generation.stoppedKept')}
+            </p>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => void state.regenerate()}
+              disabled={state.regenerating}
+            >
+              {state.regenerating ? <Loader2 className="animate-spin" /> : <RefreshCw />}
+              {t('common.generate')}
+            </Button>
+            {state.regenerating && (
+              <GenerationControls kind="single" state={state.generation} onStopNow={state.stop} />
+            )}
+          </CardContent>
+        </Card>
       </div>
     )
   }
@@ -219,6 +253,9 @@ export function TutorLessonView({
               {state.regenerating ? <Loader2 className="animate-spin" /> : <RefreshCw />}
               {state.regenerating ? t('tutor.regenerating') : t('tutor.regenerate')}
             </Button>
+            {state.regenerating && (
+              <GenerationControls kind="single" state={state.generation} onStopNow={state.stop} />
+            )}
           </div>
 
           {footer}

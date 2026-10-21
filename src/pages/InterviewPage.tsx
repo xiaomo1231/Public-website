@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { ArrowLeft, BookOpen, Loader2, Play, Sparkles, Stethoscope, Trash2 } from 'lucide-react'
 import { Button } from '@/shared/ui/Button'
@@ -9,6 +9,9 @@ import { EmptyState } from '@/shared/ui/EmptyState'
 import { ErrorState } from '@/shared/ui/ErrorState'
 import { LoadingState } from '@/shared/ui/LoadingState'
 import { Progress } from '@/shared/ui/Progress'
+import { GenerationControls } from '@/shared/ui/GenerationControls'
+import { useGenerationRun } from '@/shared/lib/useGenerationRun'
+import { isGenerationInterruption } from '@/shared/lib/generationControl'
 import { PageContainer, PageContent, PageHeader } from '@/shared/ui/Page'
 import { ProjectFlowNav } from '@/widgets/project/ProjectFlowNav'
 import { InterviewRoom } from '@/widgets/interview/InterviewRoom'
@@ -95,9 +98,10 @@ function InterviewLanding({ projectId }: { projectId: string }): JSX.Element {
   const [examMode, setExamMode] = useState(false)
   const [deleting, setDeleting] = useState<InterviewSession | null>(null)
   const [deleteBusy, setDeleteBusy] = useState(false)
-  const abort = useRef<AbortController | null>(null)
-
-  useEffect(() => () => abort.current?.abort(), [])
+  const [extractCounts, setExtractCounts] = useState({ done: 0, total: 0 })
+  // Both stop with the page: a paused extraction keeps what it read for this visit.
+  const extractRun = useGenerationRun({ abortOnUnmount: true })
+  const generateRun = useGenerationRun({ abortOnUnmount: true })
 
   useEffect(() => {
     let cancelled = false
@@ -120,34 +124,38 @@ function InterviewLanding({ projectId }: { projectId: string }): JSX.Element {
     return new InterviewService({ ai: bundle?.ai ?? null })
   }, [])
 
-  const extract = async () => {
-    const controller = new AbortController()
-    abort.current = controller
+  /** Read the scenario cards; `resume` continues a paused run with the requests left. */
+  const extract = async (resume = false) => {
+    const run = extractRun.start()
     setPhase('extracting')
     setProgress(0)
     try {
-      const found = await (
+      const result = await (
         await service()
-      ).extractScenarios(projectId, {
-        signal: controller.signal,
+      ).extractScenariosRun(projectId, {
+        control: run,
+        resume,
         onProgress: (done, total) => setProgress(Math.round((done / total) * 100)),
       })
-      setScenarios(found)
+      setScenarios(result.scenarios)
+      setExtractCounts({ done: result.done, total: result.total })
+      // Everything was read: no 继续 to offer, even when a pause came too late.
+      if (!result.paused) extractRun.reset()
     } catch (err) {
-      if (!controller.signal.aborted)
+      if (!isGenerationInterruption(err, run))
         toast({
           variant: 'error',
           title: t('interview.extractFailed'),
           description: friendlyAIError(err),
         })
     } finally {
-      if (!controller.signal.aborted) setPhase('idle')
+      run.finish()
+      setPhase('idle')
     }
   }
 
   const generate = async () => {
-    const controller = new AbortController()
-    abort.current = controller
+    const run = generateRun.start()
     setPhase('generating')
     try {
       const required = scenarios?.[0]?.questions
@@ -155,18 +163,20 @@ function InterviewLanding({ projectId }: { projectId: string }): JSX.Element {
         await service()
       ).generateScenario(projectId, {
         ...(required ? { requiredQuestions: required } : {}),
-        signal: controller.signal,
+        signal: run.signal,
       })
       setScenarios((previous) => [scenario, ...(previous ?? [])])
+      generateRun.reset()
     } catch (err) {
-      if (!controller.signal.aborted)
+      if (!isGenerationInterruption(err, run))
         toast({
           variant: 'error',
           title: t('interview.generateFailed'),
           description: friendlyAIError(err),
         })
     } finally {
-      if (!controller.signal.aborted) setPhase('idle')
+      run.finish()
+      setPhase('idle')
     }
   }
 
@@ -214,7 +224,7 @@ function InterviewLanding({ projectId }: { projectId: string }): JSX.Element {
         </CardHeader>
         <CardContent className="space-y-4 lecture:px-0">
           <div className="flex flex-wrap items-center gap-2">
-            <Button onClick={() => void extract()} disabled={busy}>
+            <Button onClick={() => void extract(false)} disabled={busy}>
               {phase === 'extracting' ? (
                 <Loader2 className="animate-spin" aria-hidden />
               ) : (
@@ -230,6 +240,11 @@ function InterviewLanding({ projectId }: { projectId: string }): JSX.Element {
               )}
               {t('interview.generate')}
             </Button>
+            <GenerationControls
+              kind="single"
+              state={generateRun.state}
+              onStopNow={generateRun.stopNow}
+            />
           </div>
           <label className="flex cursor-pointer items-start gap-3">
             <input
@@ -246,19 +261,39 @@ function InterviewLanding({ projectId }: { projectId: string }): JSX.Element {
             </span>
           </label>
           <p className="text-xs text-muted-foreground">{t('interview.privacy')}</p>
-          {phase === 'extracting' && (
-            <div className="space-y-1" role="status" aria-live="polite">
-              <Progress value={progress} />
-              <p className="text-xs text-muted-foreground">
-                {t('interview.extracting', { percent: progress })}
-              </p>
+          {(phase === 'extracting' ||
+            extractRun.state === 'paused' ||
+            extractRun.state === 'stopped') && (
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+              {phase === 'extracting' && (
+                <div className="min-w-[12rem] flex-1 space-y-1" role="status" aria-live="polite">
+                  <Progress value={progress} />
+                  <p className="text-xs text-muted-foreground">
+                    {t('interview.extracting', { percent: progress })}
+                  </p>
+                </div>
+              )}
+              <GenerationControls
+                kind="parts"
+                state={extractRun.state}
+                done={extractCounts.done}
+                total={extractCounts.total}
+                stopRequested={extractRun.run?.stopRequested ?? false}
+                onPause={extractRun.requestPause}
+                onStopNow={extractRun.stopNow}
+                {...(phase === 'idle' ? { onResume: () => void extract(true) } : {})}
+              />
             </div>
           )}
-          {scenarios !== null && scenarios.length === 0 && phase === 'idle' && (
-            <p className="text-sm text-muted-foreground" role="status">
-              {t('interview.noScenarios')}
-            </p>
-          )}
+          {scenarios !== null &&
+            scenarios.length === 0 &&
+            phase === 'idle' &&
+            extractRun.state !== 'paused' &&
+            extractRun.state !== 'stopped' && (
+              <p className="text-sm text-muted-foreground" role="status">
+                {t('interview.noScenarios')}
+              </p>
+            )}
           {scenarios && scenarios.length > 0 && (
             <ul className="divide-y divide-border rounded-lg border lecture:rounded-none lab:rounded-sm">
               {scenarios.map((scenario, index) => (

@@ -30,6 +30,7 @@ import { AppError } from '@/infrastructure/errors/AppError'
 import { logger } from '@/infrastructure/logger/logger'
 import { getUILanguage, t } from '@/i18n'
 import { fnv1a } from '@/shared/lib/hash'
+import { isAbortError } from '@/shared/lib/generationControl'
 import { prompts } from '@/infrastructure/ai/prompts'
 import type { Question, QuestionType, RubricPoint } from '@/entities/question/types'
 import type { QuestionAttempt, QuestionEvaluation } from '@/entities/questionAttempt/types'
@@ -394,7 +395,15 @@ export class PracticeService {
   }
 
   /** Grade and store one attempt, reusing the quiz's math evaluator. */
-  async recordAttempt(questionId: string, userAnswer: string): Promise<PracticeFeedback> {
+  async recordAttempt(
+    questionId: string,
+    userAnswer: string,
+    /**
+     * Stops the AI work (scoring-point extraction, short-answer check). A stop
+     * cancels the submission: the error is rethrown, nothing is stored.
+     */
+    options: { signal?: AbortSignal } = {},
+  ): Promise<PracticeFeedback> {
     const question = await this.practice.getQuestion(questionId)
     if (!question) throw new AppError(t('errors.practiceQuestionNotFound'), 'NOT_FOUND')
 
@@ -405,7 +414,7 @@ export class PracticeService {
       evaluation?: QuestionEvaluation
     } =
       question.type === 'short_answer'
-        ? await this.gradeShortAnswer(question, userAnswer)
+        ? await this.gradeShortAnswer(question, userAnswer, options.signal)
         : this.grade(question, userAnswer)
 
     const attempt: PracticeAttempt = {
@@ -472,6 +481,7 @@ export class PracticeService {
   private async gradeShortAnswer(
     question: PracticeQuestion,
     userAnswer: string,
+    signal?: AbortSignal,
   ): Promise<{
     isCorrect?: boolean
     method: PracticeAttempt['method']
@@ -488,12 +498,13 @@ export class PracticeService {
         ),
       }
     }
-    const rubric = await this.ensureRubric(question)
+    const rubric = await this.ensureRubric(question, signal)
     const subject = await loadProjectSubjectContext(question.projectId, this.db)
     const evaluation = await new ShortAnswerGrader(this.ai).grade(
       this.asQuizQuestion(question, rubric),
       userAnswer.trim(),
       subject,
+      signal ? { signal } : {},
     )
     return {
       ...(evaluation.isCorrect !== null ? { isCorrect: evaluation.isCorrect } : {}),
@@ -503,29 +514,37 @@ export class PracticeService {
   }
 
   /** Split the professor's answer into scoring points once, and cache them. */
-  private async ensureRubric(question: PracticeQuestion): Promise<RubricPoint[] | undefined> {
+  private async ensureRubric(
+    question: PracticeQuestion,
+    signal?: AbortSignal,
+  ): Promise<RubricPoint[] | undefined> {
     const answer = question.expectedAnswer?.trim()
     if (!answer || !this.ai) return question.rubric
     const hash = fnv1a(`${prompts.rubricExtractor.VERSION}|${answer}`)
     if (question.rubric?.length && question.rubricAnswerHash === hash) return question.rubric
     try {
-      const { data } = await this.ai.chatJSON<unknown>([
-        { role: 'system', content: prompts.rubricExtractor.buildSystemPrompt() },
-        {
-          role: 'user',
-          content: prompts.rubricExtractor.buildUserPrompt({
-            question: question.prompt,
-            referenceAnswer: answer,
-            language: getUILanguage() === 'zh-CN' ? 'zh' : 'en',
-          }),
-        },
-      ])
+      const { data } = await this.ai.chatJSON<unknown>(
+        [
+          { role: 'system', content: prompts.rubricExtractor.buildSystemPrompt() },
+          {
+            role: 'user',
+            content: prompts.rubricExtractor.buildUserPrompt({
+              question: question.prompt,
+              referenceAnswer: answer,
+              language: getUILanguage() === 'zh-CN' ? 'zh' : 'en',
+            }),
+          },
+        ],
+        signal ? { signal } : undefined,
+      )
       const points = prompts.rubricExtractor.normalizeRubricPoints(data)
       if (!points) return question.rubric
       const rubric = points.map((text, index) => ({ id: `p${index + 1}`, text }))
       await this.practice.updateQuestion(question.id, { rubric, rubricAnswerHash: hash })
       return rubric
     } catch (err) {
+      // Stopped: nothing is stored, the submission is cancelled.
+      if (isAbortError(err, signal)) throw err
       logger.warn('Could not split the reference answer into scoring points', {
         questionId: question.id,
         error: (err as Error)?.message,

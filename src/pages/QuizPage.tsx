@@ -12,12 +12,15 @@ import { OralExamSession } from '@/widgets/quiz/OralExamSession'
 import { ProjectFlowNav } from '@/widgets/project/ProjectFlowNav'
 import { buildAIServices, buildOfflineQuizService } from '@/services/aiServices'
 import type { Question } from '@/entities/question/types'
-import type { Quiz } from '@/entities/quiz/types'
+import { quizGenerationProgress, type Quiz } from '@/entities/quiz/types'
 import type { QuestionEvaluation } from '@/entities/questionAttempt/types'
 import { toast } from '@/features/toast/toastStore'
 import { isAppError } from '@/infrastructure/errors/AppError'
 import { cn } from '@/shared/lib/utils'
 import { useTranslation } from '@/i18n'
+import { isAbortError } from '@/shared/lib/generationControl'
+import { useGenerationRun } from '@/shared/lib/useGenerationRun'
+import { GenerationControls } from '@/shared/ui/GenerationControls'
 
 export function QuizPage(): JSX.Element {
   const { id: projectId, quizId } = useParams<{ id: string; quizId: string }>()
@@ -39,6 +42,8 @@ export function QuizPage(): JSX.Element {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [startedAt, setStartedAt] = useState<number>(Date.now())
+  const [unfinished, setUnfinished] = useState<Quiz | null>(null)
+  const checkRun = useGenerationRun({ abortOnUnmount: true })
 
   useEffect(() => {
     if (!quizId) return
@@ -51,6 +56,11 @@ export function QuizPage(): JSX.Element {
         if (cancelled) return
         if (q.status === 'completed') {
           navigate(`/projects/${projectId}/quiz/${quizId}/result`, { replace: true })
+          return
+        }
+        // An unfinished quiz is completed first (「继续出题」 on the quiz page).
+        if (q.status === 'paused' || q.status === 'generating') {
+          setUnfinished(q)
           return
         }
         const done = new Set(attempts.map((a) => a.questionId))
@@ -87,14 +97,28 @@ export function QuizPage(): JSX.Element {
       // point by point by AI when one is configured (otherwise: not scored).
       const needsAi = current.type === 'short_answer' || current.type === 'fill_blank'
       const graded = needsAi ? ((await buildAIServices())?.quiz ?? null) : null
-      const result = await (graded ?? service).submitAnswer(quizId, current.id, answer, {
-        durationMs: Date.now() - startedAt,
-        hintsUsed,
-        ...(graded ? { gradeShortAnswer: true } : {}),
-      })
-      setEvaluation(result.evaluation)
-      setAttemptId(result.attempt.id)
-      setAnsweredIds((prev) => new Set(prev).add(current.id))
+      // The AI check can be stopped; a stopped check submits nothing.
+      const run = graded ? checkRun.start() : null
+      try {
+        const result = await (graded ?? service).submitAnswer(quizId, current.id, answer, {
+          durationMs: Date.now() - startedAt,
+          hintsUsed,
+          ...(graded ? { gradeShortAnswer: true } : {}),
+          ...(run ? { signal: run.signal } : {}),
+        })
+        setEvaluation(result.evaluation)
+        setAttemptId(result.attempt.id)
+        setAnsweredIds((prev) => new Set(prev).add(current.id))
+      } catch (err) {
+        if (run && isAbortError(err, run.signal)) {
+          toast({ variant: 'info', title: t('quiz.checkStopped') })
+          return
+        }
+        throw err
+      } finally {
+        run?.finish()
+        checkRun.reset()
+      }
     } catch (err) {
       toast({ variant: 'error', title: t('quiz.gradeFailed'), description: (err as Error).message })
     } finally {
@@ -141,6 +165,29 @@ export function QuizPage(): JSX.Element {
       <PageContainer>
         <PageContent>
           <LoadingState label={t('quiz.loadingQuiz')} />
+        </PageContent>
+      </PageContainer>
+    )
+  }
+
+  if (unfinished) {
+    return (
+      <PageContainer>
+        <PageContent>
+          <ErrorState
+            title={unfinished.title}
+            description={`${t('quiz.paused.notTakeable')} ${t(
+              'quiz.paused.progress',
+              quizGenerationProgress(unfinished),
+            )}`}
+            action={
+              <Button asChild>
+                <Link to={`/projects/${projectId}/quiz?continue=${unfinished.id}`}>
+                  {t('quiz.paused.continue')}
+                </Link>
+              </Button>
+            }
+          />
         </PageContent>
       </PageContainer>
     )
@@ -248,6 +295,13 @@ export function QuizPage(): JSX.Element {
                 disputing={disputing}
               />
             )}
+
+            <GenerationControls
+              kind="single"
+              state={checkRun.state}
+              onStopNow={checkRun.stopNow}
+              className="justify-end"
+            />
 
             {evaluation?.isCorrect === null && current?.type !== 'short_answer' && (
               <Card>

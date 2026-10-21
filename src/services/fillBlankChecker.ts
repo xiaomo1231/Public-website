@@ -4,6 +4,7 @@ import type { QuestionEvaluation } from '@/entities/questionAttempt/types'
 import { prompts } from '@/infrastructure/ai/prompts'
 import { logger } from '@/infrastructure/logger/logger'
 import { t } from '@/i18n'
+import { isAbortError } from '@/shared/lib/generationControl'
 import { blankCredit } from './answerEvaluationService'
 
 /**
@@ -18,6 +19,7 @@ export async function checkBlanksWithAi(
   ai: AIService,
   question: Question,
   evaluation: QuestionEvaluation,
+  options: { signal?: AbortSignal } = {},
 ): Promise<QuestionEvaluation> {
   const results = evaluation.blanks ?? []
   const asked = results
@@ -40,7 +42,7 @@ export async function checkBlanksWithAi(
           }),
         },
       ],
-      { maxTokens: 256 },
+      { maxTokens: 256, ...(options.signal ? { signal: options.signal } : {}) },
     )
     const verdicts = prompts.fillBlankCheck.readEquivalence(
       data,
@@ -59,6 +61,8 @@ export async function checkBlanksWithAi(
       note: t('fillBlank.aiAccepted'),
     }
   } catch (err) {
+    // Stopped by the student: the caller cancels the submission.
+    if (isAbortError(err, options.signal)) throw err
     logger.warn('Fill-blank equivalence check failed; keeping the local result', {
       error: (err as Error)?.message,
     })

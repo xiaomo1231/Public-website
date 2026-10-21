@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { Loader2, Mic, Sparkles } from 'lucide-react'
 import type { CourseAnalysis, Topic } from '@/entities/courseAnalysis/types'
@@ -39,6 +39,8 @@ export interface QuizConfigDialogProps {
   onStart: (config: QuizConfig) => void
   busy?: boolean
   progress?: { stage: string; progress: number } | null
+  /** Pause / stop controls, shown to the right of the progress bar while generating. */
+  controls?: ReactNode
 }
 
 const DIFFICULTIES: Array<{ value: QuizDifficulty; labelKey: TranslationKey }> = [
@@ -69,6 +71,7 @@ export function QuizConfigDialog({
   onStart,
   busy,
   progress,
+  controls,
 }: QuizConfigDialogProps): JSX.Element {
   const { t } = useTranslation()
   const { project } = useProject(projectId)
@@ -366,13 +369,16 @@ export function QuizConfigDialog({
         </div>
 
         {busy && progress && (
-          <div className="space-y-1">
-            <Progress value={progress.progress} className="h-1.5" />
-            <p className="text-xs text-muted-foreground">
-              {(STAGE_LABEL_KEYS[progress.stage]
-                ? t(STAGE_LABEL_KEYS[progress.stage])
-                : progress.stage) + '…'}
-            </p>
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+            <div className="min-w-0 flex-1 space-y-1">
+              <Progress value={progress.progress} className="h-1.5" />
+              <p className="text-xs text-muted-foreground">
+                {(STAGE_LABEL_KEYS[progress.stage]
+                  ? t(STAGE_LABEL_KEYS[progress.stage])
+                  : progress.stage) + '…'}
+              </p>
+            </div>
+            {controls}
           </div>
         )}
 

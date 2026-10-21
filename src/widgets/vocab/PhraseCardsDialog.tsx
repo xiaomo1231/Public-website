@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Loader2, MessagesSquare } from 'lucide-react'
 import { Button } from '@/shared/ui/Button'
 import {
@@ -16,6 +16,8 @@ import { buildAIServices } from '@/services/aiServices'
 import { PHRASE_KINDS, PhraseCardService, type PhraseCandidate } from '@/services/phraseCards'
 import { friendlyAIError } from '@/shared/lib/aiErrors'
 import { useTranslation, type TranslationKey } from '@/i18n'
+import { useGenerationRun } from '@/shared/lib/useGenerationRun'
+import { GenerationControls } from '@/shared/ui/GenerationControls'
 
 const PAGE_SIZE = 100
 
@@ -53,35 +55,61 @@ export function PhraseCardsDialog({
   const [skipped, setSkipped] = useState<Set<string>>(new Set())
   const [reverse, setReverse] = useState(false)
   const [page, setPage] = useState(0)
-  const abort = useRef<AbortController | null>(null)
+  /** Parts read / planned; `paused` while some are still unread. */
+  const [parts, setParts] = useState({ done: 0, total: 0, paused: false })
+  const generation = useGenerationRun({ abortOnUnmount: true })
+  const { stopNow, reset } = generation
 
   useEffect(() => {
     if (open) return
-    abort.current?.abort()
+    stopNow()
+    reset()
+    setParts({ done: 0, total: 0, paused: false })
     setPhase('idle')
     setRows([])
     setSkipped(new Set())
     setPage(0)
     setReverse(false)
-  }, [open])
+  }, [open, stopNow, reset])
 
+  /** Read the dialogues; after a pause, only the parts still unread are requested. */
   const read = async () => {
-    const controller = new AbortController()
-    abort.current = controller
+    const run = generation.start()
     setPhase('reading')
     setProgress(0)
     try {
       const bundle = await buildAIServices()
-      const found = await new PhraseCardService({ ai: bundle?.ai ?? null }).extract(projectId, {
-        signal: controller.signal,
-        onProgress: (done, total) => setProgress(Math.round((done / total) * 100)),
+      const result = await new PhraseCardService({ ai: bundle?.ai ?? null }).extractParts(
+        projectId,
+        {
+          control: run,
+          onProgress: (done, total) => {
+            setProgress(Math.round((done / total) * 100))
+            setParts((prev) => ({ ...prev, done, total }))
+          },
+        },
+      )
+      run.finish()
+      // Continuing a paused read keeps the edits and unticks made so far.
+      const key = (row: PhraseCandidate) => `${row.chunkId}|${row.phrase}`
+      const before = new Map(rows.map((row) => [key(row), row]))
+      const next = result.candidates.map((row) => {
+        const old = before.get(key(row))
+        return old ? { ...row, prompt: old.prompt } : row
       })
-      setRows(found)
+      const skippedKeys = new Set(rows.filter((row) => skipped.has(row.id)).map(key))
+      setRows(next)
+      setSkipped(new Set(next.filter((row) => skippedKeys.has(key(row))).map((row) => row.id)))
+      setParts({ done: result.doneParts, total: result.totalParts, paused: result.paused })
       setPhase('review')
     } catch (err) {
-      if (controller.signal.aborted) return
+      run.finish()
+      if (run.stopRequested || run.signal.aborted) {
+        setPhase(rows.length > 0 ? 'review' : 'idle')
+        return
+      }
       toast({ variant: 'error', title: t('phrases.failed'), description: friendlyAIError(err) })
-      setPhase('idle')
+      setPhase(rows.length > 0 ? 'review' : 'idle')
     }
   }
 
@@ -130,11 +158,34 @@ export function PhraseCardsDialog({
         </DialogHeader>
 
         {phase === 'reading' && (
-          <div className="space-y-1" aria-live="polite">
-            <Progress value={progress} className="h-1.5" />
-            <p className="text-xs text-muted-foreground">
-              {t('phrases.reading', { percent: progress })}
+          <div className="flex flex-wrap items-center gap-3" aria-live="polite">
+            <div className="min-w-0 flex-1 space-y-1">
+              <Progress value={progress} className="h-1.5" />
+              <p className="text-xs text-muted-foreground">
+                {t('phrases.reading', { percent: progress })}
+              </p>
+            </div>
+            <GenerationControls
+              kind="parts"
+              state={generation.state}
+              stopRequested={generation.run?.stopRequested ?? false}
+              onPause={generation.requestPause}
+              onStopNow={generation.stopNow}
+            />
+          </div>
+        )}
+
+        {phase === 'review' && parts.paused && (
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="min-w-0 flex-1 text-xs text-muted-foreground">
+              {t('phrases.pausedNote', { done: parts.done, total: parts.total })}
             </p>
+            <GenerationControls
+              kind="parts"
+              state="paused"
+              hideStatus
+              onResume={() => void read()}
+            />
           </div>
         )}
 

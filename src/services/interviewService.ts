@@ -16,6 +16,12 @@ import { prompts } from '@/infrastructure/ai/prompts'
 import { AppError, NotFoundError, ValidationError } from '@/infrastructure/errors/AppError'
 import { logger } from '@/infrastructure/logger/logger'
 import { targetLanguageOf } from '@/shared/lib/language'
+import { fnv1a } from '@/shared/lib/hash'
+import {
+  isAbortError,
+  resolveControl,
+  type GenerationControl,
+} from '@/shared/lib/generationControl'
 import { t } from '@/i18n'
 import type { AIService } from './aiService'
 import { looksLikeDialogue } from './phraseCards'
@@ -45,6 +51,37 @@ const LESSON_CHARS = 6_000
 const HISTORY_TURNS = 12
 const MAX_TURN = 500
 const MAX_SUMMARY = 4_000
+
+/** Outcome of one scenario extraction run. */
+export interface ScenarioExtractionRun {
+  scenarios: InterviewScenario[]
+  /** Requests answered / planned (a resumed run counts the earlier ones). */
+  done: number
+  total: number
+  /** Stopped early on a pause or stop; run again with `resume` to finish. */
+  paused: boolean
+}
+
+/**
+ * Scenarios read by a paused extraction, per project and per request (keyed by
+ * the passages it was given). Kept for this page visit only, so 「继续」 asks
+ * only for the passages that were not read yet.
+ */
+const pausedExtractions = new Map<string, Map<string, InterviewScenario[]>>()
+
+function batchKey(batch: readonly DocumentChunk[]): string {
+  return fnv1a(batch.map((chunk) => `${chunk.id}:${chunk.text}`).join('\n\n'))
+}
+
+/** True when a paused scenario extraction is waiting to be continued. */
+export function hasPausedScenarioExtraction(projectId: string): boolean {
+  return pausedExtractions.has(projectId)
+}
+
+/** Test hook: forget paused extractions. */
+export function clearPausedScenarioExtractionsForTesting(): void {
+  pausedExtractions.clear()
+}
 
 /**
  * How much a passage looks like a scenario card: a "name, age" line, a
@@ -152,19 +189,55 @@ export class InterviewService {
   /** Scenario cards found in the course's processed material. */
   async extractScenarios(
     projectId: string,
-    options: { signal?: AbortSignal; onProgress?: (done: number, total: number) => void } = {},
+    options: {
+      signal?: AbortSignal
+      control?: GenerationControl
+      resume?: boolean
+      onProgress?: (done: number, total: number) => void
+    } = {},
   ): Promise<InterviewScenario[]> {
+    return (await this.extractScenariosRun(projectId, options)).scenarios
+  }
+
+  /**
+   * `extractScenarios` with its progress. A pause lets the request in flight
+   * finish and asks no more; a stop aborts it (not a failure). With `resume`
+   * the requests a paused run already answered are reused, not sent again.
+   */
+  async extractScenariosRun(
+    projectId: string,
+    options: {
+      signal?: AbortSignal
+      control?: GenerationControl
+      resume?: boolean
+      onProgress?: (done: number, total: number) => void
+    } = {},
+  ): Promise<ScenarioExtractionRun> {
+    const control = resolveControl(options.control, options.signal)
     const ai = this.requireAI()
     const language = await this.language(projectId)
     const candidates = selectScenarioChunks(await this.courseChunks(projectId))
-    if (candidates.length === 0) return []
+    const earlier = options.resume ? pausedExtractions.get(projectId) : undefined
+    pausedExtractions.delete(projectId)
+    if (candidates.length === 0) return { scenarios: [], done: 0, total: 0, paused: false }
     const byId = new Map(candidates.map((chunk) => [chunk.id, chunk]))
     const batches = planBatches(candidates)
-    const found: InterviewScenario[] = []
+    const answered = new Map<string, InterviewScenario[]>()
     let failed = 0
     let firstError: unknown = null
+    let paused = false
     for (const [index, batch] of batches.entries()) {
-      options.signal?.throwIfAborted()
+      const key = batchKey(batch)
+      const reused = earlier?.get(key)
+      if (reused) {
+        answered.set(key, reused)
+        options.onProgress?.(index + 1, batches.length)
+        continue
+      }
+      if (!control.shouldContinue()) {
+        paused = true
+        continue
+      }
       try {
         const { data } = await ai.chatJSON<unknown>(
           [
@@ -184,13 +257,18 @@ export class InterviewService {
               }),
             },
           ],
-          { maxTokens: 6144, ...(options.signal ? { signal: options.signal } : {}) },
+          { maxTokens: 6144, signal: control.signal },
         )
-        found.push(
-          ...validateTextbookScenarios(prompts.interviewScenario.readScenarios(data), byId),
+        answered.set(
+          key,
+          validateTextbookScenarios(prompts.interviewScenario.readScenarios(data), byId),
         )
       } catch (err) {
-        if (options.signal?.aborted) throw err
+        // A stopped request is an interruption, never a failed part.
+        if (isAbortError(err, control.signal)) {
+          paused = true
+          continue
+        }
         failed++
         firstError ??= err
         logger.warn('Interview scenario extraction part failed', {
@@ -200,14 +278,18 @@ export class InterviewService {
       }
       options.onProgress?.(index + 1, batches.length)
     }
-    if (failed === batches.length && firstError) throw firstError
+    if (paused) pausedExtractions.set(projectId, answered)
+    else if (failed === batches.length && firstError) throw firstError
     const seen = new Set<string>()
-    return found.filter((scenario) => {
-      const key = scenario.facts.map((fact) => fact.fact.toLowerCase()).join('|')
-      if (seen.has(key)) return false
-      seen.add(key)
-      return true
-    })
+    const scenarios = batches
+      .flatMap((batch) => answered.get(batchKey(batch)) ?? [])
+      .filter((scenario) => {
+        const key = scenario.facts.map((fact) => fact.fact.toLowerCase()).join('|')
+        if (seen.has(key)) return false
+        seen.add(key)
+        return true
+      })
+    return { scenarios, done: answered.size + failed, total: batches.length, paused }
   }
 
   /**
@@ -345,6 +427,8 @@ export class InterviewService {
       ],
       { maxTokens: 1024, ...(options.signal ? { signal: options.signal } : {}) },
     )
+    // A stopped turn stores nothing: the session stays as it was.
+    options.signal?.throwIfAborted()
     const reply = readPatientTurn(
       data,
       session.scenario.questions.map((q) => q.id),
@@ -422,6 +506,8 @@ export class InterviewService {
       ],
       { maxTokens: 2048, ...(options.signal ? { signal: options.signal } : {}) },
     )
+    // A stopped check grades nothing (the summary draft is kept).
+    options.signal?.throwIfAborted()
     if (!data || typeof data !== 'object' || !Array.isArray((data as { facts?: unknown }).facts))
       throw new AppError(t('interview.gradeInvalid'), 'INVALID_RESPONSE')
     return this.update(sessionId, (current) => ({

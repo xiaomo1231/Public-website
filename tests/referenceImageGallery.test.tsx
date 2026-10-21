@@ -26,6 +26,7 @@ function state(overrides: Partial<UseReferenceImagesState>): UseReferenceImagesS
     available: true,
     images: [],
     searching: false,
+    stop: vi.fn(),
     searchedEmpty: false,
     search: vi.fn(),
     remove: vi.fn(),

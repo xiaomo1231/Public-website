@@ -4,6 +4,7 @@ import { prompts } from '@/infrastructure/ai/prompts'
 import { normalizeExtractedText } from '@/infrastructure/files/textEncoding'
 import { normalizeMathNotation } from '@/infrastructure/files/mathNotation'
 import { AppError } from '@/infrastructure/errors/AppError'
+import { isAbortError } from '@/shared/lib/generationControl'
 import { logger } from '@/infrastructure/logger/logger'
 import { t } from '@/i18n'
 import { loadProjectSubjectContext } from './projectSubject'
@@ -74,7 +75,13 @@ export class ContextualTutorService {
   async ask(input: ContextualTutorInput): Promise<ContextualTutorAnswer> {
     const key = keyOf(input)
     const existing = inFlight.get(key)
-    if (existing) return existing
+    if (existing) {
+      // The asker who started it stopped it: ask again for this caller.
+      return existing.catch((err: unknown) => {
+        if (isAbortError(err) && !input.signal?.aborted) return this.ask(input)
+        throw err
+      })
+    }
 
     const run = this.run(input).finally(() => inFlight.delete(key))
     inFlight.set(key, run)

@@ -3,6 +3,8 @@ import type { TutorLesson } from '@/entities/tutorLesson/types'
 import { buildAIServices } from '@/services/aiServices'
 import { friendlyTutorError } from '@/shared/lib/aiErrors'
 import { useTranslation } from '@/i18n'
+import { isAbortError, type GenerationRunState } from '@/shared/lib/generationControl'
+import { useGenerationRun } from '@/shared/lib/useGenerationRun'
 
 export interface UseTutorLessonInput {
   projectId: string
@@ -27,6 +29,12 @@ export interface UseTutorLessonState {
   /** True while an explicit regenerate is running. */
   regenerating: boolean
   regenerate: () => Promise<void>
+  /** The AI request's run state (`running` while it can be stopped). */
+  generation: GenerationRunState | null
+  /** Stop the running request; whatever was stored stays as it was. */
+  stop: () => void
+  /** True when the student stopped the first generation (nothing to show yet). */
+  stopped: boolean
 }
 
 /**
@@ -46,6 +54,11 @@ export function useTutorLesson(input: UseTutorLessonInput): UseTutorLessonState 
   const [error, setError] = useState<string | undefined>()
   const [refreshError, setRefreshError] = useState<string | undefined>()
   const [regenerating, setRegenerating] = useState(false)
+  const [stopped, setStopped] = useState(false)
+  // Not aborted on unmount: a lesson the student navigated away from still
+  // finishes and is cached. Only the Stop button aborts.
+  const generation = useGenerationRun()
+  const { start: startRun } = generation
 
   // Guards against a slow response for topic A landing after the user switched
   // to topic B.
@@ -67,10 +80,12 @@ export function useTutorLesson(input: UseTutorLessonInput): UseTutorLessonState 
     setStreaming(false)
     setError(undefined)
     setRefreshError(undefined)
+    setStopped(false)
     // A regenerate for the previous topic may still be running; its result is
     // discarded by the request id, so its spinner must not stick either.
     setRegenerating(false)
 
+    const run = startRun()
     void (async () => {
       try {
         const services = await buildAIServices()
@@ -91,7 +106,7 @@ export function useTutorLesson(input: UseTutorLessonInput): UseTutorLessonState 
         }
 
         const result = await services.tutorLesson.getOrGenerate(
-          { projectId, topicId, topicName, topicDescription, language },
+          { projectId, topicId, topicName, topicDescription, language, signal: run.signal },
           { onDelta: stored ? undefined : () => setStreaming(true) },
         )
         if (cancelled || id !== requestId.current) return
@@ -102,9 +117,14 @@ export function useTutorLesson(input: UseTutorLessonInput): UseTutorLessonState 
         setStatus('ready')
       } catch (err) {
         if (cancelled || id !== requestId.current) return
-        setError(friendlyTutorError(err))
+        if (isAbortError(err, run.signal)) {
+          setStopped(true)
+        } else {
+          setError(friendlyTutorError(err))
+        }
         setStatus('error')
       } finally {
+        run.finish()
         if (!cancelled && id === requestId.current) setStreaming(false)
       }
     })()
@@ -124,6 +144,8 @@ export function useTutorLesson(input: UseTutorLessonInput): UseTutorLessonState 
     const isCurrent = () => id === requestId.current
     setRegenerating(true)
     setRefreshError(undefined)
+    setStopped(false)
+    const run = startRun()
     try {
       const services = await buildAIServices()
       if (!isCurrent()) return
@@ -138,6 +160,7 @@ export function useTutorLesson(input: UseTutorLessonInput): UseTutorLessonState 
         topicName,
         topicDescription,
         language,
+        signal: run.signal,
       })
       if (!isCurrent()) return
       setLesson(result.lesson)
@@ -147,12 +170,21 @@ export function useTutorLesson(input: UseTutorLessonInput): UseTutorLessonState 
       setStatus('ready')
     } catch (err) {
       if (!isCurrent()) return
+      if (isAbortError(err, run.signal)) {
+        // Stopped: the stored lesson (if any) stays on screen untouched.
+        if (!lesson) {
+          setStopped(true)
+          setStatus('error')
+        }
+        return
+      }
       // Keep whatever is on screen; only report that the refresh failed.
       setRefreshError(friendlyTutorError(err))
     } finally {
+      run.finish()
       if (isCurrent()) setRegenerating(false)
     }
-  }, [projectId, topicId, topicName, topicDescription, language, t])
+  }, [projectId, topicId, topicName, topicDescription, language, t, startRun, lesson])
 
   return {
     status,
@@ -163,5 +195,8 @@ export function useTutorLesson(input: UseTutorLessonInput): UseTutorLessonState 
     ...(refreshError ? { refreshError } : {}),
     regenerating,
     regenerate,
+    generation: generation.state,
+    stop: generation.stopNow,
+    stopped,
   }
 }

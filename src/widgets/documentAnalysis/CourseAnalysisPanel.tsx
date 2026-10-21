@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Brain, Loader2, RotateCcw, Sparkles, Sigma, Tag, FileText } from 'lucide-react'
 import { Button } from '@/shared/ui/Button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/shared/ui/Card'
@@ -8,7 +8,14 @@ import { LoadingState } from '@/shared/ui/LoadingState'
 import { Progress } from '@/shared/ui/Progress'
 import { TruncatedText } from '@/shared/ui/TruncatedText'
 import { toast } from '@/features/toast/toastStore'
-import { CourseContentService } from '@/services/courseContentService'
+import {
+  CourseContentService,
+  courseAnalysisRun,
+  pausedCourseAnalysis,
+  subscribeCourseAnalysisRuns,
+} from '@/services/courseContentService'
+import { GenerationControls } from '@/shared/ui/GenerationControls'
+import { useGenerationRun } from '@/shared/lib/useGenerationRun'
 import type { CourseAnalysis, Formula, Topic, CourseSymbol } from '@/entities/courseAnalysis/types'
 import { CourseContentRepository } from '@/entities/courseContent/repository'
 import type { CourseContentFreshness } from '@/entities/courseContent/types'
@@ -50,35 +57,64 @@ export function CourseAnalysisPanel({
   const [running, setRunning] = useState(false)
   const [progress, setProgress] = useState(0)
   const [message, setMessage] = useState<string | undefined>()
+  // Runs live in the content service (the upload flow may have started one),
+  // so the panel follows them instead of owning them.
+  const [, setRunsVersion] = useState(0)
+  const inFlight = courseAnalysisRun(projectId)
+  const paused = inFlight ? undefined : pausedCourseAnalysis(projectId)
+  const generation = useGenerationRun()
+  const { attach } = generation
+  useEffect(() => attach(inFlight?.run ?? null), [attach, inFlight?.run])
+  const busy = running || Boolean(inFlight)
+  const shownProgress = inFlight?.progress?.progress ?? progress
+  const shownMessage = inFlight?.progress?.message ?? message
+  const parts = inFlight?.progress?.parts ?? paused?.parts
+  const multiPart = (parts?.total ?? 0) > 1
+
+  const reload = useCallback(
+    async (isCancelled: () => boolean = () => false) => {
+      const a = await content.getAnalysis(projectId)
+      if (isCancelled()) return
+      setAnalysis(a ?? null)
+      const [ts, fs, ss, fr] = await Promise.all([
+        content.getTopics(projectId),
+        content.getFormulas(projectId),
+        content.getSymbols(projectId),
+        content.isFresh(projectId),
+      ])
+      if (isCancelled()) return
+      setTopics(ts)
+      setFormulas(fs)
+      setSymbols(ss)
+      setFreshness(fr)
+    },
+    [content, projectId],
+  )
 
   useEffect(() => {
     let cancelled = false
-    void (async () => {
-      try {
-        const a = await content.getAnalysis(projectId)
-        if (cancelled) return
-        setAnalysis(a ?? null)
-        const [ts, fs, ss, fr] = await Promise.all([
-          content.getTopics(projectId),
-          content.getFormulas(projectId),
-          content.getSymbols(projectId),
-          content.isFresh(projectId),
-        ])
-        if (cancelled) return
-        setTopics(ts)
-        setFormulas(fs)
-        setSymbols(ss)
-        setFreshness(fr)
-      } finally {
-        if (!cancelled) setLoading(false)
-      }
-    })()
+    void reload(() => cancelled).finally(() => {
+      if (!cancelled) setLoading(false)
+    })
     return () => {
       cancelled = true
     }
-  }, [projectId, content])
+  }, [reload])
 
-  async function analyze() {
+  // Follow runs started anywhere; reload once a run this panel did not start ends.
+  const hadRun = useRef(Boolean(inFlight))
+  useEffect(
+    () =>
+      subscribeCourseAnalysisRuns(() => {
+        setRunsVersion((version) => version + 1)
+        const now = Boolean(courseAnalysisRun(projectId))
+        if (hadRun.current && !now) void reload().catch(() => undefined)
+        hadRun.current = now
+      }),
+    [projectId, reload],
+  )
+
+  async function analyze(force = true) {
     setRunning(true)
     setProgress(0)
     setMessage(t('analysis.preparing'))
@@ -86,12 +122,14 @@ export function CourseAnalysisPanel({
       // Through the content service: shares any run already in flight for this
       // project and commits practice-question relinks in the same transaction.
       const result = await new CourseContentService().ensureAnalyzed(projectId, {
-        force: true,
+        force,
         onProgress: (p) => {
           setProgress(p.progress)
           setMessage(p.message)
         },
       })
+      // Paused / stopped: nothing changed; the controls say so and offer 继续.
+      if (result.reason === 'paused') return
       if (result.reason === 'no-provider') {
         toast({
           variant: 'error',
@@ -111,18 +149,12 @@ export function CourseAnalysisPanel({
       if (result.reason === 'failed') {
         throw result.cause ?? new Error(result.error ?? t('errors.analysisFailed'))
       }
-      const [a, ts, fs, ss, fr] = await Promise.all([
-        content.getAnalysis(projectId),
+      const [ts, fs, ss] = await Promise.all([
         content.getTopics(projectId),
         content.getFormulas(projectId),
         content.getSymbols(projectId),
-        content.isFresh(projectId),
       ])
-      setAnalysis(a ?? null)
-      setTopics(ts)
-      setFormulas(fs)
-      setSymbols(ss)
-      setFreshness(fr)
+      await reload()
       toast({
         variant: 'success',
         title: t('analysis.complete'),
@@ -144,6 +176,20 @@ export function CourseAnalysisPanel({
     return <LoadingState label={t('analysis.loading')} />
   }
 
+  const controls = (
+    <GenerationControls
+      kind={multiPart ? 'parts' : 'single'}
+      state={inFlight ? generation.state : paused ? (paused.stopped ? 'stopped' : 'paused') : null}
+      stopRequested={generation.run?.stopRequested ?? false}
+      {...(parts ? { done: parts.done, total: parts.total } : {})}
+      onPause={generation.requestPause}
+      onStopNow={generation.stopNow}
+      {...(paused && multiPart ? { onResume: () => void analyze(paused.force) } : {})}
+      {...(multiPart ? { pausedHint: t('generation.analysisPartsHint') } : {})}
+      className="shrink-0"
+    />
+  )
+
   if (!analysis && topics.length === 0) {
     return (
       <EmptyState
@@ -151,14 +197,23 @@ export function CourseAnalysisPanel({
         title={t('analysis.empty')}
         description={t('analysis.emptyHint')}
         action={
-          <Button onClick={analyze} disabled={running}>
-            {running ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <Sparkles className="h-4 w-4" />
+          <div className="flex flex-col items-center gap-3">
+            <Button onClick={() => void analyze()} disabled={busy}>
+              {busy ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Sparkles className="h-4 w-4" />
+              )}
+              {busy ? t('analysis.analyzing') : t('analysis.analyze')}
+            </Button>
+            {busy && (
+              <div className="flex w-full min-w-[16rem] items-center gap-3">
+                <Progress value={shownProgress} className="flex-1" />
+                {controls}
+              </div>
             )}
-            {running ? t('analysis.analyzing') : t('analysis.analyze')}
-          </Button>
+            {!busy && controls}
+          </div>
         }
       />
     )
@@ -167,13 +222,9 @@ export function CourseAnalysisPanel({
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-2">
-        <Button onClick={analyze} disabled={running}>
-          {running ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
-          ) : (
-            <RotateCcw className="h-4 w-4" />
-          )}
-          {running ? t('analysis.analyzing') : t('analysis.reanalyze')}
+        <Button onClick={() => void analyze()} disabled={busy}>
+          {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <RotateCcw className="h-4 w-4" />}
+          {busy ? t('analysis.analyzing') : t('analysis.reanalyze')}
         </Button>
         {analysis && (
           <Badge variant="outline">
@@ -190,13 +241,13 @@ export function CourseAnalysisPanel({
             })}
           </Badge>
         )}
-        {analysis && !running && freshness?.fresh && (
+        {analysis && !busy && freshness?.fresh && (
           <Badge variant="outline">{t('analysis.saved')}</Badge>
         )}
       </div>
 
       {analysis &&
-        !running &&
+        !busy &&
         freshness &&
         !freshness.fresh &&
         freshness.reasons.some((reason) => reason !== 'missing') && (
@@ -209,14 +260,18 @@ export function CourseAnalysisPanel({
             <p className="text-muted-foreground">{t('analysis.staleHint')}</p>
           </div>
         )}
-      {running && (
+      {busy && (
         <div className="space-y-1">
-          <Progress value={progress} />
+          <div className="flex flex-wrap items-center gap-3">
+            <Progress value={shownProgress} className="min-w-[8rem] flex-1" />
+            {controls}
+          </div>
           <p className="text-xs text-muted-foreground">
-            {message ?? t('analysis.working', { stage: `${progress}%` })}
+            {shownMessage ?? t('analysis.working', { stage: `${shownProgress}%` })}
           </p>
         </div>
       )}
+      {!busy && paused && controls}
 
       {analysis?.status === 'failed' && analysis.errorMessage && (
         <div className="space-y-1 rounded-lg border border-destructive/40 bg-destructive/5 px-3 py-2 text-sm">

@@ -19,6 +19,9 @@ import { ErrorState } from '@/shared/ui/ErrorState'
 import { Label } from '@/shared/ui/Label'
 import { LoadingState } from '@/shared/ui/LoadingState'
 import { Textarea } from '@/shared/ui/Textarea'
+import { GenerationControls } from '@/shared/ui/GenerationControls'
+import { useGenerationRun } from '@/shared/lib/useGenerationRun'
+import { isGenerationInterruption } from '@/shared/lib/generationControl'
 import { LetterBar } from '@/widgets/mathInput/LetterBar'
 import { appendSpeechText, useSpeechInput } from '@/features/homework/useSpeechInput'
 import { toast } from '@/features/toast/toastStore'
@@ -231,6 +234,7 @@ function TurnComposer({
   const { t } = useTranslation()
   const [draft, setDraft] = useState('')
   const [sending, setSending] = useState(false)
+  const turnRun = useGenerationRun({ abortOnUnmount: true })
   const [ending, setEnding] = useState(false)
   const [autoRead, setAutoRead] = useState(false)
   const [voice, setVoice] = useState(() => hasVoiceFor(targetLanguage))
@@ -253,19 +257,28 @@ function TurnComposer({
     if (!text || sending) return
     speech.cancel()
     setSending(true)
+    const run = turnRun.start()
     try {
-      const next = await (await aiService()).ask(projectId, session.id, text)
+      const next = await (
+        await aiService()
+      ).ask(projectId, session.id, text, {
+        signal: run.signal,
+      })
       onChange(next)
       setDraft('')
+      turnRun.reset()
       const last = next.turns[next.turns.length - 1]
       if (autoRead && last?.role === 'patient') speak(last.text, targetLanguage)
     } catch (err) {
-      toast({
-        variant: 'error',
-        title: t('interview.askFailed'),
-        description: friendlyAIError(err),
-      })
+      // A stopped turn stores nothing; the question stays in the box to send again.
+      if (!isGenerationInterruption(err, run))
+        toast({
+          variant: 'error',
+          title: t('interview.askFailed'),
+          description: friendlyAIError(err),
+        })
     } finally {
+      run.finish()
       setSending(false)
       field.current?.focus()
     }
@@ -331,6 +344,7 @@ function TurnComposer({
           {sending ? <Loader2 className="animate-spin" aria-hidden /> : <Send aria-hidden />}
           {t('interview.send')}
         </Button>
+        <GenerationControls kind="single" state={turnRun.state} onStopNow={turnRun.stopNow} />
         <label className="ml-auto flex cursor-pointer items-center gap-2 text-xs text-muted-foreground">
           <input
             type="checkbox"
@@ -381,23 +395,31 @@ function SummaryEditor({
   const { t } = useTranslation()
   const [summary, setSummary] = useState(session.summary)
   const [grading, setGrading] = useState(false)
+  const gradeRun = useGenerationRun({ abortOnUnmount: true })
 
   const grade = async () => {
     setGrading(true)
+    const run = gradeRun.start()
     try {
-      onChange(await (await aiService()).grade(projectId, session.id, summary))
+      onChange(
+        await (await aiService()).grade(projectId, session.id, summary, { signal: run.signal }),
+      )
+      gradeRun.reset()
     } catch (err) {
-      toast({
-        variant: 'error',
-        title: t('interview.gradeFailed'),
-        description: friendlyAIError(err),
-      })
+      // A stopped check grades nothing; the summary stays as written.
+      if (!isGenerationInterruption(err, run))
+        toast({
+          variant: 'error',
+          title: t('interview.gradeFailed'),
+          description: friendlyAIError(err),
+        })
       // The draft was kept; reload it so a later visit shows it.
       void new InterviewService()
         .get(projectId, session.id)
         .then(onChange)
         .catch(() => undefined)
     } finally {
+      run.finish()
       setGrading(false)
     }
   }
@@ -425,10 +447,13 @@ function SummaryEditor({
           }}
           placeholder={t('interview.summaryPlaceholder')}
         />
-        <Button onClick={() => void grade()} disabled={grading || !summary.trim()}>
-          {grading && <Loader2 className="animate-spin" aria-hidden />}
-          {t('interview.grade')}
-        </Button>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button onClick={() => void grade()} disabled={grading || !summary.trim()}>
+            {grading && <Loader2 className="animate-spin" aria-hidden />}
+            {t('interview.grade')}
+          </Button>
+          <GenerationControls kind="single" state={gradeRun.state} onStopNow={gradeRun.stopNow} />
+        </div>
       </CardContent>
     </Card>
   )

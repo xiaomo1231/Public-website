@@ -44,6 +44,9 @@ import type { SlideContent, SlideDocumentInfo, SlideIndex } from '@/services/sli
 import type { SlideLesson } from '@/entities/slideLesson/types'
 import { PROCESSING_STATUS_LABEL_KEYS } from '@/entities/document/types'
 import { friendlyAIError } from '@/shared/lib/aiErrors'
+import { isAbortError } from '@/shared/lib/generationControl'
+import { useGenerationRun } from '@/shared/lib/useGenerationRun'
+import { GenerationControls } from '@/shared/ui/GenerationControls'
 import { cn } from '@/shared/lib/utils'
 import { useTranslation, type TranslationKey } from '@/i18n'
 
@@ -91,6 +94,9 @@ export function SlideStudyPage(): JSX.Element {
   const [language, setLanguage] = useState<'zh' | 'en' | 'mixed'>('en')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // Only the Stop button aborts: a slide left mid-request still gets cached.
+  const generation = useGenerationRun()
+  const { start: startRun } = generation
   const [askText, setAskText] = useState('')
 
   // Load the project's presentations (local only).
@@ -220,19 +226,28 @@ export function SlideStudyPage(): JSX.Element {
       const isCurrent = () => activeSlideKey.current === key
       setBusy(true)
       setError(null)
+      const run = startRun()
       try {
-        const input = { projectId, documentId, slideNumber: validSlideNumber, language }
+        const input = {
+          projectId,
+          documentId,
+          slideNumber: validSlideNumber,
+          language,
+          signal: run.signal,
+        }
         const result = force ? await service.regenerate(input) : await service.generate(input)
         if (!isCurrent()) return
         setLesson(result.lesson)
         if (result.error) setError(result.error)
       } catch (err) {
-        if (isCurrent()) setError(friendlyAIError(err))
+        // Stopped: what was on screen stays, and nothing is reported as failed.
+        if (isCurrent() && !isAbortError(err, run.signal)) setError(friendlyAIError(err))
       } finally {
+        run.finish()
         if (isCurrent()) setBusy(false)
       }
     },
-    [service, projectId, documentId, validSlideNumber, language, slideKey],
+    [service, projectId, documentId, validSlideNumber, language, slideKey, startRun],
   )
 
   const ask = useCallback(async () => {
@@ -508,6 +523,14 @@ export function SlideStudyPage(): JSX.Element {
                       )}
                       {lesson?.status === 'failed' ? t('slides.retry') : t('slides.explain')}
                     </Button>
+                    {busy && (
+                      <GenerationControls
+                        kind="single"
+                        state={generation.state}
+                        onStopNow={generation.stopNow}
+                        className="mt-3"
+                      />
+                    )}
                   </CardContent>
                 </Card>
               ) : (
@@ -533,6 +556,15 @@ export function SlideStudyPage(): JSX.Element {
                         )}
                         {t('slides.regenerate')}
                       </Button>
+                      {busy && (
+                        <GenerationControls
+                          kind="single"
+                          state={generation.state}
+                          onStopNow={generation.stopNow}
+                          hideStatus
+                          className="shrink-0"
+                        />
+                      )}
                     </CardHeader>
                     <CardContent className="space-y-4 lecture:px-0 lab:px-5 lab:pt-5">
                       <RichText

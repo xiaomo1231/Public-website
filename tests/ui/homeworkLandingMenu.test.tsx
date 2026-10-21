@@ -112,7 +112,10 @@ describe('HomeworkLandingPage card menu', () => {
 
     fireEvent.click(retry)
     await waitFor(() => expect(holder.service.retrySet).toHaveBeenCalledTimes(1))
-    expect(holder.service.retrySet).toHaveBeenCalledWith('s1')
+    expect(holder.service.retrySet).toHaveBeenCalledWith(
+      's1',
+      expect.objectContaining({ control: expect.anything() }),
+    )
   })
 
   it('does not start a re-analysis while one is already running', async () => {

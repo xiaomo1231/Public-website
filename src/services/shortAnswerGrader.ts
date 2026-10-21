@@ -6,6 +6,7 @@ import { prompts } from '@/infrastructure/ai/prompts'
 import type { ChatMessage } from '@/infrastructure/ai/types'
 import { logger } from '@/infrastructure/logger/logger'
 import { getUILanguage, t } from '@/i18n'
+import { isAbortError } from '@/shared/lib/generationControl'
 import type { AIService } from './aiService'
 
 /**
@@ -188,6 +189,7 @@ export class ShortAnswerGrader {
     question: Question,
     answer: string,
     subject?: SubjectInput,
+    options: { signal?: AbortSignal } = {},
   ): Promise<QuestionEvaluation> {
     if (!question.rubric?.length) {
       return unverifiedShortAnswer(question, answer, t('shortAnswer.noRubric'))
@@ -215,7 +217,10 @@ export class ShortAnswerGrader {
       },
     ]
     try {
-      const { data } = await this.ai.chatJSON<ShortAnswerCheckOutput>(messages)
+      const { data } = await this.ai.chatJSON<ShortAnswerCheckOutput>(
+        messages,
+        options.signal ? { signal: options.signal } : undefined,
+      )
       if (!data || typeof data !== 'object') {
         return unverifiedShortAnswer(question, answer, t('shortAnswer.checkFailed'))
       }
@@ -229,6 +234,8 @@ export class ShortAnswerGrader {
       }
       return buildRubricEvaluation(question, answer, data)
     } catch (err) {
+      // Stopped by the student: no verdict at all, the caller cancels the submission.
+      if (isAbortError(err, options.signal)) throw err
       logger.warn('Short answer check failed; answer kept unverified', {
         questionId: question.id,
         error: (err as Error)?.message,

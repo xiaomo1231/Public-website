@@ -28,6 +28,7 @@ import { Button } from '@/shared/ui/Button'
 import { TooltipProvider, TooltipWrapper } from '@/shared/ui/Tooltip'
 import { Textarea } from '@/shared/ui/Textarea'
 import { RichText } from '@/shared/ui/RichText'
+import { GenerationControls } from '@/shared/ui/GenerationControls'
 import { toast } from '@/features/toast/toastStore'
 import {
   CARD_SIZE,
@@ -42,6 +43,7 @@ import {
 import {
   addNoteToCards,
   askInWindow,
+  stopInWindow,
   persistWindowRect,
   saveWindow,
   windowTitle,
@@ -601,10 +603,25 @@ const FloatingQAWindowView = memo(function FloatingQAWindowView({
             <p className="ml-auto w-fit max-w-full rounded-lg bg-primary/10 px-2 py-1 text-[13px] text-foreground lecture:ml-0 lecture:bg-transparent lecture:px-0 lecture:text-muted-foreground lab:rounded-none lab:bg-theme-primary-soft">
               {win.pending}
             </p>
-            <p role="status" className="flex items-center gap-2 text-[13px] text-muted-foreground">
-              <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
-              {t('contextual.thinking')}
-            </p>
+            <div className="flex flex-wrap items-center gap-2">
+              <p
+                role="status"
+                className="flex items-center gap-2 text-[13px] text-muted-foreground"
+              >
+                <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
+                {t('contextual.thinking')}
+              </p>
+              <GenerationControls
+                kind="single"
+                state="running"
+                className="ml-auto"
+                onStopNow={() => {
+                  // The question goes back into the box so it can be asked again.
+                  const question = stopInWindow(win.id)
+                  if (question && !input.trim()) setInput(question)
+                }}
+              />
+            </div>
           </div>
         )}
         {win.error && (

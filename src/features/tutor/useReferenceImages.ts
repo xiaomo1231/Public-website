@@ -14,6 +14,8 @@ export interface UseReferenceImagesState {
   searchedEmpty: boolean
   error?: string
   search: () => Promise<void>
+  /** Stop a running search; pictures already saved stay. */
+  stop: () => void
   remove: (id: string) => Promise<void>
   loadImage: (id: string) => Promise<Blob | null>
 }
@@ -99,6 +101,21 @@ export function useReferenceImages(
     }
   }, [service, lesson, topic.name, topic.description, images.length])
 
+  const stop = useCallback(() => {
+    const controller = abort.current
+    if (!controller) return
+    controller.abort()
+    abort.current = null
+    setSearching(false)
+    // Pictures the search finished before the stop are already cached.
+    if (service && lesson) {
+      void service
+        .list(lesson.projectId, lesson.topicId)
+        .then(setImages)
+        .catch(() => undefined)
+    }
+  }, [service, lesson])
+
   const remove = useCallback(
     async (id: string) => {
       if (!service) return
@@ -113,5 +130,5 @@ export function useReferenceImages(
     [service],
   )
 
-  return { available, images, searching, searchedEmpty, error, search, remove, loadImage }
+  return { available, images, searching, searchedEmpty, error, search, stop, remove, loadImage }
 }

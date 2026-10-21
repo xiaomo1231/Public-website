@@ -18,6 +18,11 @@ import type { ChatMessage } from '@/infrastructure/ai/types'
 import { AppError } from '@/infrastructure/errors/AppError'
 import { logger } from '@/infrastructure/logger/logger'
 import { shuffled } from '@/shared/lib/shuffle'
+import {
+  isAbortError,
+  resolveControl,
+  type GenerationControl,
+} from '@/shared/lib/generationControl'
 import { t } from '@/i18n'
 import type { AIService } from './aiService'
 import { loadProjectSubjectContext } from './projectSubject'
@@ -167,6 +172,8 @@ export interface OralExamServiceDeps {
   quizzes?: QuizRepository
   analyses?: CourseAnalysisRepository
   chunks?: ChunkRepository
+  /** Quiz ids being generated in this tab (shared with QuizService's recovery). */
+  generating?: Set<string>
 }
 
 export class OralExamService {
@@ -176,6 +183,7 @@ export class OralExamService {
   private analyses: CourseAnalysisRepository
   private chunks: ChunkRepository
   private ai: AIService
+  private generating: Set<string> | undefined
 
   constructor(deps: OralExamServiceDeps) {
     this.db = deps.db ?? getDb()
@@ -184,6 +192,7 @@ export class OralExamService {
     this.analyses = deps.analyses ?? new CourseAnalysisRepository(this.db)
     this.chunks = deps.chunks ?? new ChunkRepository(this.db)
     this.ai = deps.ai
+    this.generating = deps.generating
   }
 
   /**
@@ -243,6 +252,7 @@ export class OralExamService {
     const difficulty: DifficultyLevel =
       config.difficulty === 'adaptive' ? 'intermediate' : config.difficulty
     const label = config.examScope ? (config.topicName ?? draws[0]!.topic) : draws[0]!.topic
+    const control = resolveControl(options.control, options.signal)
 
     const quiz: Quiz = {
       id: crypto.randomUUID(),
@@ -256,6 +266,7 @@ export class OralExamService {
       promptVersion: ORAL_PROMPT_VERSION,
     }
     await this.quizzes.upsert(quiz)
+    this.generating?.add(quiz.id)
 
     try {
       options.onProgress?.('collecting', 10)
@@ -264,113 +275,213 @@ export class OralExamService {
         config.questionLanguage ??
         (await new UserRepository(this.db).get().catch(() => undefined))?.questionLanguage
       const language = oralLanguage(subject, preference, analysis.language)
-      const candidates = await loadQuizCandidates({
-        documentIds: analysis.documentIds,
-        chunks: this.chunks,
-        documents: new DocumentRepository(this.db),
-      })
-      const topics = new Map(
-        (await this.analyses.listTopics(projectId)).map((each) => [each.id, each]),
-      )
-      const concepts = await this.analyses.listConcepts(projectId)
-
-      const inputs: NewQuestionInput[] = []
-      let lastError: unknown = null
-      for (const [index, draw] of draws.entries()) {
-        options.signal?.throwIfAborted()
-        options.onProgress?.('generating', 20 + Math.round((index / draws.length) * 60))
-        const matched = draw.topicIds
-          .map((id) => topics.get(id))
-          .filter((each) => each !== undefined)
-        const points = concepts
-          .filter((concept) => concept.topicIds.some((id) => draw.topicIds.includes(id)))
-          .map((concept) => concept.name)
-          .slice(0, POINTS_PER_TOPIC)
-        const snippets = draw.aiOnly
-          ? []
-          : pickQuizSnippets(candidates, {
-              preferChunkIds: matched.flatMap((each) => each.sourceChunkIds ?? []),
-              keywords: [...matched.map((each) => each.name), ...points],
-              limit: SNIPPETS_PER_TOPIC,
-              fill: false,
-            })
-        // The knowledge point the exam-topic list recognises: the matched
-        // course topic's name, or the exam topic's own text.
-        const knowledgePoint = matched[0]?.name ?? draw.topic
-        try {
-          const item = await this.generateItem(
-            {
-              topic: draw.topic,
-              courseTopics: matched.map((each) => each.name),
-              knowledgePoints: points,
-              sourceSnippets: snippets.map(formatSnippetForPrompt),
-              language,
-            },
-            new Map(snippets.map((snippet) => [snippet.chunkId, snippet])),
-            { aiOnly: draw.aiOnly, fallbackPoint: knowledgePoint },
-            subject,
-            options.signal,
-          )
-          const group = crypto.randomUUID()
-          const shared = {
-            projectId,
-            ...(matched[0] ? { topicId: matched[0].id } : {}),
-            knowledgePoint,
-            type: 'short_answer' as const,
-            difficulty,
-            hints: [],
-            sourceRefs: item.sourceRefs,
-            ...(draw.aiOnly ? { origin: 'ai_without_source' as const } : {}),
-            promptVersion: ORAL_PROMPT_VERSION,
-          }
-          inputs.push({
-            ...shared,
-            prompt: item.question,
-            correctAnswer: item.outline,
-            rubric: item.rubric.map((point, i) => ({ id: `p${i + 1}`, text: point })),
-            oral: { group, role: 'main', topic: draw.topic },
-          })
-          for (const followUp of item.followUps) {
-            inputs.push({
-              ...shared,
-              prompt: followUp.question,
-              correctAnswer: followUp.answer,
-              rubric: followUp.rubric.map((point, i) => ({ id: `p${i + 1}`, text: point })),
-              oral: { group, role: 'follow_up', topic: draw.topic },
-            })
-          }
-        } catch (err) {
-          if (options.signal?.aborted) throw err
-          lastError = err
-          logger.warn('Oral exam item failed; topic skipped', {
-            error: (err as Error)?.message,
-          })
-        }
-      }
-      if (inputs.length === 0) {
-        throw lastError ?? new AppError(t('oral.errors.noItems'), 'MALFORMED_QUIZ')
-      }
-
-      options.onProgress?.('storing', 85)
-      const stored = await this.questions.addMany(inputs)
-      const topicCount = new Set(stored.map((q) => q.oral?.group)).size
-      const ready: Quiz = {
+      // The drawn topics are on the row from the start, so a pause (or a
+      // closed tab) keeps every topic already written up.
+      const withResume: Quiz = {
         ...quiz,
-        title: t('oral.quizTitle', { topic: label, count: topicCount }),
-        config: { ...quiz.config, count: topicCount },
-        questionIds: stored.map((q) => q.id),
-        difficultyPlan: stored.map(() => difficulty),
-        status: 'ready',
+        oralResume: {
+          remaining: draws,
+          total: draws.length,
+          difficulty,
+          label,
+          language,
+          updatedAt: Date.now(),
+        },
       }
-      await this.quizzes.upsert(ready)
-      options.onProgress?.('done', 100)
-      logger.info('Oral exam generated', { quizId: ready.id, topics: topicCount })
-      return ready
+      await this.quizzes.upsert(withResume)
+      return await this.fill(withResume, analysis.documentIds, subject, control, options)
     } catch (err) {
       const message = err instanceof Error ? err.message : t('errors.quizGenerationFailed')
-      await this.quizzes.upsert({ ...quiz, status: 'failed', errorMessage: message })
+      const latest = (await this.quizzes.get(quiz.id)) ?? quiz
+      await this.quizzes.upsert({ ...latest, status: 'failed', errorMessage: message })
       throw err
+    } finally {
+      this.generating?.delete(quiz.id)
     }
+  }
+
+  /** 「继续出题」 for a paused rehearsal: write up only the topics still missing. */
+  async continue(quiz: Quiz, options: GenerateQuizOptions = {}): Promise<Quiz> {
+    if (!quiz.oralResume) {
+      throw new AppError(t('quiz.paused.interrupted'), 'QUIZ_GENERATION_FAILED')
+    }
+    const analysis = await this.analyses.getByProject(quiz.projectId)
+    if (!analysis || analysis.status !== 'ready') {
+      throw new AppError(t('errors.analysisMissing'), 'NO_ANALYSIS')
+    }
+    const control = resolveControl(options.control, options.signal)
+    const { errorMessage: _previous, ...rest } = quiz
+    void _previous
+    const generating: Quiz = { ...rest, status: 'generating' }
+    await this.quizzes.upsert(generating)
+    this.generating?.add(quiz.id)
+    try {
+      options.onProgress?.('collecting', 10)
+      const subject = await loadProjectSubjectContext(quiz.projectId, this.db)
+      return await this.fill(generating, analysis.documentIds, subject, control, options)
+    } catch (err) {
+      // A failed continuation keeps the rehearsal paused with its topics.
+      const latest = (await this.quizzes.get(quiz.id)) ?? quiz
+      await this.quizzes.upsert({
+        ...latest,
+        status: 'paused',
+        ...(err instanceof Error ? { errorMessage: err.message } : {}),
+      })
+      throw err
+    } finally {
+      this.generating?.delete(quiz.id)
+    }
+  }
+
+  /**
+   * Write up the remaining drawn topics one at a time, storing each topic's
+   * questions as soon as they exist. Ends `ready`, or `paused` when the
+   * control asked to stop (an aborted topic stays remaining, never failed).
+   */
+  private async fill(
+    quiz: Quiz,
+    documentIds: string[],
+    subject: SubjectContext | undefined,
+    control: GenerationControl,
+    options: GenerateQuizOptions,
+  ): Promise<Quiz> {
+    const state = quiz.oralResume!
+    const candidates = await loadQuizCandidates({
+      documentIds,
+      chunks: this.chunks,
+      documents: new DocumentRepository(this.db),
+    })
+    const topics = new Map(
+      (await this.analyses.listTopics(quiz.projectId)).map((each) => [each.id, each]),
+    )
+    const concepts = await this.analyses.listConcepts(quiz.projectId)
+
+    let current = quiz
+    const remaining = [...state.remaining]
+    let lastError: unknown = null
+    let paused = false
+    while (remaining.length > 0) {
+      if (!control.shouldContinue()) {
+        paused = true
+        break
+      }
+      const draw = remaining[0]!
+      const done = state.total - remaining.length
+      options.onProgress?.('generating', 20 + Math.round((done / Math.max(1, state.total)) * 60))
+      const matched = draw.topicIds.map((id) => topics.get(id)).filter((each) => each !== undefined)
+      const points = concepts
+        .filter((concept) => concept.topicIds.some((id) => draw.topicIds.includes(id)))
+        .map((concept) => concept.name)
+        .slice(0, POINTS_PER_TOPIC)
+      const snippets = draw.aiOnly
+        ? []
+        : pickQuizSnippets(candidates, {
+            preferChunkIds: matched.flatMap((each) => each.sourceChunkIds ?? []),
+            keywords: [...matched.map((each) => each.name), ...points],
+            limit: SNIPPETS_PER_TOPIC,
+            fill: false,
+          })
+      // The knowledge point the exam-topic list recognises: the matched
+      // course topic's name, or the exam topic's own text.
+      const knowledgePoint = matched[0]?.name ?? draw.topic
+      const inputs: NewQuestionInput[] = []
+      try {
+        const item = await this.generateItem(
+          {
+            topic: draw.topic,
+            courseTopics: matched.map((each) => each.name),
+            knowledgePoints: points,
+            sourceSnippets: snippets.map(formatSnippetForPrompt),
+            language: state.language,
+          },
+          new Map(snippets.map((snippet) => [snippet.chunkId, snippet])),
+          { aiOnly: draw.aiOnly, fallbackPoint: knowledgePoint },
+          subject,
+          control.signal,
+        )
+        const group = crypto.randomUUID()
+        const shared = {
+          projectId: quiz.projectId,
+          ...(matched[0] ? { topicId: matched[0].id } : {}),
+          knowledgePoint,
+          type: 'short_answer' as const,
+          difficulty: state.difficulty,
+          hints: [],
+          sourceRefs: item.sourceRefs,
+          ...(draw.aiOnly ? { origin: 'ai_without_source' as const } : {}),
+          promptVersion: ORAL_PROMPT_VERSION,
+        }
+        inputs.push({
+          ...shared,
+          prompt: item.question,
+          correctAnswer: item.outline,
+          rubric: item.rubric.map((point, i) => ({ id: `p${i + 1}`, text: point })),
+          oral: { group, role: 'main', topic: draw.topic },
+        })
+        for (const followUp of item.followUps) {
+          inputs.push({
+            ...shared,
+            prompt: followUp.question,
+            correctAnswer: followUp.answer,
+            rubric: followUp.rubric.map((point, i) => ({ id: `p${i + 1}`, text: point })),
+            oral: { group, role: 'follow_up', topic: draw.topic },
+          })
+        }
+      } catch (err) {
+        // A stop aborts this topic: it stays to do, nothing is marked failed.
+        if (isAbortError(err, control.signal)) {
+          paused = true
+          break
+        }
+        lastError = err
+        logger.warn('Oral exam item failed; topic skipped', {
+          error: (err as Error)?.message,
+        })
+      }
+      remaining.shift()
+      const stored = inputs.length > 0 ? await this.questions.addMany(inputs) : []
+      current = {
+        ...current,
+        questionIds: [...current.questionIds, ...stored.map((q) => q.id)],
+        difficultyPlan: [...current.difficultyPlan, ...stored.map(() => state.difficulty)],
+        oralResume: { ...state, remaining: [...remaining], updatedAt: Date.now() },
+      }
+      await this.quizzes.upsert(current)
+    }
+
+    if (paused && remaining.length > 0) {
+      const pausedQuiz: Quiz = {
+        ...current,
+        status: 'paused',
+        oralResume: { ...state, remaining: [...remaining], updatedAt: Date.now() },
+      }
+      await this.quizzes.upsert(pausedQuiz)
+      logger.info('Oral exam generation paused', {
+        quizId: pausedQuiz.id,
+        remaining: remaining.length,
+      })
+      return pausedQuiz
+    }
+    if (current.questionIds.length === 0) {
+      throw lastError ?? new AppError(t('oral.errors.noItems'), 'MALFORMED_QUIZ')
+    }
+
+    options.onProgress?.('storing', 85)
+    const stored = await this.questions.listByIds(current.questionIds)
+    const topicCount = new Set(stored.map((q) => q.oral?.group)).size
+    const { oralResume: _finished, errorMessage: _error, ...rest } = current
+    void _finished
+    void _error
+    const ready: Quiz = {
+      ...rest,
+      title: t('oral.quizTitle', { topic: state.label, count: topicCount }),
+      config: { ...current.config, count: topicCount },
+      status: 'ready',
+    }
+    await this.quizzes.upsert(ready)
+    options.onProgress?.('done', 100)
+    logger.info('Oral exam generated', { quizId: ready.id, topics: topicCount })
+    return ready
   }
 
   private async generateItem(
@@ -398,7 +509,7 @@ export class OralExamService {
         if (item) return item
         lastError = new AppError(t('oral.errors.invalidItem'), 'MALFORMED_QUIZ')
       } catch (err) {
-        if (signal?.aborted) throw err
+        if (isAbortError(err, signal)) throw err
         lastError = err
       }
       logger.warn('Oral exam generation attempt failed', {

@@ -20,6 +20,12 @@ import {
 } from './languageDrillValidation'
 import type { AIService } from './aiService'
 import { t } from '@/i18n'
+import { fnv1a } from '@/shared/lib/hash'
+import {
+  isAbortError,
+  resolveControl,
+  type GenerationControl,
+} from '@/shared/lib/generationControl'
 
 /**
  * Import the vocabulary list printed in a language textbook ("Szótár",
@@ -195,6 +201,27 @@ export interface WordListSplitResult {
   /** Parts whose request failed (the rest are still offered). */
   failedParts: number
   totalParts: number
+  /** Parts read (in this run or kept from an earlier, paused one). */
+  doneParts: number
+  /** Paused / stopped before every part was read; the parts read are offered. */
+  paused: boolean
+}
+
+/**
+ * Parts already read, kept for this page visit (by document, language and
+ * the part's own text), so continuing a paused import only asks for the
+ * parts that are left. A reload starts over.
+ */
+const partCache = new Map<string, Array<Omit<WordListCandidate, 'id'>>>()
+
+function partKey(documentId: string, language: string, part: WordListPart): string {
+  const text = part.chunks.map((chunk) => `${chunk.id}\u0000${chunk.text}`).join('\u0001')
+  return `${documentId}:${language}:${fnv1a(`${part.lesson ?? ''}\u0002${text}`)}`
+}
+
+/** Tests: forget the parts read in earlier runs. */
+export function clearWordListPartCacheForTesting(): void {
+  partCache.clear()
 }
 
 export interface WordListMergeResult {
@@ -223,13 +250,20 @@ export class TextbookWordListService {
   /**
    * Read the word list of one processed document: one request per part
    * (chapter), two at a time. A failed part is skipped and counted; when
-   * every part fails, the first error is thrown.
+   * every part fails, the first error is thrown. Paused or stopped
+   * (`control`), the parts already read are returned with `paused` and kept
+   * for this page visit, so running it again only reads the rest.
    */
   async split(
     projectId: string,
     documentId: string,
-    options: { signal?: AbortSignal; onProgress?: (done: number, total: number) => void } = {},
+    options: {
+      signal?: AbortSignal
+      control?: GenerationControl
+      onProgress?: (done: number, total: number) => void
+    } = {},
   ): Promise<WordListSplitResult> {
+    const control = resolveControl(options.control, options.signal)
     if (!this.ai) throw new AppError(t('wordList.noProvider'), 'NO_PROVIDER')
     const { language } = await this.courseLanguage(projectId)
     const document = await new DocumentRepository(this.db).get(documentId)
@@ -239,16 +273,28 @@ export class TextbookWordListService {
     if (chunks.length === 0) throw new ValidationError(t('wordList.noText'))
     const parts = planWordListParts(chunks)
 
-    const results: Array<Omit<WordListCandidate, 'id'>[]> = new Array(parts.length)
+    const results: Array<Omit<WordListCandidate, 'id'>[] | undefined> = new Array(parts.length)
+    const keys = parts.map((part) => partKey(documentId, language, part))
     let failed = 0
     let firstError: unknown = null
     let done = 0
-    let next = 0
+    let interrupted = false
+    for (const [index, key] of keys.entries()) {
+      const cached = partCache.get(key)
+      if (cached) {
+        results[index] = cached
+        done++
+      }
+    }
+    const queue = parts.map((_, index) => index).filter((index) => !results[index])
+    options.onProgress?.(done, parts.length)
     const worker = async () => {
-      while (next < parts.length) {
-        const index = next++
+      for (let index = queue.shift(); index !== undefined; index = queue.shift()) {
+        if (!control.shouldContinue()) {
+          interrupted = true
+          return
+        }
         const part = parts[index]!
-        options.signal?.throwIfAborted()
         const text = part.chunks.map((chunk) => chunk.text).join('\n')
         try {
           const { data } = await this.ai!.chatJSON<unknown>(
@@ -266,16 +312,22 @@ export class TextbookWordListService {
                 }),
               },
             ],
-            { maxTokens: 4096, ...(options.signal ? { signal: options.signal } : {}) },
+            { maxTokens: 4096, signal: control.signal },
           )
-          results[index] = validateWordListItems(
+          const items = validateWordListItems(
             prompts.vocabListSplit.readItems(data),
             { text, chunks: part.chunks, documentName: document.name },
             language,
             part.lesson,
           )
+          results[index] = items
+          partCache.set(keys[index]!, items)
         } catch (err) {
-          if (options.signal?.aborted) throw err
+          // A stopped request is not a failed part: it is read on continue.
+          if (isAbortError(err, control.signal)) {
+            interrupted = true
+            return
+          }
           failed++
           firstError ??= err
           results[index] = []
@@ -285,19 +337,27 @@ export class TextbookWordListService {
         options.onProgress?.(done, parts.length)
       }
     }
-    await Promise.all(Array.from({ length: Math.min(CONCURRENCY, parts.length) }, worker))
-    if (failed === parts.length && firstError) throw firstError
+    await Promise.all(Array.from({ length: Math.min(CONCURRENCY, queue.length) }, worker))
+    const paused = interrupted || !control.shouldContinue() ? done < parts.length : false
+    if (!paused && failed === parts.length && firstError) throw firstError
 
     // One entry per word over the whole document (the first lesson wins).
     const seen = new Set<string>()
     const candidates: WordListCandidate[] = []
-    for (const item of results.flat()) {
+    for (const item of results.flatMap((items) => items ?? [])) {
       const key = wordKey(item.term, language)
       if (seen.has(key)) continue
       seen.add(key)
       candidates.push({ id: `w${candidates.length + 1}`, ...item })
     }
-    return { language, candidates, failedParts: failed, totalParts: parts.length }
+    return {
+      language,
+      candidates,
+      failedParts: failed,
+      totalParts: parts.length,
+      doneParts: done,
+      paused,
+    }
   }
 
   /**

@@ -50,6 +50,8 @@ import {
 } from '@/entities/vocab/types'
 import { toast } from '@/features/toast/toastStore'
 import { friendlyAIError } from '@/shared/lib/aiErrors'
+import { useGenerationRun } from '@/shared/lib/useGenerationRun'
+import { GenerationControls } from '@/shared/ui/GenerationControls'
 import { formatNumber, useTranslation, type TranslationKey } from '@/i18n'
 
 type T = ReturnType<typeof useTranslation>['t']
@@ -694,15 +696,36 @@ function CourseVocabPanel({
   const [running, setRunning] = useState<string | null>(null)
   /** The language course whose textbook word list is being imported. */
   const [importFor, setImportFor] = useState<string | null>(null)
+  /** Gloss batches done / planned for the running (or last paused) course. */
+  const [gloss, setGloss] = useState<{
+    projectId: string
+    done: number
+    total: number
+    paused: boolean
+  } | null>(null)
+  const generation = useGenerationRun()
 
   const extract = async (projectId: string) => {
     setRunning(projectId)
+    const run = generation.start()
+    setGloss({ projectId, done: 0, total: 0, paused: false })
     try {
       const bundle = await buildAIServices()
       const result = await new CourseVocabService({
         projects: new ProjectService(),
         ai: bundle?.ai ?? null,
-      }).extract(projectId)
+      }).extract(projectId, {
+        control: run,
+        onProgress: ({ done, total }) => setGloss({ projectId, done, total, paused: false }),
+      })
+      run.finish()
+      if (result.paused) {
+        // The batches glossed so far are saved; 继续 glosses only the rest.
+        setGloss((prev) => (prev ? { ...prev, paused: true } : prev))
+        onChanged()
+        return
+      }
+      setGloss(null)
       toast({
         variant: 'success',
         title: t('vocab.course.done', { total: result.total, added: result.added }),
@@ -714,6 +737,8 @@ function CourseVocabPanel({
       })
       onChanged()
     } catch (err) {
+      run.finish()
+      setGloss(null)
       toast({
         variant: 'error',
         title: t('vocab.course.failed'),
@@ -774,6 +799,30 @@ function CourseVocabPanel({
                   </Button>
                 )}
               </div>
+              {gloss?.projectId === project.id && (gloss.total > 0 || gloss.paused) && (
+                <div className="flex flex-wrap items-center gap-3 px-6 pb-3 lecture:px-0 lab:px-3.5">
+                  <div className="min-w-0 flex-1 space-y-1">
+                    <Progress
+                      value={gloss.total > 0 ? Math.round((gloss.done / gloss.total) * 100) : 0}
+                      className="h-1.5"
+                      aria-label={t('vocab.course.glossing')}
+                    />
+                    <p className="data-num text-xs text-muted-foreground">
+                      {t('vocab.course.glossProgress', { done: gloss.done, total: gloss.total })}
+                    </p>
+                  </div>
+                  <GenerationControls
+                    kind="parts"
+                    state={gloss.paused ? 'paused' : generation.state}
+                    done={gloss.done}
+                    total={gloss.total}
+                    stopRequested={generation.run?.stopRequested ?? false}
+                    onPause={generation.requestPause}
+                    onStopNow={generation.stopNow}
+                    {...(running === null ? { onResume: () => void extract(project.id) } : {})}
+                  />
+                </div>
+              )}
               {book && (
                 <BookRow
                   book={book}

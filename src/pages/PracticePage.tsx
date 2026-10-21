@@ -31,6 +31,10 @@ import type { TutorVisual } from '@/entities/tutorLesson/types'
 import { cn } from '@/shared/lib/utils'
 import { optionKeyClass, optionListClass, optionRowClass } from '@/widgets/quiz/optionStyles'
 import { useTranslation } from '@/i18n'
+import { toast } from '@/features/toast/toastStore'
+import { isAbortError } from '@/shared/lib/generationControl'
+import { useGenerationRun } from '@/shared/lib/useGenerationRun'
+import { GenerationControls } from '@/shared/ui/GenerationControls'
 
 function QuestionCard({
   question,
@@ -45,6 +49,7 @@ function QuestionCard({
   const [feedback, setFeedback] = useState<PracticeFeedback | null>(null)
   const [busy, setBusy] = useState(false)
   const [disputing, setDisputing] = useState(false)
+  const checkRun = useGenerationRun({ abortOnUnmount: true })
 
   async function dispute(): Promise<void> {
     if (!feedback) return
@@ -88,10 +93,22 @@ function QuestionCard({
   async function check(): Promise<void> {
     if (!answer.trim()) return
     setBusy(true)
+    // Only a short answer asks the AI (scoring points + check): it can be stopped.
+    const run = question.type === 'short_answer' ? checkRun.start() : null
     try {
-      setFeedback(await (await buildPracticeService()).recordAttempt(question.id, answer.trim()))
+      setFeedback(
+        await (
+          await buildPracticeService()
+        ).recordAttempt(question.id, answer.trim(), run ? { signal: run.signal } : {}),
+      )
       onChecked()
+    } catch (err) {
+      // Stopped: nothing was stored; the answer stays for another try.
+      if (!run || !isAbortError(err, run.signal)) throw err
+      toast({ variant: 'info', title: t('quiz.checkStopped') })
     } finally {
+      run?.finish()
+      checkRun.reset()
       setBusy(false)
     }
   }
@@ -171,10 +188,13 @@ function QuestionCard({
           </div>
         )}
 
-        <Button size="sm" onClick={() => void check()} disabled={busy || !answer.trim()}>
-          {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
-          {t('practice.check')}
-        </Button>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button size="sm" onClick={() => void check()} disabled={busy || !answer.trim()}>
+            {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
+            {t('practice.check')}
+          </Button>
+          <GenerationControls kind="single" state={checkRun.state} onStopNow={checkRun.stopNow} />
+        </div>
 
         {feedback?.evaluation ? (
           <ShortAnswerFeedback

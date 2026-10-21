@@ -82,13 +82,17 @@ export interface HomeworkProgress {
  * `ready`     — at least one question was extracted (per-question content may
  *               still have its own status).
  * `failed`    — nothing usable was extracted; `errorMessage` explains why.
+ * `paused`    — the student paused the run. `progress` keeps the stage and how
+ *               far it got; questions already prepared stay usable, and
+ *               「继续」 does only what is left.
  */
-export type HomeworkStatus = 'analyzing' | 'ready' | 'failed'
+export type HomeworkStatus = 'analyzing' | 'ready' | 'failed' | 'paused'
 
 export const HOMEWORK_STATUS_LABEL_KEYS: Record<HomeworkStatus, TranslationKey> = {
   analyzing: 'homework.status.analyzing',
   ready: 'homework.status.ready',
   failed: 'homework.status.failed',
+  paused: 'homework.status.paused',
 }
 
 /**

@@ -342,6 +342,10 @@ export const en = {
   'homework.status.preparing': 'Preparing help',
   'homework.status.ready': 'Ready',
   'homework.status.failed': 'Failed',
+  'homework.status.paused': 'Paused',
+  'homework.pausedIdentifyingHint':
+    'Batches already read are kept while this page stays open; after a reload they need to be read again.',
+  'homework.continueAnalysis': 'Continue',
   'homework.analyzingHint': 'This runs once on this device.',
   'homework.progress.extracting': 'Extracting text and running OCR…',
   'homework.progress.identifying': 'Reading questions · batch {current} of {total}',
@@ -1110,6 +1114,15 @@ export const en = {
   'quiz.readyBody': '{count} questions',
   'quiz.readyBody.one': '{count} question',
   'quiz.generateFailed': 'Could not generate quiz',
+  'quiz.paused.progress': '{done} of {total} questions generated',
+  'quiz.paused.continue': 'Continue generating',
+  'quiz.paused.saved':
+    'Paused. The {count} questions generated so far are saved; continue later to fill in the rest.',
+  'quiz.paused.notTakeable':
+    'This quiz is unfinished. Continue generating its remaining questions before taking it.',
+  'quiz.paused.continuing': 'Generating the remaining questions…',
+  'quiz.paused.interrupted': 'Generation was interrupted before it finished.',
+  'quiz.checkStopped': 'Check stopped. Your answer was not submitted; you can submit it again.',
   'quiz.backToProject': 'Back to project',
   'quiz.subtitle': 'Practice with AI-generated questions. Difficulty adapts to your performance.',
   'quiz.mastery': 'Knowledge Mastery',
@@ -1259,6 +1272,8 @@ export const en = {
   'wordList.count': '{included} of {total} selected',
   'wordList.selectAll': 'Select all',
   'wordList.selectNone': 'Select none',
+  'wordList.pausedNote':
+    'Paused: {done} of {total} parts read. Confirm the words found so far, or continue with the rest.',
   'wordList.partsFailed':
     '{count} part(s) of the file could not be read; the words found elsewhere are listed.',
   'wordList.include': 'Add {term}',
@@ -1289,6 +1304,8 @@ export const en = {
   'phrases.confirm': 'Create {count} cards',
   'phrases.saved': 'Added {count} phrase cards (existing ones skipped).',
   'phrases.saveFailed': 'Could not create the phrase cards',
+  'phrases.pausedNote':
+    'Paused: {done} of {total} parts read. Confirm the phrases found so far, or continue with the rest.',
   'phrases.failed': 'Could not read the dialogues',
   'phrases.noProvider': 'Configure an AI provider first (Settings → AI).',
   'phrases.noDialogues': 'No dialogue passages were found in the processed files of this course.',
@@ -2090,6 +2107,7 @@ export const en = {
   'mastery.correctOf': '{correct} / {total} correct',
 
   'quizStatus.generating': 'Generating',
+  'quizStatus.paused': 'Unfinished',
   'quizStatus.ready': 'Ready',
   'quizStatus.in_progress': 'In progress',
   'quizStatus.completed': 'Completed',
@@ -2657,6 +2675,8 @@ export const en = {
   'vocab.course.unglossed': '{count} words still have no meaning; try again later.',
   'vocab.course.noAi':
     'No AI configured: {count} technical words have no meaning yet (they can still be learned from their sentences).',
+  'vocab.course.glossing': 'Looking up meanings',
+  'vocab.course.glossProgress': 'Meanings: {done} of {total} batches',
   'vocab.course.failed': 'Could not find course words',
   'vocab.course.noProjects': 'No courses yet',
   'vocab.course.noProjectsHint': 'Create a course and upload English material first.',
@@ -3096,6 +3116,24 @@ export const en = {
   'contextual.explainQuestion': 'Explain this passage.',
 
   'time.justNow': 'now',
+
+  'generation.controls': 'Generation controls',
+  'generation.pause': 'Pause',
+  'generation.pauseHint': 'Finish the parts in progress, then pause',
+  'generation.resume': 'Continue',
+  'generation.resumeHint': 'Continue with the parts that are left',
+  'generation.stopNow': 'Stop now',
+  'generation.stopNowHint': 'Cancel the requests in progress; finished parts stay saved',
+  'generation.stop': 'Stop',
+  'generation.stopHint': 'Cancel this request; nothing that exists is changed',
+  'generation.finishingCurrent': 'Finishing the current part…',
+  'generation.stopping': 'Stopping…',
+  'generation.paused': 'Paused ({done} of {total} done)',
+  'generation.pausedShort': 'Paused',
+  'generation.stoppedSaved': 'Stopped. The finished parts are saved.',
+  'generation.stoppedKept': 'Stopped. Nothing was changed.',
+  'generation.analysisPartsHint':
+    'Parts already read are kept while this page stays open; after a reload they need to be read again.',
 } as const
 
 export type TranslationKey = keyof typeof en

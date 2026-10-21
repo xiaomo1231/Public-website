@@ -155,7 +155,10 @@ export class HomeOverviewService {
     }
 
     // Homework: per ready assignment, how many live questions were touched.
-    const readySets = sets.filter((s) => s.status === 'ready')
+    // A paused assignment's prepared questions are usable too.
+    const readySets = sets.filter(
+      (s) => s.status === 'ready' || (s.status === 'paused' && s.questionCount > 0),
+    )
     const questionLists = await Promise.all(readySets.map((s) => this.homework.listQuestions(s.id)))
     let questions = 0
     let worked = 0

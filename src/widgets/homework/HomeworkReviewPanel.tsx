@@ -8,6 +8,9 @@ import { Button } from '@/shared/ui/Button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/ui/Card'
 import { RichText } from '@/shared/ui/RichText'
 import { friendlyAIError } from '@/shared/lib/aiErrors'
+import { isGenerationInterruption } from '@/shared/lib/generationControl'
+import { useGenerationRun } from '@/shared/lib/useGenerationRun'
+import { GenerationControls } from '@/shared/ui/GenerationControls'
 import { useTranslation } from '@/i18n'
 
 interface HomeworkReviewPanelProps {
@@ -22,36 +25,47 @@ export function HomeworkReviewPanel({ question, service }: HomeworkReviewPanelPr
   const [guide, setGuide] = useState<HomeworkReviewGuide | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  // The explanation is one request the student can stop; a stop keeps what exists.
+  const generation = useGenerationRun()
+  const { start: startRun } = generation
 
   useEffect(() => {
     let active = true
     setGuide(null)
     setError(null)
     setLoading(true)
+    const run = startRun()
     void service
-      .getOrGenerateReviewGuide(question.id, reviewLanguage)
+      .getOrGenerateReviewGuide(question.id, reviewLanguage, false, { signal: run.signal })
       .then((result) => {
         if (active) setGuide(result)
       })
       .catch((err) => {
-        if (active) setError(friendlyAIError(err))
+        if (active && !isGenerationInterruption(err, run)) setError(friendlyAIError(err))
       })
       .finally(() => {
+        run.finish()
         if (active) setLoading(false)
       })
     return () => {
       active = false
     }
-  }, [question.id, reviewLanguage, service])
+  }, [question.id, reviewLanguage, service, startRun])
 
   async function regenerate(): Promise<void> {
     setLoading(true)
     setError(null)
+    const run = generation.start()
     try {
-      setGuide(await service.getOrGenerateReviewGuide(question.id, reviewLanguage, true))
+      setGuide(
+        await service.getOrGenerateReviewGuide(question.id, reviewLanguage, true, {
+          signal: run.signal,
+        }),
+      )
     } catch (err) {
-      setError(friendlyAIError(err))
+      if (!isGenerationInterruption(err, run)) setError(friendlyAIError(err))
     } finally {
+      run.finish()
       setLoading(false)
     }
   }
@@ -72,6 +86,12 @@ export function HomeworkReviewPanel({ question, service }: HomeworkReviewPanelPr
             {t('homework.review.preparing')}
           </p>
         )}
+        <GenerationControls
+          kind="single"
+          state={generation.state}
+          onStopNow={generation.stopNow}
+          hideStatus={generation.state !== 'stopped' || guide !== null}
+        />
         {error && (
           <p role="alert" className="text-sm text-destructive">
             {error}

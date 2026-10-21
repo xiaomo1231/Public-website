@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { GenerationControls } from '@/shared/ui/GenerationControls'
 import { ExternalLink, Globe, ImageOff, Loader2, ShieldCheck, X } from 'lucide-react'
 import type { ReferenceImage } from '@/entities/referenceImage/types'
 import type { UseReferenceImagesState } from '@/features/tutor/useReferenceImages'
@@ -144,19 +145,26 @@ export function ReferenceImageGallery({
           <p className="text-xs text-muted-foreground">{t('referenceImages.subtitle')}</p>
         </div>
         {offerSearch && (
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => void state.search()}
-            disabled={state.searching}
-          >
-            {state.searching ? <Loader2 className="animate-spin" /> : <Globe />}
-            {state.searching
-              ? t('referenceImages.searching')
-              : state.images.length > 0
-                ? t('referenceImages.searchMore')
-                : t('referenceImages.search')}
-          </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => void state.search()}
+              disabled={state.searching}
+            >
+              {state.searching ? <Loader2 className="animate-spin" /> : <Globe />}
+              {state.searching
+                ? t('referenceImages.searching')
+                : state.images.length > 0
+                  ? t('referenceImages.searchMore')
+                  : t('referenceImages.search')}
+            </Button>
+            <GenerationControls
+              kind="single"
+              state={state.searching ? 'running' : null}
+              onStopNow={state.stop}
+            />
+          </div>
         )}
       </div>
       {state.error && <p className="text-sm text-destructive">{state.error}</p>}

@@ -36,6 +36,9 @@ import { MathField } from '@/widgets/mathInput/MathField'
 import { useProject } from '@/features/project/useProjects'
 import { QuestionSource } from '@/widgets/quiz/QuestionSource'
 import { friendlyAIError } from '@/shared/lib/aiErrors'
+import { isGenerationInterruption } from '@/shared/lib/generationControl'
+import { useGenerationRun } from '@/shared/lib/useGenerationRun'
+import { GenerationControls } from '@/shared/ui/GenerationControls'
 import { cn } from '@/shared/lib/utils'
 import { useTranslation } from '@/i18n'
 import { appendSpeechText, useSpeechInput } from '@/features/homework/useSpeechInput'
@@ -91,6 +94,10 @@ export function HomeworkQuestionView({
   const [busy, setBusy] = useState(false)
   const [actionError, setActionError] = useState<string | null>(null)
   const [checking, setChecking] = useState(false)
+  // Each AI request here can be stopped; a stop leaves everything as it was.
+  const checkRun = useGenerationRun()
+  const regenerateRun = useGenerationRun()
+  const askRun = useGenerationRun()
   const [checkError, setCheckError] = useState<string | null>(null)
   const [answerCheck, setAnswerCheck] = useState<HomeworkAnswerCheck | null>(
     question.answerCheck ?? null,
@@ -213,12 +220,16 @@ export function HomeworkQuestionView({
     if (!draft.trim() || checking) return
     setChecking(true)
     setCheckError(null)
+    const run = checkRun.start()
     try {
-      setAnswerCheck(await service.checkAnswer(question.id, draft, checkLanguage))
+      setAnswerCheck(
+        await service.checkAnswer(question.id, draft, checkLanguage, { signal: run.signal }),
+      )
       setSaved(true)
     } catch (err) {
-      setCheckError(friendlyAIError(err))
+      if (!isGenerationInterruption(err, run)) setCheckError(friendlyAIError(err))
     } finally {
+      run.finish()
       setChecking(false)
     }
   }
@@ -241,14 +252,17 @@ export function HomeworkQuestionView({
     setActionError(null)
     setNotice(null)
     const previousHints = hints.length
+    const run = regenerateRun.start()
     try {
       // A question confirmed against the professor answer regenerates FROM that
       // answer; every other question uses the ordinary walkthrough.
       const useProfessorAnswer =
         question.answerStatus === 'matched' && Boolean((question.answerText ?? '').trim())
       const next = useProfessorAnswer
-        ? await service.generateAnswerForQuestion(question.id)
-        : await service.generateContent(question.id)
+        ? await service.generateAnswerForQuestion(question.id, { signal: run.signal })
+        : await service.generateContent(question.id, { signal: run.signal })
+      // Stopped: the question kept its previous help; nothing to announce.
+      if (run.stopRequested) return
       if (next) {
         setHints(next.hints)
         setSolution(next.solution)
@@ -264,8 +278,9 @@ export function HomeworkQuestionView({
         }
       }
     } catch (err) {
-      setActionError(friendlyAIError(err))
+      if (!isGenerationInterruption(err, run)) setActionError(friendlyAIError(err))
     } finally {
+      run.finish()
       setBusy(false)
     }
   }
@@ -283,14 +298,16 @@ export function HomeworkQuestionView({
     }
     setMessages((prev) => [...prev, optimistic])
     setQuestionText('')
+    const run = askRun.start()
     try {
-      const reply = await service.ask(question.id, text)
+      const reply = await service.ask(question.id, text, { signal: run.signal })
       setMessages((prev) => [...prev, reply])
     } catch (err) {
       setMessages((prev) => prev.filter((message) => message.id !== optimistic.id))
       setQuestionText(text)
-      setAskError(friendlyAIError(err))
+      if (!isGenerationInterruption(err, run)) setAskError(friendlyAIError(err))
     } finally {
+      run.finish()
       setAsking(false)
     }
   }
@@ -514,6 +531,11 @@ export function HomeworkQuestionView({
                 )}
                 {checking ? t('homework.check.checking') : t('homework.check.button')}
               </Button>
+              <GenerationControls
+                kind="single"
+                state={checkRun.state}
+                onStopNow={checkRun.stopNow}
+              />
               {!availableReference && (
                 <span className="text-sm text-muted-foreground">
                   {t('homework.check.noReference')}
@@ -622,6 +644,11 @@ export function HomeworkQuestionView({
             )}
             {t('homework.regenerate')}
           </Button>
+          <GenerationControls
+            kind="single"
+            state={regenerateRun.state}
+            onStopNow={regenerateRun.stopNow}
+          />
         </div>
 
         {actionError && (
@@ -752,10 +779,13 @@ export function HomeworkQuestionView({
               </ul>
             )}
             {asking && (
-              <p role="status" className="flex items-center gap-2 text-xs text-muted-foreground">
-                <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
-                {t('homework.thinking')}
-              </p>
+              <div className="flex flex-wrap items-center gap-3">
+                <p role="status" className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+                  {t('homework.thinking')}
+                </p>
+                <GenerationControls kind="single" state={askRun.state} onStopNow={askRun.stopNow} />
+              </div>
             )}
             {askError && (
               <p role="alert" className="text-sm text-destructive">

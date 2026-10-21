@@ -49,6 +49,14 @@ import { t } from '@/i18n'
 import type { SubjectContext } from '@/entities/project/types'
 import { loadProjectSubjectContext } from './projectSubject'
 import { getDb, type AppDatabase } from '@/infrastructure/db/database'
+import {
+  GenerationPausedError,
+  createGenerationRun,
+  isGenerationInterruption,
+  resolveControl,
+  type GenerationControl,
+  type GenerationRun,
+} from '@/shared/lib/generationControl'
 
 /** How a re-analysis would have to be run. */
 export type IncrementalMode = 'none' | 'full' | 'incremental'
@@ -74,7 +82,14 @@ export interface IncrementalPlan {
   executionScope: 'project' | 'local'
 }
 
-export type EnsureAnalyzedReason = 'fresh' | 'no-provider' | 'no-documents' | 'failed' | 'analyzed'
+export type EnsureAnalyzedReason =
+  | 'fresh'
+  | 'no-provider'
+  | 'no-documents'
+  | 'failed'
+  | 'analyzed'
+  /** Paused or stopped by the student: nothing changed, parts read are kept in memory. */
+  | 'paused'
 
 export interface EnsureAnalyzedResult {
   analyzed: boolean
@@ -82,6 +97,8 @@ export interface EnsureAnalyzedResult {
   error?: string
   /** The original error for `failed`, so the UI can map it to an actionable hint. */
   cause?: unknown
+  /** For `paused`: it was an immediate stop rather than a pause. */
+  stopped?: boolean
 }
 
 export interface EnsureAnalyzedOptions {
@@ -94,6 +111,12 @@ export interface EnsureAnalyzedOptions {
    * "re-analyse"). Still coalesced with any run already in flight.
    */
   force?: boolean
+  /**
+   * Pause / stop from the caller. Every run also gets its own controller,
+   * reachable through `courseAnalysisRun(projectId)`, so a page that did not
+   * start the run (it came from the upload flow) can still pause it.
+   */
+  control?: GenerationControl
 }
 
 export interface IncrementalExecutionResult {
@@ -127,9 +150,77 @@ interface InFlightRun {
   listeners: Set<(progress: DocumentAnalysisProgress) => void>
   /** A caller asked for `force` while a non-forced pass was running. */
   forceRequested: boolean
+  /** Pause / stop for this run (any page may use it). */
+  run: GenerationRun
+  /** Whether the run was started as a forced re-analysis. */
+  force: boolean
+  /** The latest progress, for a page that opens while the run is going. */
+  progress?: DocumentAnalysisProgress
 }
 
 const inFlight = new Map<string, InFlightRun>()
+
+/** A run that ended on a pause / stop, so the page can offer 「继续」. */
+export interface PausedCourseAnalysis {
+  force: boolean
+  stopped: boolean
+  parts?: { done: number; total: number }
+}
+
+const pausedRuns = new Map<string, PausedCourseAnalysis>()
+const runListeners = new Set<() => void>()
+
+function emitRuns(): void {
+  for (const listener of [...runListeners]) listener()
+}
+
+/** Re-render when a course analysis run starts, progresses, pauses or ends. */
+export function subscribeCourseAnalysisRuns(listener: () => void): () => void {
+  runListeners.add(listener)
+  return () => runListeners.delete(listener)
+}
+
+/** The analysis run in flight for a project (its controller and latest progress). */
+export function courseAnalysisRun(
+  projectId: string,
+): { run: GenerationRun; progress?: DocumentAnalysisProgress; force: boolean } | undefined {
+  const entry = inFlight.get(projectId)
+  if (!entry) return undefined
+  return {
+    run: entry.run,
+    force: entry.force,
+    ...(entry.progress ? { progress: entry.progress } : {}),
+  }
+}
+
+/** The project's last run, when it ended on a pause / stop during this visit. */
+export function pausedCourseAnalysis(projectId: string): PausedCourseAnalysis | undefined {
+  return pausedRuns.get(projectId)
+}
+
+/** Forget a paused run (the student dismissed it, or a new run started). */
+export function clearPausedCourseAnalysis(projectId: string): void {
+  if (pausedRuns.delete(projectId)) emitRuns()
+}
+
+/**
+ * The control a run works with: its own controller, also stopped / paused by
+ * the caller's control or signal.
+ */
+function combinedControl(
+  own: GenerationRun,
+  extra: GenerationControl | undefined,
+  signal: AbortSignal | undefined,
+): GenerationControl {
+  const outer = extra ?? (signal ? resolveControl(undefined, signal) : undefined)
+  if (!outer) return own
+  if (outer.signal.aborted) own.stopNow()
+  else outer.signal.addEventListener('abort', () => own.stopNow(), { once: true })
+  return {
+    signal: own.signal,
+    shouldContinue: () => own.shouldContinue() && outer.shouldContinue(),
+  }
+}
 
 /**
  * A shared run re-runs when material changed under it or a forced request
@@ -140,6 +231,7 @@ const MAX_ANALYSIS_PASSES = 3
 /** Test helper — drops any pending deduplication entry. */
 export function clearEnsureAnalyzedInFlightForTesting(): void {
   inFlight.clear()
+  pausedRuns.clear()
 }
 
 /** A run older than this with no live request in this tab was cut off. */
@@ -318,16 +410,39 @@ export class CourseContentService {
       return existing.promise
     }
 
+    const run = createGenerationRun()
     const entry: InFlightRun = {
       promise: Promise.resolve({ analyzed: false, reason: 'fresh' }),
       listeners: new Set(options.onProgress ? [options.onProgress] : []),
       forceRequested: false,
+      run,
+      force: Boolean(options.force),
     }
-    const tracked = this.runPasses(projectId, options, entry).finally(() => {
-      if (inFlight.get(projectId) === entry) inFlight.delete(projectId)
+    entry.listeners.add((progress) => {
+      entry.progress = progress
+      emitRuns()
     })
+    const control = combinedControl(run, options.control, options.signal)
+    pausedRuns.delete(projectId)
+    const tracked = this.runPasses(projectId, { ...options, control }, entry)
+      .then((result) => {
+        if (result.reason === 'paused') {
+          pausedRuns.set(projectId, {
+            force: entry.force,
+            stopped: Boolean(result.stopped),
+            ...(entry.progress?.parts ? { parts: entry.progress.parts } : {}),
+          })
+        }
+        return result
+      })
+      .finally(() => {
+        run.finish()
+        if (inFlight.get(projectId) === entry) inFlight.delete(projectId)
+        emitRuns()
+      })
     entry.promise = tracked
     inFlight.set(projectId, entry)
+    emitRuns()
     return tracked
   }
 
@@ -352,7 +467,12 @@ export class CourseContentService {
           for (const listener of entry.listeners) listener(progress)
         },
       })
-      if (result.reason === 'no-provider' || result.reason === 'no-documents') return result
+      if (
+        result.reason === 'no-provider' ||
+        result.reason === 'no-documents' ||
+        result.reason === 'paused'
+      )
+        return result
       // A forced pass already re-read everything it could; another forced
       // request arriving meanwhile is the same request (e.g. a double click).
       const forcedAgain = entry.forceRequested && !force
@@ -361,6 +481,7 @@ export class CourseContentService {
         startHash !== undefined && endHash !== undefined && endHash !== startHash
       if (!forcedAgain && !materialChanged) return result
       if (signalAborted(options.signal)) return result
+      if (options.control && !options.control.shouldContinue()) return result
       logger.info('Course material changed during analysis; running once more', {
         projectId,
         forcedAgain,
@@ -409,6 +530,8 @@ export class CourseContentService {
     options: EnsureAnalyzedOptions = {},
   ): Promise<IncrementalExecutionResult> {
     const { projectId } = scope
+    // Pause / stop: no further topic is requested, nothing is committed.
+    const control = resolveControl(options.control, options.signal)
     const nodes = await this.content.listAllNodes(projectId)
     const targetNodeId = scope.type === 'chapter' ? scope.chapterId : scope.sectionId
     const target = nodes.find((node) => node.id === targetNodeId)
@@ -512,6 +635,7 @@ export class CourseContentService {
     const subject =
       regeneratableOps.length > 0 ? await loadProjectSubjectContext(projectId) : undefined
     for (const op of regeneratableOps) {
+      if (!control.shouldContinue()) throw new GenerationPausedError(control.signal.aborted)
       const topic = topicById.get(op.id)
       if (!topic) {
         skipped.push({ topicId: op.id, reason: 'topic-missing' })
@@ -531,7 +655,7 @@ export class CourseContentService {
         services!.ai,
         analysisLanguage,
         subject,
-        options.signal,
+        control.signal,
       )
       if (!staged) {
         flaggedForFullReanalysis.push(op.id)
@@ -805,10 +929,19 @@ export class CourseContentService {
       await services.documentAnalysis.analyzeProject(projectId, {
         ...(options.onProgress ? { onProgress: options.onProgress } : {}),
         ...(options.signal ? { signal: options.signal } : {}),
+        ...(options.control ? { control: options.control } : {}),
         ...(practiceQuestions.length > 0 ? { sideWrites: { practiceQuestions } } : {}),
       })
       return { analyzed: true, reason: 'analyzed' }
     } catch (err) {
+      if (isGenerationInterruption(err, options.control)) {
+        // Not a failure: the stored analysis is untouched.
+        return {
+          analyzed: false,
+          reason: 'paused',
+          stopped: err instanceof GenerationPausedError ? err.stopped : true,
+        }
+      }
       if (isAppError(err) && err.code === 'NO_DOCUMENTS') {
         return { analyzed: false, reason: 'no-documents' }
       }

@@ -1,4 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type KeyboardEvent } from 'react'
+import { isAbortError } from '@/shared/lib/generationControl'
+import { useGenerationRun } from '@/shared/lib/useGenerationRun'
+import { GenerationControls } from '@/shared/ui/GenerationControls'
 import { ArrowRight, Loader2, MessageCircleQuestion, Send, X } from 'lucide-react'
 import { Button } from '@/shared/ui/Button'
 import { Textarea } from '@/shared/ui/Textarea'
@@ -52,6 +55,9 @@ export function ContextualTutorPopup({
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const startedRef = useRef(false)
+  // Closing the popup stops its request; Stop does too.
+  const generation = useGenerationRun({ abortOnUnmount: true })
+  const { start: startRun } = generation
   const inputRef = useRef<HTMLTextAreaElement>(null)
 
   // A selection that is really a figure — or a broken transcription of one —
@@ -66,6 +72,7 @@ export function ContextualTutorPopup({
       setBusy(true)
       setMessages((prev) => [...prev, { role: 'user', content: trimmed }])
       setInput('')
+      const run = startRun()
       try {
         const services = await buildAIServices()
         if (!services) {
@@ -82,15 +89,23 @@ export function ContextualTutorPopup({
           surroundingContext: context.surroundingContext,
           question: trimmed,
           language: context.language,
+          signal: run.signal,
         })
         setMessages((prev) => [...prev, { role: 'assistant', content: answer }])
       } catch (err) {
-        setError(friendlyAIError(err))
+        if (isAbortError(err, run.signal)) {
+          // Stopped: take the question back so it can be edited or re-sent.
+          setMessages((prev) => prev.slice(0, -1))
+          setInput(trimmed)
+        } else {
+          setError(friendlyAIError(err))
+        }
       } finally {
+        run.finish()
         setBusy(false)
       }
     },
-    [busy, context, t],
+    [busy, context, t, startRun],
   )
 
   // "Explain" answers immediately. The ref keeps StrictMode's double effect
@@ -172,10 +187,16 @@ export function ContextualTutorPopup({
           )}
 
           {busy && (
-            <p className="mt-2 flex items-center gap-2 text-[13px] text-muted-foreground">
+            <div className="mt-2 flex items-center gap-2 text-[13px] text-muted-foreground">
               <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
               {t('contextual.thinking')}
-            </p>
+              <GenerationControls
+                kind="single"
+                state={generation.state}
+                onStopNow={generation.stopNow}
+                className="ml-auto"
+              />
+            </div>
           )}
 
           {error && (

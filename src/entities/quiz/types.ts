@@ -59,10 +59,17 @@ export interface ExamScopeSelection {
   includeUnmatched: boolean
 }
 
-export type QuizStatus = 'generating' | 'ready' | 'in_progress' | 'completed' | 'failed'
+/**
+ * `paused` — generation was paused (or stopped) before every planned question
+ * existed. The questions generated so far are stored; `resume` /
+ * `oralResume` hold what is needed to fill the remaining slots. A paused quiz
+ * cannot be taken until 「继续出题」 completes it.
+ */
+export type QuizStatus = 'generating' | 'paused' | 'ready' | 'in_progress' | 'completed' | 'failed'
 
 export const QUIZ_STATUS_LABEL_KEYS: Record<QuizStatus, TranslationKey> = {
   generating: 'quizStatus.generating',
+  paused: 'quizStatus.paused',
   ready: 'quizStatus.ready',
   in_progress: 'quizStatus.in_progress',
   completed: 'quizStatus.completed',
@@ -116,4 +123,63 @@ export interface Quiz {
   finishedAt?: number
   /** Prompt version that generated the questions. */
   promptVersion: string
+  /** While generating / paused: what is needed to fill the remaining slots. */
+  resume?: QuizResumeState
+  /** Oral rehearsal while generating / paused: the topics still to draw up. */
+  oralResume?: OralResumeState
+}
+
+/** One planned question not generated yet; `slot` is its place in the plan. */
+export interface QuizResumeSlot {
+  slot: number
+  type: QuestionType
+  difficulty: DifficultyLevel
+  /** Index into `QuizResumeState.groups` (a mixed review spreads over topics). */
+  group?: number
+}
+
+/** A topic group of the quiz; its passages are reloaded by chunk id on resume. */
+export interface QuizResumeGroup {
+  topicId?: string
+  aiOnly?: boolean
+  knowledgePoints: string[]
+  snippetChunkIds: string[]
+}
+
+export interface QuizResumeState {
+  pending: QuizResumeSlot[]
+  /** Plan slot of each stored question, parallel to `Quiz.questionIds`. */
+  questionSlots: number[]
+  groups: QuizResumeGroup[]
+  /** The quiz's knowledge points (fallback for a question without one). */
+  knowledgePoints: string[]
+  topicName: string
+  topicDescription: string
+  language: 'zh' | 'en' | 'mixed' | 'zh_terms'
+  professorStyleContext?: string
+  updatedAt: number
+}
+
+export interface OralResumeState {
+  /** Drawn topics without a generated item yet. */
+  remaining: Array<{ topic: string; topicIds: string[]; aiOnly: boolean }>
+  /** Topics drawn in all. */
+  total: number
+  difficulty: DifficultyLevel
+  /** The quiz title's topic label. */
+  label: string
+  language: 'zh' | 'en' | 'mixed' | 'zh_terms'
+  updatedAt: number
+}
+
+/**
+ * How far an unfinished quiz got: questions generated of those planned, or
+ * for an oral rehearsal the drawn topics written up of those drawn.
+ */
+export function quizGenerationProgress(quiz: Quiz): { done: number; total: number } {
+  if (quiz.oralResume) {
+    const total = quiz.oralResume.total
+    return { done: total - quiz.oralResume.remaining.length, total }
+  }
+  return { done: quiz.questionIds.length, total: quiz.config.count }
 }

@@ -31,6 +31,7 @@ import { ConfirmDialog } from '@/shared/ui/ConfirmDialog'
 import { LoadingState } from '@/shared/ui/LoadingState'
 import { Math as TeX } from '@/shared/ui/Math'
 import { Progress } from '@/shared/ui/Progress'
+import { GenerationControls } from '@/shared/ui/GenerationControls'
 import { RichText } from '@/shared/ui/RichText'
 import { cn } from '@/shared/lib/utils'
 import { prefersReducedMotion } from '@/shared/lib/motion'
@@ -71,7 +72,20 @@ export function HomeworkWalkthroughPanel({
   mode,
 }: HomeworkWalkthroughPanelProps): JSX.Element {
   const { t, language: uiLanguage } = useTranslation()
-  const { state, notes, progress, loading, error, generate } = useWalkthrough(set.id)
+  const {
+    state,
+    notes,
+    progress,
+    loading,
+    error,
+    generate,
+    resume,
+    runState,
+    stopRequested,
+    paused,
+    requestPause,
+    stopNow,
+  } = useWalkthrough(set.id)
   const homework = useHomeworkService()
   // The spoiler notice appears once per assignment; dismissing it is stored on
   // the assignment, so a reload or another visit opens the walkthrough directly.
@@ -214,9 +228,11 @@ export function HomeworkWalkthroughPanel({
     return note ? { kind: 'note', note } : null
   })()
 
-  async function run(force: boolean): Promise<void> {
-    const result = await generate(force)
+  async function run(force: boolean | 'resume'): Promise<void> {
+    const result = await (force === 'resume' ? resume() : generate(force))
     if (!result) return
+    // Paused or stopped: the panel says so; finished sections are saved.
+    if (result.paused && !result.fatalError) return
     if (result.fatalError)
       toast({
         variant: 'error',
@@ -346,10 +362,40 @@ export function HomeworkWalkthroughPanel({
               <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
               {t('homework.walkthrough.progress', { done: progress.done, total: progress.total })}
             </p>
-            <Progress value={progress.total ? (progress.done / progress.total) * 100 : 0} />
+            <div className="flex flex-wrap items-center gap-3">
+              <Progress
+                className="min-w-[12rem] flex-1"
+                value={progress.total ? (progress.done / progress.total) * 100 : 0}
+              />
+              <GenerationControls
+                kind="parts"
+                state={runState}
+                stopRequested={stopRequested}
+                onPause={requestPause}
+                onStopNow={stopNow}
+              />
+            </div>
             <p className="text-xs text-muted-foreground">
               {t('homework.walkthrough.progressHint')}
             </p>
+          </CardContent>
+        </Card>
+      )}
+
+      {!progress && paused && (runState === 'paused' || runState === 'stopped') && (
+        <Card className="border-border/70">
+          <CardContent className="flex flex-wrap items-center gap-3 p-4">
+            <Progress
+              className="min-w-[12rem] flex-1"
+              value={paused.total ? (paused.done / paused.total) * 100 : 0}
+            />
+            <GenerationControls
+              kind="parts"
+              state={runState}
+              done={paused.done}
+              total={paused.total}
+              onResume={() => void run('resume')}
+            />
           </CardContent>
         </Card>
       )}

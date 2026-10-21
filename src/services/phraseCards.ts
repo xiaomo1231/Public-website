@@ -14,6 +14,12 @@ import { targetLanguageOf } from '@/shared/lib/language'
 import type { AIService } from './aiService'
 import { ReviewCardService } from './reviewCardService'
 import { t } from '@/i18n'
+import { fnv1a } from '@/shared/lib/hash'
+import {
+  isAbortError,
+  resolveControl,
+  type GenerationControl,
+} from '@/shared/lib/generationControl'
 
 /**
  * Phrase cards for a language course: useful sentences from the textbook's
@@ -119,6 +125,32 @@ function planBatches(chunks: DocumentChunk[]): DocumentChunk[][] {
   return batches.slice(0, MAX_REQUESTS)
 }
 
+/** Phrases read from the dialogues, and whether the reading was paused. */
+export interface PhraseExtractResult {
+  candidates: PhraseCandidate[]
+  paused: boolean
+  doneParts: number
+  totalParts: number
+}
+
+/** Parts already read, for this page visit (see `extractParts`). */
+const phraseCache = new Map<string, Array<Omit<PhraseCandidate, 'id'>>>()
+
+function batchKey(
+  projectId: string,
+  language: string,
+  explanationLanguage: string,
+  batch: DocumentChunk[],
+): string {
+  const text = batch.map((chunk) => chunk.id + '|' + chunk.text).join('||')
+  return [projectId, language, explanationLanguage, fnv1a(text)].join(':')
+}
+
+/** Tests: forget the parts read in earlier runs. */
+export function clearPhrasePartCacheForTesting(): void {
+  phraseCache.clear()
+}
+
 export class PhraseCardService {
   private db: AppDatabase
   private ai: AIService | null
@@ -134,10 +166,29 @@ export class PhraseCardService {
     options: {
       documentId?: string
       signal?: AbortSignal
+      control?: GenerationControl
       onProgress?: (done: number, total: number) => void
     } = {},
   ): Promise<PhraseCandidate[]> {
+    return (await this.extractParts(projectId, options)).candidates
+  }
+
+  /**
+   * `extract`, also saying whether it was paused / stopped (`control`) before
+   * every part was read. Parts read are kept for this page visit, so running
+   * it again only asks for the parts that are left; a reload starts over.
+   */
+  async extractParts(
+    projectId: string,
+    options: {
+      documentId?: string
+      signal?: AbortSignal
+      control?: GenerationControl
+      onProgress?: (done: number, total: number) => void
+    } = {},
+  ): Promise<PhraseExtractResult> {
     if (!this.ai) throw new AppError(t('phrases.noProvider'), 'NO_PROVIDER')
+    const control = resolveControl(options.control, options.signal)
     const project = await new ProjectRepository(this.db).get(projectId)
     const language = targetLanguageOf(project)
     if (!language) throw new ValidationError(t('wordList.notLanguageCourse'))
@@ -157,11 +208,26 @@ export class PhraseCardService {
     const profile = await new UserRepository(this.db).get().catch(() => undefined)
     const explanationLanguage = profile?.questionLanguage === 'en' ? 'en' : 'zh'
 
-    const found: Omit<PhraseCandidate, 'id'>[] = []
+    const results: Array<Omit<PhraseCandidate, 'id'>[] | undefined> = new Array(batches.length)
+    const keys = batches.map((batch) => batchKey(projectId, language, explanationLanguage, batch))
     let failed = 0
     let firstError: unknown = null
+    let done = 0
+    let paused = false
+    for (const [index, key] of keys.entries()) {
+      const cached = phraseCache.get(key)
+      if (cached) {
+        results[index] = cached
+        done++
+      }
+    }
+    options.onProgress?.(done, batches.length)
     for (const [index, batch] of batches.entries()) {
-      options.signal?.throwIfAborted()
+      if (results[index]) continue
+      if (!control.shouldContinue()) {
+        paused = true
+        break
+      }
       try {
         const { data } = await this.ai.chatJSON<unknown>(
           [
@@ -178,23 +244,32 @@ export class PhraseCardService {
               }),
             },
           ],
-          { maxTokens: 4096, ...(options.signal ? { signal: options.signal } : {}) },
+          { maxTokens: 4096, signal: control.signal },
         )
-        found.push(...validatePhrases(prompts.phraseExtract.readPhrases(data), byId))
+        const phrases = validatePhrases(prompts.phraseExtract.readPhrases(data), byId)
+        results[index] = phrases
+        phraseCache.set(keys[index]!, phrases)
       } catch (err) {
-        if (options.signal?.aborted) throw err
+        // A stopped request is not a failed part: it is read on continue.
+        if (isAbortError(err, control.signal)) {
+          paused = true
+          break
+        }
         failed++
         firstError ??= err
+        results[index] = []
         logger.warn('Phrase extraction part failed', {
           part: index,
           error: (err as Error)?.message,
         })
       }
-      options.onProgress?.(index + 1, batches.length)
+      done++
+      options.onProgress?.(done, batches.length)
     }
-    if (failed === batches.length && firstError) throw firstError
+    if (!paused && failed === batches.length && firstError) throw firstError
     const seen = new Set<string>()
-    return found
+    const candidates = results
+      .flatMap((items) => items ?? [])
       .filter((item) => {
         const key = item.prompt.toLowerCase()
         if (seen.has(key)) return false
@@ -202,6 +277,7 @@ export class PhraseCardService {
         return true
       })
       .map((item, i) => ({ id: `p${i + 1}`, ...item }))
+    return { candidates, paused, doneParts: done, totalParts: batches.length }
   }
 
   /**
