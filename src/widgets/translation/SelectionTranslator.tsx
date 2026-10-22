@@ -14,9 +14,11 @@ import { useTranslation } from '@/i18n'
 import type { ContextualTutorKind } from '@/infrastructure/ai/prompts/contextual-tutor/v3'
 import { describeAnchor, type TextAnchor } from '@/shared/lib/textAnchor'
 import { openPassage } from '@/features/homework/floatingQA'
+import { isTouchLike } from '@/shared/lib/pointerGesture'
 import {
   computeSelectionPopupPosition,
   isPopupAnchorVisible,
+  TOUCH_POPUP_GAP,
   type PopupAnchor,
   type PopupPosition,
 } from '@/shared/lib/popupPosition'
@@ -40,6 +42,11 @@ interface SelectionState {
   /** The selection's viewport rectangle; the anchor for every re-position. */
   anchor: PopupAnchor
   mobile: boolean
+  /**
+   * Made with a finger or pen (iPadOS): the popup goes below the selection,
+   * clear of the native selection menu above it and the handle below it.
+   */
+  touch: boolean
   /** Inside a homework walkthrough: Explain / Ask open a floating window. */
   walkthrough?: WalkthroughSelection
 }
@@ -64,6 +71,12 @@ const MAX_SELECTION = 600
 
 /** Idle pause after which a selection that changed without a release counts as settled. */
 const SELECTION_SETTLE_MS = 120
+
+/**
+ * The same for a touch / pen selection. iPadOS handle drags send no pointer
+ * events, only selectionchange, so a longer pause stands in for "released".
+ */
+export const SELECTION_SETTLE_TOUCH_MS = 400
 
 /** The part of a popup position that affects rendering. */
 type PopupLayout = Pick<PopupPosition, 'side' | 'maxHeight'>
@@ -165,6 +178,9 @@ export function SelectionTranslator(): JSX.Element | null {
     // key release, or after a short idle pause (touch handles, programmatic).
     let pending: Range | null = null
     let pointerDown = false
+    // The kind of the last press: a touch / pen selection settles more slowly
+    // and its popup prefers to sit below the text.
+    let lastPointerType = 'mouse'
     let timer: ReturnType<typeof setTimeout> | undefined
 
     function clearTimer(): void {
@@ -206,6 +222,7 @@ export function SelectionTranslator(): JSX.Element | null {
       )
       const homeworkProject = homeworkScope ? parseProjectRoute(window.location.pathname) : null
       const mobile = window.innerWidth < 640
+      const touch = isTouchLike(lastPointerType)
       const anchor: PopupAnchor = {
         left: rect.left,
         top: rect.top,
@@ -247,6 +264,7 @@ export function SelectionTranslator(): JSX.Element | null {
         tooLong: text.length > MAX_SELECTION,
         anchor,
         mobile,
+        touch,
         ...(walkthrough ? { walkthrough } : {}),
       })
     }
@@ -265,11 +283,20 @@ export function SelectionTranslator(): JSX.Element | null {
       clearTimer()
       // While the pointer is down the selection is still being dragged; the
       // release flushes it.
-      if (!pointerDown) timer = setTimeout(flush, SELECTION_SETTLE_MS)
+      if (!pointerDown)
+        timer = setTimeout(
+          flush,
+          isTouchLike(lastPointerType) ? SELECTION_SETTLE_TOUCH_MS : SELECTION_SETTLE_MS,
+        )
     }
 
-    function onPointerDown(): void {
+    function onPointerDown(event: PointerEvent): void {
       pointerDown = true
+      lastPointerType = event.pointerType || 'mouse'
+    }
+    function onTouchStart(): void {
+      // Browsers without Pointer Events for touch (old webviews).
+      lastPointerType = 'touch'
     }
     function onRelease(): void {
       pointerDown = false
@@ -281,8 +308,16 @@ export function SelectionTranslator(): JSX.Element | null {
     window.addEventListener('pointerup', onRelease, true)
     window.addEventListener('pointercancel', onRelease, true)
     window.addEventListener('keyup', onRelease, true)
+    // A long-press selection may end without a pointerup (iPadOS hands the
+    // gesture to its selection UI); the touch still ends.
+    window.addEventListener('touchstart', onTouchStart, { capture: true, passive: true })
+    window.addEventListener('touchend', onRelease, true)
+    window.addEventListener('touchcancel', onRelease, true)
     return () => {
       clearTimer()
+      window.removeEventListener('touchstart', onTouchStart, true)
+      window.removeEventListener('touchend', onRelease, true)
+      window.removeEventListener('touchcancel', onRelease, true)
       document.removeEventListener('selectionchange', onSelectionChange)
       window.removeEventListener('pointerdown', onPointerDown, true)
       window.removeEventListener('pointerup', onRelease, true)
@@ -344,6 +379,7 @@ export function SelectionTranslator(): JSX.Element | null {
       viewportOffsetTop: viewport.offsetTop,
       viewportOffsetLeft: viewport.offsetLeft,
       mobile: selection.mobile,
+      ...(selection.touch ? { prefer: 'bottom' as const, gap: TOUCH_POPUP_GAP } : {}),
     })
     if (element) element.style.transform = translateFor(next)
     // Re-render only when the side or the height clamp actually changes.

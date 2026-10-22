@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type PointerEvent } from 'react'
 import type { PopupAnchor } from '@/shared/lib/popupPosition'
+import { isTouchLike } from '@/shared/lib/pointerGesture'
 
 /** What is under the pointer: a key for the passage and where it is on screen. */
 export interface PassageHoverTarget {
@@ -13,8 +14,16 @@ export const HOVER_CLOSE_DELAY = 200
 export interface PassageHover {
   hover: PassageHoverTarget | null
   close: () => void
+  /**
+   * Open the card at once and keep it open until a tap outside it, Escape or
+   * `close` (finger and pen have no hover to keep it open).
+   */
+  pin: (target: PassageHoverTarget) => void
+  /** Whether the last press on the article was a finger or a pen. */
+  lastPressWasTouch: () => boolean
   /** For the article. */
   articleHandlers: {
+    onPointerDown: (event: PointerEvent) => void
     onPointerMove: (event: PointerEvent) => void
     onPointerLeave: () => void
   }
@@ -29,6 +38,9 @@ export interface PassageHover {
  * Hovering marked passages. `resolve` hit-tests a point (at most once per
  * frame); a card opens after a short delay and closes a little after the
  * pointer leaves both the passage and the card. Escape closes it.
+ *
+ * Finger and pen (2h3): a tap on a passage `pin`s its card, which then stays
+ * until a tap outside both the card and the article, Escape, or another tap.
  */
 export function usePassageHover(
   resolve: (point: { x: number; y: number }) => PassageHoverTarget | null,
@@ -43,6 +55,9 @@ export function usePassageHover(
   const frame = useRef<number>()
   const point = useRef({ x: 0, y: 0 })
   const pendingKey = useRef<string | null>(null)
+  const pinned = useRef(false)
+  const lastPointerType = useRef<string>('mouse')
+  const article = useRef<Element | null>(null)
 
   const cancelOpen = useCallback(() => {
     clearTimeout(openTimer.current)
@@ -56,10 +71,22 @@ export function usePassageHover(
   const close = useCallback(() => {
     cancelOpen()
     cancelClose()
+    pinned.current = false
     setHover(null)
   }, [cancelOpen, cancelClose])
+  const pin = useCallback(
+    (target: PassageHoverTarget) => {
+      cancelOpen()
+      cancelClose()
+      pinned.current = true
+      setHover(target)
+    },
+    [cancelOpen, cancelClose],
+  )
   const scheduleClose = useCallback(() => {
     cancelOpen()
+    // A tapped card stays until a tap elsewhere (touch has no "leave").
+    if (pinned.current) return
     if (!hoverRef.current || closeTimer.current) return
     closeTimer.current = setTimeout(() => {
       closeTimer.current = undefined
@@ -92,7 +119,7 @@ export function usePassageHover(
 
   const onPointerMove = useCallback(
     (event: PointerEvent) => {
-      if (event.pointerType === 'touch') return
+      if (event.pointerType === 'touch' || pinned.current) return
       point.current = { x: event.clientX, y: event.clientY }
       if (frame.current === undefined) frame.current = requestAnimationFrame(check)
     },
@@ -108,6 +135,28 @@ export function usePassageHover(
     return () => document.removeEventListener('keydown', onKey)
   }, [hover, close])
 
+  // A tap outside the card and the article closes a tapped card. Presses in
+  // the article are left to its click handler (another passage, or none).
+  useEffect(() => {
+    if (!hover) return
+    const onDown = (event: Event): void => {
+      if (!pinned.current) return
+      const target = event.target
+      if (!(target instanceof Node)) return
+      if (article.current?.contains(target)) return
+      if (target instanceof Element && target.closest('[data-passage-hover-card]')) return
+      close()
+    }
+    document.addEventListener('pointerdown', onDown)
+    return () => document.removeEventListener('pointerdown', onDown)
+  }, [hover, close])
+
+  const onPointerDown = useCallback((event: PointerEvent) => {
+    lastPointerType.current = event.pointerType
+    article.current = event.currentTarget
+  }, [])
+  const lastPressWasTouch = useCallback(() => isTouchLike(lastPointerType.current), [])
+
   useEffect(
     () => () => {
       clearTimeout(openTimer.current)
@@ -120,7 +169,9 @@ export function usePassageHover(
   return {
     hover,
     close,
-    articleHandlers: { onPointerMove, onPointerLeave: scheduleClose },
+    pin,
+    lastPressWasTouch,
+    articleHandlers: { onPointerDown, onPointerMove, onPointerLeave: scheduleClose },
     cardHandlers: { onPointerEnter: cancelClose, onPointerLeave: scheduleClose },
   }
 }

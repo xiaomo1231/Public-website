@@ -31,6 +31,11 @@ export interface PopupPositionInput {
   gap?: number
   /** Phones use a bottom sheet instead of an anchored popup. */
   mobile?: boolean
+  /**
+   * Preferred side. Defaults to above; a touch / pen selection prefers below,
+   * because iPadOS puts its own selection menu above the selection.
+   */
+  prefer?: 'top' | 'bottom'
 }
 
 export interface PopupPosition {
@@ -43,6 +48,11 @@ export interface PopupPosition {
 
 export const POPUP_MARGIN = 8
 export const POPUP_GAP = 8
+/**
+ * Gap below a touch / pen selection: clears the native selection handle (its
+ * knob hangs below the last line) so the popup never sits on it.
+ */
+export const TOUCH_POPUP_GAP = 28
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(Math.max(value, min), max)
@@ -104,7 +114,11 @@ export function computeSelectionPopupPosition(input: PopupPositionInput): PopupP
   const spaceBelow = viewBottom - (input.anchor.top + input.anchor.height + gap)
 
   let side: 'top' | 'bottom'
-  if (popupHeight <= spaceAbove) side = 'top'
+  if (input.prefer === 'bottom') {
+    if (popupHeight <= spaceBelow) side = 'bottom'
+    else if (popupHeight <= spaceAbove) side = 'top'
+    else side = spaceBelow >= spaceAbove ? 'bottom' : 'top'
+  } else if (popupHeight <= spaceAbove) side = 'top'
   else if (popupHeight <= spaceBelow) side = 'bottom'
   else side = spaceAbove >= spaceBelow ? 'top' : 'bottom'
 

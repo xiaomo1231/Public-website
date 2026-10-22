@@ -169,7 +169,7 @@ export function ProjectFlowNav({ projectId, active, className }: ProjectFlowNavP
             to={item.path(projectId)}
             aria-current={isActive ? 'page' : undefined}
             className={cn(
-              'focus-ring group relative inline-flex min-h-9 shrink-0 items-center gap-1.5 rounded-full px-3 py-2 text-[13px] font-medium transition-colors duration-200 lecture:h-11 lecture:rounded-none lecture:px-2.5 lecture:text-[13.5px] lecture:font-normal lecture:focus-visible:ring-inset lecture:focus-visible:ring-offset-0 lab:rounded-sm',
+              'focus-ring group relative inline-flex min-h-9 shrink-0 items-center gap-1.5 rounded-full px-3 py-2 text-[13px] font-medium transition-colors duration-200 lecture:h-11 lecture:rounded-none lecture:px-2.5 lecture:text-[13.5px] lecture:font-normal lecture:focus-visible:ring-inset lecture:focus-visible:ring-offset-0 lab:rounded-sm coarse:min-h-11',
               isActive
                 ? 'bg-theme-primary-soft text-foreground group-data-[indicator=ready]/flow:bg-transparent lecture:bg-transparent lecture:font-medium lecture:after:absolute lecture:after:inset-x-2.5 lecture:after:bottom-0 lecture:after:h-0.5 lecture:after:bg-primary'
                 : 'text-muted-foreground hover:bg-muted hover:text-foreground lecture:hover:bg-transparent',

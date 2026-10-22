@@ -59,7 +59,7 @@ export function LetterBar({
           onMouseDown={(event) => event.preventDefault()}
           onClick={() => insert(item)}
           aria-label={t('symbolBar.inserts', { text: item.insert })}
-          className="focus-ring inline-flex h-7 min-w-7 items-center justify-center rounded-md border border-border/70 bg-card px-1.5 text-sm text-foreground transition-colors hover:border-primary/40 hover:bg-accent"
+          className="focus-ring inline-flex h-7 min-w-7 items-center justify-center rounded-md border border-border/70 bg-card px-1.5 text-sm text-foreground transition-colors hover:border-primary/40 hover:bg-accent coarse:h-11 coarse:min-w-11"
         >
           {item.glyph}
         </button>

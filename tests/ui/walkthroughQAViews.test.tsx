@@ -15,6 +15,7 @@ import { HomeworkWalkthroughPanel } from '@/widgets/homework/walkthrough/Homewor
 import { hitPassage, pointInPassage } from '@/widgets/homework/walkthrough/passage'
 import type { WalkthroughNote } from '@/entities/homework/walkthrough'
 import type { HomeworkSet } from '@/entities/homework/types'
+import { installPointerEvent } from '../helpers/pointerEvent'
 
 const walkthrough = vi.hoisted(() => ({ notes: [] as unknown[] }))
 
@@ -333,5 +334,178 @@ describe('compact cards and passages tucked into the text', () => {
     const card = await screen.findByRole('dialog', { name: 'Row step' })
     expect(within(card).getByText('The second row of the matrix.')).toBeInTheDocument()
     expect(within(card).getByRole('button', { name: 'Review cards' })).toBeInTheDocument()
+  })
+})
+
+describe('finger and pen on marked passages (2h3)', () => {
+  let restorePointerEvent: () => void = () => undefined
+  beforeEach(() => {
+    restorePointerEvent = installPointerEvent()
+  })
+  afterEach(() => restorePointerEvent())
+
+  function renderPanel(): HTMLElement {
+    render(<HomeworkWalkthroughPanel set={set} mode="review" />)
+    return document.querySelector<HTMLElement>('[data-selection-context="walkthrough"]')!
+  }
+
+  function caretOnPassage(article: HTMLElement): void {
+    const text = within(article).getByText(/First do R2/).firstChild as Text
+    ;(
+      document as { caretPositionFromPoint?: (x: number, y: number) => unknown }
+    ).caretPositionFromPoint = () => ({ offsetNode: text, offset: 12 })
+  }
+
+  function tap(element: HTMLElement, pointerType: 'touch' | 'pen' | 'mouse'): void {
+    fireEvent.pointerDown(element, { pointerType, clientX: 40, clientY: 40 })
+    fireEvent.pointerUp(element, { pointerType, clientX: 40, clientY: 40 })
+    fireEvent.click(element, { clientX: 40, clientY: 40 })
+  }
+
+  it('a tap opens the card; it stays when the finger lifts, a tap outside closes it', async () => {
+    const article = renderPanel()
+    act(() => {
+      store().tuck(openWindow())
+    })
+    caretOnPassage(article)
+    tap(article, 'touch')
+    const card = await screen.findByRole('dialog', { name: /R2 minus 2 R1/ })
+    expect(card).toHaveAttribute('data-passage-hover-card')
+    // Touch has no hover: leaving the passage or the card does not close it.
+    fireEvent.pointerLeave(article, { pointerType: 'touch' })
+    fireEvent.pointerLeave(card, { pointerType: 'touch' })
+    await new Promise((resolve) => setTimeout(resolve, 260))
+    expect(document.querySelector('[data-passage-hover-card]')).not.toBeNull()
+    // A press inside the card keeps it.
+    fireEvent.pointerDown(card, { pointerType: 'touch' })
+    expect(document.querySelector('[data-passage-hover-card]')).not.toBeNull()
+    // A tap elsewhere closes it; no window was opened.
+    fireEvent.pointerDown(document.body, { pointerType: 'touch' })
+    await waitFor(() => expect(document.querySelector('[data-passage-hover-card]')).toBeNull())
+    expect(windowMode(store().windows[0]!)).toBe('tucked')
+  })
+
+  it('a pen tap opens a saved note card; tapping the passage again closes it', async () => {
+    walkthrough.notes = [savedNote]
+    const article = renderPanel()
+    caretOnPassage(article)
+    tap(article, 'pen')
+    expect(await screen.findByRole('dialog', { name: 'Row step' })).toBeInTheDocument()
+    tap(article, 'pen')
+    await waitFor(() => expect(document.querySelector('[data-passage-hover-card]')).toBeNull())
+  })
+
+  it('a mouse click still opens the full window, as before', async () => {
+    const article = renderPanel()
+    act(() => {
+      store().tuck(openWindow())
+    })
+    caretOnPassage(article)
+    tap(article, 'mouse')
+    await waitFor(() => expect(windowMode(store().windows[0]!)).toBe('full'))
+    expect(document.querySelector('[data-passage-hover-card]')).toBeNull()
+  })
+})
+
+describe('dragging windows and cards with a finger or pen (2h3)', () => {
+  let restorePointerEvent: () => void = () => undefined
+  beforeEach(() => {
+    restorePointerEvent = installPointerEvent()
+  })
+  afterEach(() => restorePointerEvent())
+
+  it('captures the pointer on the title bar, waits for the threshold, then moves', () => {
+    const id = openWindow()
+    render(<FloatingQALayer setId="s1" />)
+    const handle = document.querySelector<HTMLElement>('[data-drag-handle]')!
+    expect(handle.className).toContain('touch-none')
+    // Only the handles opt out of scrolling, not the window body.
+    expect(screen.getByRole('dialog').className).not.toContain('touch-none')
+    const capture = vi.fn()
+    handle.setPointerCapture = capture
+    fireEvent.pointerDown(handle, {
+      pointerType: 'touch',
+      pointerId: 3,
+      button: 0,
+      clientX: 0,
+      clientY: 0,
+    })
+    expect(capture).toHaveBeenCalledWith(3)
+    // A wobble under the threshold is not a drag.
+    fireEvent.pointerMove(window, {
+      pointerType: 'touch',
+      pointerId: 3,
+      buttons: 1,
+      clientX: 3,
+      clientY: 3,
+    })
+    fireEvent.pointerUp(window, { pointerType: 'touch', pointerId: 3 })
+    expect(store().windows.find((w) => w.id === id)!.rect).toMatchObject({ x: 500, y: 100 })
+    fireEvent.pointerDown(handle, {
+      pointerType: 'pen',
+      pointerId: 4,
+      button: 0,
+      clientX: 0,
+      clientY: 0,
+    })
+    fireEvent.pointerMove(window, {
+      pointerType: 'pen',
+      pointerId: 4,
+      buttons: 1,
+      clientX: -60,
+      clientY: 40,
+    })
+    fireEvent.pointerUp(window, { pointerType: 'pen', pointerId: 4 })
+    expect(store().windows.find((w) => w.id === id)!.rect).toMatchObject({ x: 440, y: 140 })
+  })
+
+  it('the resize grip is a touch handle too', () => {
+    openWindow()
+    render(<FloatingQALayer setId="s1" />)
+    const grip = document.querySelector<HTMLElement>('[data-resize-handle]')!
+    expect(grip.className).toContain('touch-none')
+    expect(grip.className).toContain('[@media(pointer:coarse)]:h-8')
+  })
+
+  it('a card tapped without moving expands; a dragged card moves and stays a card', () => {
+    const id = openWindow()
+    store().compact(id, { x: 200, y: 150, pinned: true })
+    render(<FloatingQALayer setId="s1" />)
+    const card = screen.getByRole('group', { name: /Question card/ })
+    const capture = vi.fn()
+    card.setPointerCapture = capture
+    fireEvent.pointerDown(card, {
+      pointerType: 'touch',
+      pointerId: 5,
+      button: 0,
+      clientX: 10,
+      clientY: 10,
+    })
+    expect(capture).toHaveBeenCalledWith(5)
+    fireEvent.pointerMove(window, {
+      pointerType: 'touch',
+      pointerId: 5,
+      buttons: 1,
+      clientX: 40,
+      clientY: 50,
+    })
+    fireEvent.pointerUp(window, { pointerType: 'touch', pointerId: 5 })
+    expect(store().windows[0]!.compact).toMatchObject({ x: 230, y: 190 })
+    fireEvent.pointerDown(screen.getByRole('group', { name: /Question card/ }), {
+      pointerType: 'touch',
+      pointerId: 6,
+      button: 0,
+      clientX: 10,
+      clientY: 10,
+    })
+    fireEvent.pointerMove(window, {
+      pointerType: 'touch',
+      pointerId: 6,
+      buttons: 1,
+      clientX: 14,
+      clientY: 13,
+    })
+    fireEvent.pointerUp(window, { pointerType: 'touch', pointerId: 6 })
+    expect(windowMode(store().windows[0]!)).toBe('full')
   })
 })

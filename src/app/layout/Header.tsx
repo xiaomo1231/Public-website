@@ -79,7 +79,7 @@ export function HeaderControls(): JSX.Element {
   const ThemeIcon = preference === 'light' ? Sun : preference === 'dark' ? Moon : Monitor
 
   return (
-    <div className="header-controls flex shrink-0 items-center gap-1 rounded-full border border-border/50 bg-card/90 p-1 shadow-soft lecture:border-0 lecture:bg-transparent lecture:p-0 lecture:shadow-none lab:rounded-md lab:border-0 lab:bg-transparent lab:p-0 lab:shadow-none">
+    <div className="header-controls flex shrink-0 items-center gap-1 rounded-full border border-border/50 bg-card/90 p-1 shadow-soft lecture:border-0 lecture:bg-transparent lecture:p-0 lecture:shadow-none lab:rounded-md lab:border-0 lab:bg-transparent lab:p-0 lab:shadow-none coarse:gap-2">
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button variant="ghost" size="icon" aria-label={t('header.changeTheme')}>

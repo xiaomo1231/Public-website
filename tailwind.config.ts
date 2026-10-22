@@ -207,5 +207,11 @@ export default {
       addVariant('lecture', ':is([data-ui-style="lecture"] &)')
       addVariant('lab', ':is([data-ui-style="lab"] &)')
     }),
+    // `coarse:` applies only where the primary pointer is a finger or a pen
+    // (iPad, touch screens), so touch targets can grow to 44px there without
+    // making the desktop layout any looser.
+    plugin(({ addVariant }) => {
+      addVariant('coarse', '@media (pointer: coarse)')
+    }),
   ],
 } satisfies Config

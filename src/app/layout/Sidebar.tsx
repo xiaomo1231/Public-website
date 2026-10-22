@@ -45,7 +45,7 @@ export function Sidebar({ onNavigate, onCollapse }: SidebarProps): JSX.Element {
             type="button"
             variant="ghost"
             size="icon"
-            className="hidden h-7 w-7 shrink-0 lg:grid"
+            className="hidden h-7 w-7 shrink-0 coarse:h-11 coarse:w-11 lg:grid"
             aria-label={t('nav.collapseSidebar')}
             onClick={onCollapse}
           >
@@ -65,7 +65,7 @@ export function Sidebar({ onNavigate, onCollapse }: SidebarProps): JSX.Element {
               onClick={onNavigate}
               aria-current={active ? 'page' : undefined}
               className={cn(
-                'sidebar-link focus-ring flex items-center gap-2.5 rounded-sm px-2.5 py-2 text-[13px] transition-colors duration-150',
+                'sidebar-link focus-ring flex items-center gap-2.5 rounded-sm px-2.5 py-2 text-[13px] transition-colors duration-150 coarse:min-h-11 coarse:text-sm',
                 active
                   ? 'bg-theme-primary-soft font-medium text-foreground shadow-[inset_2px_0_0_hsl(var(--primary))]'
                   : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground',

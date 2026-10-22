@@ -1,5 +1,9 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
-import type { KeyboardEvent as ReactKeyboardEvent, PointerEvent as ReactPointerEvent } from 'react'
+import type {
+  KeyboardEvent as ReactKeyboardEvent,
+  MouseEvent as ReactMouseEvent,
+  PointerEvent as ReactPointerEvent,
+} from 'react'
 import {
   ChevronLeft,
   ChevronRight,
@@ -31,6 +35,7 @@ import {
   boardReducer,
   initialBoard,
   inkFromToken,
+  isPalmContact,
   MAX_PAGES,
   PAGE_HEIGHT,
   PAGE_WIDTH,
@@ -118,6 +123,8 @@ export function PenBoardDialog({ open, onOpenChange, onSave }: PenBoardDialogPro
   const scrollRef = useRef<HTMLDivElement | null>(null)
   const panRef = useRef<{ pointerId: number; x: number; y: number } | null>(null)
   const scaleRef = useRef(1)
+  /** Until when a click is swallowed because its touch was a palm (ms, performance.now). */
+  const palmClickUntil = useRef(0)
 
   const state = stateRef.current
   const apply = useCallback((action: BoardAction, rerender = true) => {
@@ -244,6 +251,30 @@ export function PenBoardDialog({ open, onOpenChange, onSave }: PenBoardDialogPro
     if (cancelled) redraw()
   }
 
+  /*
+   * Palm rejection outside the canvas: while the pen is writing, a palm
+   * resting on the toolbar or the buttons must not press them. The canvas
+   * handles its own contacts (a palm there is already ignored). Only finger
+   * contacts during pen use are swallowed; normal taps work as usual.
+   */
+  function onPalmGuardDown(event: ReactPointerEvent<HTMLDivElement>): void {
+    if (event.target === canvasRef.current) return
+    if (!isPalmContact(stateRef.current, event.pointerType, performance.now())) {
+      if (event.pointerType !== 'touch') palmClickUntil.current = 0
+      return
+    }
+    palmClickUntil.current = performance.now() + 700
+    event.preventDefault()
+    event.stopPropagation()
+  }
+
+  function onPalmGuardClick(event: ReactMouseEvent<HTMLDivElement>): void {
+    if (performance.now() >= palmClickUntil.current) return
+    palmClickUntil.current = 0
+    event.preventDefault()
+    event.stopPropagation()
+  }
+
   function onKeyDown(event: ReactKeyboardEvent<HTMLDivElement>): void {
     if (!(event.ctrlKey || event.metaKey) || event.altKey) return
     const key = event.key.toLowerCase()
@@ -291,7 +322,19 @@ export function PenBoardDialog({ open, onOpenChange, onSave }: PenBoardDialogPro
 
   return (
     <Dialog open={open} onOpenChange={requestClose}>
-      <DialogContent className="max-w-4xl gap-3 p-4 sm:p-5" onKeyDown={onKeyDown}>
+      <DialogContent
+        className="max-w-4xl gap-3 p-4 sm:p-5"
+        onKeyDown={onKeyDown}
+        onPointerDownCapture={onPalmGuardDown}
+        onClickCapture={onPalmGuardClick}
+        // A palm on the backdrop while writing must not close the board.
+        onPointerDownOutside={(event) => {
+          const original = event.detail.originalEvent
+          if (isPalmContact(stateRef.current, original.pointerType, performance.now())) {
+            event.preventDefault()
+          }
+        }}
+      >
         <DialogHeader>
           <DialogTitle className="font-heading">{t('handwriting.title')}</DialogTitle>
           <DialogDescription>{t('handwriting.description')}</DialogDescription>

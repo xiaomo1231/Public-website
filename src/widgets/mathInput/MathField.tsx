@@ -13,6 +13,7 @@ import { Textarea } from '@/shared/ui/Textarea'
 import { Math } from '@/shared/ui/Math'
 import { RichText } from '@/shared/ui/RichText'
 import { cn } from '@/shared/lib/utils'
+import { answerFieldAttrs, type AnswerFieldKind } from '@/shared/lib/answerFieldAttrs'
 import {
   applySymbol,
   symbolGroupsFor,
@@ -55,6 +56,15 @@ const OPEN_BY_DEFAULT: Record<MathInputMode, boolean> = {
   number: true,
   quantity: true,
   chemistry: true,
+}
+
+/** Keyboard / Scribble attributes per mode (see `answerFieldAttrs`). */
+const FIELD_KIND: Record<MathInputMode, AnswerFieldKind> = {
+  text: 'text',
+  expression: 'expression',
+  number: 'number',
+  quantity: 'expression',
+  chemistry: 'expression',
 }
 
 const storageKey = (mode: MathInputMode) => `ai-learning:symbol-bar:${mode}`
@@ -188,6 +198,7 @@ export function MathField({
     }
   }
 
+  const { inputMode, ...fieldAttrs } = answerFieldAttrs(FIELD_KIND[mode])
   const shared = {
     id,
     value,
@@ -195,7 +206,9 @@ export function MathField({
     disabled,
     'aria-label': ariaLabel,
     onKeyDown: handleKeyDown,
-    spellCheck: mode === 'text',
+    ...fieldAttrs,
+    // The on-screen keyboard's return key: "go" when Enter submits.
+    ...(onSubmit && !multiline ? { enterKeyHint: 'go' as const } : {}),
   }
 
   return (
@@ -213,7 +226,7 @@ export function MathField({
           {...shared}
           ref={setRef}
           type="text"
-          inputMode={mode === 'number' ? 'decimal' : 'text'}
+          inputMode={inputMode}
           autoComplete="off"
           onChange={(event) => onChange(event.target.value)}
           className={cn(mode !== 'text' && 'font-mono', inputClassName)}
@@ -227,13 +240,14 @@ export function MathField({
           disabled={disabled}
           aria-expanded={open}
           aria-controls={panelId}
-          className="focus-ring inline-flex items-center gap-1.5 rounded-full px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-50"
+          className="focus-ring inline-flex items-center gap-1.5 rounded-full px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-50 coarse:px-3"
         >
           <Keyboard className="h-3.5 w-3.5" aria-hidden />
           {open ? t('symbolBar.hide') : t('symbolBar.show')}
         </button>
         {onSubmit && (
-          <span className="text-xs text-muted-foreground">
+          // Keyboard shortcut hint: touch devices use the visible submit button.
+          <span className="text-xs text-muted-foreground coarse:hidden">
             {multiline ? t('symbolBar.submitHintMultiline') : t('symbolBar.submitHint')}
           </span>
         )}
@@ -242,7 +256,11 @@ export function MathField({
       {open && !disabled && (
         <div id={panelId} className="space-y-2 rounded-xl border border-border/70 bg-muted/40 p-2">
           {groups.length > 1 && (
-            <div role="tablist" aria-label={t('symbolBar.groups')} className="flex flex-wrap gap-1">
+            <div
+              role="tablist"
+              aria-label={t('symbolBar.groups')}
+              className="flex flex-wrap gap-1 coarse:gap-1.5"
+            >
               {groups.map((group) => (
                 <button
                   key={group.id}
@@ -262,7 +280,7 @@ export function MathField({
               ))}
             </div>
           )}
-          <div className="flex flex-wrap gap-1">
+          <div className="flex flex-wrap gap-1 coarse:gap-1.5">
             {activeGroup.items.map((item) => (
               <button
                 key={`${item.glyph}-${item.insert}`}
@@ -272,7 +290,7 @@ export function MathField({
                 onClick={() => insert(item)}
                 title={t('symbolBar.inserts', { text: item.insert })}
                 aria-label={t('symbolBar.inserts', { text: item.insert })}
-                className="focus-ring inline-flex h-8 min-w-8 items-center justify-center rounded-md border border-border/70 bg-card px-2 text-sm text-foreground transition-[color,background-color,border-color,transform] duration-press ease-out hover:border-primary/40 hover:bg-accent motion-safe:active:scale-[0.97]"
+                className="focus-ring inline-flex h-8 min-w-8 items-center justify-center rounded-md border border-border/70 bg-card px-2 text-sm text-foreground transition-[color,background-color,border-color,transform] duration-press ease-out hover:border-primary/40 hover:bg-accent coarse:h-11 coarse:min-w-11 coarse:text-base motion-safe:active:scale-[0.97]"
               >
                 {item.glyph}
               </button>

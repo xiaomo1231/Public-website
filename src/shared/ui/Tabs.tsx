@@ -22,7 +22,7 @@ export const TabsList = forwardRef<
       data-indicator={ready ? 'ready' : undefined}
       className={cn(
         // Scrolls inside itself on narrow screens instead of widening the page.
-        'group/tabs relative inline-flex h-10 max-w-full items-center justify-start gap-1 overflow-x-auto overflow-y-hidden rounded-lg border border-border/70 bg-muted/60 p-1 text-muted-foreground',
+        'group/tabs relative inline-flex h-10 max-w-full items-center justify-start gap-1 overflow-x-auto overflow-y-hidden rounded-lg border border-border/70 bg-muted/60 p-1 text-muted-foreground coarse:h-[3.25rem] coarse:lecture:h-11',
         // Lecture: plain text tabs over a rule, the active one underlined.
         'lecture:gap-5 lecture:rounded-none lecture:border-0 lecture:border-b lecture:bg-transparent lecture:p-0',
         className,

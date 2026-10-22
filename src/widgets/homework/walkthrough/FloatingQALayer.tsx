@@ -51,6 +51,7 @@ import {
 import { friendlyAIError } from '@/shared/lib/aiErrors'
 import { cn } from '@/shared/lib/utils'
 import { EASE_OUT, prefersReducedMotion } from '@/shared/lib/motion'
+import { capturePointer, passedDragThreshold, releasePointer } from '@/shared/lib/pointerGesture'
 import { useTranslation } from '@/i18n'
 import type { WalkthroughNoteTurn } from '@/entities/homework/walkthrough'
 import { revealPassage } from './passage'
@@ -359,14 +360,26 @@ const FloatingQAWindowView = memo(function FloatingQAWindowView({
     event.preventDefault()
     event.stopPropagation()
     focus(win.id)
+    // Finger, pen and mouse alike: the handle keeps the pointer (and iPadOS
+    // does not turn the gesture into a page scroll; the handles are
+    // `touch-none`). A small travel threshold keeps a tap a tap.
+    const handle = event.currentTarget
+    const pointerId = event.pointerId
+    const pointerType = event.pointerType
+    capturePointer(handle, pointerId)
     const origin = { x: event.clientX, y: event.clientY, rect: win.rect }
     let latest = origin.rect
+    let moved = false
     // Listen on the window: the pointer may leave the handle while dragging.
     const onMove = (move: PointerEvent): void => {
+      if (move.pointerId !== pointerId) return
       if (move.buttons === 0) {
         onUp()
         return
       }
+      if (!moved && !passedDragThreshold(origin, { x: move.clientX, y: move.clientY }, pointerType))
+        return
+      moved = true
       const dx = move.clientX - origin.x
       const dy = move.clientY - origin.y
       latest = clampRect(
@@ -387,6 +400,8 @@ const FloatingQAWindowView = memo(function FloatingQAWindowView({
       window.removeEventListener('pointermove', onMove)
       window.removeEventListener('pointerup', onUp)
       window.removeEventListener('pointercancel', onUp)
+      releasePointer(handle, pointerId)
+      if (!moved) return
       // Commit before dropping the transform, so the window never jumps back.
       flushSync(() => setRect(win.id, latest))
       if (rootRef.current) rootRef.current.style.transform = ''
@@ -514,7 +529,8 @@ const FloatingQAWindowView = memo(function FloatingQAWindowView({
       className="fixed flex flex-col overflow-hidden rounded-xl border bg-card text-card-foreground shadow-2xl outline-none lecture:rounded-2xl lecture:border-input lecture:shadow-lift lab:rounded-none lab:border-input lab:shadow-lift"
     >
       <div
-        className="flex cursor-move select-none items-center gap-2 border-b bg-muted/40 px-3 py-2 lecture:bg-transparent lecture:px-3.5 lecture:py-2.5 lab:bg-background lab:py-1.5"
+        data-drag-handle
+        className="flex cursor-move touch-none select-none items-center gap-2 border-b bg-muted/40 px-3 py-2 lecture:bg-transparent lecture:px-3.5 lecture:py-2.5 lab:bg-background lab:py-1.5"
         onPointerDown={(event) => startGesture(event, 'move')}
       >
         <GripHorizontal className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
@@ -718,12 +734,15 @@ const FloatingQAWindowView = memo(function FloatingQAWindowView({
         </div>
       )}
 
+      {/* The grip is drawn 16px; on a touch screen the hit area grows to
+          32px (bottom-right corner) so a finger can take it. */}
       <div
         role="presentation"
         aria-hidden
+        data-resize-handle
         onPointerDown={(event) => startGesture(event, 'resize')}
         className={cn(
-          'absolute bottom-0 right-0 h-4 w-4 cursor-se-resize',
+          'absolute bottom-0 right-0 h-4 w-4 cursor-se-resize touch-none bg-no-repeat [background-position:bottom_right] [background-size:1rem_1rem] [@media(pointer:coarse)]:h-8 [@media(pointer:coarse)]:w-8',
           'bg-[linear-gradient(135deg,transparent_50%,hsl(var(--muted-foreground)/0.45)_50%,transparent_60%,transparent_70%,hsl(var(--muted-foreground)/0.45)_70%,transparent_80%)]',
         )}
       />
@@ -814,18 +833,24 @@ const CompactCardView = memo(function CompactCardView({
     if (event.button !== 0 || (event.target as HTMLElement).closest('button')) return
     event.preventDefault()
     raise(win.id)
+    const handle = event.currentTarget
+    const pointerId = event.pointerId
+    const pointerType = event.pointerType
+    capturePointer(handle, pointerId)
     const origin = { x: event.clientX, y: event.clientY }
     const start = card
     let latestCard = start
     let moved = false
     const onMove = (move: PointerEvent): void => {
+      if (move.pointerId !== pointerId) return
       if (move.buttons === 0) {
         finish(false)
         return
       }
       const dx = move.clientX - origin.x
       const dy = move.clientY - origin.y
-      if (!moved && Math.hypot(dx, dy) < 4) return
+      if (!moved && !passedDragThreshold(origin, { x: move.clientX, y: move.clientY }, pointerType))
+        return
       moved = true
       latestCard = clampCard({ ...start, x: start.x + dx, y: start.y + dy }, bounds(start.pinned))
       if (rootRef.current)
@@ -837,6 +862,7 @@ const CompactCardView = memo(function CompactCardView({
       window.removeEventListener('pointermove', onMove)
       window.removeEventListener('pointerup', onUp)
       window.removeEventListener('pointercancel', onCancel)
+      releasePointer(handle, pointerId)
       if (!moved) {
         if (released) expandNow()
         return

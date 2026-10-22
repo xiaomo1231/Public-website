@@ -846,7 +846,7 @@ export const zhCN: Record<TranslationKey, string> = {
   'homework.walkthrough.step.row': '第 {row} 行',
   'homework.walkthrough.step.cell': '第 {row} 行第 {col} 列：{value}',
   'homework.walkthrough.step.changed': '已改动',
-  'homework.walkthrough.step.hint': '悬停或用键盘聚焦高亮的行 / 数字，查看它是怎么算出来的。',
+  'homework.walkthrough.step.hint': '悬停、点按或用键盘聚焦高亮的行 / 数字，查看它是怎么算出来的。',
   'homework.walkthrough.step.swap': '与第 {row} 行交换',
   'homework.walkthrough.step.mismatch':
     '第 {row} 行第 {col} 列：讲解写的是 {written}，按这一步的变换应为 {expected}。',
@@ -883,7 +883,7 @@ export const zhCN: Record<TranslationKey, string> = {
   'walkthroughQA.compact': '缩成小卡片',
   'walkthroughQA.compactHint': '缩成只显示最新回答的小卡片',
   'walkthroughQA.tuck': '收进原文',
-  'walkthroughQA.tuckHint': '隐藏窗口并标记原文；鼠标移到虚线标记的句子上即可查看回答',
+  'walkthroughQA.tuckHint': '隐藏窗口并标记原文；鼠标移到或点按虚线标记的句子即可查看回答',
   'walkthroughQA.expand': '展开',
   'walkthroughQA.expandWindow': '展开窗口',
   'walkthroughQA.pin': '固定在屏幕上',

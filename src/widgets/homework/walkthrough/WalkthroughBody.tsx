@@ -1,4 +1,4 @@
-import { Fragment, useId, useMemo, useState } from 'react'
+import { Fragment, useEffect, useId, useMemo, useRef, useState } from 'react'
 import { AlertTriangle, ShieldCheck } from 'lucide-react'
 import type { WalkthroughPart } from '@/entities/homework/walkthrough'
 import {
@@ -17,6 +17,7 @@ import {
 import { Math as TeX } from '@/shared/ui/Math'
 import { RichText } from '@/shared/ui/RichText'
 import { cn } from '@/shared/lib/utils'
+import { EMULATED_MOUSE_WINDOW_MS, isTouchLike } from '@/shared/lib/pointerGesture'
 import { useTranslation } from '@/i18n'
 import { sharedColumnWidths } from './stepLayout'
 
@@ -130,7 +131,33 @@ type Active = { row: number; col?: number } | null
 export function StepCard({ step }: { step: WalkthroughStep }): JSX.Element {
   const { t } = useTranslation()
   const [active, setActive] = useState<Active>(null)
+  // Set when a finger / pen tap chose the entry: it stays until another tap.
+  const [tapped, setTapped] = useState(false)
+  const lastTouch = useRef(0)
+  const cardRef = useRef<HTMLDivElement>(null)
   const id = useId()
+  /** Mouse hover and keyboard focus, as before; ignored right after a tap. */
+  const hoverActive = (next: Active): void => {
+    if (tapped || Date.now() - lastTouch.current < EMULATED_MOUSE_WINDOW_MS) return
+    setActive(next)
+  }
+  /** A tap on an entry shows its arithmetic; tapping it again hides it. */
+  const tapActive = (next: { row: number; col: number }): void => {
+    const same = tapped && active?.row === next.row && active.col === next.col
+    setTapped(!same)
+    setActive(same ? null : next)
+  }
+  // A tap outside the step card hides a tapped readout.
+  useEffect(() => {
+    if (!tapped) return
+    const onDown = (event: Event): void => {
+      if (event.target instanceof Node && cardRef.current?.contains(event.target)) return
+      setTapped(false)
+      setActive(null)
+    }
+    document.addEventListener('pointerdown', onDown)
+    return () => document.removeEventListener('pointerdown', onDown)
+  }, [tapped])
   // Both matrices share column widths, so their entries line up identically.
   const columnWidths = useMemo(
     () => sharedColumnWidths(step.before, step.after),
@@ -151,7 +178,11 @@ export function StepCard({ step }: { step: WalkthroughStep }): JSX.Element {
   })()
   return (
     <div
+      ref={cardRef}
       data-walkthrough-step={step.number}
+      onPointerDownCapture={(event) => {
+        if (isTouchLike(event.pointerType)) lastTouch.current = Date.now()
+      }}
       className="space-y-3 border-l-2 border-primary/50 py-1 pl-4 lab:border-dashed lab:border-primary/60"
     >
       <p className="text-[15px] font-semibold leading-relaxed lecture:text-[16px]">
@@ -198,7 +229,10 @@ export function StepCard({ step }: { step: WalkthroughStep }): JSX.Element {
           label={t('homework.walkthrough.step.matrix', { number: step.number })}
           changedRows={step.changedRows}
           active={active}
-          onActive={setActive}
+          onActive={hoverActive}
+          onTap={(row, col) => {
+            if (Date.now() - lastTouch.current < EMULATED_MOUSE_WINDOW_MS) tapActive({ row, col })
+          }}
           describe={(row, col) => {
             const value = step.after.rows[row]![col]!
             const parts = [
@@ -283,6 +317,8 @@ interface MatrixViewProps {
   changedRows?: number[]
   active?: Active
   onActive?: (active: Active) => void
+  /** A click on a changed entry (the step card keeps it only for finger / pen taps). */
+  onTap?: (row: number, col: number) => void
   describe?: (row: number, col: number) => string
   wrongCell?: (row: number, col: number) => boolean
   idPrefix?: string
@@ -297,6 +333,7 @@ function MatrixView({
   changedRows = [],
   active,
   onActive,
+  onTap,
   describe,
   wrongCell,
   idPrefix,
@@ -332,6 +369,7 @@ function MatrixView({
                       aria-describedby={focusable ? descId : undefined}
                       data-wrong={wrong ? '' : undefined}
                       onMouseEnter={focusable ? () => onActive?.({ row: r, col: c }) : undefined}
+                      onClick={focusable && onTap ? () => onTap(r, c) : undefined}
                       onFocus={focusable ? () => onActive?.({ row: r, col: c }) : undefined}
                       onBlur={focusable ? () => onActive?.(null) : undefined}
                       className={cn(

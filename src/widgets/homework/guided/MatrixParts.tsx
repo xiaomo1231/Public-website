@@ -4,6 +4,7 @@ import type { CellCheck } from '@/entities/homework/guidedMatrix'
 import { cellLatex } from '@/entities/homework/walkthroughSteps'
 import { Math as TeX } from '@/shared/ui/Math'
 import { cn } from '@/shared/lib/utils'
+import { answerFieldAttrs } from '@/shared/lib/answerFieldAttrs'
 import { useTranslation } from '@/i18n'
 
 /** LaTeX of a matrix, with the augmented bar where the walkthrough had it. */
@@ -105,9 +106,10 @@ export function MatrixInputGrid({
                       <input
                         id={`${id}-${r}-${c}`}
                         type="text"
-                        inputMode="text"
-                        autoComplete="off"
-                        spellCheck={false}
+                        // Exact numbers (−3/2): numbers-and-punctuation keyboard,
+                        // and Scribble writes straight into the cell.
+                        {...answerFieldAttrs('fraction')}
+                        enterKeyHint="go"
                         value={value}
                         disabled={disabled}
                         aria-label={t('guided.cellLabel', { row: r + 1, col: c + 1 })}

@@ -3,6 +3,7 @@ import { Check, X } from 'lucide-react'
 import { optionLetter, type Question } from '@/entities/question/types'
 import { Input } from '@/shared/ui/Input'
 import { cn } from '@/shared/lib/utils'
+import { answerFieldAttrs } from '@/shared/lib/answerFieldAttrs'
 import {
   gradedOptionStatusKey,
   optionKeyClass,
@@ -192,6 +193,8 @@ export function FillBlankInput({
               focused.current = i
             }}
             onChange={(event) => set(i, event.target.value)}
+            {...answerFieldAttrs('term')}
+            enterKeyHint={i === count - 1 ? 'go' : 'next'}
             onKeyDown={(event) => {
               if (event.key === 'Enter' && onSubmit && i === count - 1) {
                 event.preventDefault()

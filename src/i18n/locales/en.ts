@@ -929,7 +929,7 @@ export const en = {
   'homework.walkthrough.step.cell': 'Row {row}, column {col}: {value}',
   'homework.walkthrough.step.changed': 'changed',
   'homework.walkthrough.step.hint':
-    'Hover or focus a highlighted row or entry to see how it is computed.',
+    'Hover, tap or focus a highlighted row or entry to see how it is computed.',
   'homework.walkthrough.step.swap': 'swapped with row {row}',
   'homework.walkthrough.step.mismatch':
     'Row {row}, column {col}: the walkthrough writes {written}; the operation gives {expected}.',
@@ -967,7 +967,7 @@ export const en = {
   'walkthroughQA.compactHint': 'Shrink to a small card that shows the latest answer',
   'walkthroughQA.tuck': 'Tuck into the text',
   'walkthroughQA.tuckHint':
-    'Hide the window and mark the passage; hover the dashed passage to read the answer',
+    'Hide the window and mark the passage; hover or tap the dashed passage to read the answer',
   'walkthroughQA.expand': 'Expand',
   'walkthroughQA.expandWindow': 'Open window',
   'walkthroughQA.pin': 'Pin to the screen',

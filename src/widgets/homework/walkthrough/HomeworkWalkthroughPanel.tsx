@@ -304,6 +304,14 @@ export function HomeworkWalkthroughPanel({
     const selection = window.getSelection()
     if (selection && !selection.isCollapsed) return
     const point = { x: event.clientX, y: event.clientY }
+    // Finger / pen: a tap shows the passage's card (what hover shows with a
+    // mouse); tapping it again or anywhere else closes it.
+    if (passageHover.lastPressWasTouch()) {
+      const target = resolveHover(point)
+      if (!target || passageHover.hover?.key === target.key) passageHover.close()
+      else passageHover.pin(target)
+      return
+    }
     const key = hitPassage(markedPassages(), caretAt(point.x, point.y), point)
     if (!key) return
     passageHover.close()
@@ -728,7 +736,7 @@ export function HomeworkWalkthroughPanel({
                         jumpTo(entry.id)
                       }}
                       className={cn(
-                        'focus-ring block truncate rounded px-2 py-1 transition-colors duration-150 hover:bg-muted',
+                        'focus-ring block truncate rounded px-2 py-1 transition-colors duration-150 hover:bg-muted coarse:py-2.5',
                         'lecture:rounded-none lecture:border-l lecture:py-1.5 lecture:pl-3 lecture:hover:border-primary lecture:hover:bg-transparent',
                         entry.section?.status === 'ready'
                           ? 'text-foreground'

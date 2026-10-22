@@ -1,12 +1,23 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { ArrowLeft, ArrowRight, Brain, GraduationCap, Languages, Sigma } from 'lucide-react'
+import {
+  ArrowLeft,
+  ArrowRight,
+  Brain,
+  ChevronDown,
+  GraduationCap,
+  Languages,
+  ListOrdered,
+  Sigma,
+} from 'lucide-react'
 import { Button } from '@/shared/ui/Button'
 import { EmptyState } from '@/shared/ui/EmptyState'
 import { LoadingState } from '@/shared/ui/LoadingState'
 import { PageContainer, PageContent, PageHeader } from '@/shared/ui/Page'
 import { TruncatedText } from '@/shared/ui/TruncatedText'
 import { cn } from '@/shared/lib/utils'
+import { SIDE_COLUMNS_QUERY, useMediaQuery } from '@/shared/lib/useMediaQuery'
+import { useThemeStore } from '@/features/theme/themeStore'
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -65,6 +76,15 @@ export function TutorPage(): JSX.Element {
   /** When set, only topics inside this chapter/section are shown. */
   const [structureFilter, setStructureFilter] = useState<CourseStructureNode | null>(null)
   const [language, setLanguage] = useState<'zh' | 'en' | 'mixed'>('en')
+  /*
+   * Narrower than the side-column breakpoint (iPad portrait; lecture also on
+   * iPad landscape) the contents fold into a toggle above the lesson, so the
+   * lesson starts on the first screen instead of under a long list.
+   */
+  const uiStyle = useThemeStore((s) => s.uiStyle)
+  const sideColumns = useMediaQuery(SIDE_COLUMNS_QUERY[uiStyle])
+  const [tocOpen, setTocOpen] = useState(false)
+  const tocFolded = !sideColumns && !tocOpen
 
   useEffect(() => {
     if (topicId) setActiveTopicId(topicId)
@@ -212,74 +232,106 @@ export function TutorPage(): JSX.Element {
         */}
         <div className="grid gap-8 lab:gap-0 lab:border lab:bg-card lg:lab:grid-cols-[232px_minmax(0,1fr)] min-[1200px]:lecture:grid-cols-[minmax(210px,1fr)_minmax(0,680px)_minmax(200px,1fr)] min-[1200px]:lecture:gap-10 xl:lab:grid-cols-[232px_minmax(0,1fr)_248px] min-[1400px]:lecture:gap-12">
           <aside className="min-w-0 space-y-3 lecture:mx-auto lecture:w-full lecture:max-w-[680px] lab:space-y-0 lab:border-b lab:py-3.5 lg:lab:border-b-0 lg:lab:border-r min-[1200px]:lecture:sticky min-[1200px]:lecture:top-8 min-[1200px]:lecture:mx-0 min-[1200px]:lecture:max-h-[calc(100vh-4rem)] min-[1200px]:lecture:w-full min-[1200px]:lecture:max-w-[248px] min-[1200px]:lecture:self-start min-[1200px]:lecture:justify-self-end min-[1200px]:lecture:overflow-y-auto">
-            <div className="empty:hidden lab:px-3 lab:pb-3">
-              <CourseStructurePanel
-                projectId={projectId}
-                {...(structureFilter ? { selectedId: structureFilter.id } : {})}
-                onSelect={(node) =>
-                  setStructureFilter((current) => (current?.id === node.id ? null : node))
-                }
-              />
-            </div>
-            <nav aria-label={t('tutor.topics')} className="min-w-0">
-              <h2 className="mb-2 text-sm font-semibold text-foreground lecture:text-xs lecture:font-normal lecture:tracking-[0.14em] lecture:text-muted-foreground lab:mx-3.5 lab:font-mono lab:text-[10.5px] lab:font-medium lab:uppercase lab:tracking-[0.08em] lab:text-muted-foreground">
-                {t('tutor.toc')}
-                <span className="hidden tabular-nums lab:inline"> / {visibleTopics.length}</span>
-              </h2>
-              <p className="sr-only">{t('tutor.pickTopic')}</p>
-              {/* Above the lesson (lecture below 1200px) a long contents list scrolls in
+            {!sideColumns && (
+              <button
+                type="button"
+                aria-expanded={tocOpen}
+                aria-controls="tutor-contents"
+                data-testid="tutor-toc-toggle"
+                onClick={() => setTocOpen((open) => !open)}
+                className="focus-ring flex w-full min-w-0 items-center gap-2 rounded-lg border px-3 py-2.5 text-left text-sm transition-colors hover:bg-accent/50 lecture:rounded-none lecture:border-x-0 lecture:border-t-0 lecture:px-0 lecture:hover:bg-transparent lab:mx-3.5 lab:w-[calc(100%-1.75rem)] lab:rounded-sm"
+              >
+                <ListOrdered className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
+                <span className="shrink-0 font-medium">{t('tutor.toc')}</span>
+                {activeTopic && (
+                  <span className="min-w-0 flex-1 truncate text-muted-foreground">
+                    {topicNumber(activeTopic, activeIndex)} {activeTopic.name}
+                  </span>
+                )}
+                <ChevronDown
+                  className={cn(
+                    'ml-auto h-4 w-4 shrink-0 opacity-60 transition-transform duration-200',
+                    tocOpen && 'rotate-180',
+                  )}
+                  aria-hidden
+                />
+              </button>
+            )}
+            <div
+              id="tutor-contents"
+              hidden={tocFolded}
+              className="space-y-3 lab:space-y-0 lab:pt-3 lg:lab:pt-0"
+            >
+              <div className="empty:hidden lab:px-3 lab:pb-3">
+                <CourseStructurePanel
+                  projectId={projectId}
+                  {...(structureFilter ? { selectedId: structureFilter.id } : {})}
+                  onSelect={(node) =>
+                    setStructureFilter((current) => (current?.id === node.id ? null : node))
+                  }
+                />
+              </div>
+              <nav aria-label={t('tutor.topics')} className="min-w-0">
+                <h2 className="mb-2 text-sm font-semibold text-foreground lecture:text-xs lecture:font-normal lecture:tracking-[0.14em] lecture:text-muted-foreground lab:mx-3.5 lab:font-mono lab:text-[10.5px] lab:font-medium lab:uppercase lab:tracking-[0.08em] lab:text-muted-foreground">
+                  {t('tutor.toc')}
+                  <span className="hidden tabular-nums lab:inline"> / {visibleTopics.length}</span>
+                </h2>
+                <p className="sr-only">{t('tutor.pickTopic')}</p>
+                {/* Above the lesson (lecture below 1200px) a long contents list scrolls in
                   its own box instead of pushing the lesson down. */}
-              <ul className="space-y-1 lecture:space-y-0 lab:space-y-0 max-[1199px]:lecture:grid max-[1199px]:lecture:max-h-[min(18rem,40vh)] max-[1199px]:lecture:grid-cols-2 max-[1199px]:lecture:gap-x-6 max-[1199px]:lecture:overflow-y-auto">
-                {visibleTopics.map((topic) => {
-                  const current = activeTopic?.id === topic.id
-                  const covered = coveredIds.has(topic.id)
-                  return (
-                    <li key={topic.id}>
-                      <button
-                        type="button"
-                        aria-current={current ? 'true' : undefined}
-                        onClick={() => {
-                          setActiveTopicId(topic.id)
-                          navigate(`/projects/${projectId}/tutor/${topic.id}`)
-                        }}
-                        className={cn(
-                          'focus-ring flex w-full min-w-0 items-start gap-2 rounded-lg px-2 py-2 text-left text-sm transition-colors',
-                          'lecture:rounded-none lecture:border-l lecture:py-1.5 lecture:pl-3 lecture:pr-0 lecture:text-[13.5px] lecture:leading-[1.5] lecture:text-muted-foreground lecture:hover:text-foreground',
-                          'lab:grid lab:grid-cols-[2.25rem_minmax(0,1fr)_0.875rem] lab:items-baseline lab:gap-1 lab:rounded-none lab:px-3.5 lab:py-1.5 lab:text-[13px] lab:leading-[1.45] lab:text-muted-foreground lab:hover:bg-muted lab:hover:text-foreground',
-                          current
-                            ? 'bg-accent text-accent-foreground lecture:border-l-2 lecture:border-primary lecture:bg-transparent lecture:pl-[11px] lecture:text-foreground lab:bg-theme-primary-soft lab:text-foreground lab:shadow-[inset_2px_0_0_hsl(var(--primary))] lab:hover:bg-theme-primary-soft'
-                            : 'hover:bg-accent/50 lecture:hover:bg-transparent',
-                        )}
-                      >
-                        <span
+                <ul className="space-y-1 lecture:space-y-0 lab:space-y-0 max-[1199px]:lecture:grid max-[1199px]:lecture:max-h-[min(18rem,40vh)] max-[1199px]:lecture:grid-cols-2 max-[1199px]:lecture:gap-x-6 max-[1199px]:lecture:overflow-y-auto">
+                  {visibleTopics.map((topic) => {
+                    const current = activeTopic?.id === topic.id
+                    const covered = coveredIds.has(topic.id)
+                    return (
+                      <li key={topic.id}>
+                        <button
+                          type="button"
+                          aria-current={current ? 'true' : undefined}
+                          onClick={() => {
+                            setActiveTopicId(topic.id)
+                            setTocOpen(false)
+                            navigate(`/projects/${projectId}/tutor/${topic.id}`)
+                          }}
                           className={cn(
-                            'data-num mt-0.5 shrink-0 font-mono text-xs text-muted-foreground lecture:mt-0 lecture:font-sans lecture:text-[13px] lecture:tabular-nums lab:mt-0 lab:text-[11px]',
-                            current && 'lab:text-primary',
+                            'focus-ring flex w-full min-w-0 items-start gap-2 rounded-lg px-2 py-2 text-left text-sm transition-colors',
+                            'lecture:rounded-none lecture:border-l lecture:py-1.5 lecture:pl-3 lecture:pr-0 lecture:text-[13.5px] lecture:leading-[1.5] lecture:text-muted-foreground lecture:hover:text-foreground',
+                            'lab:grid lab:grid-cols-[2.25rem_minmax(0,1fr)_0.875rem] lab:items-baseline lab:gap-1 lab:rounded-none lab:px-3.5 lab:py-1.5 lab:text-[13px] lab:leading-[1.45] lab:text-muted-foreground lab:hover:bg-muted lab:hover:text-foreground',
+                            current
+                              ? 'bg-accent text-accent-foreground lecture:border-l-2 lecture:border-primary lecture:bg-transparent lecture:pl-[11px] lecture:text-foreground lab:bg-theme-primary-soft lab:text-foreground lab:shadow-[inset_2px_0_0_hsl(var(--primary))] lab:hover:bg-theme-primary-soft'
+                              : 'hover:bg-accent/50 lecture:hover:bg-transparent',
                           )}
                         >
-                          {topicNumber(topic, topics.indexOf(topic))}
-                        </span>
-                        {/* Two lines before clipping: a topic name is rarely readable in one. */}
-                        <TruncatedText
-                          text={topic.name}
-                          className="min-w-0 flex-1 lecture:line-clamp-2 lecture:whitespace-normal lecture:break-words lab:line-clamp-2 lab:whitespace-normal lab:break-words"
-                        />
-                        {/* Lab tick: filled once the professor's class has reached the topic. */}
-                        <span
-                          aria-hidden
-                          title={covered ? t('tutor.coveredInClass') : undefined}
-                          className={cn(
-                            'hidden h-1.5 w-1.5 self-center justify-self-end rounded-full border lab:block',
-                            covered ? 'border-primary bg-primary' : 'border-input',
-                          )}
-                        />
-                        {covered && <span className="sr-only">{t('tutor.coveredInClass')}</span>}
-                      </button>
-                    </li>
-                  )
-                })}
-              </ul>
-            </nav>
+                          <span
+                            className={cn(
+                              'data-num mt-0.5 shrink-0 font-mono text-xs text-muted-foreground lecture:mt-0 lecture:font-sans lecture:text-[13px] lecture:tabular-nums lab:mt-0 lab:text-[11px]',
+                              current && 'lab:text-primary',
+                            )}
+                          >
+                            {topicNumber(topic, topics.indexOf(topic))}
+                          </span>
+                          {/* Two lines before clipping: a topic name is rarely readable in one. */}
+                          <TruncatedText
+                            text={topic.name}
+                            className="min-w-0 flex-1 lecture:line-clamp-2 lecture:whitespace-normal lecture:break-words lab:line-clamp-2 lab:whitespace-normal lab:break-words"
+                          />
+                          {/* Lab tick: filled once the professor's class has reached the topic. */}
+                          <span
+                            aria-hidden
+                            title={covered ? t('tutor.coveredInClass') : undefined}
+                            className={cn(
+                              'hidden h-1.5 w-1.5 self-center justify-self-end rounded-full border lab:block',
+                              covered ? 'border-primary bg-primary' : 'border-input',
+                            )}
+                          />
+                          {covered && <span className="sr-only">{t('tutor.coveredInClass')}</span>}
+                        </button>
+                      </li>
+                    )
+                  })}
+                </ul>
+              </nav>
+            </div>
           </aside>
 
           <section className="min-w-0 lab:px-5 lab:py-6 sm:lab:px-9 xl:lab:border-r">

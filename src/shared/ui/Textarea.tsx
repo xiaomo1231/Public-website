@@ -11,7 +11,7 @@ export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(
       <textarea
         ref={ref}
         className={cn(
-          'focus-ring flex min-h-[80px] w-full rounded-lg border border-input bg-background px-3 py-2 text-sm shadow-sm transition-[color,background-color,border-color,box-shadow] duration-200 placeholder:text-muted-foreground hover:border-primary/40 disabled:cursor-not-allowed disabled:opacity-50',
+          'focus-ring flex min-h-[80px] w-full rounded-lg border border-input bg-background px-3 py-2 text-sm shadow-sm transition-[color,background-color,border-color,box-shadow] duration-200 placeholder:text-muted-foreground hover:border-primary/40 disabled:cursor-not-allowed disabled:opacity-50 coarse:min-h-[96px]',
           invalid && 'border-destructive focus-visible:ring-destructive',
           className,
         )}

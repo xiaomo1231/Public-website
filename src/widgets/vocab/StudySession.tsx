@@ -367,6 +367,7 @@ export function StudySession({
                 autoComplete="off"
                 autoCorrect="off"
                 spellCheck={false}
+                enterKeyHint="go"
                 translate="no"
                 className={cn(
                   'notranslate text-center text-lg',

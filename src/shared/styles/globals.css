@@ -847,3 +847,81 @@
     font-weight: inherit;
   }
 }
+
+/*
+ * Tablet / touch (finger or pen as the primary pointer). Desktop with a mouse
+ * is untouched: every rule sits behind `(pointer: coarse)`.
+ *
+ * - Controls take `touch-action: manipulation` (no double-tap zoom, no 300ms
+ *   wait; pinch zoom still works) and are not text-selected by a long press.
+ * - Buttons, tabs, menu items, options, <summary>, <select> and text inputs
+ *   are at least 44×44px. `:where()` keeps specificity at zero for the
+ *   selector list, but min-* wins over a smaller `h-7` anyway, so compact
+ *   desktop controls grow only here. Opt out with `data-touch-compact` (on the
+ *   control or an ancestor) where a control already sits inside a larger hit
+ *   area.
+ * - `--keyboard-inset` (set by `shared/lib/keyboardInset.ts`) is how much of
+ *   the layout viewport the on-screen keyboard covers; sticky footers lift by
+ *   it, and focused fields keep a margin above it.
+ */
+:root {
+  --keyboard-inset: 0px;
+}
+
+@media (pointer: coarse) {
+  :where(
+    a[href],
+    button,
+    summary,
+    label,
+    select,
+    input,
+    textarea,
+    [role='button'],
+    [role='tab'],
+    [role='menuitem'],
+    [role='menuitemradio'],
+    [role='menuitemcheckbox'],
+    [role='option'],
+    [role='checkbox'],
+    [role='radio'],
+    [role='switch'],
+    [role='slider']
+  ) {
+    touch-action: manipulation;
+  }
+
+  :where(button, summary, [role='button'], [role='tab'], [role='menuitem'], [role='option']) {
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-touch-callout: none;
+  }
+
+  :where(
+    button,
+    summary,
+    select,
+    [role='button'],
+    [role='tab'],
+    [role='menuitem'],
+    [role='menuitemradio'],
+    [role='menuitemcheckbox'],
+    [role='option'],
+    input:not([type='checkbox'], [type='radio'], [type='range'], [type='hidden'], [type='file'])
+  ):not([data-touch-compact], [data-touch-compact] *) {
+    min-height: 44px;
+  }
+
+  :where(button, [role='button'], [role='tab']):not([data-touch-compact], [data-touch-compact] *) {
+    min-width: 44px;
+  }
+
+  /* A checkbox / radio is hit through its label: make that row 44px tall. */
+  :where(label):has(> input[type='checkbox'], > input[type='radio']) {
+    min-height: 44px;
+  }
+
+  :where(input, textarea, select, [contenteditable='true']) {
+    scroll-margin-block: 24px calc(var(--keyboard-inset) + 24px);
+  }
+}

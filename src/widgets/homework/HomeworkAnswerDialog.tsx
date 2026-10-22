@@ -643,6 +643,7 @@ export function HomeworkAnswerDialog({
                         {isStart && (
                           <Input
                             className="h-8 w-20 shrink-0"
+                            inputMode="numeric"
                             value={
                               Object.prototype.hasOwnProperty.call(manualNumbers, index)
                                 ? manualNumbers[index]

@@ -12,6 +12,7 @@ import {
 import { Input } from '@/shared/ui/Input'
 import { compareTargetText, isNearTarget } from '@/shared/lib/language'
 import { cn } from '@/shared/lib/utils'
+import { answerFieldAttrs } from '@/shared/lib/answerFieldAttrs'
 import { LetterBar } from '@/widgets/mathInput/LetterBar'
 import {
   gradedOptionStatusKey,
@@ -143,8 +144,10 @@ export function ArticleGenderInput({
               lang="de"
               value={plural}
               disabled={disabled}
-              spellCheck={false}
-              autoComplete="off"
+              {...answerFieldAttrs('term')}
+              // German nouns start with a capital letter.
+              autoCapitalize="sentences"
+              enterKeyHint="go"
               placeholder={t('articleGender.pluralPlaceholder')}
               className={cn(pluralStatus && STATUS_FIELD[pluralStatus])}
               onChange={(event) =>
@@ -273,10 +276,10 @@ export function ParadigmTableInput({
                         aria-label={paradigmCellLabel(table, row, column)}
                         value={answers[index] ?? ''}
                         disabled={disabled}
-                        spellCheck={false}
-                        autoComplete="off"
+                        {...answerFieldAttrs('term')}
+                        enterKeyHint="next"
                         className={cn(
-                          'h-8 min-w-[7rem] lab:rounded-none',
+                          'h-8 min-w-[7rem] lab:rounded-none coarse:h-11',
                           status && STATUS_FIELD[status],
                         )}
                         onFocus={() => {

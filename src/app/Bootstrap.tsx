@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Loader2 } from 'lucide-react'
 import { useTranslation } from '@/i18n'
 import { recoverInterruptedAnalyses } from '@/services/courseContentService'
+import { installKeyboardAvoidance } from '@/shared/lib/keyboardInset'
 
 /**
  * Bootstrap screen shown while we open IndexedDB and seed the default profile.
@@ -21,6 +22,9 @@ export function Bootstrap({ children }: { children: React.ReactNode }): JSX.Elem
   useEffect(() => {
     void recoverInterruptedAnalyses().catch(() => undefined)
   }, [])
+
+  // iPad: keep the focused field (and sticky footers) above the on-screen keyboard.
+  useEffect(() => installKeyboardAvoidance(), [])
 
   if (!ready) {
     return (

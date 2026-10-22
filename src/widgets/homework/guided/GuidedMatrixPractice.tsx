@@ -29,6 +29,7 @@ import { Input } from '@/shared/ui/Input'
 import { Math as TeX } from '@/shared/ui/Math'
 import { RichText } from '@/shared/ui/RichText'
 import { cn } from '@/shared/lib/utils'
+import { answerFieldAttrs } from '@/shared/lib/answerFieldAttrs'
 import { useTranslation, type TranslationKey } from '@/i18n'
 import { MatrixDisplay, MatrixInputGrid } from './MatrixParts'
 
@@ -285,8 +286,8 @@ function ChainWorkspace({ chain, progress, active, onChange }: ChainWorkspacePro
                 value={pending.typedOp ?? ''}
                 disabled={Boolean(pending.op)}
                 placeholder={t('guided.opPlaceholder')}
-                autoComplete="off"
-                spellCheck={false}
+                {...answerFieldAttrs('expression')}
+                enterKeyHint="go"
                 className="h-11 min-w-0 flex-1 font-mono text-[15px] sm:max-w-sm"
                 onChange={(event) => {
                   setOpMessage(null)

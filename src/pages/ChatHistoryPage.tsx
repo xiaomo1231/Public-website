@@ -131,7 +131,10 @@ export function ChatHistoryPage(): JSX.Element {
           // lecture: a margin list of sessions beside a transcript read as prose.
           // lab: one hairline panel — session index | log.
           <div className="grid gap-6 lab:gap-0 lab:border lab:bg-card lg:grid-cols-[280px_1fr] lg:lecture:gap-12">
-            <aside className="space-y-2 lecture:space-y-0 lab:space-y-0 lab:border-b lg:lab:border-b-0 lg:lab:border-r">
+            {/* Above the transcript (narrower than lg, e.g. iPad portrait) the
+                session list scrolls in its own box instead of pushing the
+                conversation below the fold. */}
+            <aside className="space-y-2 lecture:space-y-0 lab:space-y-0 lab:border-b max-lg:max-h-[min(18rem,40vh)] max-lg:overflow-y-auto max-lg:overscroll-contain lg:lab:border-b-0 lg:lab:border-r">
               {sessions.map((s) => (
                 <button
                   key={s.id}

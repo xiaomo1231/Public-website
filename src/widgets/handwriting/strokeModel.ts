@@ -71,6 +71,19 @@ export function pointerIntent(
   return penActive ? 'ignore' : 'pan'
 }
 
+/**
+ * A finger contact that lands while the pen is writing (or just lifted) is a
+ * palm, wherever it lands on the board dialog: it must not press a toolbar
+ * button or dismiss the dialog. Pen and mouse contacts never are.
+ */
+export function isPalmContact(
+  state: Pick<BoardState, 'active' | 'lastPenAt'>,
+  pointerType: string,
+  now: number,
+): boolean {
+  return asPointerKind(pointerType) === 'touch' && pointerIntent(state, 'touch', now) === 'ignore'
+}
+
 /** Pen pressure → width factor (0.35×–1.65×, 1× at a typical 0.5). */
 export function pressureWidth(base: number, pressure: number, sensitive: boolean): number {
   if (!sensitive) return base

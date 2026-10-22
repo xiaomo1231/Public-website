@@ -16,10 +16,11 @@ export const buttonVariants = cva(
         link: 'text-primary underline-offset-4 hover:underline',
       },
       size: {
-        sm: 'h-8 px-3 text-xs',
-        default: 'h-9 px-4',
+        // `coarse:` (finger / pen): every size reaches the 44px touch target.
+        sm: 'h-8 px-3 text-xs coarse:h-11 coarse:px-3.5',
+        default: 'h-9 px-4 coarse:h-11',
         lg: 'h-12 px-6',
-        icon: 'h-9 w-9',
+        icon: 'h-9 w-9 coarse:h-11 coarse:w-11',
       },
     },
     defaultVariants: {

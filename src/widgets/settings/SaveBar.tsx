@@ -26,7 +26,8 @@ export function SaveBar({
       role="region"
       aria-label={t('settings.unsaved')}
       className={cn(
-        'sticky bottom-0 z-30 -mx-4 -mb-6 mt-6 border-t bg-background/95 px-4 py-3 backdrop-blur supports-[backdrop-filter]:bg-background/80 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8',
+        // Lifts above the iPad keyboard (`--keyboard-inset`, 0 elsewhere).
+        'sticky bottom-[var(--keyboard-inset,0px)] z-30 -mx-4 -mb-6 mt-6 border-t bg-background/95 px-4 py-3 backdrop-blur supports-[backdrop-filter]:bg-background/80 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8',
         'lab:border-border',
       )}
     >
