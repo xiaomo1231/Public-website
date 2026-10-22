@@ -38,6 +38,13 @@ import type { Mistake } from '@/entities/mistake/types'
 import { logger } from '../logger/logger'
 import type { VocabBook, VocabCard, VocabEntry, VocabReview } from '@/entities/vocab/types'
 import type { InterviewSession } from '@/entities/interview/types'
+import type { FocusSession } from '@/entities/focus/types'
+import type {
+  DiagnosticPaper,
+  PlannedExam,
+  StudyPlan,
+  StudyTask,
+} from '@/entities/studyPlan/types'
 
 /**
  * Single Dexie database for the entire app. Versioned schema lives here;
@@ -102,6 +109,13 @@ export class AppDatabase extends Dexie {
   vocabReviews!: EntityTable<VocabReview, 'id'>
   /** Simulated patient interviews (language courses). */
   interviewSessions!: EntityTable<InterviewSession, 'id'>
+  /** Pomodoro focus phases (course-linked or global). */
+  focusSessions!: EntityTable<FocusSession, 'id'>
+  /** 学习计划: exams, the global plan row, its tasks and diagnostic papers. */
+  exams!: EntityTable<PlannedExam, 'id'>
+  studyPlans!: EntityTable<StudyPlan, 'id'>
+  studyTasks!: EntityTable<StudyTask, 'id'>
+  diagnostics!: EntityTable<DiagnosticPaper, 'id'>
   /** Detected textbook chapter/section hierarchy (structural source of truth). */
   courseStructures!: EntityTable<CourseStructure, 'id'>
   courseStructureNodes!: EntityTable<CourseStructureNode, 'id'>
@@ -868,6 +882,20 @@ export class AppDatabase extends Dexie {
       walkthroughNotes: 'id, projectId, setId, updatedAt, [setId+updatedAt]',
       interviewSessions: 'id, projectId, [projectId+updatedAt]',
       homeworkAnswerImages: 'id, projectId, setId, questionId, [questionId+order]',
+    })
+
+    // v20 — additive only. Tables not named here keep their v19 schema
+    // (Dexie 3+ carries undeclared tables forward). One v20 block shared by
+    // features shipped together: append new tables here, never a second v20.
+    this.version(20).stores({
+      // Pomodoro focus phases; `projectId` is absent for time outside a course.
+      focusSessions: 'id, projectId, startedAt, [projectId+startedAt]',
+      // 学习计划: planned exams and tasks carry `projectId`; the plan row and
+      // the diagnostic papers span courses (sections carry their course).
+      exams: 'id, projectId, at',
+      studyPlans: 'id',
+      studyTasks: 'id, projectId, examId, date, status, [projectId+date]',
+      diagnostics: 'id, createdAt',
     })
   }
 }

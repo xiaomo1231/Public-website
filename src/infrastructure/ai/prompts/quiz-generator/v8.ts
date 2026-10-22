@@ -15,6 +15,7 @@
 
 import * as V7 from './v7'
 import { untrustedContentWrapper } from '../security'
+import { examLanguageInstruction, examLanguageOf } from '../exam-language/v1'
 import { professorStyleSection } from '../question-style/v1'
 
 export const VERSION = 'v8' as const
@@ -142,6 +143,9 @@ const CLOSING = 'Respond with the JSON object only.'
 
 /** v6's language line. */
 function languageLine(language: QuizGenerationInput['language']): string {
+  // 跟随考试语言 (`exam:<code>`); every other value is v6's line word for word.
+  const exam = examLanguageOf(language)
+  if (exam) return `Respond in: ${examLanguageInstruction(exam)}.`
   return `Respond in: ${
     language === 'zh_terms'
       ? 'Simplified Chinese. At the first mention of each key technical term, give the English term in parentheses, e.g. 核孔复合体（nuclear pore complex）. Options, hints and the solution follow the same style; `quote` stays verbatim in the source language'

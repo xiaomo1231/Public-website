@@ -18,6 +18,8 @@ import { CourseFigures } from '@/widgets/project/CourseFigures'
 import { ExamTopicsPanel } from '@/widgets/syllabus/ExamTopicsPanel'
 import { QuestionHabitsPanel } from '@/widgets/questionHabits/QuestionHabitsPanel'
 import { GradingRulesPanel } from '@/widgets/project/GradingRulesPanel'
+import { CourseLanguagePanel } from '@/widgets/project/CourseLanguagePanel'
+import { CoursePlanPanel } from '@/widgets/studyPlan/CoursePlanPanel'
 import { useCourseMastery } from '@/widgets/dashboard/useCourseMastery'
 import { useHomeOverview } from '@/features/home/useHomeOverview'
 import { useDocumentsStore } from '@/features/documents/documentsStore'
@@ -37,7 +39,7 @@ export function ProjectDetailPage(): JSX.Element {
   const [searchParams, setSearchParams] = useSearchParams()
   const tabParam = searchParams.get('tab')
   const tab =
-    tabParam === 'analysis' || tabParam === 'exams' || tabParam === 'habits'
+    tabParam === 'analysis' || tabParam === 'exams' || tabParam === 'habits' || tabParam === 'plan'
       ? tabParam
       : 'documents'
   // Read-only course summary (same counts as the homepage) and the mastery
@@ -205,6 +207,7 @@ export function ProjectDetailPage(): JSX.Element {
             <TabsTrigger value="analysis">{t('projectDetail.tab.analysis')}</TabsTrigger>
             <TabsTrigger value="exams">{t('projectDetail.tab.exams')}</TabsTrigger>
             <TabsTrigger value="habits">{t('projectDetail.tab.habits')}</TabsTrigger>
+            <TabsTrigger value="plan">{t('projectDetail.tab.plan')}</TabsTrigger>
           </TabsList>
 
           <TabsContent value="documents">
@@ -226,12 +229,17 @@ export function ProjectDetailPage(): JSX.Element {
             <ExamTopicsPanel projectId={project.id} />
           </TabsContent>
 
+          <TabsContent value="plan">
+            <CoursePlanPanel projectId={project.id} />
+          </TabsContent>
+
           <TabsContent value="habits" className="space-y-10">
             <QuestionHabitsPanel projectId={project.id} />
             <GradingRulesPanel
               project={project}
               onSave={(sigFigPolicy) => update({ sigFigPolicy })}
             />
+            <CourseLanguagePanel projectId={project.id} />
           </TabsContent>
         </Tabs>
       </PageContent>

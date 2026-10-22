@@ -115,4 +115,41 @@ describe('study session', () => {
     expect(await screen.findByText('labrum')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Show meaning' })).toBeInTheDocument()
   })
+
+  it('shows a 顽固词 with its sentence, brings it back soon in another way, and says when it returns', async () => {
+    const due = Date.now() + 86400000
+    const grade = vi.fn(async () => ({ due, leech: true }))
+    const service = {
+      grade,
+      previewIntervals: vi.fn(async () => ({ 1: 60000, 2: 360000, 3: 600000, 4: 86400000 })),
+      details: vi.fn(async () => ({ view: {}, roots: [] })),
+    } as unknown as VocabService
+    const items: SessionItem[] = [
+      {
+        view: view('fascia', 'n. 筋膜', 'The deep fascia encloses the muscles.'),
+        kind: 'review',
+        mode: 'recognize',
+        leech: true,
+      },
+      { view: view('tendon', 'n. 肌腱'), kind: 'review', mode: 'recognize' },
+      { view: view('bursa', 'n. 滑膜囊'), kind: 'review', mode: 'recognize' },
+      { view: view('labrum', 'n. 唇'), kind: 'review', mode: 'recognize' },
+    ]
+    render(<StudySession items={items} bookId={null} service={service} onExit={() => undefined} />)
+    expect(screen.getByText('Leech')).toBeInTheDocument()
+    expect(screen.getByText('The deep fascia encloses the muscles.')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Show meaning' }))
+    fireEvent.click(screen.getByRole('button', { name: /Forgot/ }))
+    await waitFor(() => expect(grade).toHaveBeenCalledWith('fascia', 1, 'recognize', {}))
+    expect(await screen.findByText(/Next review: in 1 d/)).toBeInTheDocument()
+    // Two other words, then the leech again — now spelled.
+    for (const word of ['tendon', 'bursa']) {
+      expect(await screen.findByText(word)).toBeInTheDocument()
+      fireEvent.click(screen.getByRole('button', { name: 'Show meaning' }))
+      fireEvent.click(screen.getByRole('button', { name: /Good/ }))
+      await waitFor(() => expect(grade).toHaveBeenCalledWith(word, 3, 'recognize', {}))
+    }
+    expect(await screen.findByLabelText('Type the English word')).toBeInTheDocument()
+    expect(screen.getByText('Leech')).toBeInTheDocument()
+  })
 })

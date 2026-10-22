@@ -65,6 +65,10 @@ export class UserRepository {
           ...(patch.walkthroughLevel !== undefined
             ? { walkthroughLevel: patch.walkthroughLevel }
             : {}),
+          // Merged field by field, so a quick edit of one length keeps the rest.
+          ...(patch.pomodoro !== undefined
+            ? { pomodoro: { ...current.pomodoro, ...patch.pomodoro } }
+            : {}),
         }
         await this.db.user.put(merged)
         return merged

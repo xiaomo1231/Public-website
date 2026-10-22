@@ -25,14 +25,15 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/sha
 import { EmptyState } from '@/shared/ui/EmptyState'
 import { ErrorState } from '@/shared/ui/ErrorState'
 import { LoadingState } from '@/shared/ui/LoadingState'
-import { PageContainer, PageContent, PageHeader } from '@/shared/ui/Page'
+import { PageContainer, PageContent } from '@/shared/ui/Page'
 import { RichText } from '@/shared/ui/RichText'
 import { formatHomeworkQuestion } from '@/entities/homework/formatQuestion'
 import { HomeworkQuestionView } from '@/widgets/homework/HomeworkQuestionView'
 import { GuidedPracticeView } from '@/widgets/homework/guided/GuidedPracticeView'
 import { HomeworkWalkthroughPanel } from '@/widgets/homework/walkthrough/HomeworkWalkthroughPanel'
 import { practiceSourceFor } from '@/widgets/homework/practice/practiceSource'
-import { ProjectFlowNav } from '@/widgets/project/ProjectFlowNav'
+import { FocusPageHeader } from '@/widgets/focus/FocusPageHeader'
+import { useExamMode } from '@/features/focus/examMode'
 import { useHomeworkService } from '@/features/homework/useHomeworkService'
 import { startHomeworkRun, useHomeworkRun } from '@/features/homework/homeworkRuns'
 import { isGenerationInterruption } from '@/shared/lib/generationControl'
@@ -191,6 +192,8 @@ export function HomeworkPage(): JSX.Element {
   // The assignment's pausable run (re-read / continue), if one exists.
   const runHandle = useHomeworkRun(set?.documentId)
   const runLive = runHandle.state === 'running' || runHandle.state === 'pausing'
+  // 自测 is an exam: the pomodoro hides and pauses itself while it is open.
+  useExamMode(view === 'selftest')
 
   // Questions held out for independent evaluation are only done in 自测:
   // no hints, walkthrough, guided steps or AI chat for them.
@@ -258,15 +261,14 @@ export function HomeworkPage(): JSX.Element {
 
   return (
     <PageContainer>
-      <PageHeader
-        icon={<ClipboardList className="h-5 w-5" />}
+      {/* 专注子页面: back header instead of the course navigation. */}
+      <FocusPageHeader
+        backTo={`/projects/${projectId}/homework`}
+        backLabel={t('projectNav.homework')}
         title={set?.title ?? t('homework.title')}
-        description={
-          set && set.questionCount > 0
-            ? t('homework.questionsCount', { count: set.questionCount })
-            : t('homework.subtitle')
-        }
-        nav={<ProjectFlowNav projectId={projectId} active="homework" />}
+        {...(set && set.questionCount > 0
+          ? { meta: t('homework.questionsCount', { count: set.questionCount }) }
+          : {})}
         actions={
           <div className="flex flex-wrap items-center gap-2">
             {set?.status === 'ready' && questions.length > 0 && (
@@ -365,12 +367,6 @@ export function HomeworkPage(): JSX.Element {
                 {t('evaluation.menu')}
               </Button>
             )}
-            <Button asChild variant="outline" className="hidden xl:inline-flex">
-              <Link to={`/projects/${projectId}/homework`}>
-                <ArrowLeft className="h-4 w-4" />
-                {t('homework.back')}
-              </Link>
-            </Button>
             {/* Narrower screens: the secondary actions sit in one menu, so the
                 header stays one tidy row next to the title. */}
             <DropdownMenu>

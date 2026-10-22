@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { HomeworkPage } from '@/pages/HomeworkPage'
@@ -8,7 +8,9 @@ import type { HomeworkService } from '@/services/homeworkService'
 
 const holder = vi.hoisted(() => ({ service: null as unknown as HomeworkService }))
 
-vi.mock('@/widgets/project/ProjectFlowNav', () => ({ ProjectFlowNav: () => <div /> }))
+vi.mock('@/widgets/project/ProjectFlowNav', () => ({
+  ProjectFlowNav: () => <nav aria-label="Course sections" />,
+}))
 vi.mock('@/widgets/homework/HomeworkQuestionView', () => ({
   HomeworkQuestionView: ({ question }: { question: HomeworkQuestion }) => (
     <div data-testid="question-view">{question.prompt}</div>
@@ -105,6 +107,18 @@ function renderPage(): void {
     </MemoryRouter>,
   )
 }
+
+describe('HomeworkPage as a focus page', () => {
+  it('replaces the course navigation with a compact back header', async () => {
+    renderPage()
+    expect(await screen.findByRole('heading', { level: 1, name: 'Homework 1.txt' })).toBeVisible()
+    expect(screen.queryByRole('navigation', { name: 'Course sections' })).toBeNull()
+    const back = screen.getByRole('navigation', { name: 'Back' })
+    const link = within(back).getByRole('link', { name: 'Back to Homework' })
+    expect(link).toHaveAttribute('href', '/projects/p1/homework')
+    expect(document.querySelector('[data-focus-header]')).toHaveTextContent('1 question')
+  })
+})
 
 describe('HomeworkPage archive and re-analysis summary', () => {
   it('lists archived questions and restores one on request', async () => {

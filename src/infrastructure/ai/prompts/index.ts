@@ -36,6 +36,8 @@ import * as SyllabusTopicsV1 from './syllabus-topics/v1'
 import * as ExamTopicMatchV1 from './exam-topic-match/v1'
 import * as VocabGlossV2 from './vocab-gloss/v2'
 import * as VocabListSplitV1 from './vocab-list-split/v1'
+import * as ExamTermsV1 from './exam-terms/v1'
+import * as ExamLanguageV1 from './exam-language/v1'
 import * as PhraseExtractV1 from './phrase-extract/v1'
 import * as InterviewScenarioV1 from './interview-scenario/v1'
 import * as InterviewPatientV1 from './interview-patient/v1'
@@ -46,6 +48,7 @@ import * as PracticeReviewV1 from './practice-review/v1'
 import * as GuidedStepsV1 from './guided-steps/v1'
 import * as QuestionStyleV2 from './question-style/v2'
 import * as QuestionTranslateV2 from './question-translate/v2'
+import * as StudyPlanSummaryV1 from './study-plan-summary/v1'
 
 export const PROMPT_VERSIONS = {
   documentAnalyzer: 'v3',
@@ -80,6 +83,8 @@ export const PROMPT_VERSIONS = {
   examTopicMatch: 'v1',
   vocabGloss: 'v2',
   vocabListSplit: 'v1',
+  examTerms: 'v1',
+  examLanguage: 'v1',
   phraseExtract: 'v1',
   interviewScenario: 'v1',
   interviewPatient: 'v1',
@@ -90,6 +95,7 @@ export const PROMPT_VERSIONS = {
   guidedSteps: 'v1',
   questionStyle: 'v2',
   questionTranslate: 'v2',
+  studyPlanSummary: 'v1',
 } as const
 
 export const prompts = {
@@ -126,6 +132,9 @@ export const prompts = {
   examTopicMatch: ExamTopicMatchV1,
   vocabGloss: VocabGlossV2,
   vocabListSplit: VocabListSplitV1,
+  examTerms: ExamTermsV1,
+  /** Language line of 跟随考试语言 (`exam:<code>`), used inside other prompts. */
+  examLanguage: ExamLanguageV1,
   phraseExtract: PhraseExtractV1,
   interviewScenario: InterviewScenarioV1,
   interviewPatient: InterviewPatientV1,
@@ -136,6 +145,7 @@ export const prompts = {
   guidedSteps: GuidedStepsV1,
   questionStyle: QuestionStyleV2,
   questionTranslate: QuestionTranslateV2,
+  studyPlanSummary: StudyPlanSummaryV1,
 } as const
 
 export type { DocumentAnalyzerInput, DocumentAnalysisOutput } from './document-analyzer/v3'

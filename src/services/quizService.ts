@@ -19,6 +19,7 @@ import type {
   QuizConfig,
   QuizDifficulty,
   QuizKnowledgeStat,
+  QuizLanguage,
   QuizResumeSlot,
   QuizResumeState,
   QuizScore,
@@ -89,7 +90,6 @@ import { imbalances, parseEquation } from '@/infrastructure/chemistry/equation'
 import { isValidUnit } from '@/infrastructure/math/quantityAnswer'
 import { normalizeProgramOutput } from './answerEvaluationService'
 import type { SubjectInput } from '@/entities/project/types'
-import { UserRepository } from '@/entities/user/repository'
 import { isNoneOption, shuffled, shuffledOptions } from '@/shared/lib/shuffle'
 import { asSigFigCount } from '@/infrastructure/math/significantFigures'
 import {
@@ -105,7 +105,12 @@ import {
 import { formatForces, isForceType, type ForceSpec } from '@/entities/question/forceList'
 import type { SigFigBasis } from '@/entities/question/answerDimensions'
 import type { ProfessorConvention } from '@/infrastructure/ai/prompts/quiz-generator/v9'
-import { DEFAULT_QUESTION_LANGUAGE, type QuestionLanguage } from '@/entities/user/types'
+import {
+  DEFAULT_QUESTION_LANGUAGE,
+  examModeKey,
+  type QuestionLanguage,
+} from '@/entities/user/types'
+import { loadCourseLanguage } from './courseLanguage'
 
 /** Scoring points per short answer: enough to grade, few enough to stay distinct. */
 const MIN_RUBRIC_POINTS = 2
@@ -227,8 +232,12 @@ function answerStandsOut(options: Array<{ label: string; isCorrect: boolean }>):
 export function quizLanguage(
   preference: QuestionLanguage | undefined,
   material: 'zh' | 'en' | 'mixed',
-): 'zh' | 'en' | 'mixed' | 'zh_terms' {
+  /** `exam` mode: the course's detected exam language (`loadCourseLanguage`). */
+  examLanguage?: string,
+): QuizLanguage {
   const choice = preference ?? DEFAULT_QUESTION_LANGUAGE
+  // 跟随考试语言: `exam:<code>`; a Chinese or undetected exam falls back to the default.
+  if (choice === 'exam') return examModeKey(choice, examLanguage) ?? 'zh_terms'
   return choice === 'source' ? material : choice
 }
 
@@ -650,9 +659,12 @@ export class QuizService {
       const professorHabits = buildHabitsBlock(courseContext?.questionHabits)
       // Conventions the generator follows explicitly (final "none" option …).
       const conventions = professorConventions(courseContext?.questionHabits)
-      const preference =
-        config.questionLanguage ??
-        (await new UserRepository(this.db).get().catch(() => undefined))?.questionLanguage
+      // The quiz's own choice, else the course's, else the global preference.
+      const courseLanguage = await loadCourseLanguage(projectId, {
+        db: this.db,
+        ...(config.questionLanguage ? { override: config.questionLanguage } : {}),
+      })
+      const preference = courseLanguage.mode
       // Everything needed to fill the plan later is on the row from the start,
       // so a pause (or a closed tab) keeps the questions already generated.
       const resume: QuizResumeState = {
@@ -667,7 +679,7 @@ export class QuizService {
         knowledgePoints,
         topicName,
         topicDescription,
-        language: quizLanguage(preference, analysis.language),
+        language: quizLanguage(preference, analysis.language, courseLanguage.examLanguage),
         ...(professorStyleContext ? { professorStyleContext } : {}),
         ...(professorHabits ? { professorHabits } : {}),
         ...(conventions.conventions.length

@@ -1,15 +1,15 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { ArrowLeft, ListChecks } from 'lucide-react'
 import { Button } from '@/shared/ui/Button'
 import { Card, CardContent } from '@/shared/ui/Card'
 import { ErrorState } from '@/shared/ui/ErrorState'
 import { LoadingState } from '@/shared/ui/LoadingState'
 import { Progress } from '@/shared/ui/Progress'
-import { PageContainer, PageContent, PageHeader } from '@/shared/ui/Page'
+import { PageContainer, PageContent } from '@/shared/ui/Page'
 import { QuestionCard } from '@/widgets/quiz/QuestionCard'
 import { OralExamSession } from '@/widgets/quiz/OralExamSession'
-import { ProjectFlowNav } from '@/widgets/project/ProjectFlowNav'
+import { FocusPageHeader } from '@/widgets/focus/FocusPageHeader'
+import { useExamMode } from '@/features/focus/examMode'
 import { buildAIServices, buildOfflineQuizService } from '@/services/aiServices'
 import type { Question } from '@/entities/question/types'
 import { quizGenerationProgress, quizLength, type Quiz } from '@/entities/quiz/types'
@@ -45,6 +45,8 @@ export function QuizPage(): JSX.Element {
   const [startedAt, setStartedAt] = useState<number>(Date.now())
   const [unfinished, setUnfinished] = useState<Quiz | null>(null)
   const checkRun = useGenerationRun({ abortOnUnmount: true })
+  // An oral exam (timed questions) is an exam: the pomodoro hides and pauses.
+  useExamMode(quiz?.config.mode === 'oral')
 
   useEffect(() => {
     if (!quizId) return
@@ -227,25 +229,17 @@ export function QuizPage(): JSX.Element {
 
   return (
     <PageContainer>
-      <PageHeader
-        title={
-          <div className="flex items-center gap-2">
-            <Button asChild variant="ghost" size="icon" aria-label={t('quiz.backToQuizzes')}>
-              <Link to={`/projects/${projectId}/quiz`}>
-                <ArrowLeft className="h-4 w-4" />
-              </Link>
-            </Button>
-            <ListChecks className="h-4 w-4" />
-            {quiz.title}
-          </div>
-        }
-        description={quiz.config.mode === 'oral' ? t('oral.instructions') : t('quiz.instructions')}
-        nav={<ProjectFlowNav projectId={projectId} active="quiz" />}
+      {/* 专注子页面: back header instead of the course navigation. */}
+      <FocusPageHeader
+        backTo={`/projects/${projectId}/quiz`}
+        backLabel={t('projectNav.quiz')}
+        title={quiz.title}
       />
       <PageContent className="space-y-4">
         {/* lecture: one centred column. lab: the instrument panel, a little wider. */}
         {quiz.config.mode === 'oral' ? (
-          <div className="mx-auto w-full lecture:max-w-[720px] lab:max-w-[860px]">
+          <div className="mx-auto w-full space-y-3 lecture:max-w-[720px] lab:max-w-[860px]">
+            <p className="text-sm text-muted-foreground">{t('oral.instructions')}</p>
             <OralExamSession
               projectId={projectId}
               quiz={quiz}

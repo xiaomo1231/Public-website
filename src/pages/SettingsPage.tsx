@@ -24,6 +24,9 @@ import { PageContainer, PageContent, PageHeader } from '@/shared/ui/Page'
 import { ThemePicker } from '@/widgets/theme/ThemePicker'
 import { NoteMarkStyleSetting } from '@/widgets/settings/NoteMarkStyleSetting'
 import { WalkthroughLevelSetting } from '@/widgets/settings/WalkthroughLevelSetting'
+import { PomodoroSettingsCard } from '@/widgets/focus/PomodoroSettingsCard'
+import { FocusStatsCard } from '@/widgets/focus/FocusStatsCard'
+import { QuestionLanguageSetting } from '@/widgets/settings/QuestionLanguageSetting'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/shared/ui/Select2'
 import { Slider } from '@/shared/ui/Slider'
 import { cn } from '@/shared/lib/utils'
@@ -321,6 +324,12 @@ export function SettingsPage(): JSX.Element {
             <NoteMarkStyleSetting {...SETTINGS_SHELL} />
 
             <WalkthroughLevelSetting {...SETTINGS_SHELL} />
+
+            {/* 番茄钟 + 学习时长 (focus records); both apply / read at once. */}
+            <PomodoroSettingsCard {...SETTINGS_SHELL} />
+            <FocusStatsCard {...SETTINGS_SHELL} />
+
+            <QuestionLanguageSetting {...SETTINGS_SHELL} />
           </SettingsGroup>
 
           <SettingsGroup

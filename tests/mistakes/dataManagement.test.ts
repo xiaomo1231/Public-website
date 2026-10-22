@@ -214,7 +214,7 @@ describe('DataManagementService', () => {
     expect(parsed.blobs.map((b) => b.id)).toEqual(['big', 'figure'])
     expect(parsed.blobs[0]!.bytesBase64 === expected.blobs[0]!.bytesBase64).toBe(true)
     expect(parsed.blobs[1]).toEqual(expected.blobs[1])
-  })
+  }, 30_000) // Builds an ~8 MB file; slow when the full suite runs in parallel.
 
   it('exportFile is valid JSON when nothing binary is stored', async () => {
     await new ProjectService(db).create({ name: 'P', subject: 'cs' })

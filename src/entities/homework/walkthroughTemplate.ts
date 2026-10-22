@@ -13,6 +13,10 @@
  */
 import { formatHomeworkQuestion } from './formatQuestion'
 import type { WalkthroughLanguage } from './walkthrough'
+import {
+  examLanguageInstruction,
+  examLanguageOf,
+} from '@/infrastructure/ai/prompts/exam-language/v1'
 
 export interface TemplateQuestion {
   id: string
@@ -130,10 +134,13 @@ const attr = (value: string): string => value.replace(/["<>]/g, '').replace(/--/
 
 /** The Markdown template of one assignment, in the walkthrough language. */
 export function buildWalkthroughTemplate(input: WalkthroughTemplateInput): string {
-  const lang: Lang = input.language === 'en' ? 'en' : 'zh'
+  const exam = examLanguageOf(input.language)
+  const lang: Lang = input.language === 'en' || exam ? 'en' : 'zh'
   const text = TEXT[lang]
   const rules = [
-    text.language[input.language],
+    exam
+      ? `Write in ${examLanguageInstruction(exam)}.`
+      : text.language[input.language as 'zh_terms' | 'zh' | 'en'],
     ...text.rules,
     ...(input.linearSystems ? [text.checkRule] : []),
     ...(input.questions.some((question) => question.hasProfessorAnswer)

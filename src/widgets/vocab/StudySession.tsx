@@ -13,7 +13,8 @@ import type { SessionItem, VocabMode, VocabRating, WordView } from '@/entities/v
 import type { VocabService } from '@/services/vocabService'
 import { toast } from '@/features/toast/toastStore'
 import { useTranslation, type TranslationKey } from '@/i18n'
-import { formatSpan } from './formatSpan'
+import { formatNextReview, formatSpan } from './formatSpan'
+import { requeueAfterRating } from '@/entities/vocab/session'
 
 type T = ReturnType<typeof useTranslation>['t']
 
@@ -35,9 +36,6 @@ const MODE_KEYS: Record<VocabMode, TranslationKey> = {
   dictation: 'vocab.mode.dictation',
   cloze: 'vocab.mode.cloze',
 }
-
-/** A word that is forgotten comes back at most this often in one session. */
-const MAX_REPEATS = 2
 
 /**
  * Whether the word can be read aloud: English needs speech synthesis; another
@@ -117,6 +115,25 @@ export function WordMeaning({
   )
 }
 
+/** "absorb — 下次复习：3 天后" for the word just rated. */
+function LastRatedLine({
+  rated,
+  t,
+}: {
+  rated: { word: string; due: number; leech: boolean }
+  t: T
+}): JSX.Element {
+  return (
+    <p className="text-xs text-muted-foreground" data-last-rated role="status">
+      <span translate="no" className="notranslate font-medium text-foreground">
+        {rated.word}
+      </span>{' '}
+      — {t('vocab.next.label', { when: formatNextReview(rated.due, t) })}
+      {rated.leech ? ` · ${t('vocab.leech')}` : ''}
+    </p>
+  )
+}
+
 export interface StudySessionProps {
   items: SessionItem[]
   bookId: string | null
@@ -145,6 +162,12 @@ export function StudySession({
   const [intervals, setIntervals] = useState<Record<VocabRating, number> | null>(null)
   const [roots, setRoots] = useState<RootEntry[]>([])
   const [busy, setBusy] = useState(false)
+  /** The word just rated and when it comes back, so the cycle can be checked. */
+  const [lastRated, setLastRated] = useState<{
+    word: string
+    due: number
+    leech: boolean
+  } | null>(null)
   const repeats = useRef(new Map<string, number>())
   const inputRef = useRef<HTMLInputElement>(null)
 
@@ -200,30 +223,26 @@ export function StudySession({
       if (!current || busy) return
       setBusy(true)
       try {
-        await service.grade(current.view.word, rating, mode, {
+        const card = await service.grade(current.view.word, rating, mode, {
           ...(correct !== undefined ? { correct } : {}),
           ...(bookId ? { bookId } : {}),
           ...(current.language ? { language: current.language } : {}),
         })
         const key = current.view.word
         const count = repeats.current.get(key) ?? 0
-        setQueue((q) => {
-          const rest = q.slice(1)
-          // Forgotten: once more at the end of this session, as recognition.
-          if (rating === 1 && count < MAX_REPEATS) {
-            repeats.current.set(key, count + 1)
-            return [
-              ...rest,
-              {
-                view: current.view,
-                kind: 'review',
-                mode: 'recognize',
-                ...(current.language ? { language: current.language } : {}),
-              },
-            ]
-          }
-          return rest
-        })
+        // Forgotten: once more at the end; a 顽固词 sooner, several times,
+        // each time with another prompt type (see `requeueAfterRating`).
+        const { queue: next, repeated } = requeueAfterRating(
+          queue.slice(1),
+          current,
+          rating,
+          card,
+          count,
+        )
+        if (repeated) repeats.current.set(key, count + 1)
+        setQueue(next)
+        if (typeof card?.due === 'number')
+          setLastRated({ word: key, due: card.due, leech: Boolean(card.leech) })
         setDone((n) => n + 1)
         setRevealed(false)
         setTyped('')
@@ -239,7 +258,7 @@ export function StudySession({
         setBusy(false)
       }
     },
-    [current, busy, service, mode, bookId, onProgress, t],
+    [current, busy, service, mode, bookId, onProgress, t, queue],
   )
 
   const check = useCallback(() => {
@@ -290,6 +309,7 @@ export function StudySession({
           <p className="text-sm text-muted-foreground">
             {t('vocab.sessionDoneHint', { count: done })}
           </p>
+          {lastRated && <LastRatedLine rated={lastRated} t={t} />}
           <Button onClick={onExit}>{t('vocab.backToOverview')}</Button>
         </CardContent>
       </Card>
@@ -310,10 +330,20 @@ export function StudySession({
             {t(MODE_KEYS[mode])}
             {current.kind === 'new' ? ` · ${t('vocab.newWord')}` : ''}
           </span>
+          {current.leech && (
+            <span
+              className="rounded border border-amber-500/60 px-1 text-amber-700 dark:text-amber-400"
+              data-leech-badge
+              title={t('vocab.leechHint')}
+            >
+              {t('vocab.leech')}
+            </span>
+          )}
           <Button variant="ghost" size="sm" onClick={onExit}>
             {t('vocab.endSession')}
           </Button>
         </div>
+        {lastRated && <LastRatedLine rated={lastRated} t={t} />}
         {!isEnglish(language) && !speakable && (
           <p className="text-xs text-muted-foreground">
             {t('vocab.noVoice', { language: languageName(language!, uiLanguage) })}
@@ -349,6 +379,12 @@ export function StudySession({
             </Button>
           )}
           {mode === 'cloze' && cloze && <p className="text-[15px] italic">{cloze.text}</p>}
+          {/* A 顽固词 is met with its sentence (and root hints once revealed). */}
+          {current.leech && mode === 'recognize' && !revealed && view.context && (
+            <p className="text-sm italic text-muted-foreground" data-leech-sentence>
+              {view.context.text}
+            </p>
+          )}
           {(mode === 'spell' || mode === 'cloze') && !revealed && (
             <div className="mx-auto max-w-md">
               <WordMeaning

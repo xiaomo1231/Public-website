@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
-import { ArrowLeft, CheckCircle2, Loader2, RotateCcw, Timer } from 'lucide-react'
+import { useParams } from 'react-router-dom'
+import { CheckCircle2, Loader2, RotateCcw, Timer } from 'lucide-react'
 import { Badge } from '@/shared/ui/Badge'
 import { Button } from '@/shared/ui/Button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/shared/ui/Card'
@@ -9,11 +9,11 @@ import { ErrorState } from '@/shared/ui/ErrorState'
 import { Input } from '@/shared/ui/Input'
 import { Label } from '@/shared/ui/Label'
 import { LoadingState } from '@/shared/ui/LoadingState'
-import { PageContainer, PageContent, PageHeader } from '@/shared/ui/Page'
+import { PageContainer, PageContent } from '@/shared/ui/Page'
 import { RichText } from '@/shared/ui/RichText'
 import { Textarea } from '@/shared/ui/Textarea'
 import { GenerationControls } from '@/shared/ui/GenerationControls'
-import { ProjectFlowNav } from '@/widgets/project/ProjectFlowNav'
+import { FocusPageHeader } from '@/widgets/focus/FocusPageHeader'
 import { FormulaSheetPanel } from '@/widgets/exam/FormulaSheetPanel'
 import { MockExamResults } from '@/widgets/exam/MockExamResults'
 import { QuestionWindowButton, QuestionWindowLayer } from '@/widgets/homework/QuestionWindowLayer'
@@ -171,25 +171,14 @@ export function MockExamPage(): JSX.Element {
     )
   }
 
-  const back = (
-    <Button asChild variant="ghost" size="icon" aria-label={t('mockExam.back')}>
-      <Link to={`/projects/${projectId}/homework`}>
-        <ArrowLeft className="h-4 w-4" />
-      </Link>
-    </Button>
-  )
-
   return (
     <PageContainer>
-      <PageHeader
-        title={
-          <div className="flex items-center gap-2">
-            {!writing && back}
-            {t('mockExam.titleFor', { title: set.title })}
-          </div>
-        }
-        description={t('mockExam.subtitle')}
-        nav={writing ? undefined : <ProjectFlowNav projectId={projectId} active="homework" />}
+      {/* 专注子页面: back header; while the paper is being written there is no way back but handing in. */}
+      <FocusPageHeader
+        {...(writing
+          ? {}
+          : { backTo: `/projects/${projectId}/homework`, backLabel: t('projectNav.homework') })}
+        title={t('mockExam.titleFor', { title: set.title })}
         actions={
           writing && attempt ? (
             <div className="flex items-center gap-2">

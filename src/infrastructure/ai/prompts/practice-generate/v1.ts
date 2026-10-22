@@ -12,10 +12,12 @@ import { asArray, asRecord, asTrimmedString } from '../../validation'
 import { securityFooter, untrustedContentWrapper } from '../security'
 import { NOTATION_RULES } from '../homework-walkthrough/v1'
 import { professorStyleSection } from '../question-style/v1'
+import { examLanguageInstruction, examLanguageOf, type ExamLanguageKey } from '../exam-language/v1'
 
 export const VERSION = 'v1' as const
 
-export type PracticePromptLanguage = 'zh' | 'en'
+/** `exam:<code>`: 跟随考试语言 (zh / en give the line word for word as before). */
+export type PracticePromptLanguage = 'zh' | 'en' | ExamLanguageKey
 
 export interface PracticeSlotInput {
   /** Closed slot id (`s1`) the reply must echo. */
@@ -98,10 +100,13 @@ export function buildUserPrompt(input: PracticeGenerateInput): string {
     if (slot.focus) lines.push(`Focus: ${slot.focus}`)
     return lines.join('\n')
   })
+  const exam = examLanguageOf(input.language)
   return [
-    input.language === 'zh'
-      ? 'Write every question, answer and solution in Simplified Chinese (mathematical notation unchanged).'
-      : 'Write every question, answer and solution in English.',
+    exam
+      ? `Write every question, answer and solution in ${examLanguageInstruction(exam)} (mathematical notation unchanged).`
+      : input.language === 'zh'
+        ? 'Write every question, answer and solution in Simplified Chinese (mathematical notation unchanged).'
+        : 'Write every question, answer and solution in English.',
     input.keyPoints
       ? untrustedContentWrapper('KNOWLEDGE POINTS OF THE ASSIGNMENT', input.keyPoints)
       : '',

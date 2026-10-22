@@ -35,6 +35,7 @@
  */
 
 import type { DifficultyLevel } from '../types'
+import type { ExamLanguageKey } from '../exam-language/v1'
 import { securityFooter, untrustedContentWrapper } from '../security'
 
 export const VERSION = 'v6' as const
@@ -59,7 +60,8 @@ export interface QuizGenerationInput {
   knowledgePoints: string[]
   /** One entry per question, in order. */
   plan: Array<{ difficulty: DifficultyLevel; type: QuizQuestionType }>
-  language: 'zh' | 'en' | 'mixed' | 'zh_terms'
+  /** `exam:<code>` (跟随考试语言) is understood by v8 and later only. */
+  language: 'zh' | 'en' | 'mixed' | 'zh_terms' | ExamLanguageKey
   sourceSnippets: string[]
   /** Questions to avoid repeating. */
   avoidRepeating?: string[]

@@ -1,4 +1,6 @@
 import type { UILanguage } from '@/i18n/types'
+import type { PomodoroSettings } from '@/entities/focus/pomodoro'
+import { examLanguageKey, type ExamLanguageKey } from '@/infrastructure/ai/prompts/exam-language/v1'
 
 export type UserLanguage = 'auto' | 'zh' | 'en'
 
@@ -7,17 +9,50 @@ export type UserLanguage = 'auto' | 'zh' | 'en'
  * questions: Chinese with key terms in English (the default — Chinese students
  * often study from English textbooks), the textbook's own language, or English.
  */
-export type QuestionLanguage = 'zh_terms' | 'source' | 'en'
+export type QuestionLanguage = 'zh_terms' | 'source' | 'en' | 'exam'
 
-export const QUESTION_LANGUAGES: QuestionLanguage[] = ['zh_terms', 'source', 'en']
+export const QUESTION_LANGUAGES: QuestionLanguage[] = ['zh_terms', 'source', 'en', 'exam']
 export const DEFAULT_QUESTION_LANGUAGE: QuestionLanguage = 'zh_terms'
 
-/** The concrete language for content when the preference follows the textbook. */
+/**
+ * Teaching / content language: Chinese, English, bilingual, or the
+ * 「跟随考试语言（中文辅助）」 key `exam:<code>` (see prompts/exam-language).
+ */
+export type ContentLanguage = 'zh' | 'en' | 'mixed' | ExamLanguageKey
+
+/**
+ * The `exam:<code>` key of the exam-language mode, or `null` when the mode
+ * does not apply: another preference, no detected exam language, or a
+ * Chinese exam (then content is simply Chinese).
+ */
+export function examModeKey(
+  preference: QuestionLanguage | undefined,
+  examLanguage: string | undefined,
+): ExamLanguageKey | null {
+  if (preference !== 'exam' || !examLanguage || examLanguage === 'zh') return null
+  return examLanguageKey(examLanguage)
+}
+
+/**
+ * A content language for helpers that know only zh / en / mixed (figure
+ * labels, image searches): the exam mode reads as bilingual.
+ */
+export function plainContentLanguage(language: ContentLanguage): 'zh' | 'en' | 'mixed' {
+  return language === 'zh' || language === 'en' || language === 'mixed' ? language : 'mixed'
+}
+
+/**
+ * The concrete language for content when the preference follows the textbook.
+ * The exam mode gives `exam:<code>` (a Chinese or undetected exam → Chinese
+ * with key terms, like the default).
+ */
 export function resolveContentLanguage(
   preference: QuestionLanguage | undefined,
   sourceLanguage: 'zh' | 'en' | 'mixed',
-): 'zh' | 'en' | 'mixed' {
+  examLanguage?: string,
+): ContentLanguage {
   const choice = preference ?? DEFAULT_QUESTION_LANGUAGE
+  if (choice === 'exam') return examModeKey(choice, examLanguage) ?? 'zh'
   if (choice === 'source') return sourceLanguage
   return choice === 'en' ? 'en' : 'zh'
 }
@@ -107,6 +142,12 @@ export interface UserProfile {
   vocabReviewMode?: 'auto' | 'recognize' | 'spell' | 'dictation'
   /** Homework walkthrough: the version sections show by default (普通 / 详细). */
   walkthroughLevel?: 'standard' | 'detailed'
+  /**
+   * Pomodoro timer settings (lengths, cycle, sound, dim, shown). Absent or
+   * partial fields fall back to `DEFAULT_POMODORO` via `normalizePomodoroSettings`.
+   * The running timer itself is per-tab session state, not stored here.
+   */
+  pomodoro?: Partial<PomodoroSettings>
   unlockedAt?: number
   inviteCode?: string
 }
@@ -126,4 +167,5 @@ export interface UpdateUserInput {
   vocabDailyNew?: number
   vocabReviewMode?: 'auto' | 'recognize' | 'spell' | 'dictation'
   walkthroughLevel?: 'standard' | 'detailed'
+  pomodoro?: Partial<PomodoroSettings>
 }

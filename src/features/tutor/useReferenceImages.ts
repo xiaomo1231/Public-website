@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { ReferenceImage } from '@/entities/referenceImage/types'
 import type { TutorLesson } from '@/entities/tutorLesson/types'
+import { plainContentLanguage } from '@/entities/user/types'
 import { buildReferenceImageService } from '@/services/aiServices'
 import type { ReferenceImageService } from '@/services/referenceImageService'
 import { friendlyTutorError } from '@/shared/lib/aiErrors'
@@ -86,7 +87,7 @@ export function useReferenceImages(
         topicId: lesson.topicId,
         topicName: topic.name,
         topicDescription: topic.description ?? '',
-        language: lesson.language,
+        language: plainContentLanguage(lesson.language),
         lessonContent: lesson.content,
         signal: controller.signal,
       })

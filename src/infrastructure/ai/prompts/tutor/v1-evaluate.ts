@@ -4,6 +4,7 @@
  */
 
 import type { SourceReference, TutorEvaluation } from '../types'
+import type { ExamLanguageKey } from '../exam-language/v1'
 import { securityFooter, untrustedContentWrapper } from '../security'
 
 export const VERSION = 'v1' as const
@@ -13,7 +14,8 @@ export interface EvaluateAnswerInput {
   question: string
   expectedAnswer: string
   studentAnswer: string
-  language: 'zh' | 'en' | 'mixed'
+  /** `exam:<code>` (跟随考试语言) is understood by v2 only. */
+  language: 'zh' | 'en' | 'mixed' | ExamLanguageKey
   sourceSnippets: string[]
   sourceRefs: SourceReference[]
 }

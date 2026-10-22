@@ -1,7 +1,12 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { Outlet, useMatches } from 'react-router-dom'
+import { Outlet, useLocation, useMatches } from 'react-router-dom'
 import { Sidebar } from './Sidebar'
+import { SidebarRail } from './SidebarRail'
+import { isFocusPath } from '@/features/focus/focusRoutes'
+import { usePomodoroRuntime } from '@/features/focus/usePomodoro'
+import { PomodoroDock } from '@/widgets/focus/PomodoroDock'
 import { Header } from './Header'
+import { CountdownBar } from '@/widgets/studyPlan/CountdownBar'
 import { TopNav } from './TopNav'
 import { useThemeStore } from '@/features/theme/themeStore'
 import { cn } from '@/shared/lib/utils'
@@ -18,6 +23,9 @@ export function AppShell(): JSX.Element {
    */
   const [navCollapsed, setNavCollapsed] = useState(false)
   const uiStyle = useThemeStore((s) => s.uiStyle)
+  /** 专注子页面: the lab side rail shrinks to icons (lecture pages drop the course bar themselves). */
+  const focusPage = isFocusPath(useLocation().pathname)
+  const { examActive } = usePomodoroRuntime()
 
   /*
    * Page transition. Plays when the matched route changes (a different page),
@@ -127,7 +135,11 @@ export function AppShell(): JSX.Element {
         mounted while expanded so nothing hidden stays keyboard-focusable. It
         snaps (no width transition), since the content cannot animate with it.
       */}
-      {lab && (
+      {/* The global pomodoro timer: its own column at the left edge from lg. */}
+      <PomodoroDock examActive={examActive} />
+
+      {lab && focusPage && !navCollapsed && <SidebarRail />}
+      {lab && !(focusPage && !navCollapsed) && (
         <div
           className={cn(
             'relative z-10 hidden shrink-0 overflow-hidden lg:block',
@@ -179,6 +191,8 @@ export function AppShell(): JSX.Element {
         ) : (
           <TopNav />
         )}
+        {/* 学习计划: nearest exam countdown (hidden during exams). */}
+        <CountdownBar />
         <div ref={pageRef} className="flex min-h-0 flex-1 flex-col">
           <Outlet />
         </div>

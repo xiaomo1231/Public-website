@@ -23,8 +23,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { downloadText } from '@/shared/lib/download'
 import { primaryLanguage } from '@/shared/lib/language'
 import type { ExportFormat, VocabEntry, WordView } from '@/entities/vocab/types'
-import type { VocabService } from '@/services/vocabService'
+import type { VocabService, WordSchedule } from '@/services/vocabService'
 import { toast } from '@/features/toast/toastStore'
+import { formatNextReview } from './formatSpan'
 import { formatNumber, useTranslation, type TranslationKey } from '@/i18n'
 
 const FORMATS: Array<{ format: ExportFormat; labelKey: TranslationKey; hintKey: TranslationKey }> =
@@ -249,6 +250,38 @@ export function ImportDialog({
 /** Shown at most at once; the search narrows long exam books. */
 const PAGE = 200
 
+/**
+ * Under a word: when it comes back (learnt words), whether it is a 顽固词,
+ * and for course words how often it was looked up / met in the exams.
+ */
+export function WordScheduleLine({
+  schedule,
+  entry,
+}: {
+  schedule?: WordSchedule
+  entry?: Pick<VocabEntry, 'lookups' | 'examOccurrences'>
+}): JSX.Element | null {
+  const { t } = useTranslation()
+  const parts: string[] = []
+  if (schedule) parts.push(t('vocab.next.label', { when: formatNextReview(schedule.due, t) }))
+  if (entry?.lookups) parts.push(t('vocab.lookups', { count: entry.lookups }))
+  if (entry?.examOccurrences) parts.push(t('vocab.examCount', { count: entry.examOccurrences }))
+  if (parts.length === 0 && !schedule?.leech) return null
+  return (
+    <p
+      className="flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground"
+      data-word-schedule
+    >
+      {schedule?.leech && (
+        <span className="rounded border border-amber-500/60 px-1 text-amber-700 dark:text-amber-400">
+          {t('vocab.leech')}
+        </span>
+      )}
+      <span className="tabular-nums">{parts.join(' · ')}</span>
+    </p>
+  )
+}
+
 /** The words of a book, searchable; course and custom words can be removed. */
 export function WordListDialog({
   bookId,
@@ -268,6 +301,7 @@ export function WordListDialog({
   const { t } = useTranslation()
   const [views, setViews] = useState<WordView[]>([])
   const [entries, setEntries] = useState<VocabEntry[]>([])
+  const [schedules, setSchedules] = useState<Map<string, WordSchedule>>(new Map())
   const [query, setQuery] = useState('')
   const [limit, setLimit] = useState(PAGE)
   const [loading, setLoading] = useState(false)
@@ -281,11 +315,20 @@ export function WordListDialog({
     void Promise.all([
       service.bookWords(bookId),
       editable ? service.bookEntries(bookId) : Promise.resolve([]),
+      service.bookLanguage(bookId),
     ])
-      .then(([words, stored]) => {
+      .then(async ([words, stored, language]) => {
         if (cancelled) return
         setViews(words)
         setEntries(stored)
+        // When each learnt word comes back (an extra: the list works without it).
+        const next = await service
+          .schedules(
+            words.map((view) => view.word),
+            language,
+          )
+          .catch(() => new Map<string, WordSchedule>())
+        if (!cancelled) setSchedules(next)
       })
       .catch(() => {
         if (!cancelled)
@@ -392,6 +435,10 @@ export function WordListDialog({
                           : ''}
                       </p>
                     )}
+                    <WordScheduleLine
+                      schedule={schedules.get(view.word)}
+                      entry={entryOf(view.word)}
+                    />
                   </div>
                   {editable && (
                     <Button

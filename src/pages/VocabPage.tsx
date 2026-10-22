@@ -3,6 +3,7 @@ import {
   BookA,
   BookOpen,
   BookOpenCheck,
+  FileText,
   GraduationCap,
   Loader2,
   Play,
@@ -731,8 +732,54 @@ function CourseVocabPanel({
     done: number
     total: number
     paused: boolean
+    /** `exam`: 考卷高频术语 (parts read), otherwise course words (gloss batches). */
+    kind?: 'exam'
   } | null>(null)
   const generation = useGenerationRun()
+
+  /** 从考卷提取高频术语: AI-picked key terms of the course's exam papers. */
+  const extractExam = async (projectId: string) => {
+    setRunning(projectId)
+    const run = generation.start()
+    setGloss({ projectId, done: 0, total: 0, paused: false, kind: 'exam' })
+    try {
+      const bundle = await buildAIServices()
+      const result = await new CourseVocabService({
+        projects: new ProjectService(),
+        ai: withUsageKind(bundle?.ai ?? null, 'vocab'),
+      }).extractExamTerms(projectId, {
+        control: run,
+        onProgress: ({ done, total }) =>
+          setGloss({ projectId, done, total, paused: false, kind: 'exam' }),
+      })
+      run.finish()
+      onChanged()
+      if (result.paused) {
+        setGloss((prev) => (prev ? { ...prev, paused: true } : prev))
+        return
+      }
+      setGloss(null)
+      toast({
+        variant: result.failed ? 'warning' : 'success',
+        title: t('vocab.examTerms.done', { added: result.added, updated: result.updated }),
+        ...(result.failed
+          ? {
+              description: `${t('vocab.examTerms.failedParts', { count: result.failed })} ${friendlyAIError(result.error)}`,
+            }
+          : {}),
+      })
+    } catch (err) {
+      run.finish()
+      setGloss(null)
+      toast({
+        variant: 'error',
+        title: t('vocab.examTerms.failed'),
+        description: friendlyAIError(err),
+      })
+    } finally {
+      setRunning(null)
+    }
+  }
 
   const extract = async (projectId: string) => {
     setRunning(projectId)
@@ -825,6 +872,16 @@ function CourseVocabPanel({
                   )}
                   {book ? t('vocab.course.update') : t('vocab.course.extract')}
                 </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={running !== null}
+                  onClick={() => void extractExam(project.id)}
+                  title={t('vocab.examTerms.hint')}
+                >
+                  <FileText className="h-4 w-4" />
+                  {t('vocab.examTerms.open')}
+                </Button>
                 {targetLanguageOf(project) && (
                   <Button
                     variant="outline"
@@ -843,10 +900,17 @@ function CourseVocabPanel({
                     <Progress
                       value={gloss.total > 0 ? Math.round((gloss.done / gloss.total) * 100) : 0}
                       className="h-1.5"
-                      aria-label={t('vocab.course.glossing')}
+                      aria-label={t(
+                        gloss.kind === 'exam' ? 'vocab.examTerms.reading' : 'vocab.course.glossing',
+                      )}
                     />
                     <p className="data-num text-xs text-muted-foreground">
-                      {t('vocab.course.glossProgress', { done: gloss.done, total: gloss.total })}
+                      {t(
+                        gloss.kind === 'exam'
+                          ? 'vocab.examTerms.progress'
+                          : 'vocab.course.glossProgress',
+                        { done: gloss.done, total: gloss.total },
+                      )}
                     </p>
                   </div>
                   <GenerationControls
@@ -857,7 +921,14 @@ function CourseVocabPanel({
                     stopRequested={generation.run?.stopRequested ?? false}
                     onPause={generation.requestPause}
                     onStopNow={generation.stopNow}
-                    {...(running === null ? { onResume: () => void extract(project.id) } : {})}
+                    {...(running === null
+                      ? {
+                          onResume: () =>
+                            void (gloss.kind === 'exam'
+                              ? extractExam(project.id)
+                              : extract(project.id)),
+                        }
+                      : {})}
                   />
                 </div>
               )}
@@ -1010,9 +1081,10 @@ function StatsPanel({
         <ExportMenu service={service} target="learned" disabled={stats.learned === 0} />
       </CardHeader>
       <CardContent className="space-y-6 lecture:px-0 lab:p-3.5">
-        <div className="grid gap-6 sm:grid-cols-4">
+        <div className="grid gap-6 sm:grid-cols-5">
           <Stat value={stats.learned} label={t('vocab.stat.learned')} />
           <Stat value={stats.mature} label={t('vocab.stat.mature')} />
+          <Stat value={stats.leeches} label={t('vocab.stat.leeches')} />
           <Stat value={stats.reviewsToday} label={t('vocab.stat.reviewsToday')} />
           <Stat value={stats.streak} label={t('vocab.stat.streak')} />
         </div>

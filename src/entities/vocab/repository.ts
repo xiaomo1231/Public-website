@@ -77,4 +77,13 @@ export class VocabRepository {
   listReviews(): Promise<VocabReview[]> {
     return this.db.vocabReviews.toArray()
   }
+  /** A word's review log, oldest first. */
+  async reviewsOf(word: string): Promise<VocabReview[]> {
+    const rows = await this.db.vocabReviews.where('word').equals(word).toArray()
+    return rows.sort((a, b) => a.at - b.at)
+  }
+  /** Course or custom entries of a book for one word. */
+  entriesInBook(bookId: string, word: string): Promise<VocabEntry[]> {
+    return this.db.vocabEntries.where('[bookId+word]').equals([bookId, word]).toArray()
+  }
 }

@@ -95,7 +95,24 @@ export interface VocabEntry {
   plural?: string
   /** The lesson / chapter of the textbook word list the word came from. */
   lesson?: string
+  /** Course books: how the word got in first (absent: the material). */
+  origin?: 'material' | 'lookup' | 'exam'
+  /** Times the student looked it up (划词翻译 / 解释) in this course. */
+  lookups?: number
+  lastLookedUpAt?: number
+  /** Occurrences in the course's exam papers / review materials (AI-picked key term). */
+  examOccurrences?: number
   createdAt: number
+}
+
+/**
+ * Study order of a course book: words looked up again and again first, then
+ * the exam's high-frequency terms, then the material's frequent words.
+ */
+export function courseEntryPriority(
+  entry: Pick<VocabEntry, 'lookups' | 'examOccurrences' | 'occurrences'>,
+): number {
+  return (entry.lookups ?? 0) * 10 + (entry.examOccurrences ?? 0) * 3 + (entry.occurrences ?? 0)
 }
 
 /** "der Kopf, die Köpfe" for a German noun with its article (and plural); undefined otherwise. */
@@ -143,6 +160,16 @@ export interface VocabCard {
   /** Wrong spellings so far. */
   mistakes: number
   lastMistakeAt?: number
+  /**
+   * 顽固词: forgotten ≥ 3 times or failing most recent reviews. Re-shown
+   * several times in a session (rotating prompt types) and relearnt over the
+   * next days; cleared after three correct reviews in a row.
+   */
+  leech?: boolean
+  /** Correct reviews in a row since it became a leech. */
+  leechStreak?: number
+  /** When it first became a leech. */
+  leechAt?: number
 }
 
 export type VocabRating = 1 | 2 | 3 | 4
@@ -183,6 +210,8 @@ export interface SessionItem {
   mode: VocabMode
   /** Language of the word's book, when not English. */
   language?: string
+  /** A 顽固词 (see `VocabCard.leech`): shown with its sentence and root hints. */
+  leech?: boolean
 }
 
 export type ExportFormat = 'anki' | 'csv' | 'txt'

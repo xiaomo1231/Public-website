@@ -6,6 +6,7 @@ import {
   DEFAULT_VOCAB_SETTINGS,
   EXAM_LABEL_KEYS,
   TAG_ORDER,
+  courseEntryPriority,
   examBookId,
   examTagOf,
   grammarLine,
@@ -22,11 +23,13 @@ import {
   type WordView,
 } from '@/entities/vocab/types'
 import {
+  dueForExamWeek,
   isLearning,
   isMature,
   newVocabCard,
   previewVocabIntervals,
-  rateVocabCard,
+  scheduleVocabCard,
+  type ScheduleContext,
 } from '@/entities/vocab/schedule'
 import {
   buildLemmaIndex,
@@ -73,6 +76,8 @@ export interface VocabStats {
   reviewsToday: number
   learned: number
   mature: number
+  /** 顽固词 (words forgotten again and again). */
+  leeches: number
   /** Consecutive days with at least one review, up to today (or yesterday). */
   streak: number
   /** Words falling due on each of the next seven days (today first). */
@@ -111,6 +116,34 @@ export async function vocabIndex() {
   }))
   indexed.catch(() => (indexed = null))
   return indexed
+}
+
+/** Due now, or a course-exam word that must be seen in the exam's final week. */
+function isDueNow(card: VocabCard, now: number, examAt: number | undefined): boolean {
+  return card.due <= now || (examAt !== undefined && dueForExamWeek(card, examAt, now))
+}
+
+/** Seconds a review / a new word takes on average (for the study plan's estimate). */
+const REVIEW_SECONDS = 10
+const NEW_WORD_SECONDS = 25
+
+/** Today's vocabulary load for the study plan. */
+export interface DailyVocabLoad {
+  /** Reviews due today (course words only when a course is given). */
+  due: number
+  /** New words still to learn today (within the daily limit). */
+  new: number
+  /** Rough minutes for both. */
+  estimatedMinutes: number
+}
+
+/** When a word comes back, for the word list and after a rating. */
+export interface WordSchedule {
+  due: number
+  leech: boolean
+  /** Still in the short learning / relearning steps. */
+  learning: boolean
+  reps: number
 }
 
 function viewOfEntry(entry: DictEntry): WordView {
@@ -208,10 +241,11 @@ export class VocabService {
     const entries = await this.repo.listEntries(bookId)
     const book = await this.repo.getBook(bookId)
     const language = book?.language
+    // A course book: looked-up words and the exam's key terms first.
     const ordered =
       book?.kind === 'course'
         ? entries.sort(
-            (a, b) => (b.occurrences ?? 0) - (a.occurrences ?? 0) || a.createdAt - b.createdAt,
+            (a, b) => courseEntryPriority(b) - courseEntryPriority(a) || a.createdAt - b.createdAt,
           )
         : entries.sort((a, b) => a.createdAt - b.createdAt)
     return Promise.all(ordered.map((entry) => this.viewOfStored(entry, language)))
@@ -331,11 +365,15 @@ export class VocabService {
    */
   async session(now = Date.now()): Promise<SessionItem[]> {
     const settings = await this.settings()
-    const [cards, languages] = await Promise.all([this.repo.listCards(), this.languages()])
-    const due = (await this.dueInBook(cards, settings.bookId, now, languages)).slice(
-      0,
-      MAX_SESSION_REVIEWS,
-    )
+    const [cards, languages, examWords] = await Promise.all([
+      this.repo.listCards(),
+      this.languages(),
+      this.examWords(now),
+    ])
+    // 顽固词 first, then the rest by due date.
+    const due = (await this.dueInBook(cards, settings.bookId, now, languages, examWords))
+      .sort((a, b) => Number(Boolean(b.leech)) - Number(Boolean(a.leech)))
+      .slice(0, MAX_SESSION_REVIEWS)
     const items: SessionItem[] = []
     for (const card of due) {
       const language = languages.get(card.bookId)
@@ -345,6 +383,7 @@ export class VocabService {
         kind: 'review',
         mode: this.reviewMode(card, view, settings, language),
         ...(language ? { language } : {}),
+        ...(card.leech ? { leech: true } : {}),
       })
     }
     if (settings.bookId) {
@@ -374,8 +413,12 @@ export class VocabService {
     bookId: string | null | undefined,
     now: number,
     languages: Map<string, string>,
+    /** Course-exam words (word → next exam): due in the exam's final week too. */
+    examWords: Map<string, number> = new Map(),
   ): Promise<VocabCard[]> {
-    const due = cards.filter((card) => card.due <= now).sort((a, b) => a.due - b.due)
+    const due = cards
+      .filter((card) => isDueNow(card, now, examWords.get(card.word)))
+      .sort((a, b) => a.due - b.due)
     if (!bookId) return due
     const language = languages.get(bookId)
     const words = new Set(
@@ -417,7 +460,8 @@ export class VocabService {
     language?: string,
   ): VocabMode {
     if (settings.reviewMode !== 'auto') return settings.reviewMode
-    if (isLearning(card) || card.reps < 2) return 'recognize'
+    // A 顽固词 starts from recognition (with its sentence and root hints).
+    if (isLearning(card) || card.reps < 2 || card.leech) return 'recognize'
     const cycle: VocabMode[] = ['spell', 'cloze', 'dictation']
     const pick = cycle[card.reps % cycle.length]!
     if (
@@ -441,7 +485,7 @@ export class VocabService {
     const base =
       existing ??
       newVocabCard(key, options.bookId ?? (await this.settings()).bookId ?? 'unknown', now)
-    let next = rateVocabCard(base, rating, now)
+    let next = scheduleVocabCard(base, rating, now, await this.scheduleContext(key, now))
     // Only a typed answer that was wrong ("forgot", rating 1) counts toward the
     // mistake list; a near miss (one letter off, rating 2) does not.
     if (options.correct === false && rating === 1) {
@@ -470,7 +514,153 @@ export class VocabService {
   ): Promise<Record<VocabRating, number>> {
     const key = wordKey(word, language)
     const card = (await this.repo.getCard(key)) ?? newVocabCard(key, 'preview', now)
-    return previewVocabIntervals(card, now)
+    return previewVocabIntervals(card, now, await this.scheduleContext(key, now))
+  }
+
+  /** What a review of `word` needs beyond FSRS: its recent ratings and its next course exam. */
+  private async scheduleContext(word: string, now: number): Promise<ScheduleContext> {
+    const [reviews, examAt] = await Promise.all([
+      this.repo.reviewsOf(word),
+      this.examAtFor(word, now),
+    ])
+    return {
+      recent: reviews.map((review) => review.rating),
+      ...(examAt !== undefined ? { examAt } : {}),
+    }
+  }
+
+  /**
+   * Next exam (epoch ms) of each course with one ahead, from the study plan's
+   * exams (`exams` table). Empty when there is no such table or no exam.
+   */
+  private async upcomingExams(now: number): Promise<Map<string, number>> {
+    const exams = new Map<string, number>()
+    if (!this.db.tables.some((table) => table.name === 'exams')) return exams
+    try {
+      const rows = await this.db
+        .table<{ projectId?: string; at?: number }>('exams')
+        .where('at')
+        .above(now)
+        .toArray()
+      for (const row of rows) {
+        if (!row.projectId || typeof row.at !== 'number') continue
+        const known = exams.get(row.projectId)
+        if (known === undefined || row.at < known) exams.set(row.projectId, row.at)
+      }
+    } catch {
+      // No exams to plan around.
+    }
+    return exams
+  }
+
+  /** The next exam of any course whose book has this word. */
+  private async examAtFor(word: string, now: number): Promise<number | undefined> {
+    const exams = await this.upcomingExams(now)
+    if (exams.size === 0) return undefined
+    let at: number | undefined
+    for (const entry of await this.repo.entriesForWord(word)) {
+      const exam = entry.projectId ? exams.get(entry.projectId) : undefined
+      if (exam !== undefined && (at === undefined || exam < at)) at = exam
+    }
+    return at
+  }
+
+  /** Every course-exam word with its next exam (for the final-week guarantee). */
+  private async examWords(now: number): Promise<Map<string, number>> {
+    const exams = await this.upcomingExams(now)
+    const words = new Map<string, number>()
+    for (const [projectId, at] of exams) {
+      const book = await this.repo.findCourseBook(projectId)
+      if (!book) continue
+      for (const entry of await this.repo.listEntries(book.id)) {
+        const known = words.get(entry.word)
+        if (known === undefined || at < known) words.set(entry.word, at)
+      }
+    }
+    return words
+  }
+
+  /**
+   * When each word comes back (only words with progress), for the word list
+   * and the line shown after a rating. Words of another `language` keep their case.
+   */
+  async schedules(words: string[], language?: string): Promise<Map<string, WordSchedule>> {
+    const result = new Map<string, WordSchedule>()
+    const cards = new Map((await this.repo.listCards()).map((card) => [card.word, card]))
+    for (const word of words) {
+      const card = cards.get(wordKey(word, language))
+      if (card)
+        result.set(word, {
+          due: card.due,
+          leech: Boolean(card.leech),
+          learning: isLearning(card),
+          reps: card.reps,
+        })
+    }
+    return result
+  }
+
+  /** 顽固词 so far, most recent first. */
+  async leeches(): Promise<Array<{ view: WordView; card: VocabCard }>> {
+    const [all, languages] = await Promise.all([this.repo.listCards(), this.languages()])
+    const cards = all.filter((card) => card.leech)
+    cards.sort((a, b) => (b.leechAt ?? 0) - (a.leechAt ?? 0))
+    return Promise.all(
+      cards.map(async (card) => ({
+        view: await this.view(card.word, languages.get(card.bookId)),
+        card,
+      })),
+    )
+  }
+
+  /**
+   * Today's vocabulary task for the study plan: due reviews and the new
+   * words still allowed today, with a time estimate. With a course, only its
+   * course book counts (its words due anywhere, its unlearned words as new);
+   * without one, the current book (as `session` would build it).
+   */
+  async planDailyLoad(projectId?: string, now = Date.now()): Promise<DailyVocabLoad> {
+    const settings = await this.settings()
+    const [cards, languages, examWords] = await Promise.all([
+      this.repo.listCards(),
+      this.languages(),
+      this.examWords(now),
+    ])
+    const newToday = cards.filter((card) => card.addedAt >= startOfDay(now)).length
+    const room = Math.max(0, settings.dailyNew - newToday)
+    let due: number
+    let fresh: number
+    if (projectId) {
+      const book = await this.repo.findCourseBook(projectId)
+      const entries = book ? await this.repo.listEntries(book.id) : []
+      const words = new Set(entries.map((entry) => entry.word))
+      const byWord = new Map(cards.map((card) => [card.word, card]))
+      due = cards.filter(
+        (card) => words.has(card.word) && isDueNow(card, now, examWords.get(card.word)),
+      ).length
+      fresh = Math.min(room, entries.filter((entry) => !byWord.has(entry.word)).length)
+    } else {
+      due = Math.min(
+        MAX_SESSION_REVIEWS,
+        (await this.dueInBook(cards, settings.bookId, now, languages, examWords)).length,
+      )
+      if (settings.bookId && room > 0) {
+        const language = languages.get(settings.bookId)
+        const known = new Set(cards.map((card) => card.word))
+        fresh = Math.min(
+          room,
+          (await this.bookWords(settings.bookId)).filter(
+            (view) => !known.has(wordKey(view.word, language)),
+          ).length,
+        )
+      } else fresh = 0
+    }
+    const seconds = due * REVIEW_SECONDS + fresh * NEW_WORD_SECONDS
+    return {
+      due,
+      new: fresh,
+      estimatedMinutes: seconds === 0 ? 0 : Math.max(1, Math.ceil(seconds / 60)),
+    }
   }
 
   /** Take a word off the mistake list (it stays in the review schedule). */
@@ -493,13 +683,14 @@ export class VocabService {
   }
 
   async stats(now = Date.now()): Promise<VocabStats> {
-    const [settings, cards, reviews, languages] = await Promise.all([
+    const [settings, cards, reviews, languages, examWords] = await Promise.all([
       this.settings(),
       this.repo.listCards(),
       this.repo.listReviews(),
       this.languages(),
+      this.examWords(now),
     ])
-    const dueHere = await this.dueInBook(cards, settings.bookId, now, languages)
+    const dueHere = await this.dueInBook(cards, settings.bookId, now, languages, examWords)
     const today = startOfDay(now)
     const days = new Set(reviews.map((review) => startOfDay(review.at)))
     let streak = 0
@@ -521,6 +712,7 @@ export class VocabService {
       reviewsToday: reviews.filter((review) => review.at >= today).length,
       learned: cards.length,
       mature: cards.filter(isMature).length,
+      leeches: cards.filter((card) => card.leech).length,
       streak,
       forecast,
     }

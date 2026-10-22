@@ -2,6 +2,7 @@ import type { AppDatabase } from '@/infrastructure/db/database'
 import { getDb } from '@/infrastructure/db/database'
 import { CourseAnalysisRepository } from '@/entities/courseAnalysis/repository'
 import type { Topic } from '@/entities/courseAnalysis/types'
+import { plainContentLanguage } from '@/entities/user/types'
 import type { Subject } from '@/entities/project/types'
 import { ChunkRepository } from '@/entities/chunk/repository'
 import type { DocumentChunk } from '@/entities/chunk/types'
@@ -536,7 +537,7 @@ export class TutorLessonService {
     return this.visualizationService.generate({
       topicName: input.topicName,
       topicDescription: input.topicDescription || topic.description || '',
-      language: input.language,
+      language: plainContentLanguage(input.language),
       lessonContent: content,
       ...(subject ? { subject } : {}),
       ...(input.signal ? { signal: input.signal } : {}),

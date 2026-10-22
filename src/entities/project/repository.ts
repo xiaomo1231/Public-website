@@ -1,6 +1,7 @@
 import type { AppDatabase } from '@/infrastructure/db/database'
 import {
   EXAM_STYLES,
+  courseQuestionLanguage,
   normalizeLanguageTag,
   type CreateProjectInput,
   type Project,
@@ -84,6 +85,11 @@ export class ProjectRepository {
     if (patch.sigFigPolicy !== undefined) {
       if (patch.sigFigPolicy) next.sigFigPolicy = normalizeSigFigPolicy(patch.sigFigPolicy)
       else delete next.sigFigPolicy
+    }
+    if (patch.questionLanguage !== undefined) {
+      const mode = courseQuestionLanguage(patch.questionLanguage)
+      if (mode) next.questionLanguage = mode
+      else delete next.questionLanguage
     }
     if (patch.description !== undefined) next.description = patch.description.trim()
 

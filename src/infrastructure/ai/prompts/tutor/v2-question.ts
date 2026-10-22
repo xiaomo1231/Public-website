@@ -8,6 +8,7 @@
  */
 
 import type { DifficultyLevel } from '../types'
+import type { ExamLanguageKey } from '../exam-language/v1'
 import { securityFooter, untrustedContentWrapper } from '../security'
 
 export const VERSION = 'v2' as const
@@ -16,7 +17,8 @@ export interface QuestionGeneratorInput {
   topicName: string
   topicDescription: string
   difficulty: DifficultyLevel
-  language: 'zh' | 'en' | 'mixed'
+  /** `exam:<code>` (跟随考试语言) is understood by v3 only. */
+  language: 'zh' | 'en' | 'mixed' | ExamLanguageKey
   /** Up to 3 prior questions to avoid repeating. */
   avoidRepeating?: string[]
   /** Source snippets for grounding. */

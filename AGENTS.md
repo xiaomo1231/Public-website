@@ -50,8 +50,9 @@
 
 ```text
 ┌─ IndexedDB (Dexie) ─────────────┐  结构化元数据 + 学习数据 + 原始文件字节
-│                                 │  47 张表，Dexie v19
+│                                 │  52 张表，Dexie v20
 ├─ localStorage ──────────────────┤  UI 语言镜像（避免首帧语言闪烁）+ 符号键盘开合状态
+├─ sessionStorage ────────────────┤  正在走的番茄钟（本标签页，刷新后按墙钟时间续算）
 ├─ 浏览器内存 ────────────────────┤  仅当前任务文本 → 用户配置的 AI API
 └─────────────────────────────────┘
 ```
@@ -59,6 +60,7 @@
 - 原始文件字节存在 **IndexedDB 的 `documentBlobs` 表**（`bytes: ArrayBuffer`），不在 OPFS。
 - `src/infrastructure/opfs/opfs.ts` 是一个**未被接线的可选快速路径**（全项目无 import）；`Document.hasBlob` 的注释也写明「OPFS migration can come later」。不要以为文件已落 OPFS。
 - localStorage 只保存 UI 语言（`ai-learning:ui-language`）、符号键盘按模式的开合状态（`ai-learning:symbol-bar:<mode>`）与原题浮动窗口的位置 / 大小 / 字号（`ai-learning:question-window:<questionId>`），均为仅本机偏好；外观偏好（界面风格 + 明暗模式 + 配色主题）存在 `UserProfile`（IndexedDB）。
+- sessionStorage 只保存**正在走的番茄钟**（`ai-learning:pomodoro`：阶段 / 状态 / 时长 / 已计时 / 本段开始的墙钟时间 / 本轮已完成次数 / 当前专注记录 id）：每个标签页一个计时器，切换页面与刷新都保留（剩余时间按 `Date.now()` 重新计算，不靠计时累加），关闭标签页即丢弃。番茄钟设置在 `UserProfile.pomodoro`；学习时长不依赖它——每次专注开始即写入 `focusSessions`，运行中约每分钟与每次暂停写一次检查点，所以关掉标签页最多少记一分钟。
 
 ### 分层（铁律：UI 不直接碰 IndexedDB）
 
@@ -151,24 +153,26 @@ Dexie
 
 ## 4. 数据模型（按域）
 
-| 域           | 实体                                                                                                                                                                                                                                   |
-| ------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 身份/配置    | `UserProfile` `AISettingsRow` `InviteKeyRecord` `CryptoKeyRow`                                                                                                                                                                         |
-| 项目         | `Project`                                                                                                                                                                                                                              |
-| 内容         | `Document` `DocumentBlobRow` `DocumentChunk` `ProcessingJob`                                                                                                                                                                           |
-| 知识结构     | `CourseAnalysis` `Topic` `Concept` `Formula` `CourseSymbol` `Example` `CourseExercise` `Prerequisite`                                                                                                                                  |
-| 教材结构     | `CourseStructure` `CourseStructureNode`（章节唯一真相，扁平 + `parentId`）                                                                                                                                                             |
-| 教学         | `TutorLesson`（缓存课时）`TutorSession`（交互会话）`TranslationEntry`                                                                                                                                                                  |
-| 上下文       | `CourseContext`（教授教学风格、班级进度、note/lecture 关联、`questionHabits` 教授出题习惯档案）                                                                                                                                        |
-| 视觉         | `VisualSource` `VisualSourceImage` `ReferenceImage` `ReferenceImageBlobRow`（联网参考图片缓存，Dexie v14）                                                                                                                             |
-| 教授练习     | `PracticeSet` `PracticeQuestion` `PracticeAttempt`                                                                                                                                                                                     |
-| 练习         | `Question` `QuestionAttempt` `Quiz` `KnowledgeMastery`                                                                                                                                                                                 |
-| 复习         | `ReviewCard`（复习卡片 / 间隔重复，Dexie v15）                                                                                                                                                                                         |
-| 单词         | `VocabCard` `VocabBook` `VocabEntry` `VocabReview`（背单词，Dexie v16；**进度全局、不带 projectId**，课程词书带 `projectId`）                                                                                                          |
-| 作业完整讲解 | `HomeworkWalkthrough`（每份作业 × 语言一行，分部分缓存）`WalkthroughNote`（保存的划词问答，Dexie v17）；练习作业 = `HomeworkSet.kind: 'practice'` + `parentSetId`，题目带 `HomeworkQuestion.practice`（见 §6「做练习题」，未升 Dexie） |
-| 模拟问诊     | `InterviewSession`（外语课口试问诊：情景卡 + 对话 + 英语总结 + 结果，Dexie v18 `interviewSessions`）                                                                                                                                   |
-| 作答图片     | `HomeworkAnswerImage`（作业作答的手写照片 / 手写板页面，Dexie v19 `homeworkAnswerImages`）                                                                                                                                             |
-| 错误         | `Mistake`                                                                                                                                                                                                                              |
+| 域           | 实体                                                                                                                                                                                                                                                                                       |
+| ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 身份/配置    | `UserProfile` `AISettingsRow` `InviteKeyRecord` `CryptoKeyRow`                                                                                                                                                                                                                             |
+| 项目         | `Project`                                                                                                                                                                                                                                                                                  |
+| 内容         | `Document` `DocumentBlobRow` `DocumentChunk` `ProcessingJob`                                                                                                                                                                                                                               |
+| 知识结构     | `CourseAnalysis` `Topic` `Concept` `Formula` `CourseSymbol` `Example` `CourseExercise` `Prerequisite`                                                                                                                                                                                      |
+| 教材结构     | `CourseStructure` `CourseStructureNode`（章节唯一真相，扁平 + `parentId`）                                                                                                                                                                                                                 |
+| 教学         | `TutorLesson`（缓存课时）`TutorSession`（交互会话）`TranslationEntry`                                                                                                                                                                                                                      |
+| 上下文       | `CourseContext`（教授教学风格、班级进度、note/lecture 关联、`questionHabits` 教授出题习惯档案）                                                                                                                                                                                            |
+| 视觉         | `VisualSource` `VisualSourceImage` `ReferenceImage` `ReferenceImageBlobRow`（联网参考图片缓存，Dexie v14）                                                                                                                                                                                 |
+| 教授练习     | `PracticeSet` `PracticeQuestion` `PracticeAttempt`                                                                                                                                                                                                                                         |
+| 练习         | `Question` `QuestionAttempt` `Quiz` `KnowledgeMastery`                                                                                                                                                                                                                                     |
+| 复习         | `ReviewCard`（复习卡片 / 间隔重复，Dexie v15）                                                                                                                                                                                                                                             |
+| 单词         | `VocabCard` `VocabBook` `VocabEntry` `VocabReview`（背单词，Dexie v16；**进度全局、不带 projectId**，课程词书带 `projectId`）                                                                                                                                                              |
+| 作业完整讲解 | `HomeworkWalkthrough`（每份作业 × 语言一行，分部分缓存）`WalkthroughNote`（保存的划词问答，Dexie v17）；练习作业 = `HomeworkSet.kind: 'practice'` + `parentSetId`，题目带 `HomeworkQuestion.practice`（见 §6「做练习题」，未升 Dexie）                                                     |
+| 模拟问诊     | `InterviewSession`（外语课口试问诊：情景卡 + 对话 + 英语总结 + 结果，Dexie v18 `interviewSessions`）                                                                                                                                                                                       |
+| 作答图片     | `HomeworkAnswerImage`（作业作答的手写照片 / 手写板页面，Dexie v19 `homeworkAnswerImages`）                                                                                                                                                                                                 |
+| 专注记录     | `FocusSession`（番茄钟每次专注：开始 / 结束 / 计划与实际时长 / 页面类型，Dexie v20 `focusSessions`；`projectId` 可选，课程以外的时间不带）                                                                                                                                                 |
+| 学习计划     | `PlannedExam`（Dexie v20 `exams`，带 `projectId`）`StudyPlan`（`studyPlans` 全局单行 `singleton`：日历 / 权重滑块 / 排不下的报告 / AI 总结）`StudyTask`（`studyTasks`，带 `projectId` + `examId`）`DiagnosticPaper`（`diagnostics`，跨课程，各 section 带 `projectId`）；见 §6「学习计划」 |
+| 错误         | `Mistake`                                                                                                                                                                                                                                                                                  |
 
 关键约定：
 
@@ -365,7 +369,8 @@ Topic
 - **暂停出题**：出题与口试每批 / 每个考点前检查暂停；暂停或停止时已出的题即存，测验标为 `paused`（0 题也保留），行上记录续出所需（剩余计划位、分组的主题 / 知识点 / 来源 chunk id、语言与教授风格、口试待写考点）。测验首页列出「未完成」并提供「继续出题」（只补剩余计划位，沿用补题规则，完成后 `ready`）；`paused` 测验不能作答。`recoverInterruptedQuizzes` 把本页无进行中、超过 10 分钟的 `generating` 测验改为 `paused`（有计划）或 `failed`。
 - **出题分批与补题**（`QuizService.generateInBatches`）：每批最多 5 道，输出上限 = 整个解析后的上限（`AIService` 发送，不再按题数估算、不再封顶 8192）；后续批次附“避免重复”。题目按**自身题型**对应计划位（不再按位置套用计划题型，丢题不会让后面的题型错位）；未选的题型丢弃；成功请求中缺少的题最多再补 2 轮（整批失败只在 `generateWithRetry` 内重试 2 次，但在上限处截断 / 思考用完额度时不重试）；测验标题按实际题数。取材：`loadQuizCandidates` 一次读出全部候选段落，`pickQuizSnippets` 选取（主题的已校验来源分块优先，再每个知识点一段，其余在全书均匀抽取）。主题测验为单组，片段数 = clamp(题数 + 3, 8, 24)，题多时各批分到不同片段。**混合复习按主题分组**（`planGroups`）：主题数 ≤ 题数时全部主题，否则随机抽题数个主题；题目轮流分到各组，每批只拿到本批题目所属主题的知识点（每主题 ≤3）与来源段落（每主题 ≤3，不用全书填充），题目记录各自的 `topicId`。
 - **选项随机顺序**：保存前在本地打乱 `multiple_choice` / `multiple_select` / `matching` 的选项（`shared/lib/shuffle.ts`，判分按选项文字，不受影响）；AI 导师单选同样打乱。单选题若正确项长度 > 1.6 × 最长干扰项且多 ≥12 字，或选项重复，丢弃并补题。旧题不变。
-- **题目语言**（`UserProfile.questionLanguage`：`zh_terms` 默认 / `source` 跟随教材 / `en`）：测验配置里选择并保存，`QuizConfig.questionLanguage` 可覆盖；服务端缺省读用户偏好（`quizLanguage()`）。错题分析与交互导师（`InteractiveTutorPage`）用 `resolveContentLanguage()` 换算为 zh / en / 教材语言；课时阅读页仍保留自己的语言切换，不受影响。
+- **题目语言**（`UserProfile.questionLanguage`：`zh_terms` 默认 / `source` 跟随教材 / `en` / `exam` 跟随考试语言）：测验配置里选择并保存，`QuizConfig.questionLanguage` 可覆盖；服务端缺省读用户偏好（`quizLanguage()`）。错题分析与交互导师（`InteractiveTutorPage`）用 `resolveContentLanguage()` 换算为 zh / en / 教材语言；课时阅读页仍保留自己的语言切换，不受影响。
+- **每门课的语言 + 跟随考试语言（中文辅助）**：`Project.questionLanguage?`（未升 Dexie；`null` 清除 = 跟随全局）。解析统一走 `services/courseLanguage.ts` 的 `loadCourseLanguage(projectId, { override? })`：本次调用（测验配置）> 课程 > 全局 > 默认；`exam` 时用 `entities/project/examLanguage.ts` 的 `loadExamLanguage` 识别考试语言（外语课 = `targetLanguage`；否则依次看 `past_exam` → `syllabus` → 教授练习 / 作业 / 教授答案 → 全部资料，按 CJK 比例判中文、按功能词判 en / de / hu / fr / es / it）。`setCourseLanguageMode(projectId, mode | null)` 供学习计划调用；`getCourseLanguageMode` / `detectCourseExamLanguage` 供界面（`features/project/useCourseLanguage`）。**语言键** `exam:<code>`（`prompts/exam-language/v1`：`examLanguageKey` / `examLanguageOf` / `examLanguageInstruction`）沿用原有语言管道：`resolveContentLanguage(mode, material, examLanguage)`、`quizLanguage(...)`（`QuizLanguage` 类型）、`oralLanguage(...)`（考试语言优先于国际医学的英文）、`walkthroughLanguage(...)`；考试为中文或识别不出时退回原默认（zh / `zh_terms`）。接入：课时（`TutorPage` 语言菜单多一项，课程为 `exam` 时默认选中，课程语言读出前不请求课时）、交互导师、测验 / 题库 / 口试、做练习题（AI 题；本地线代题按英文题面）、作业完整讲解（`<setId>:exam:<code>` 独立一行）、错题分析。提示词改法：在各自的语言函数里对 `exam:<code>` 走新分支（`tutor/v5-lesson`、`v3-question`、`v2-evaluate`、`v1-introduce`、`quiz-generator/v8` 的 `languageLine`、`oral-exam/v1`、`mistake-analyzer/v2`、`homework-walkthrough/v1` 的 `languageRule`、`practice-generate/v1`），**其它语言值逐字不变、未升版本**（`tests/examLanguage.test.ts` 用 v0.9.5 生成的哈希逐个核对）；缓存按语言分行（课时 `[projectId+topicId+language]`、讲解 id），所以 `exam:<code>` 是独立缓存，不让其它语言失效。图示 / 参考图片只认 zh / en / mixed，经 `plainContentLanguage` 把 `exam:*` 视为 `mixed`。界面：设置页「讲解与题目语言」（`QuestionLanguageSetting`）、课程主页「教授出题习惯」标签下 `CourseLanguagePanel`（跟随全局 / 五档 + 识别到的考试语言）、测验配置（课程有自己的档位时改的是课程档位）。
 - 题目卡片与结果页的难度显示为本地化名称（`difficultyLabelKey`），取题目自身记录的难度。设置页底部显示版本号（`APP_VERSION` 取自 `package.json`）。
 - 题目出处没有摘录时（`fillMissingExcerpts`，仅显示时补，不写回）：有 `chunkId` 显示该分块原文，否则显示该页原文并注明“未记录具体原句”。
 - 表达式判分 `infrastructure/math/expressionEvaluator.ts`：Unicode 归一 → mathjs 解析 → 符号化简 `simplify(lhs-rhs)===0` → 16 点数值采样 → 去 `+C` → 返回 `true|false|null`。`null` 显示「无法自动判定」且**不计入成绩**。判分不依赖 AI，可复现。
@@ -411,11 +416,16 @@ Topic
 ### 背单词（`/vocab`）
 
 - **数据**：`scripts/build-vocab.mjs` 从 [ECDICT](https://github.com/skywind3000/ECDICT)（MIT）下载到 `.cache/ecdict/`（已 gitignore），生成 `public/vocab/{dictionary.json, common.json, roots.json, LICENSE-ECDICT.txt}`。`dictionary.json` 只保留带考试标签的 14,912 词，每词 `[word, phonetic, meanings[], mask, rank, exchange]`，按词频排序；`mask` 位序 = `TAG_ORDER`（`zk gk cet4 cet6 ky toefl ielts gre`）；释义去掉 `[网络]` / `[计]` 义项（含 `art. [计] …` 写法）。`common.json` = 词频前 6000 及其变形（课程词汇跳过它们）。重跑脚本即可重建；运行时由 `infrastructure/vocab/wordData.ts` fetch。**不要**改用 qwerty-learner / TypeWords（GPL）、Earthworm（AGPL）或无许可证的词表。
-- **调度**：`ts-fsrs`（FSRS-6，`request_retention 0.9`、fuzz、最长 1825 天），`entities/vocab/schedule.ts`。**现有复习卡片 `ReviewCard` 仍是 SM-2，未迁移。**
+- **调度**：`ts-fsrs`（FSRS-6，`request_retention 0.9`、fuzz、最长 365 天 `MAX_INTERVAL_DAYS`；学习步 1 / 10 分钟、重学 10 分钟为 ts-fsrs 默认），`entities/vocab/schedule.ts`。评分一律走 `scheduleVocabCard(card, rating, now, { recent, examAt })`（预览 `previewVocabIntervals` 同规则）：FSRS 之后再加 ① **新词封顶**：第 1 / 2 / 3 次复习后间隔 ≤ 1 / 3 / 7 天（`YOUNG_INTERVAL_DAYS`，评一次的词绝不会消失一周）；② **顽固词**（`VocabCard.leech` / `leechStreak` / `leechAt`，可选字段未升 Dexie）：`detectLeech` = lapses ≥ 3 或最近 4–6 次评分中「忘了」≥ 50%（`recent` 取 `vocabReviews` 按 word 索引）；顽固词间隔 ≤ 1 / 2 / 3 天（随连续答对数），连续答对 3 次（`LEECH_RELEASE_STREAK`）取消；③ **考前一周**：这门课词书里的词、课程有将来的考试（读学习计划的 `exams` 表，`projectId` + `at`，表不存在则跳过），下次复习落在考试之后时提前到考前第 7 天（`examWeekDue`）；考前最后一周、上次复习在该周之前且到期日在考后的卡也算今日到期（`dueForExamWeek`，`session` / `stats` / `planDailyLoad` 都计入）。**现有复习卡片 `ReviewCard` 仍是 SM-2，未迁移。**
+- **会话内强化**（`entities/vocab/session.ts` `requeueAfterRating`，`StudySession` 使用）：普通词忘了 → 队尾以认读再出现（≤2 次）；顽固词评「忘了 / 模糊」→ 隔 `LEECH_GAP` = 2 个词就再出现，最多 3 次，题型轮换 认读 → 拼写 → 原句填空 → 听写（不可用时按原规则退回拼写）。顽固词带「顽固词」标记，认读时先显示原句，揭晓后有词根提示；`auto` 模式下顽固词从认读开始；今日队列把顽固词排在复习最前。
+- **下次复习显示**：`VocabService.schedules(words, language)`（一次读全部卡片）→ 词表每个已学词下显示「下次复习：x 天后 / 日期」+ 顽固词 + 查过次数 / 考卷次数（`WordScheduleLine`）；学习会话每次评分后显示「词 — 下次复习：…」（`formatNextReview`）。统计页新增「顽固词」数。
+- **学习计划接口**：`VocabService.planDailyLoad(projectId?, now?)` → `{ due, new, estimatedMinutes }`（复习 10 s / 新词 25 s 估算）；带课程时只算该课程词书（到期 = 词书里到期的词，新词 = 未学条目与今日剩余新词额度取小），不带时同今日队列（当前词书）。
 - **表（Dexie v16）**：`vocabCards`（主键 `word`，**全局进度**，跨课程共享——`projectId` 原则的唯一例外）、`vocabBooks`（`custom` 导入词表 / `course` 课程词书，后者带 `projectId`）、`vocabEntries`（词书条目，含释义来源 `glossBy: dictionary | ai | user | none`、原句 `context`、出现次数）、`vocabReviews`（评分日志，供连续天数与统计）。考试词书不入库，由词典按标签生成（`exam:<tag>`，推荐 `exam:cet4`）。删除词书 / 删除项目只删词书与条目，**不删单词进度**。纳入导出。
 - **设置**（`UserProfile`）：`vocabBookId` / `vocabDailyNew`（默认 20，上限 200）/ `vocabReviewMode`（`auto | recognize | spell | dictation | cloze`）。
 - **今日队列**（`VocabService.session`）：到期复习在前（上限 200），再补新词至 `dailyNew − 今日已学新词`。`auto` 复习方式：学习中或 `reps < 2` → 认读；否则按 `reps % 3` 轮换 拼写 / 填空 / 听写，无可挖空原句时填空退回拼写。打字题本地判分：对 → 记得(3)，差一个字母 → 模糊(2)，错 → 忘了(1) 并计入易错词；忘了的词本轮以认读再出现（最多 2 次）。
-- **课程词汇**（`CourseVocabService.extract`）：读项目已处理分块，本地抽词（`extractCourseTerms`：≥4 字母、去停用词、复数并入单数），跳过常用词与中考 / 高考 / 四级词，取前 150 个，保留首次出现的原句 + 页码 + 文档名；词典查不到的由 `vocab-gloss/v1` 每批 40 个补释义（AI 判定不是词则丢弃），未配置 AI 时保留未释义条目、之后可再补；每个项目一本课程词书，重复提取只合并不重复。
+- **课程词汇**（`CourseVocabService.extract`）：读项目已处理分块，本地抽词（`extractCourseTerms`：≥4 字母、去停用词、复数并入单数），跳过常用词与中考 / 高考 / 四级词，取前 150 个，保留首次出现的原句 + 页码 + 文档名；词典查不到的由 `vocab-gloss/v1` 每批 40 个补释义（AI 判定不是词则丢弃），未配置 AI 时保留未释义条目、之后可再补；每个项目一本课程词书，重复提取只合并不重复。课程词书排序 `courseEntryPriority` = 查词次数 × 10 + 考卷出现次数 × 3 + 资料出现次数。`VocabEntry` 新增可选 `origin`（material / lookup / exam）、`lookups`、`lastLookedUpAt`、`examOccurrences`。
+- **查词自动入词书**（`CourseVocabService.recordLookup`，`features/vocab/recordLookup.ts` 懒加载后调用，失败只记日志）：`SelectionTranslator` 翻译成功（目标为中文时译文作释义）与「解释」（弹窗与作业讲解浮动窗口）都记录；`lookupTermOf` 只收 ≤4 词 / ≤48 字、非中文、非公式的词或短语，`sentenceWith` 从段落取含该词的句子（≤280 字）作 `context`（`documentName` = 讲解 / 课时 / 小节标题）。按 `wordKey` 去重（英文单词按词典还原词形；非英语词书不区分大小写匹配），重复查询 `lookups + 1`；已在背的词（卡片到期 > 明天）提前到明天。课程词书不存在时新建（语言 = 课程目标语言）。不调用 AI、不建 VocabCard（进度仍全局）。
+- **考卷高频术语**（`CourseVocabService.extractExamTerms(projectId, { control, documentIds?, onProgress })`，背单词「课程词汇」的「从考卷提取高频术语」）：读 `past_exam` / `syllabus` / `professor_practice`（或指定文档）的分块，`planExamTermParts` 切成 ≤8000 字的部分，经共享 AI 池（`createAdaptivePool` + `aiConcurrency`，限流退避、账号类错误停止）逐部分调 `exam-terms/v1`（考试语言名、`[c:<id>]` 闭集分块、≤40 个术语 + 中文释义，`untrustedContentWrapper` + `securityFooter`，不缓存）。`validateExamTerms`：须是词或短语且在所标分块中按整词逐字出现（不区分大小写），例句取自原文；次数 `countOccurrences` 在全部考卷文字上本地统计。每部分完成即合并入课程词书（新增 `origin: 'exam'`，已有条目更新 `examOccurrences`、空释义补上）；已读部分按 课程 + 部分文字哈希 存模块内存，暂停 / 停止后「继续」只读剩余部分，刷新后重新读。
 - **导出**（`formatExport`）：Anki（`#separator:tab` / `#html:true` / `#tags column:3`，背面音标 + 释义 + 例句）、CSV（带 BOM，`word,phonetic,meaning,example,source`）、纯单词 TXT；可导出任意词书 / 已学 / 易错词。导入：`parseWordList`（每行单词，或 制表符 / 逗号 / 冒号 / 空格+中文 分隔的释义）。
 - **非英语词书**（`VocabBook.language`，缺省为英语）：导入时可选语言；课程词书取项目目标语言。非英语词书不查 ECDICT、不做常用词 / 四级过滤、不做英语词形还原与词根提示，释义由用户或 `vocab-gloss/v2`（带 `targetLanguage`；英语时与 v1 逐字相同）提供；保留单词大小写（`wordKey`：英语照旧小写，已有进度不受影响）。分词、词表解析一律按 Unicode 字母（`\p{L}`），抽词前去掉在一半以上页面重复的页眉页脚行。
 - **目标语言判分**（`shared/lib/language.ts` `compareTargetText` → `exact / accent / case / variant / wrong`）：非英语词书的拼写题只差重音、大小写或德语 ß↔ss / ä↔ae 时评为「模糊」(2) 并提示正确写法；语言课测验填空同样情况计 0.5 分并提示，且不送 AI 等价核对。朗读 `speak(text, lang)` 按语言选语音，本机没有该语言语音时听写退回拼写并提示。符号键盘新增德语（ä ö ü ß „ “）与匈牙利语（á é í ó ö ő ú ü ű）组，按项目目标语言排在最前（`LetterBar` 也用于单词拼写与填空）。
@@ -546,29 +556,46 @@ Topic
   - **识别准确性**：`parsingSummary`（整份作业，含回归用例）—— 题数、已核对数、需要修改的题数与按错误类型的计数（来自校对 `edits`）。
 - **记录**（`entities/evaluation/types.ts`）：`EvaluationRecord { id, setId, startedAt, finishedAt?, status, model, promptVersions, abilities, roles, items[{ questionId, label, role, solve?, aligned?, grading? }], parsing }` 存在 `HomeworkSet.evaluations`（最新在前，≤10 条；只存计数与短文本，**不新增表、不升 Dexie**，随作业导出 / 删除）。`summarizeEvaluation` 按用途分组（开发集 / 独立检验 / 回归 / 未指定**绝不合并**），每项显示 n；独立检验组标「不要据此调整规则」，逐题结果默认折叠。导出 Markdown（`evaluationMarkdown`，含说明「与教授答案对照只是辅助，最终正误需要懂这门课的人判断；样本小不能代表整门课」）或 JSON（记录本身）。
 
+### 学习计划（`/plan`，课程主页 `?tab=plan`）
+
+- **数据**（Dexie **v20**，与专注记录共用同一个 `version(20)` 块）：`exams`（`PlannedExam { projectId, name, at, scope: course | syllabus{documentId, scopeId} | topics{topicIds}, materials{pastExamSetIds, reviewDocumentIds, practiceSetIds, homeworkSetIds} }`，索引 `id, projectId, at`）、`studyPlans`（全局单行：`calendar { minutes{class, weekend, holiday, off}, weekly[7]（按 `Date.getDay()`）, overrides{YYYY-MM-DD: {type, minutes?}} }`、`weights{examId: {share, locked}}`、`overflow`、`summary`、`lastPlannedAt`）、`studyTasks`（`StudyTask { projectId, examId, date, kind, topicId?, topicNames?, refId?, minutes, order, status: pending|done|skipped, pinned? }`，索引 `id, projectId, examId, date, status, [projectId+date]`）、`diagnostics`（`DiagnosticPaper`）。仓库 `entities/studyPlan/repository.ts`；四表纳入 `EXPORTED_TABLES`；删除课程时 `StudyPlanRepository.deleteByProject` 删该课的考试与任务、去掉摸底卷中该课的 section（空卷删除）与该课考试的权重。
+- **纯函数**（`entities/studyPlan/`，无 AI，有测试）：`calendar.ts`（本地日期键、日类型与分钟，`normalizeCalendar`）、`weights.ts`（`suggestWeights`：紧迫度 1/√剩余天数 × (1.15 − 有效掌握度) × 主题数 × 难度，模拟考试结果与练习掌握度各占一半；`roundToTotal` 最大余数取整，合计 100；`rebalanceShares` 拖动一个滑块时未锁定的按比例调整；`effectiveShares` 合并保存的滑块；`examDifficulty` 由往年试卷计算 / 证明题比例与主题数估计；理由 `WeightReason` 由界面译成大白话）、`scheduler.ts`（`buildSchedule`，见下）、`tasks.ts`（`reconcileTasks` / `pinnedMinutes` / `topicProgress` / `handledMaterials`）、`countdown.ts`（`countdownParts` / `countdownUrgency` calm >14 天、soon 8–14、near 4–7、final ≤3 / `nearestExam` / `hidesCountdown`）。
+- **调度**（`buildSchedule`）：每天绝不超过日历分钟（已完成与学生移动过的任务先占用）。主题优先级 = 往年试卷分值占比 × (1 − 掌握度) + 0.1 × 未解决错题（≤5）+ 0.2 × 出题习惯强调（习惯条目文字本地匹配到的主题）；分值未知时均分。顺序：① 先放教授模拟卷（T−14 / T−7 附近 ±3 天，更多卷 T−10 / T−4…）与 AI 模拟卷占位（T−5，`ai_mock`，链接到摸底卷，第四阶段再做）；② 第一个学习日放到期的错题复测 / 复习卡片 / 背单词（语言课）；③ 考前 3 天（`FINAL_DAYS`）只排薄弱点（最弱 3 个主题）与错题，不学新内容，未学完的主题此时记为排不下；④ 间隔复习（第一轮后 +1 / +3 / +7 天，没空则顺延）；⑤ 第一轮学习按考试权重 × 临近系数（≤7 天 1.4、≤3 天 2）分配当天时间，弱的先学（放不下时可取后两个中能放下的），所选作业 / 教授练习夹在主题之间；⑥ 已掌握且已确认（估计 ≥0.85 且 ≥5 次作答）的主题不重学，只在有空时复习一次；⑦ 每个有主题任务的学习日以 5–10 分钟收尾练习（当日主题）结束。排不下的项目与建议（每天加多少分钟 / 动用「不学」日 / 降低某场考试占比 / 跳过已练得较好的主题）存在 `StudyPlan.overflow`。
+- **重新安排**（`StudyPlanService.replan`，打开今天视图时若上次安排不是今天或已超过 5 分钟就重排；标记完成 / 跳过 / 移动后、改考试 / 日历 / 权重后也重排）：已完成 / 跳过的任务保留（据此得出各主题第一轮日期与已做复习数），学生移动过的任务（`pinned`）留在该日，其余待办按新结果替换（同一考试 + 类型 + 主题 / 资料 + 日期的待办沿用原 id），未完成的自然顺延。模拟考试在考试创建后交卷即算完成；其最近一次已检查成绩进入权重；测验 / 练习 / 模拟考试 / 摸底卷更新掌握度后，下次重排自动改变顺序与权重。
+- **任务链接**（`widgets/studyPlan/taskLinks.ts`）：学习 → 课时；复习与收尾练习 → 测验（`?topic=` 预选主题，`QuizConfigDialog` 读取）；薄弱点 → 掌握度；错题 → 错题本；卡片 → 复习卡片；单词 → `/vocab`；模拟考试 → `/homework/:setId/exam`；作业 → 引导练习；教授练习 → 练习页；AI 模拟卷 → 摸底卷。
+- **今天 / 倒计时**：`TodayPanel`（全局与课程）显示任务、已完成 / 已计划 / 可用分钟与番茄钟专注分钟（`FocusService.totalsByCourse(lastDaysRange(1))`）、完成 / 跳过 / 改日期 / 撤销。`CountdownBar` 在 `AppShell` 顶栏下（各页包括主页）显示最近一场考试「名称 · 课程 · 还有 x 天 y 小时」，颜色随紧迫度（主题 token，near 用 amber 状态色，最后 3 天加粗 + 描边），点击到考试列表；`useExamActive()`（番茄钟的考试声明）或 `hidesCountdown`（模拟考试、测验作答、问诊会话、自测、设置页）时隐藏。时间线（`StudyPlanService.timeline`）按周显示每日已排 / 可用分钟与各考试阶段（第一轮 / 模拟考试 / 冲刺 / 考试周），以及每个主题的第一轮、复习次数、掌握度估计与近 4 周练习趋势。
+- **摸底卷**（`services/diagnosticService.ts`）：`proposeSection` 按本地规则建议每门课题数（每主题约 2 道，4–15）与作答时间（每题 2.5 分钟），学生可改；`estimateDiagnostic` 在生成前显示请求数与 token 估计。生成前 `preflight`：已配置 AI、各课程分析已就绪、`testConnection()` 成功，否则不发任何请求。每门课按主题拆成 ≤5 题的条目（`planItems`），每条一次 `QuizService.generateQuiz`（`mode: 'topic'` 或考点清单的 `examScope.examTopicId`，难度 `intermediate`，题型为课程默认），沿用测验的分批、本地校验、选项打乱与来源标注；条目经 `createAdaptivePool`（同时进行的 AI 请求数，429 减半）并行，每条完成即存（`DiagnosticItem.status/quizId`），可暂停 / 立即停止 / 继续（暂停的条目用 `continueQuiz` 续出），失败条目单独重试，额度 / 鉴权错误停止调度；关闭页面留下的 `generating` 条目由 `recoverInterrupted` 恢复。一门课的条目全部完成后合并为一份普通测验（标题「摸底卷 · …」，条目测验行删除），在测验页作答（不显示倒计时），也可「先做已出好的部分」。结果为每门课得分与各知识点得分（估计值），作答本身经测验流程计入掌握度。
+- **AI 总结（可选）**：`study-plan-summary/v1`（`PlanSummaryService`，一次请求、整个输出上限、可停止）：只发考试名、课程名、剩余天数、占比、掌握度估计、可能需要复习的主题与排不下的项目（名称用 `untrustedContentWrapper`），不发课程资料；结果存 `StudyPlan.summary`。
+- **未做**：AI 模拟卷（第四阶段，只排占位任务）；摸底卷的题数建议为本地规则，不调用 AI；复习资料（`reviewDocumentIds`）目前只记录选择，不单独排任务。
+
 ### 作业题目的知识点与考试范围（本地）
 
 - `entities/homework/questionMeta.ts`：课程主题名的词（`matchTokens`）在题目中出现 ≥60% 即为知识点（≤3 个）；考点清单中覆盖这些主题（`topicIds`）或自身词 ≥60% 出现在题目中的考点为考试范围（≤3 个，链接到考点清单）。`HomeworkProofreadService.refreshMeta(setId)` 在作业页加载时运行，按 `fingerprint`（题目 + 主题 + 大纲编辑时间）只重写变化的行；独立检验的大纲文件不参与。题头 `QuestionMetaLine` 显示知识点、考试范围、已核对与检验用途。不调用 AI。
 
 ## 7. 路由与目录
 
-| 路由                                           | 页面                           |
-| ---------------------------------------------- | ------------------------------ |
-| `/login` `/invite`                             | 邀请码门（本地校验）           |
-| `/dashboard`                                   | 总览                           |
-| `/projects` `/projects/:id`                    | 项目列表 / 详情                |
-| `/projects/:id/tutor/:topicId`                 | **课时页**（阅读，缓存）       |
-| `/projects/:id/tutor/:topicId/interactive`     | **交互导师**（提问/作答/提示） |
-| `/projects/:id/history`                        | 对话记录                       |
-| `/projects/:id/quiz` `/quiz/:quizId` `/result` | 测验                           |
-| `/projects/:id/mastery` `/mistakes`            | 掌握度 / 错题本                |
-| `/projects/:id/cards`                          | 复习卡片（间隔重复）           |
-| `/projects/:id/interview` `/interview/:sid`    | 模拟问诊（仅外语课）           |
-| `/vocab`                                       | 背单词（全局，侧栏「单词」）   |
-| `/projects/:id/documents/:did`                 | 文档详情                       |
-| `/settings`                                    | AI 设置 / 数据管理             |
+| 路由                                                               | 页面                                                                |
+| ------------------------------------------------------------------ | ------------------------------------------------------------------- |
+| `/login` `/invite`                                                 | 邀请码门（本地校验）                                                |
+| `/dashboard`                                                       | 总览                                                                |
+| `/projects` `/projects/:id`                                        | 项目列表 / 详情                                                     |
+| `/projects/:id/tutor/:topicId`                                     | **课时页**（阅读，缓存）                                            |
+| `/projects/:id/tutor/:topicId/interactive`                         | **交互导师**（提问/作答/提示）                                      |
+| `/projects/:id/history`                                            | 对话记录                                                            |
+| `/projects/:id/quiz` `/quiz/:quizId` `/result`                     | 测验                                                                |
+| `/projects/:id/mastery` `/mistakes`                                | 掌握度 / 错题本                                                     |
+| `/projects/:id/cards`                                              | 复习卡片（间隔重复）                                                |
+| `/projects/:id/interview` `/interview/:sid`                        | 模拟问诊（仅外语课）                                                |
+| `/vocab`                                                           | 背单词（全局，侧栏「单词」）                                        |
+| `/plan`（`?tab=today/timeline/exams/calendar/weights/diagnostic`） | 学习计划（全局，导航「学习计划」）；课程主页 `?tab=plan` 为本课切片 |
+| `/projects/:id/documents/:did`                                     | 文档详情                                                            |
+| `/settings`                                                        | AI 设置 / 数据管理 / 番茄钟                                         |
 
 响应式（课时页）：**讲义风格** ≥1200px 为「页边目录（sticky）| ~680px 阅读栏 | 旁注（公式符号等，sticky）」三列，<1200px 目录在课时上方、旁注收进课时下方的折叠区；**精密实验室风格** 为一个细线面板，≥lg「目录 | 正文」，≥xl 再加右侧检查栏（248px），更窄时同样收进折叠区。旧的底部 Sheet 公式面板已移除。只做电脑与平板布局。
+
+**专注子页面**（`features/focus/focusRoutes.ts` 的 `focusRouteOf` / `isFocusPath`，唯一判定处）：作业详情 `/homework/:assignmentId`（含做题 / 复习 / 引导练习 / 完整讲解 / 校对 / 自测 / 检验）、模拟考试 `/homework/:id/exam`、测验作答 `/quiz/:quizId`、课时 `/tutor/:topicId`（不带 topicId 的 `/tutor` 不算）、交互导师、问诊会话 `/interview/:sessionId`。这些页面不显示课程二级导航（`ProjectFlowNav`），改用 `widgets/focus/FocusPageHeader`：一行「← 作业 / HW4.pdf · 8 道题」+ 页面自己的工具栏（返回链接在自己的 `nav` 地标里，`#main-content` 跳转链接不变；模拟考试作答中不给返回）；页面里重复的大标题 / 说明已去掉（测验说明、模拟考试副标题、交互导师副标题）。精密实验室风格下 `AppShell` 把编号侧栏换成 `SidebarRail`（56px 图标条，标签留给读屏；鼠标悬停、键盘焦点进入或点按顶部开关时覆盖展开为完整侧栏，Esc 收起；用户手动收起侧栏时仍为收起）。回到列表页即恢复完整导航。
+
+**番茄钟**（全局，`AppShell` 内 `usePomodoroRuntime()` + `widgets/focus/PomodoroDock`）：≥lg 是页面最左侧独立的 48px 一列（占位，不遮挡内容），更窄时是左下角 44px 圆钮；点开为非模态面板（开始 / 暂停 / 继续 / 跳过 / 重置、本轮第几次、时长快速修改、「学习时长」链接），Esc / 点外部关闭并归还焦点。纯状态机 `entities/focus/pomodoro.ts`（墙钟计时；默认 25 / 5 / 15 分钟、每 4 次长休息，`normalizePomodoroSettings` 夹取范围），运行状态见 §3 sessionStorage，设置在 `UserProfile.pomodoro`（设置页「番茄钟」卡片：时长、显示、提示音（Web Audio，默认关）、休息时调暗屏幕（默认关，`pointer-events: none`））。阶段结束：toast + 可选提示音，下一阶段等学生点开始。**考试中不显示也不提醒**：`useExamMode(active)`（`features/focus/examMode.ts`）由自测、口试测验、考试模式且未评分的问诊声明，模拟考试按地址识别；进入考试时正在走的计时器**自动暂停**（`autoPaused`，计入的时间写检查点），离开后提示「考试期间番茄钟已暂停」，由学生决定继续（考试时间不算作番茄专注，也不会在考试中弹窗）。每次专注写 `focusSessions`（`FocusService.start / checkpoint / finish`，跳过或重置不足 1 秒的记录删除）；`FocusService.listByDay(range)` / `totalsByCourse(range)` / `totalMs(range)` 按开始时间所在的本地日期统计（供学习计划读取今日学习时长），设置页「学习时长」卡片（`#focus-stats`）显示最近 14 天每日与按课程合计。`focusSessions` 纳入导出 / 恢复，删除课程时删除该课程的记录，课程以外的记录保留。
 
 ```text
 src/

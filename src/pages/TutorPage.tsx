@@ -37,6 +37,7 @@ import {
 } from '@/widgets/tutor/lessonStyle'
 import { CourseStructurePanel } from '@/widgets/courseStructure/CourseStructurePanel'
 import { ProjectFlowNav } from '@/widgets/project/ProjectFlowNav'
+import { FocusPageHeader } from '@/widgets/focus/FocusPageHeader'
 import { StudyModeTabs } from '@/widgets/slides/StudyModeTabs'
 import { useProjectTopics } from '@/features/tutor/useProjectTopics'
 import { useTutorLesson } from '@/features/tutor/useTutorLesson'
@@ -46,12 +47,22 @@ import { useCourseContext } from '@/features/tutor/useCourseContext'
 import { useSlideDocuments } from '@/features/slides/useSlideDocuments'
 import type { CourseStructureNode } from '@/entities/courseStructure/types'
 import { useTranslation, type TranslationKey } from '@/i18n'
+import { examModeKey, type ContentLanguage } from '@/entities/user/types'
+import type { ExamLanguageKey } from '@/infrastructure/ai/prompts/exam-language/v1'
+import { useCourseLanguage } from '@/features/project/useCourseLanguage'
 
-const LANGUAGES: Array<{ value: 'zh' | 'en' | 'mixed'; labelKey: TranslationKey }> = [
+const LANGUAGES: Array<{ value: ContentLanguage; labelKey: TranslationKey }> = [
   { value: 'en', labelKey: 'language.en' },
   { value: 'zh', labelKey: 'language.zh' },
   { value: 'mixed', labelKey: 'language.bilingual' },
 ]
+
+/** The lesson languages offered: 跟随考试语言 too when the course's exam language is known. */
+function languagesFor(examKey: ExamLanguageKey | null) {
+  return examKey
+    ? [...LANGUAGES, { value: examKey, labelKey: 'questionLanguage.exam' as TranslationKey }]
+    : LANGUAGES
+}
 
 /**
  * The Topic page: the AI tutor's *teaching material*.
@@ -75,7 +86,12 @@ export function TutorPage(): JSX.Element {
   const [activeTopicId, setActiveTopicId] = useState<string | undefined>(topicId)
   /** When set, only topics inside this chapter/section are shown. */
   const [structureFilter, setStructureFilter] = useState<CourseStructureNode | null>(null)
-  const [language, setLanguage] = useState<'zh' | 'en' | 'mixed'>('en')
+  const [language, setLanguage] = useState<ContentLanguage>('en')
+  // 跟随考试语言: offered (and chosen by default) when the course uses it.
+  const courseLanguage = useCourseLanguage(projectId)
+  const examKey = examModeKey('exam', courseLanguage.examLanguage)
+  const defaultExam = courseLanguage.mode === 'exam' ? examKey : null
+  const languages = languagesFor(examKey)
   /*
    * Narrower than the side-column breakpoint (iPad portrait; lecture also on
    * iPad landscape) the contents fold into a toggle above the lesson, so the
@@ -91,8 +107,9 @@ export function TutorPage(): JSX.Element {
   }, [topicId])
 
   useEffect(() => {
-    if (analysis?.language) setLanguage(analysis.language)
-  }, [analysis?.language])
+    if (defaultExam) setLanguage(defaultExam)
+    else if (analysis?.language) setLanguage(analysis.language)
+  }, [analysis?.language, defaultExam])
 
   const visibleTopics = structureFilter
     ? topics.filter((topic) =>
@@ -109,7 +126,9 @@ export function TutorPage(): JSX.Element {
 
   const lessonState = useTutorLesson({
     projectId: projectId ?? '',
-    topicId: activeTopic?.id ?? '',
+    // Wait for the course's language mode, so a lesson is not requested in
+    // the textbook language just before switching to the exam language.
+    topicId: courseLanguage.loaded ? (activeTopic?.id ?? '') : '',
     topicName: activeTopic?.name ?? '',
     topicDescription: activeTopic?.description ?? '',
     language,
@@ -171,45 +190,58 @@ export function TutorPage(): JSX.Element {
     ...(classProgress?.currentTopicId ? [classProgress.currentTopicId] : []),
   ])
 
+  const toolbar = (
+    <div className="flex flex-wrap items-center gap-2">
+      {studyMode}
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button variant="outline" size="sm">
+            <Languages className="h-4 w-4" />
+            {t(languages.find((l) => l.value === language)?.labelKey ?? 'language.en')}
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end">
+          <DropdownMenuLabel>{t('tutor.teachingLanguage')}</DropdownMenuLabel>
+          <DropdownMenuSeparator />
+          {languages.map((l) => (
+            <DropdownMenuItem key={l.value} onSelect={() => setLanguage(l.value)}>
+              {t(l.labelKey)}
+            </DropdownMenuItem>
+          ))}
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </div>
+  )
+
   return (
     <PageContainer>
-      <PageHeader
-        title={
-          <div className="flex items-center gap-2">
-            <Button asChild variant="ghost" size="icon" aria-label={t('tutor.backToProject')}>
-              <Link to={`/projects/${projectId}`}>
-                <ArrowLeft className="h-4 w-4" />
-              </Link>
-            </Button>
-            <GraduationCap className="h-4 w-4" />
-            {t('tutor.title')}
-          </div>
-        }
-        description={t('tutor.subtitle')}
-        nav={<ProjectFlowNav projectId={projectId} active="tutor" />}
-        actions={
-          <div className="flex flex-wrap items-center gap-2">
-            {studyMode}
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="outline" size="sm">
-                  <Languages className="h-4 w-4" />
-                  {t(LANGUAGES.find((l) => l.value === language)?.labelKey ?? 'language.en')}
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuLabel>{t('tutor.teachingLanguage')}</DropdownMenuLabel>
-                <DropdownMenuSeparator />
-                {LANGUAGES.map((l) => (
-                  <DropdownMenuItem key={l.value} onSelect={() => setLanguage(l.value)}>
-                    {t(l.labelKey)}
-                  </DropdownMenuItem>
-                ))}
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </div>
-        }
-      />
+      {topicId ? (
+        // 专注子页面 (a lesson being read): back header instead of the course navigation.
+        <FocusPageHeader
+          backTo={`/projects/${projectId}`}
+          backLabel={t('projectNav.home')}
+          title={activeTopic?.name ?? t('tutor.title')}
+          meta={t('tutor.title')}
+          actions={toolbar}
+        />
+      ) : (
+        <PageHeader
+          title={
+            <div className="flex items-center gap-2">
+              <Button asChild variant="ghost" size="icon" aria-label={t('tutor.backToProject')}>
+                <Link to={`/projects/${projectId}`}>
+                  <ArrowLeft className="h-4 w-4" />
+                </Link>
+              </Button>
+              <GraduationCap className="h-4 w-4" />
+              {t('tutor.title')}
+            </div>
+          }
+          description={t('tutor.subtitle')}
+          nav={<ProjectFlowNav projectId={projectId} active="tutor" />}
+          actions={toolbar}
+        />
+      )}
       <PageContent>
         {/* Lab: an instrument readout above the panel. Only figures the page
           already holds — no mastery estimate is loaded here, so none is shown. */}

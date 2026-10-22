@@ -8,6 +8,7 @@
 
 import type { MistakeType, SimilarExample } from '@/entities/mistake/types'
 import { securityFooter, untrustedContentWrapper } from '../security'
+import { examLanguageInstruction, examLanguageOf, type ExamLanguageKey } from '../exam-language/v1'
 
 export const VERSION = 'v2' as const
 export const PROMPT_KIND = 'mistake-analyzer' as const
@@ -19,7 +20,8 @@ export interface MistakeAnalyzerInput {
   solution?: string
   knowledgePoint?: string
   difficulty?: string
-  language: 'zh' | 'en' | 'mixed'
+  /** `exam:<code>`: 跟随考试语言 (any other value: the prompt is unchanged). */
+  language: 'zh' | 'en' | 'mixed' | ExamLanguageKey
   /** Relevant source snippets for grounding. */
   sourceSnippets?: string[]
   /** Prior mistakes on the same knowledge point, to spot patterns. */
@@ -93,13 +95,16 @@ export function buildUserPrompt(input: MistakeAnalyzerInput): string {
   if (input.solution) lines.push(`Reference solution: ${input.solution}`)
   if (input.knowledgePoint) lines.push(`Knowledge point: ${input.knowledgePoint}`)
   if (input.difficulty) lines.push(`Difficulty: ${input.difficulty}`)
+  const exam = examLanguageOf(input.language)
   lines.push(
     `Respond in: ${
-      input.language === 'zh'
-        ? 'Simplified Chinese'
-        : input.language === 'en'
-          ? 'English'
-          : 'English with key Chinese terms in parentheses'
+      exam
+        ? examLanguageInstruction(exam)
+        : input.language === 'zh'
+          ? 'Simplified Chinese'
+          : input.language === 'en'
+            ? 'English'
+            : 'English with key Chinese terms in parentheses'
     }.`,
   )
   if (input.sourceSnippets?.length) {

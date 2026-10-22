@@ -1,6 +1,7 @@
 import type { AppDatabase } from '@/infrastructure/db/database'
 import { getDb } from '@/infrastructure/db/database'
 import { TutorSessionRepository } from '@/entities/tutorSession/repository'
+import type { ContentLanguage } from '@/entities/user/types'
 import { CourseAnalysisRepository } from '@/entities/courseAnalysis/repository'
 import { ChunkRepository } from '@/entities/chunk/repository'
 import { collectTopicSources, formatTopicSources } from './topicSources'
@@ -59,7 +60,7 @@ export interface TutorStartInput {
   topicId: string
   topicName: string
   topicDescription: string
-  language: 'zh' | 'en' | 'mixed'
+  language: ContentLanguage
   difficulty?: DifficultyLevel
   signal?: AbortSignal
 }

@@ -13,13 +13,19 @@
  */
 
 import { securityFooter, untrustedContentWrapper } from '../security'
+import { examLanguageInstruction, examLanguageOf, type ExamLanguageKey } from '../exam-language/v1'
 
 export const VERSION = 'v5' as const
 
 export interface LessonInput {
   topicName: string
   topicDescription: string
-  language: 'zh' | 'en' | 'mixed'
+  /**
+   * `exam:<code>`: 跟随考试语言. Any other value gives the prompt word for
+   * word as before; the lesson cache keys the language, so this mode is cached
+   * as a language of its own and other lessons are not invalidated.
+   */
+  language: 'zh' | 'en' | 'mixed' | ExamLanguageKey
   /** Primary course material (textbook), already trimmed. */
   sourceSnippets: string[]
   /** Supplementary learner notes, matched to this topic. */
@@ -123,8 +129,10 @@ export function buildSystemPrompt(): string {
 }
 
 export function buildUserPrompt(input: LessonInput): string {
-  const language =
-    input.language === 'zh'
+  const exam = examLanguageOf(input.language)
+  const language = exam
+    ? examLanguageInstruction(exam)
+    : input.language === 'zh'
       ? 'Simplified Chinese'
       : input.language === 'en'
         ? 'English'

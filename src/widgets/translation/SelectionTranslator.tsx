@@ -17,6 +17,7 @@ import { openPassage } from '@/features/homework/floatingQA'
 import { isTouchLike } from '@/shared/lib/pointerGesture'
 import { selectionTextWithMath } from '@/shared/lib/selectionText'
 import { RichText } from '@/shared/ui/RichText'
+import { recordVocabLookup } from '@/features/vocab/recordLookup'
 import {
   computeSelectionPopupPosition,
   isPopupAnchorVisible,
@@ -66,6 +67,13 @@ interface TranslationResult {
   translation: string
   contextNote: string
   alternatives: string[]
+}
+
+/** What was being read when a word was looked up (shown with the word in the word book). */
+function lookupSource(selection: SelectionState): { documentName?: string } {
+  const name =
+    selection.walkthrough?.setTitle ?? selection.topicTitle ?? selection.sectionHeading ?? ''
+  return name ? { documentName: name } : {}
 }
 
 /** Longest selection worth sending; beyond this the learner is told to narrow it. */
@@ -478,6 +486,14 @@ export function SelectionTranslator(): JSX.Element | null {
         contextNote: entry.contextNote,
         alternatives: entry.alternatives,
       })
+      // A looked-up word joins the course's word book (sentences are ignored).
+      recordVocabLookup({
+        projectId: currentProject.id,
+        text: selection.text,
+        surrounding: selection.surrounding,
+        ...(targetLang === 'zh' ? { meaning: entry.translation } : {}),
+        ...lookupSource(selection),
+      })
     } catch (err) {
       // Closed while translating: nothing to report.
       if (controller.signal.aborted) return
@@ -494,6 +510,15 @@ export function SelectionTranslator(): JSX.Element | null {
   // Choosing "Translate" runs it once; the AI is never called on selection alone.
   useEffect(() => {
     if (action === 'translate') void translate()
+    // "Explain" on a single term is a lookup too (popup or floating window).
+    const projectId = selection?.walkthrough?.projectId ?? selection?.projectId
+    if (action === 'explain' && selection && projectId && !selection.tooLong)
+      recordVocabLookup({
+        projectId,
+        text: selection.text,
+        surrounding: selection.surrounding,
+        ...lookupSource(selection),
+      })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [action])
 

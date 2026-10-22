@@ -6,11 +6,17 @@ import { CourseAnalysisRepository } from '@/entities/courseAnalysis/repository'
 import { ChunkRepository } from '@/entities/chunk/repository'
 import { DocumentRepository } from '@/entities/document/repository'
 import type { NewQuestionInput } from '@/entities/question/types'
-import { ORAL_MAX_TOPICS, type Quiz, type QuizConfig } from '@/entities/quiz/types'
+import {
+  ORAL_MAX_TOPICS,
+  type Quiz,
+  type QuizConfig,
+  type QuizLanguage,
+} from '@/entities/quiz/types'
 import type { SourceReference } from '@/entities/courseAnalysis/types'
 import type { SubjectContext } from '@/entities/project/types'
 import { examTopicsFor, planExamScopeEntries } from '@/entities/syllabus/examPlan'
-import { UserRepository } from '@/entities/user/repository'
+import { examModeKey } from '@/entities/user/types'
+import { loadCourseLanguage } from './courseLanguage'
 import { prompts } from '@/infrastructure/ai/prompts'
 import type { OralExamOutput } from '@/infrastructure/ai/prompts/oral-exam/v1'
 import type { DifficultyLevel } from '@/infrastructure/ai/prompts/types'
@@ -155,12 +161,19 @@ export function validateOralItem(
   }
 }
 
-/** International medicine is examined in English; otherwise the student's question language. */
+/**
+ * International medicine is examined in English; otherwise the student's
+ * question language. 跟随考试语言 wins over both (the exam language with
+ * Chinese glosses).
+ */
 export function oralLanguage(
   subject: SubjectContext | undefined,
   preference: Parameters<typeof quizLanguage>[0],
   material: 'zh' | 'en' | 'mixed',
-): 'zh' | 'en' | 'mixed' | 'zh_terms' {
+  examLanguage?: string,
+): QuizLanguage {
+  const exam = examModeKey(preference, examLanguage)
+  if (exam) return exam
   if (subject?.subject === 'medicine' && subject.examStyle === 'international') return 'en'
   return quizLanguage(preference, material)
 }
@@ -271,10 +284,11 @@ export class OralExamService {
     try {
       options.onProgress?.('collecting', 10)
       const subject = await loadProjectSubjectContext(projectId, this.db)
-      const preference =
-        config.questionLanguage ??
-        (await new UserRepository(this.db).get().catch(() => undefined))?.questionLanguage
-      const language = oralLanguage(subject, preference, analysis.language)
+      const course = await loadCourseLanguage(projectId, {
+        db: this.db,
+        ...(config.questionLanguage ? { override: config.questionLanguage } : {}),
+      })
+      const language = oralLanguage(subject, course.mode, analysis.language, course.examLanguage)
       // The drawn topics are on the row from the start, so a pause (or a
       // closed tab) keeps every topic already written up.
       const withResume: Quiz = {

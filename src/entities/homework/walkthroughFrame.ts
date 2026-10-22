@@ -99,7 +99,8 @@ const HEADINGS = {
 } as const
 
 function headings(language: WalkthroughLanguage) {
-  return language === 'en' ? HEADINGS.en : HEADINGS.zh
+  // 跟随考试语言 (`exam:<code>`) writes in a non-Chinese exam language.
+  return language === 'en' || language.startsWith('exam:') ? HEADINGS.en : HEADINGS.zh
 }
 
 function cell(value: string): string {

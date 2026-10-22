@@ -13,22 +13,29 @@ import { friendlyAIError } from '@/shared/lib/aiErrors'
 import { AppError } from '@/infrastructure/errors/AppError'
 import { t } from '@/i18n'
 import { loadProjectSubjectContext } from './projectSubject'
-import { UserRepository } from '@/entities/user/repository'
-import { resolveContentLanguage } from '@/entities/user/types'
+import { resolveContentLanguage, type ContentLanguage } from '@/entities/user/types'
+import { loadCourseLanguage } from './courseLanguage'
 
 /** Resolved lazily so it follows the current UI language. */
 const fallbackCause = (): string => t('mistakeAnalysis.fallbackCause')
 
 /** Language used when the project has no detected language. */
 const DEFAULT_LANGUAGE: AnalysisLanguage = 'en'
+const DEFAULT_MATERIAL = 'en' as const
 
-/** The student's question-language preference applied to the material's language. */
-async function contentLanguage(material: AnalysisLanguage): Promise<AnalysisLanguage> {
-  const profile = await new UserRepository().get().catch(() => undefined)
-  return resolveContentLanguage(profile?.questionLanguage, material)
+/**
+ * The course's (else the student's) question-language preference applied to
+ * the material's language; 跟随考试语言 gives `exam:<code>`.
+ */
+async function contentLanguage(
+  projectId: string,
+  material: 'zh' | 'en' | 'mixed',
+): Promise<AnalysisLanguage> {
+  const course = await loadCourseLanguage(projectId).catch(() => undefined)
+  return resolveContentLanguage(course?.mode, material, course?.examLanguage)
 }
 
-export type AnalysisLanguage = 'zh' | 'en' | 'mixed'
+export type AnalysisLanguage = ContentLanguage
 
 export interface AnalysisOptions {
   signal?: AbortSignal
@@ -92,13 +99,14 @@ export class MistakeAnalysisService {
     if (override) return override
     if (!this.analyses) return DEFAULT_LANGUAGE
     const analysis = await this.analyses.getByProject(projectId)
-    return contentLanguage(analysis?.language ?? DEFAULT_LANGUAGE)
+    return contentLanguage(projectId, analysis?.language ?? DEFAULT_MATERIAL)
   }
 
   private async runAnalysis(mistake: Mistake, opts: AnalysisOptions): Promise<MistakeAnalysis> {
     const analysis = this.analyses ? await this.analyses.getByProject(mistake.projectId) : undefined
     const language: AnalysisLanguage =
-      opts.language ?? (await contentLanguage(analysis?.language ?? DEFAULT_LANGUAGE))
+      opts.language ??
+      (await contentLanguage(mistake.projectId, analysis?.language ?? DEFAULT_MATERIAL))
 
     const sources =
       this.chunks && analysis

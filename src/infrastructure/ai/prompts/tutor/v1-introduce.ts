@@ -4,6 +4,7 @@
  */
 
 import { securityFooter, untrustedContentWrapper } from '../security'
+import { examLanguageInstruction, examLanguageOf, type ExamLanguageKey } from '../exam-language/v1'
 
 export const VERSION = 'v1' as const
 
@@ -14,7 +15,8 @@ export interface IntroduceConceptInput {
   context: string
   /** Bullet-style relevant content from the source documents. */
   sourceSnippets: string[]
-  language: 'zh' | 'en' | 'mixed'
+  /** `exam:<code>`: 跟随考试语言 (any other value: the prompt is unchanged). */
+  language: 'zh' | 'en' | 'mixed' | ExamLanguageKey
 }
 
 export function buildSystemPrompt(): string {
@@ -33,8 +35,10 @@ export function buildSystemPrompt(): string {
 }
 
 export function buildUserPrompt(input: IntroduceConceptInput): string {
-  const lang =
-    input.language === 'zh'
+  const exam = examLanguageOf(input.language)
+  const lang = exam
+    ? `${examLanguageInstruction(exam)}.`
+    : input.language === 'zh'
       ? 'Simplified Chinese.'
       : input.language === 'en'
         ? 'English.'

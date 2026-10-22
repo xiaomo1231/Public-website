@@ -85,12 +85,15 @@ export function resolveSubjectContext(
 export async function sampleProjectMaterials(
   db: AppDatabase,
   projectId: string,
+  /** Only the documents it accepts (all ready documents when absent). */
+  include?: (doc: Document) => boolean,
 ): Promise<MaterialSample[]> {
-  const documents = await db
+  const ready = await db
     .table<Document, string>('documents')
     .where('[projectId+status]')
     .equals([projectId, 'ready'])
     .toArray()
+  const documents = include ? ready.filter(include) : ready
   const samples: MaterialSample[] = []
   let budget = SAMPLE_CHARS_PER_COURSE
   const perDocument = Math.max(2_000, Math.floor(budget / Math.max(1, documents.length)))

@@ -65,6 +65,7 @@ describe('ProjectDetailPage', () => {
       'Analysis',
       'Exam topics',
       'Question habits',
+      'Study plan',
     ])
     expect(screen.getByTestId('documents-tab')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Edit' })).toBeInTheDocument()

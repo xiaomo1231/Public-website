@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { TutorLesson } from '@/entities/tutorLesson/types'
+import type { ContentLanguage } from '@/entities/user/types'
 import { buildAIServices } from '@/services/aiServices'
 import { loadStoredLesson } from '@/services/tutorLessonService'
 import { isAbortError, type GenerationRunState } from '@/shared/lib/generationControl'
@@ -11,7 +12,7 @@ export interface UseTutorLessonInput {
   topicId: string
   topicName: string
   topicDescription: string
-  language: 'zh' | 'en' | 'mixed'
+  language: ContentLanguage
 }
 
 export interface UseTutorLessonState {

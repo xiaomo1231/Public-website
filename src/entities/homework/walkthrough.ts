@@ -1,6 +1,7 @@
 import { fnv1a } from '@/shared/lib/hash'
 import { professorMapEditDigest } from './professorMap'
-import type { QuestionLanguage } from '@/entities/user/types'
+import { examModeKey, type QuestionLanguage } from '@/entities/user/types'
+import type { ExamLanguageKey } from '@/infrastructure/ai/prompts/exam-language/v1'
 import type { SolutionKind } from '@/infrastructure/math/rref'
 import type { HomeworkQuestion, HomeworkSet } from './types'
 import { isDeferredProfessorAnswer } from './answerMatching'
@@ -19,7 +20,11 @@ import type { ProfessorCompareReport } from './professorCompare'
  * out of date. Nothing is regenerated without the learner asking.
  */
 
-export type WalkthroughLanguage = 'zh_terms' | 'zh' | 'en'
+/**
+ * `exam:<code>` = 跟随考试语言: stored as a walkthrough of its own
+ * (`<setId>:exam:<code>`), so the other languages' sections keep their hashes.
+ */
+export type WalkthroughLanguage = 'zh_terms' | 'zh' | 'en' | ExamLanguageKey
 
 /**
  * `other` — content of an imported walkthrough that matched no question
@@ -470,7 +475,11 @@ export const questionSectionId = (questionId: string) => `q:${questionId}`
 export function walkthroughLanguage(
   preference: QuestionLanguage | undefined,
   setLanguage: HomeworkSet['language'],
+  /** `exam` mode: the course's detected exam language. */
+  examLanguage?: string,
 ): WalkthroughLanguage {
+  const exam = examModeKey(preference, examLanguage)
+  if (exam) return exam
   if (preference === 'en') return 'en'
   if (preference === 'source')
     return setLanguage === 'en' ? 'en' : setLanguage === 'zh' ? 'zh' : 'zh_terms'

@@ -16,6 +16,7 @@
 
 import { securityFooter, untrustedContentWrapper } from '../security'
 import { professorStyleSection } from '../question-style/v1'
+import { examLanguageInstruction, examLanguageOf, type ExamLanguageKey } from '../exam-language/v1'
 
 export const VERSION = 'v1' as const
 export const PROMPT_KIND = 'oral-exam' as const
@@ -28,7 +29,8 @@ export interface OralExamInput {
   knowledgePoints: string[]
   /** Formatted source passages (`[chunk:<id> · …]\n<text>`); empty = no course material. */
   sourceSnippets: string[]
-  language: 'zh' | 'en' | 'mixed' | 'zh_terms'
+  /** `exam:<code>`: 跟随考试语言 (any other value: the prompt is unchanged). */
+  language: 'zh' | 'en' | 'mixed' | 'zh_terms' | ExamLanguageKey
   /**
    * 教授出题习惯 (`buildHabitsBlock`), when the profile is on and not empty.
    * Absent: the prompt is byte-identical to before (no version change).
@@ -69,6 +71,8 @@ export function buildSystemPrompt(): string {
 }
 
 function languageInstruction(language: OralExamInput['language']): string {
+  const exam = examLanguageOf(language)
+  if (exam) return examLanguageInstruction(exam)
   if (language === 'zh_terms')
     return 'Simplified Chinese. At the first mention of each key term, give the English (or Latin anatomical) term in parentheses. Quotes stay verbatim in the source language'
   if (language === 'zh') return 'Simplified Chinese'

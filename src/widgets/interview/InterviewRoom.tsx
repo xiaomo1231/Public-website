@@ -32,6 +32,7 @@ import { cn } from '@/shared/lib/utils'
 import { buildAIServices } from '@/services/aiServices'
 import { withUsageKind } from '@/services/aiService'
 import { InterviewService } from '@/services/interviewService'
+import { useExamMode } from '@/features/focus/examMode'
 import {
   askedQuestionIds,
   courseScaleScore,
@@ -75,6 +76,9 @@ export function InterviewRoom({
       cancelled = true
     }
   }, [projectId, sessionId, reloadKey])
+
+  // An interview in exam mode is an exam until it is graded: the pomodoro hides and pauses.
+  useExamMode(Boolean(session?.examMode) && session?.status !== 'graded')
 
   if (error)
     return (

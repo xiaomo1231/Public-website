@@ -8,6 +8,7 @@
 
 import * as V2 from './v2-question'
 import { untrustedContentWrapper } from '../security'
+import { examLanguageInstruction, examLanguageOf } from '../exam-language/v1'
 
 export const VERSION = 'v3' as const
 
@@ -23,7 +24,7 @@ export function buildUserPrompt(input: QuestionGeneratorInput): string {
   return [
     `Topic: ${input.topicName}.`,
     `Description: ${input.topicDescription}.`,
-    `Respond in: ${input.language === 'zh' ? 'Simplified Chinese' : input.language === 'en' ? 'English' : 'English with key Chinese terms in parentheses'}.`,
+    `Respond in: ${examLanguageOf(input.language) ? examLanguageInstruction(examLanguageOf(input.language)!) : input.language === 'zh' ? 'Simplified Chinese' : input.language === 'en' ? 'English' : 'English with key Chinese terms in parentheses'}.`,
     untrustedContentWrapper(
       'SOURCE MATERIAL',
       input.sourceSnippets.map((s, i) => `[${i + 1}] ${s}`).join('\n'),

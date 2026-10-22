@@ -39,6 +39,7 @@ export type SubjectInput = Subject | SubjectContext | undefined
 
 import type { TranslationKey } from '@/i18n/types'
 import type { SigFigPolicy } from '@/entities/question/answerDimensions'
+import { QUESTION_LANGUAGES, type QuestionLanguage } from '@/entities/user/types'
 
 export const SUBJECT_LABEL_KEYS: Record<Subject, TranslationKey> = {
   calculus: 'subject.calculus',
@@ -74,6 +75,11 @@ export interface Project {
    * platform rule (`DEFAULT_SIG_FIG_POLICY`).
    */
   sigFigPolicy?: SigFigPolicy
+  /**
+   * Per-course 讲解与题目语言 (overrides `UserProfile.questionLanguage`); unset
+   * follows the global preference. `exam` = 「跟随考试语言（中文辅助）」.
+   */
+  questionLanguage?: QuestionLanguage
   description?: string
   createdAt: number
   updatedAt: number
@@ -96,6 +102,8 @@ export interface UpdateProjectInput {
   examStyle?: ExamStyle | null
   /** `null` clears the rule (back to the platform default). */
   sigFigPolicy?: SigFigPolicy | null
+  /** `null` clears the per-course language (back to the global preference). */
+  questionLanguage?: QuestionLanguage | null
   description?: string
 }
 
@@ -103,4 +111,11 @@ export interface UpdateProjectInput {
 export function normalizeLanguageTag(tag: string | null | undefined): string | undefined {
   const primary = tag?.trim().split(/[-_]/)[0]?.toLowerCase()
   return primary && /^[a-z]{2,8}$/.test(primary) ? primary : undefined
+}
+
+/** A stored per-course language mode, ignoring anything unknown. */
+export function courseQuestionLanguage(value: unknown): QuestionLanguage | undefined {
+  return QUESTION_LANGUAGES.includes(value as QuestionLanguage)
+    ? (value as QuestionLanguage)
+    : undefined
 }

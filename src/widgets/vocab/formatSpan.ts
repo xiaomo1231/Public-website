@@ -13,3 +13,18 @@ export function formatSpan(ms: number, t: T): string {
   if (days < 365) return t('vocab.span.months', { count: Math.round(days / 30) })
   return t('vocab.span.years', { count: Math.round((days / 365) * 10) / 10 })
 }
+
+/**
+ * When a word comes back: "现在" when due, "10 分钟后" / "3 天后" within a
+ * month, else the date ("2026-12-03").
+ */
+export function formatNextReview(due: number, t: T, now = Date.now()): string {
+  const ms = due - now
+  if (ms <= 0) return t('vocab.next.now')
+  if (ms < 31 * 86400000) return t('vocab.next.in', { span: formatSpan(ms, t) })
+  const date = new Date(due)
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return t('vocab.next.on', {
+    date: `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`,
+  })
+}

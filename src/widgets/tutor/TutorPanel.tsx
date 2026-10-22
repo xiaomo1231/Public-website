@@ -1,4 +1,5 @@
 import { targetLanguageOf } from '@/shared/lib/language'
+import type { ContentLanguage } from '@/entities/user/types'
 import { useEffect, useRef, useState } from 'react'
 import {
   CheckCircle2,
@@ -46,7 +47,7 @@ export interface TutorPanelProps {
   topicId: string
   topicName: string
   topicDescription: string
-  language: 'zh' | 'en' | 'mixed'
+  language: ContentLanguage
   difficulty?: DifficultyLevel
   onClose?: () => void
 }

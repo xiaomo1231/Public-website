@@ -2,6 +2,13 @@ import type { DifficultyLevel } from '@/infrastructure/ai/prompts/types'
 import type { QuestionType } from '@/entities/question/types'
 import type { TranslationKey } from '@/i18n/types'
 import type { QuestionLanguage } from '../user/types'
+import type { ExamLanguageKey } from '@/infrastructure/ai/prompts/exam-language/v1'
+
+/**
+ * The language a quiz / oral exam is written in: Chinese, English, the
+ * material's mix, Chinese with English terms, or 跟随考试语言 (`exam:<code>`).
+ */
+export type QuizLanguage = 'zh' | 'en' | 'mixed' | 'zh_terms' | ExamLanguageKey
 
 export type QuizDifficulty = 'adaptive' | DifficultyLevel
 
@@ -209,7 +216,7 @@ export interface QuizResumeState {
   knowledgePoints: string[]
   topicName: string
   topicDescription: string
-  language: 'zh' | 'en' | 'mixed' | 'zh_terms'
+  language: QuizLanguage
   professorStyleContext?: string
   /** 教授出题习惯 block captured when the quiz was planned. */
   professorHabits?: string
@@ -232,7 +239,7 @@ export interface OralResumeState {
   difficulty: DifficultyLevel
   /** The quiz title's topic label. */
   label: string
-  language: 'zh' | 'en' | 'mixed' | 'zh_terms'
+  language: QuizLanguage
   updatedAt: number
 }
 

@@ -6,12 +6,16 @@
  * question's conclusion.
  */
 import { securityFooter, untrustedContentWrapper } from '../security'
+import { examLanguageInstruction, examLanguageOf, type ExamLanguageKey } from '../exam-language/v1'
 
 export const VERSION = 'v1' as const
 
-export type WalkthroughPromptLanguage = 'zh_terms' | 'zh' | 'en'
+/** `exam:<code>`: 跟随考试语言 (the other values give the rule word for word as before). */
+export type WalkthroughPromptLanguage = 'zh_terms' | 'zh' | 'en' | ExamLanguageKey
 
 export function languageRule(language: WalkthroughPromptLanguage): string {
+  const exam = examLanguageOf(language)
+  if (exam) return `Write in ${examLanguageInstruction(exam)}.`
   if (language === 'en') return 'Write in English.'
   if (language === 'zh') return 'Write in Simplified Chinese.'
   return 'Write in Simplified Chinese. The first time a key technical term appears, add its English name in parentheses, e.g. 主元（pivot）、简化行阶梯形（RREF）. Keep mathematical notation unchanged.'

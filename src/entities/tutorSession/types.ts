@@ -1,4 +1,5 @@
 import type { RubricPoint } from '@/entities/question/types'
+import type { ContentLanguage } from '@/entities/user/types'
 import type { ChatMessage } from '@/infrastructure/ai/types'
 import type {
   DifficultyLevel,
@@ -62,7 +63,8 @@ export interface TutorSession {
   topicName: string
   /** Carried so the AI can ground its explanation in the topic's own summary. */
   topicDescription?: string
-  language: 'zh' | 'en' | 'mixed'
+  /** `exam:<code>`: 跟随考试语言. */
+  language: ContentLanguage
   /** Up-to-date conversation context for the AI. */
   messages: ChatMessage[]
   /** Persisted turns for the UI. */

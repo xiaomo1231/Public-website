@@ -12,7 +12,7 @@ import { prompts } from '@/infrastructure/ai/prompts'
 import { AbortedError, TimeoutError as AITimeoutError } from '@/infrastructure/ai/errors'
 import { AppError, NotFoundError } from '@/infrastructure/errors/AppError'
 import { HomeworkRepository } from '@/entities/homework/repository'
-import { UserRepository } from '@/entities/user/repository'
+import { loadCourseLanguage } from './courseLanguage'
 import {
   cleanProfessorAnswerText,
   isDeferredProfessorAnswer,
@@ -328,8 +328,8 @@ export class HomeworkWalkthroughService {
     const questions = (await this.sets.listQuestions(setId)).filter(
       (question) => !question.retired && !isHeldOut(question, set),
     )
-    const profile = await new UserRepository(this.db).get().catch(() => undefined)
-    const language = walkthroughLanguage(profile?.questionLanguage, set.language)
+    const course = await loadCourseLanguage(set.projectId, { db: this.db })
+    const language = walkthroughLanguage(course.mode, set.language, course.examLanguage)
     const subject = await loadProjectSubjectContext(set.projectId, this.db)
     const promptVersion = prompts.subjectProfile.subjectPromptVersion(
       // v2 without a revision block is byte-identical to v1, so caches keep their hashes.
@@ -1184,8 +1184,8 @@ export class HomeworkWalkthroughService {
       throw new NotFoundError('HomeworkSet', question.setId)
     if (!professorAnswerOf(question))
       throw new AppError(t('homework.walkthrough.compareUnavailable'), 'VALIDATION_ERROR')
-    const profile = await new UserRepository(this.db).get().catch(() => undefined)
-    const language = walkthroughLanguage(profile?.questionLanguage, set.language)
+    const course = await loadCourseLanguage(set.projectId, { db: this.db })
+    const language = walkthroughLanguage(course.mode, set.language, course.examLanguage)
     const subject = await loadProjectSubjectContext(set.projectId, this.db)
     const promptVersion = prompts.subjectProfile.subjectPromptVersion(
       `homework-walkthrough/${prompts.homeworkWalkthrough.CACHE_VERSION}`,

@@ -1,5 +1,5 @@
 import { Link, useParams } from 'react-router-dom'
-import { ArrowLeft, ArrowRight, Brain, MessagesSquare } from 'lucide-react'
+import { ArrowRight, Brain } from 'lucide-react'
 import { Button } from '@/shared/ui/Button'
 import { EmptyState } from '@/shared/ui/EmptyState'
 import { LoadingState } from '@/shared/ui/LoadingState'
@@ -7,11 +7,13 @@ import { PageContainer, PageContent, PageHeader } from '@/shared/ui/Page'
 import { TutorPanel } from '@/widgets/tutor/TutorPanel'
 import { topicKicker, topicNumber } from '@/widgets/tutor/lessonStyle'
 import { ProjectFlowNav } from '@/widgets/project/ProjectFlowNav'
+import { FocusPageHeader } from '@/widgets/focus/FocusPageHeader'
 import { useProjectTopics } from '@/features/tutor/useProjectTopics'
 import { TopicNotFound } from '@/widgets/tutor/TopicNotFound'
 import { useTranslation } from '@/i18n'
 import { useAuth } from '@/features/auth/useAuth'
 import { resolveContentLanguage } from '@/entities/user/types'
+import { useCourseLanguage } from '@/features/project/useCourseLanguage'
 
 /**
  * The interactive half of the tutor.
@@ -27,10 +29,14 @@ export function InteractiveTutorPage(): JSX.Element {
   // language is derived (not seeded with a default) so the TutorPanel is only
   // mounted once it is final: mounting it early would start a session and an
   // AI introduction in the wrong language, then remount and orphan both.
-  const { profile, loaded: profileLoaded } = useAuth()
-  const questionLanguage = profile?.questionLanguage
+  // The course's own mode wins over the global one; 跟随考试语言 needs the
+  // detected exam language.
+  const { loaded: profileLoaded } = useAuth()
+  const courseLanguage = useCourseLanguage(projectId)
   const language =
-    analysis && profileLoaded ? resolveContentLanguage(questionLanguage, analysis.language) : null
+    analysis && profileLoaded && courseLanguage.loaded
+      ? resolveContentLanguage(courseLanguage.mode, analysis.language, courseLanguage.examLanguage)
+      : null
 
   if (!projectId) return <div />
 
@@ -76,20 +82,11 @@ export function InteractiveTutorPage(): JSX.Element {
 
   return (
     <PageContainer>
-      <PageHeader
-        title={
-          <div className="flex items-center gap-2">
-            <Button asChild variant="ghost" size="icon" aria-label={t('tutor.backToLesson')}>
-              <Link to={`/projects/${projectId}/tutor/${activeTopic.id}`}>
-                <ArrowLeft className="h-4 w-4" />
-              </Link>
-            </Button>
-            <MessagesSquare className="h-4 w-4" />
-            {t('tutor.interactiveTitle')}
-          </div>
-        }
-        description={t('tutor.interactiveSubtitle')}
-        nav={<ProjectFlowNav projectId={projectId} active="tutor" />}
+      {/* 专注子页面: back to the lesson instead of the course navigation. */}
+      <FocusPageHeader
+        backTo={`/projects/${projectId}/tutor/${activeTopic.id}`}
+        backLabel={t('focus.backToLesson')}
+        title={t('tutor.interactiveTitle')}
       />
       <PageContent>
         {/* Reading measure: a lecture-notes column, never full-bleed. Lecture

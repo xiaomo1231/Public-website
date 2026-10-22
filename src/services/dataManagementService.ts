@@ -22,6 +22,8 @@ import { TutorLessonRepository } from '@/entities/tutorLesson/repository'
 import { HomeworkRepository } from '@/entities/homework/repository'
 import { SlideLessonRepository } from '@/entities/slideLesson/repository'
 import { InterviewSessionRepository } from '@/entities/interview/repository'
+import { FocusSessionRepository } from '@/entities/focus/repository'
+import { StudyPlanRepository } from '@/entities/studyPlan/repository'
 import { SettingsService } from './settingsService'
 import { clearCachedDeviceKey } from '@/infrastructure/crypto/deviceKey'
 
@@ -176,6 +178,11 @@ export const EXPORTED_TABLES = [
   'homeworkWalkthroughs',
   'walkthroughNotes',
   'interviewSessions',
+  'focusSessions',
+  'exams',
+  'studyPlans',
+  'studyTasks',
+  'diagnostics',
   'slideLessons',
   'translations',
   'reviewCards',
@@ -624,6 +631,8 @@ export class DataManagementService {
     const homeworkRepo = new HomeworkRepository(this.db)
     const slideRepo = new SlideLessonRepository(this.db)
     const interviewRepo = new InterviewSessionRepository(this.db)
+    const focusRepo = new FocusSessionRepository(this.db)
+    const planRepo = new StudyPlanRepository(this.db)
 
     await this.db.transaction('rw', this.db.tables, async () => {
       await projectRepo.get(projectId)
@@ -651,6 +660,10 @@ export class DataManagementService {
       await homeworkRepo.deleteByProject(projectId)
       await slideRepo.deleteByProject(projectId)
       await interviewRepo.deleteByProject(projectId)
+      // Course focus time goes with the course; time outside a course stays.
+      await focusRepo.deleteByProject(projectId)
+      // 学习计划: the course's exams, tasks, diagnostic sections and shares.
+      await planRepo.deleteByProject(projectId)
       await mastery.deleteByProject(projectId)
       await mistakeRepo.deleteByProject(projectId)
       await quizRepo.deleteByProject(projectId)

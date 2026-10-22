@@ -10,6 +10,7 @@
  */
 
 import type { VisualSourceType } from '../visualSource/types'
+import type { ContentLanguage } from '../user/types'
 import type { TutorVisualization } from '../tutorVisualization/types'
 
 /**
@@ -45,8 +46,11 @@ export interface TutorLesson {
   id: string
   projectId: string
   topicId: string
-  /** Teaching language — independent of the UI language. */
-  language: 'zh' | 'en' | 'mixed'
+  /**
+   * Teaching language — independent of the UI language. `exam:<code>`
+   * (跟随考试语言) is a cache language of its own.
+   */
+  language: ContentLanguage
 
   /** The lesson body. Markdown-ish headings plus inline/block LaTeX. */
   content: string
@@ -101,7 +105,7 @@ export const TUTOR_LESSON_VERSION = 3
 export interface TutorLessonKey {
   projectId: string
   topicId: string
-  language: 'zh' | 'en' | 'mixed'
+  language: ContentLanguage
 }
 
 export function tutorLessonKeyString(key: TutorLessonKey): string {

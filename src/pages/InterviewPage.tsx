@@ -14,6 +14,7 @@ import { useGenerationRun } from '@/shared/lib/useGenerationRun'
 import { isGenerationInterruption } from '@/shared/lib/generationControl'
 import { PageContainer, PageContent, PageHeader } from '@/shared/ui/Page'
 import { ProjectFlowNav } from '@/widgets/project/ProjectFlowNav'
+import { FocusPageHeader } from '@/widgets/focus/FocusPageHeader'
 import { InterviewRoom } from '@/widgets/interview/InterviewRoom'
 import { useProject } from '@/features/project/useProjects'
 import { toast } from '@/features/toast/toastStore'
@@ -38,7 +39,15 @@ export function InterviewPage(): JSX.Element {
   const { project, loading } = useProject(projectId)
   const targetLanguage = targetLanguageOf(project)
 
-  const header = (
+  const header = sessionId ? (
+    // 专注子页面 (an interview in progress): back to the session list.
+    <FocusPageHeader
+      backTo={`/projects/${projectId}/interview`}
+      backLabel={t('projectNav.interview')}
+      title={t('interview.title')}
+      {...(targetLanguage ? { meta: languageName(targetLanguage, uiLanguage) } : {})}
+    />
+  ) : (
     <PageHeader
       title={
         <div className="flex items-center gap-2">

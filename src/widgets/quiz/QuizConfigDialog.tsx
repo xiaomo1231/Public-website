@@ -17,12 +17,9 @@ import {
 } from '@/entities/question/types'
 import { targetLanguageOf } from '@/shared/lib/language'
 import { useProject } from '@/features/project/useProjects'
-import { useAuth } from '@/features/auth/useAuth'
-import {
-  DEFAULT_QUESTION_LANGUAGE,
-  QUESTION_LANGUAGES,
-  type QuestionLanguage,
-} from '@/entities/user/types'
+import { useCourseLanguage } from '@/features/project/useCourseLanguage'
+import { QUESTION_LANGUAGES, type QuestionLanguage } from '@/entities/user/types'
+import { QUESTION_LANGUAGE_LABEL_KEYS } from '@/widgets/settings/questionLanguageLabels'
 import { CourseContentRepository } from '@/entities/courseContent/repository'
 import { Button } from '@/shared/ui/Button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/shared/ui/Card'
@@ -53,12 +50,6 @@ const DIFFICULTIES: Array<{ value: QuizDifficulty; labelKey: TranslationKey }> =
   { value: 'advanced', labelKey: 'difficulty.advanced' },
   { value: 'challenge', labelKey: 'difficulty.challenge' },
 ]
-
-const QUESTION_LANGUAGE_LABEL_KEYS: Record<QuestionLanguage, TranslationKey> = {
-  zh_terms: 'questionLanguage.zh_terms',
-  source: 'questionLanguage.source',
-  en: 'questionLanguage.en',
-}
 
 const STAGE_LABEL_KEYS: Record<string, TranslationKey> = {
   starting: 'quiz.starting',
@@ -96,6 +87,8 @@ export function QuizConfigDialog({
   // Oral-exam rehearsal: offered for medicine and for any course with a
   // syllabus; preselected by the exam-topic list's 「口试练习」 link (`?oral=1`).
   const [params] = useSearchParams()
+  // A study-plan task links here with its topic preselected (`?topic=`).
+  const wantedTopic = useRef(params.get('topic'))
   const [oral, setOral] = useState(params.get('oral') === '1')
   const [oralCount, setOralCount] = useState(params.get('examTopic') ? 1 : 3)
   const [oralTimer, setOralTimer] = useState(true)
@@ -116,9 +109,14 @@ export function QuizConfigDialog({
   const [loading, setLoading] = useState(true)
   const availability = useRef(onAvailability)
   availability.current = onAvailability
-  // The saved preference; changing it here saves it for every later quiz.
-  const { profile, setQuestionLanguage } = useAuth()
-  const questionLanguage = profile?.questionLanguage ?? DEFAULT_QUESTION_LANGUAGE
+  // The saved preference; changing it here saves it for every later quiz: the
+  // course's own mode when it has one, else the global preference.
+  const courseLanguage = useCourseLanguage(projectId)
+  const questionLanguage = courseLanguage.mode
+  const setQuestionLanguage = (mode: QuestionLanguage) =>
+    courseLanguage.courseMode
+      ? courseLanguage.saveCourseMode(mode)
+      : courseLanguage.saveGlobalMode(mode)
 
   useEffect(() => {
     let cancelled = false
@@ -132,6 +130,8 @@ export function QuizConfigDialog({
         if (cancelled) return
         setAnalysis(a ?? null)
         setTopics(ts)
+        const wanted = wantedTopic.current
+        if (wanted && ts.some((each) => each.id === wanted)) setTopicId(wanted)
         availability.current?.(a?.status === 'ready')
       } finally {
         if (!cancelled) setLoading(false)

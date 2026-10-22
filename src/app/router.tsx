@@ -63,6 +63,7 @@ const ReviewCardsPage = lazyPage(() => import('@/pages/ReviewCardsPage'), 'Revie
 const InterviewPage = lazyPage(() => import('@/pages/InterviewPage'), 'InterviewPage')
 const SettingsPage = lazyPage(() => import('@/pages/SettingsPage'), 'SettingsPage')
 const VocabPage = lazyPage(() => import('@/pages/VocabPage'), 'VocabPage')
+const StudyPlanPage = lazyPage(() => import('@/pages/StudyPlanPage'), 'StudyPlanPage')
 
 /**
  * Every project sub-page sits under `ProjectScope`, which shows one
@@ -118,6 +119,7 @@ export const routes: RouteObject[] = [
           { path: 'projects/:id', element: <ProjectDetailPage /> },
           { element: <ProjectScope />, children: projectPages },
           { path: 'vocab', element: <VocabPage /> },
+          { path: 'plan', element: <StudyPlanPage /> },
           { path: 'settings', element: <SettingsPage /> },
           // Signed-in users get a "page not found"; locked users are sent to
           // the invite page by RequireAuth first, then return here.

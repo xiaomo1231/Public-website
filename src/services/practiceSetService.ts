@@ -32,6 +32,8 @@ import {
 import { verifyAiPart } from '@/entities/homework/practice/verify'
 import { loadProfessorConventions } from './projectGradingRules'
 import type { ProfessorConvention } from '@/entities/questionHabits/types'
+import type { ExamLanguageKey } from '@/infrastructure/ai/prompts/exam-language/v1'
+import { loadCourseLanguage } from './courseLanguage'
 
 /** Significant figures are asked of chemistry / physics, or when the professor grades them. */
 function practiceSigFigs(context: {
@@ -126,6 +128,8 @@ interface BuildContext {
   knowledge: SummaryKnowledge
   subject: SubjectContext | undefined
   language: PracticeLanguage
+  /** 跟随考试语言: the AI writes in the exam language (local questions use `language`). */
+  examKey?: ExamLanguageKey
   /** 教授出题习惯 block for the AI (absent when off or empty). */
   professorHabits?: string
   /** Conventions from the habits profile (marks per part, data sheet, sig figs …). */
@@ -320,7 +324,9 @@ export class PracticeSetService {
     }
     const professorHabits = await loadProfessorHabits(parent.projectId, this.db)
     const { conventions } = await loadProfessorConventions(parent.projectId, this.db)
+    const course = await loadCourseLanguage(parent.projectId, { db: this.db })
     return {
+      ...(course.examKey ? { examKey: course.examKey } : {}),
       parent,
       questions: state.questions,
       labels: state.questions.map((question, index) => questionLabel(question, index)),
@@ -328,7 +334,8 @@ export class PracticeSetService {
       ...(summary ? { summary } : {}),
       knowledge: summaryKnowledge(summary),
       subject: await loadProjectSubjectContext(parent.projectId, this.db),
-      language: parent.language === 'en' ? 'en' : 'zh',
+      // Local questions have zh / en stems; a non-Chinese exam language reads as English.
+      language: parent.language === 'en' || course.examKey ? 'en' : 'zh',
       ...(professorHabits ? { professorHabits } : {}),
       ...(conventions.length ? { professorConventions: conventions } : {}),
       linearHints: await loadLinearStyleHints(parent.projectId, this.db),
@@ -526,7 +533,7 @@ export class PracticeSetService {
       {
         role: 'user',
         content: prompts.practiceGenerate.buildUserPrompt({
-          language: context.language,
+          language: context.examKey ?? context.language,
           keyPoints: knowledgeText(context.knowledge),
           ...(context.professorHabits ? { professorHabits: context.professorHabits } : {}),
           ...(context.professorConventions?.length
