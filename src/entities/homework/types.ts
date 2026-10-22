@@ -3,6 +3,8 @@ import type { AnswerEntry } from './answerMatching'
 import type { TranslationKey } from '@/i18n/types'
 import type { HomeworkReviewGuide } from './reviewGuide'
 import type { HomeworkAnswerCheck } from './answerCheck'
+import type { PracticeQuestionInfo, PracticeSetInfo } from './practice/types'
+import type { GuidedProgress } from './guided'
 
 /**
  * A student-uploaded homework assignment that the AI has turned into questions.
@@ -57,9 +59,23 @@ export interface HomeworkSet {
    * solution" notice. Set once; the notice is not shown again for this set.
    */
   walkthroughNoticeSeenAt?: number
+  /**
+   * `practice` — a practice set made from an assignment's walkthrough
+   * (讲解末尾「做练习题」). It shares the parent's `documentId` (so deleting the
+   * assignment deletes it too) but is never re-read from the document.
+   * Absent means an ordinary assignment.
+   */
+  kind?: 'assignment' | 'practice'
+  /** Practice sets: the assignment they were made from. */
+  parentSetId?: string
+  /** Practice sets: mode, counts and an unfinished build. */
+  practice?: PracticeSetInfo
   createdAt: number
   updatedAt: number
 }
+
+/** A practice set made from an assignment (not an uploaded assignment). */
+export const isPracticeSet = (set: Pick<HomeworkSet, 'kind'>): boolean => set.kind === 'practice'
 
 /**
  * Progress of an in-flight homework run.
@@ -181,6 +197,8 @@ export interface HomeworkQuestion {
   reviewGuide?: HomeworkReviewGuide
   /** Latest answer check, tied to the exact submitted draft and reference. */
   answerCheck?: HomeworkAnswerCheck
+  /** 引导练习 progress (see `entities/homework/guided.ts`); counts as student work. */
+  guidedProgress?: GuidedProgress
   /** Student's saved working. Restored on reload. */
   draftText: string
   /** How many hints the student has revealed (0..hints.length). */
@@ -188,6 +206,12 @@ export interface HomeworkQuestion {
   /** Whether the student has revealed the solution. */
   solutionRevealed: boolean
   messages: HomeworkMessage[]
+  /**
+   * Practice-set questions: the reference answers (computed locally where a
+   * grader exists) and how each part is checked. `solution` holds the worked
+   * reference solution.
+   */
+  practice?: PracticeQuestionInfo
   createdAt: number
   updatedAt: number
 }

@@ -18,7 +18,9 @@ import {
   resolveMaterialType,
   type Document,
 } from '@/entities/document/types'
+import { PracticeSetRows } from '@/widgets/homework/practice/PracticeSetRows'
 import {
+  isPracticeSet,
   HOMEWORK_STATUS_LABEL_KEYS,
   type HomeworkSet,
   type ReanalysisSummary,
@@ -330,153 +332,162 @@ export function HomeworkLandingPage(): JSX.Element {
               />
             ) : (
               <ul className="grid gap-4 lecture:gap-0 lecture:border-t lab:gap-3 sm:grid-cols-2 sm:lecture:grid-cols-1 xl:grid-cols-3 xl:lecture:grid-cols-1">
-                {sets.map((set) => {
-                  const running =
-                    busyDocumentId === set.documentId || Boolean(service?.isSetRunning(set.id))
-                  const interrupted =
-                    set.status === 'analyzing' &&
-                    !running &&
-                    Date.now() - set.updatedAt > STALE_ANALYZING_MS
-                  const generating =
-                    set.status === 'analyzing' && set.progress?.stage === 'generating'
-                  return (
-                    <li key={set.id}>
-                      <Card className={cn('flex h-full flex-col', SET_ROW)}>
-                        <CardHeader className="lecture:min-w-0 lecture:flex-1 lecture:px-0 lecture:py-4 lab:p-4">
-                          <div className="flex items-start justify-between gap-2">
-                            <CardTitle className="min-w-0 text-base lecture:font-heading lecture:text-lg lecture:font-bold">
-                              <TruncatedText text={set.title} className="min-w-0 max-w-full" />
-                            </CardTitle>
-                            <div className="flex shrink-0 items-center gap-1">
-                              <Badge variant={STATUS_VARIANT[set.status]}>
-                                {generating
-                                  ? t('homework.status.preparing')
-                                  : t(HOMEWORK_STATUS_LABEL_KEYS[set.status])}
-                              </Badge>
-                              <DropdownMenu>
-                                <DropdownMenuTrigger asChild>
-                                  <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    className="h-8 w-8"
-                                    aria-label={t('homework.menu.label')}
-                                  >
-                                    <MoreHorizontal className="h-4 w-4" />
-                                  </Button>
-                                </DropdownMenuTrigger>
-                                <DropdownMenuContent align="end">
-                                  <DropdownMenuItem onSelect={() => void refresh()}>
-                                    <RefreshCw className="h-4 w-4" />
-                                    {t('homework.menu.refresh')}
-                                  </DropdownMenuItem>
-                                  <DropdownMenuItem
-                                    onSelect={() => void reanalyze(set)}
-                                    disabled={running}
-                                  >
-                                    <RotateCcw className="h-4 w-4" />
-                                    {t('homework.menu.reanalyze')}
-                                  </DropdownMenuItem>
-                                  <DropdownMenuSeparator />
-                                  <DropdownMenuItem onSelect={() => setUploadAnswerTarget(set)}>
-                                    <ClipboardCheck className="h-4 w-4" />
-                                    {set.answerDocumentId
-                                      ? t('homework.menu.replaceAnswer')
-                                      : t('homework.menu.uploadAnswer')}
-                                  </DropdownMenuItem>
-                                  {set.answerDocumentId && (
-                                    <DropdownMenuItem onSelect={() => setAnswerTarget(set)}>
-                                      <ListChecks className="h-4 w-4" />
-                                      {t('homework.menu.manageAnswer')}
+                {sets
+                  .filter((set) => !isPracticeSet(set))
+                  .map((set) => {
+                    const running =
+                      busyDocumentId === set.documentId || Boolean(service?.isSetRunning(set.id))
+                    const interrupted =
+                      set.status === 'analyzing' &&
+                      !running &&
+                      Date.now() - set.updatedAt > STALE_ANALYZING_MS
+                    const generating =
+                      set.status === 'analyzing' && set.progress?.stage === 'generating'
+                    return (
+                      <li key={set.id}>
+                        <Card className={cn('flex h-full flex-col', SET_ROW)}>
+                          <CardHeader className="lecture:min-w-0 lecture:flex-1 lecture:px-0 lecture:py-4 lab:p-4">
+                            <div className="flex items-start justify-between gap-2">
+                              <CardTitle className="min-w-0 text-base lecture:font-heading lecture:text-lg lecture:font-bold">
+                                <TruncatedText text={set.title} className="min-w-0 max-w-full" />
+                              </CardTitle>
+                              <div className="flex shrink-0 items-center gap-1">
+                                <Badge variant={STATUS_VARIANT[set.status]}>
+                                  {generating
+                                    ? t('homework.status.preparing')
+                                    : t(HOMEWORK_STATUS_LABEL_KEYS[set.status])}
+                                </Badge>
+                                <DropdownMenu>
+                                  <DropdownMenuTrigger asChild>
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      className="h-8 w-8"
+                                      aria-label={t('homework.menu.label')}
+                                    >
+                                      <MoreHorizontal className="h-4 w-4" />
+                                    </Button>
+                                  </DropdownMenuTrigger>
+                                  <DropdownMenuContent align="end">
+                                    <DropdownMenuItem onSelect={() => void refresh()}>
+                                      <RefreshCw className="h-4 w-4" />
+                                      {t('homework.menu.refresh')}
                                     </DropdownMenuItem>
-                                  )}
-                                  <DropdownMenuSeparator />
-                                  <DropdownMenuItem
-                                    onSelect={() => setDeleting(set)}
-                                    className="text-destructive focus:text-destructive"
-                                  >
-                                    <Trash2 className="h-4 w-4" />
-                                    {t('homework.menu.delete')}
-                                  </DropdownMenuItem>
-                                </DropdownMenuContent>
-                              </DropdownMenu>
+                                    <DropdownMenuItem
+                                      onSelect={() => void reanalyze(set)}
+                                      disabled={running}
+                                    >
+                                      <RotateCcw className="h-4 w-4" />
+                                      {t('homework.menu.reanalyze')}
+                                    </DropdownMenuItem>
+                                    <DropdownMenuSeparator />
+                                    <DropdownMenuItem onSelect={() => setUploadAnswerTarget(set)}>
+                                      <ClipboardCheck className="h-4 w-4" />
+                                      {set.answerDocumentId
+                                        ? t('homework.menu.replaceAnswer')
+                                        : t('homework.menu.uploadAnswer')}
+                                    </DropdownMenuItem>
+                                    {set.answerDocumentId && (
+                                      <DropdownMenuItem onSelect={() => setAnswerTarget(set)}>
+                                        <ListChecks className="h-4 w-4" />
+                                        {t('homework.menu.manageAnswer')}
+                                      </DropdownMenuItem>
+                                    )}
+                                    <DropdownMenuSeparator />
+                                    <DropdownMenuItem
+                                      onSelect={() => setDeleting(set)}
+                                      className="text-destructive focus:text-destructive"
+                                    >
+                                      <Trash2 className="h-4 w-4" />
+                                      {t('homework.menu.delete')}
+                                    </DropdownMenuItem>
+                                  </DropdownMenuContent>
+                                </DropdownMenu>
+                              </div>
                             </div>
-                          </div>
-                          <CardDescription>
-                            {set.status === 'ready'
-                              ? t('homework.questionsCount', { count: set.questionCount })
-                              : relativeTime(set.updatedAt)}
-                          </CardDescription>
-                        </CardHeader>
-                        <CardContent className="mt-auto space-y-3 lecture:px-0 lab:p-4 lab:pt-0 sm:lecture:mt-0 sm:lecture:w-60 sm:lecture:shrink-0 sm:lecture:py-4">
-                          {interrupted && (
-                            <p className="text-xs text-amber-600 dark:text-amber-400">
-                              {t('homework.analysisInterrupted')}
-                            </p>
-                          )}
-                          {set.analysisNote && (
-                            <p className="text-xs text-muted-foreground">{set.analysisNote}</p>
-                          )}
-                          {set.status === 'failed' && set.errorMessage && (
-                            <p className="text-xs text-muted-foreground">{set.errorMessage}</p>
-                          )}
-                          {set.status === 'failed' ? (
-                            <Button
-                              variant="outline"
-                              className="w-full"
-                              onClick={() => void reanalyze(set)}
-                              disabled={running}
-                            >
-                              {running ? (
-                                <Loader2 className="h-4 w-4 animate-spin" />
-                              ) : (
-                                <RotateCcw className="h-4 w-4" />
-                              )}
-                              {t('homework.retryAnalyze')}
-                            </Button>
-                          ) : set.status === 'analyzing' ? (
-                            interrupted ? (
+                            <CardDescription>
+                              {set.status === 'ready'
+                                ? t('homework.questionsCount', { count: set.questionCount })
+                                : relativeTime(set.updatedAt)}
+                            </CardDescription>
+                          </CardHeader>
+                          <CardContent className="mt-auto space-y-3 lecture:px-0 lab:p-4 lab:pt-0 sm:lecture:mt-0 sm:lecture:w-60 sm:lecture:shrink-0 sm:lecture:py-4">
+                            {interrupted && (
+                              <p className="text-xs text-amber-600 dark:text-amber-400">
+                                {t('homework.analysisInterrupted')}
+                              </p>
+                            )}
+                            {set.analysisNote && (
+                              <p className="text-xs text-muted-foreground">{set.analysisNote}</p>
+                            )}
+                            {set.status === 'failed' && set.errorMessage && (
+                              <p className="text-xs text-muted-foreground">{set.errorMessage}</p>
+                            )}
+                            {set.status === 'failed' ? (
                               <Button
                                 variant="outline"
                                 className="w-full"
-                                onClick={() => void resume(set)}
+                                onClick={() => void reanalyze(set)}
                                 disabled={running}
                               >
-                                <RotateCcw className="h-4 w-4" />
+                                {running ? (
+                                  <Loader2 className="h-4 w-4 animate-spin" />
+                                ) : (
+                                  <RotateCcw className="h-4 w-4" />
+                                )}
                                 {t('homework.retryAnalyze')}
                               </Button>
-                            ) : (
-                              <div className="flex flex-wrap items-end gap-2">
-                                <div className="min-w-[10rem] flex-1">
-                                  <SetProgress set={set} />
-                                </div>
-                                <SetRunControls set={set} />
-                              </div>
-                            )
-                          ) : set.status === 'paused' ? (
-                            <div className="space-y-2">
-                              <SetRunControls set={set} onResume={() => void resume(set)} />
-                              {set.questionCount > 0 && (
-                                <Button asChild variant="outline" className="w-full">
-                                  <Link to={`/projects/${projectId}/homework/${set.id}`}>
-                                    {t('homework.open')}
-                                    <ArrowRight className="h-4 w-4" />
-                                  </Link>
+                            ) : set.status === 'analyzing' ? (
+                              interrupted ? (
+                                <Button
+                                  variant="outline"
+                                  className="w-full"
+                                  onClick={() => void resume(set)}
+                                  disabled={running}
+                                >
+                                  <RotateCcw className="h-4 w-4" />
+                                  {t('homework.retryAnalyze')}
                                 </Button>
+                              ) : (
+                                <div className="flex flex-wrap items-end gap-2">
+                                  <div className="min-w-[10rem] flex-1">
+                                    <SetProgress set={set} />
+                                  </div>
+                                  <SetRunControls set={set} />
+                                </div>
+                              )
+                            ) : set.status === 'paused' ? (
+                              <div className="space-y-2">
+                                <SetRunControls set={set} onResume={() => void resume(set)} />
+                                {set.questionCount > 0 && (
+                                  <Button asChild variant="outline" className="w-full">
+                                    <Link to={`/projects/${projectId}/homework/${set.id}`}>
+                                      {t('homework.open')}
+                                      <ArrowRight className="h-4 w-4" />
+                                    </Link>
+                                  </Button>
+                                )}
+                              </div>
+                            ) : (
+                              <Button asChild className="w-full">
+                                <Link to={`/projects/${projectId}/homework/${set.id}`}>
+                                  {t('homework.open')}
+                                  <ArrowRight className="h-4 w-4" />
+                                </Link>
+                              </Button>
+                            )}
+                            <PracticeSetRows
+                              projectId={projectId}
+                              sets={sets.filter(
+                                (item) => isPracticeSet(item) && item.parentSetId === set.id,
                               )}
-                            </div>
-                          ) : (
-                            <Button asChild className="w-full">
-                              <Link to={`/projects/${projectId}/homework/${set.id}`}>
-                                {t('homework.open')}
-                                <ArrowRight className="h-4 w-4" />
-                              </Link>
-                            </Button>
-                          )}
-                        </CardContent>
-                      </Card>
-                    </li>
-                  )
-                })}
+                              onChanged={() => void load()}
+                            />
+                          </CardContent>
+                        </Card>
+                      </li>
+                    )
+                  })}
 
                 {documents
                   .filter((doc) => !sets.some((set) => set.documentId === doc.id))

@@ -10,6 +10,7 @@ import {
   Eye,
   EyeOff,
   Lightbulb,
+  ListChecks,
   Loader2,
   MessageCircle,
   Mic,
@@ -20,7 +21,6 @@ import {
 import type { HomeworkMessage, HomeworkQuestion } from '@/entities/homework/types'
 import type { SourceReference } from '@/entities/courseAnalysis/types'
 import { formatHomeworkQuestion } from '@/entities/homework/formatQuestion'
-import { suggestLinearAlgebraMethod } from '@/entities/homework/linearAlgebraGuide'
 import { isDeferredProfessorAnswer } from '@/entities/homework/answerMatching'
 import {
   answerCheckInputHash,
@@ -42,7 +42,6 @@ import { GenerationControls } from '@/shared/ui/GenerationControls'
 import { cn } from '@/shared/lib/utils'
 import { useTranslation } from '@/i18n'
 import { appendSpeechText, useSpeechInput } from '@/features/homework/useSpeechInput'
-import { HomeworkStudyGuide } from './HomeworkStudyGuide'
 import { AnswerImages } from '@/widgets/handwriting/AnswerImages'
 import { answerImageKey, type HomeworkAnswerImage } from '@/entities/homework/answerImages'
 import { HomeworkReviewPanel } from './HomeworkReviewPanel'
@@ -54,6 +53,8 @@ export interface HomeworkQuestionViewProps {
   mode?: 'practice' | 'review'
   /** The linked answer document, for the "open original file" link. */
   answerDocumentId?: string
+  /** Switch to 引导练习 for this question (the step-by-step guide). */
+  onStartGuided?: () => void
 }
 
 /**
@@ -67,6 +68,7 @@ export function HomeworkQuestionView({
   service,
   mode = 'practice',
   answerDocumentId,
+  onStartGuided,
 }: HomeworkQuestionViewProps): JSX.Element {
   const { t, language } = useTranslation()
   const deferredAnswer =
@@ -120,7 +122,6 @@ export function HomeworkQuestionView({
   const workingRef = useRef<HTMLInputElement | HTMLTextAreaElement | null>(null)
   const askRef = useRef<HTMLInputElement | HTMLTextAreaElement | null>(null)
   const { project } = useProject(question.projectId)
-  const suggestedMethod = suggestLinearAlgebraMethod(question.prompt)
   const availableReference = answerReference(question)
   const checkLanguage = language === 'zh-CN' ? 'zh' : 'en'
   // Shown only while the working is unchanged since it was checked; compared
@@ -131,11 +132,6 @@ export function HomeworkQuestionView({
       answerCheckInputHash(question, draft, checkLanguage, answerCheck.promptVersion, imageKey)
       ? answerCheck
       : null
-
-  function focusField(field: HTMLInputElement | HTMLTextAreaElement | null): void {
-    field?.scrollIntoView?.({ block: 'center' })
-    field?.focus({ preventScroll: true })
-  }
 
   useEffect(() => {
     let cancelled = false
@@ -421,16 +417,16 @@ export function HomeworkQuestionView({
           </Button>
         </div>
 
-        {mode === 'practice' && suggestedMethod && (
-          <HomeworkStudyGuide
-            suggestedMethod={suggestedMethod}
-            solutionRevealed={solutionRevealed}
-            onWork={() => focusField(workingRef.current)}
-            onAsk={(message) => {
-              setQuestionText((previous) => (previous.trim() ? previous : message))
-              focusField(askRef.current)
-            }}
-          />
+        {mode === 'practice' && onStartGuided && (
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border/70 bg-muted/20 px-4 py-3 lab:rounded-sm">
+            <p className="min-w-0 flex-1 text-sm leading-relaxed text-muted-foreground">
+              {t('guided.entryHint')}
+            </p>
+            <Button type="button" variant="outline" className="h-11" onClick={onStartGuided}>
+              <ListChecks className="h-4 w-4" aria-hidden />
+              {t('guided.start')}
+            </Button>
+          </div>
         )}
 
         {mode === 'review' && <HomeworkReviewPanel question={question} service={service} />}

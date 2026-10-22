@@ -39,6 +39,9 @@ import * as InterviewScenarioV1 from './interview-scenario/v1'
 import * as InterviewPatientV1 from './interview-patient/v1'
 import * as InterviewSummaryCheckV1 from './interview-summary-check/v1'
 import * as OralExamV1 from './oral-exam/v1'
+import * as PracticeGenerateV1 from './practice-generate/v1'
+import * as PracticeReviewV1 from './practice-review/v1'
+import * as GuidedStepsV1 from './guided-steps/v1'
 
 export const PROMPT_VERSIONS = {
   documentAnalyzer: 'v2',
@@ -76,6 +79,9 @@ export const PROMPT_VERSIONS = {
   interviewPatient: 'v1',
   interviewSummaryCheck: 'v1',
   oralExam: 'v1',
+  practiceGenerate: 'v1',
+  practiceReview: 'v1',
+  guidedSteps: 'v1',
 } as const
 
 export const prompts = {
@@ -115,6 +121,9 @@ export const prompts = {
   interviewPatient: InterviewPatientV1,
   interviewSummaryCheck: InterviewSummaryCheckV1,
   oralExam: OralExamV1,
+  practiceGenerate: PracticeGenerateV1,
+  practiceReview: PracticeReviewV1,
+  guidedSteps: GuidedStepsV1,
 } as const
 
 export type { DocumentAnalyzerInput, DocumentAnalysisOutput } from './document-analyzer/v2'

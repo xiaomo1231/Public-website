@@ -1,4 +1,5 @@
 import { fnv1a } from '@/shared/lib/hash'
+import { guidedHasWork, type GuidedProgress } from './guided'
 
 /**
  * Stable identity matching for homework questions across a re-analysis.
@@ -41,6 +42,7 @@ export interface StudentWorkFields {
   messages?: readonly unknown[]
   revealedHints?: number
   solutionRevealed?: boolean
+  guidedProgress?: GuidedProgress
 }
 
 /**
@@ -53,7 +55,8 @@ export function hasStudentWork(fields: StudentWorkFields): boolean {
     (fields.draftText ?? '').trim() !== '' ||
     (fields.messages?.length ?? 0) > 0 ||
     (fields.revealedHints ?? 0) > 0 ||
-    fields.solutionRevealed === true
+    fields.solutionRevealed === true ||
+    guidedHasWork(fields.guidedProgress)
   )
 }
 

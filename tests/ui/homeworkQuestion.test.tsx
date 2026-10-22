@@ -76,38 +76,20 @@ function stubService(): HomeworkService {
 }
 
 describe('HomeworkQuestionView', () => {
-  it('guides a span question without sending AI requests until the student sends one', async () => {
+  it('offers guided practice (the step-by-step guide) without any AI request', async () => {
     const user = userEvent.setup()
     const service = stubService()
+    const onStartGuided = vi.fn()
     const question = { ...QUESTION, prompt: 'Is v in Span(v1, v2)?' }
-    render(<HomeworkQuestionView question={question} service={service} />)
-
-    expect(screen.getByText('Start with the question')).toBeInTheDocument()
-    expect(screen.getByText(/Read the original question on the left/)).toBeInTheDocument()
-    expect(screen.queryByText(/Start from the definition/)).not.toBeInTheDocument()
-    expect(service.ask).not.toHaveBeenCalled()
-
-    await user.click(screen.getByRole('button', { name: '3. Choose a method' }))
-    await user.click(screen.getByRole('button', { name: 'Span · suggested' }))
-    expect(screen.getByText(/Start from the definition/)).toBeInTheDocument()
-    expect(service.ask).not.toHaveBeenCalled()
-
-    await user.click(screen.getByRole('button', { name: 'Ask about this step' }))
-    expect(screen.getByLabelText('Ask about this question')).toHaveValue(
-      'Please help me choose a method for this question and explain why it fits. Do not solve the problem.',
+    render(
+      <HomeworkQuestionView question={question} service={service} onStartGuided={onStartGuided} />,
     )
-    expect(service.ask).not.toHaveBeenCalled()
-    await user.click(screen.getByRole('button', { name: 'Send' }))
-    expect(service.ask).toHaveBeenCalledWith(
-      'q1',
-      expect.stringContaining('choose a method'),
-      expect.objectContaining({ signal: expect.any(AbortSignal) }),
-    )
-    expect(screen.getByLabelText('Your working')).toHaveValue('my partial working')
 
-    await user.click(screen.getByRole('button', { name: 'Show answer' }))
-    await user.click(screen.getByRole('button', { name: '6. Check' }))
-    expect(screen.getByText('Exam answer outline')).toBeInTheDocument()
+    // The former six-step guide is replaced by guided practice.
+    expect(screen.queryByText('Start with the question')).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Guided practice' }))
+    expect(onStartGuided).toHaveBeenCalled()
+    expect(service.ask).not.toHaveBeenCalled()
   })
 
   it('hides hints and the solution until asked, and keeps the draft', async () => {

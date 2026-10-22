@@ -56,6 +56,7 @@ import { cn } from '@/shared/lib/utils'
 import { prefersReducedMotion } from '@/shared/lib/motion'
 import { useTranslation, type TranslationKey } from '@/i18n'
 import { FloatingQALayer } from './FloatingQALayer'
+import { PracticeSetLauncher } from '../practice/PracticeSetLauncher'
 import { WalkthroughBody, WALKTHROUGH_PARAGRAPH } from './WalkthroughBody'
 import { WalkthroughNotesDialog } from './WalkthroughNotesDialog'
 import { WalkthroughPrint, type PrintableSection } from './WalkthroughPrint'
@@ -736,6 +737,9 @@ export function HomeworkWalkthroughPanel({
                   />
                 ))}
               </article>
+              {entries.some(
+                (entry) => entry.kind === 'summary' && entry.section?.status === 'ready',
+              ) && <PracticeSetLauncher set={set} />}
               {/* Cards that follow the page are placed here, in content coordinates. */}
               <div
                 ref={setCardLayer}

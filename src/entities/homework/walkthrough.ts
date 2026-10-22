@@ -4,6 +4,7 @@ import type { SolutionKind } from '@/infrastructure/math/rref'
 import type { HomeworkQuestion, HomeworkSet } from './types'
 import { isDeferredProfessorAnswer } from './answerMatching'
 import type { TextAnchor } from '@/shared/lib/textAnchor'
+import type { GuidedStepsCache } from './guided'
 
 /**
  * The full walkthrough of one homework assignment: a readable document that
@@ -185,6 +186,8 @@ export interface WalkthroughSection {
   variantDraft?: WalkthroughVariantDraft
   /** The level the student chose for this section (else the default setting). */
   level?: WalkthroughLevel
+  /** 引导练习 steps converted from this section (non-matrix questions), reused while its text is unchanged. */
+  guided?: GuidedStepsCache
   generatedAt: number
 }
 

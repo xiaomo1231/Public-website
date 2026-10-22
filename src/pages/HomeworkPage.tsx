@@ -20,6 +20,7 @@ import { PageContainer, PageContent, PageHeader } from '@/shared/ui/Page'
 import { RichText } from '@/shared/ui/RichText'
 import { formatHomeworkQuestion } from '@/entities/homework/formatQuestion'
 import { HomeworkQuestionView } from '@/widgets/homework/HomeworkQuestionView'
+import { GuidedPracticeView } from '@/widgets/homework/guided/GuidedPracticeView'
 import { HomeworkWalkthroughPanel } from '@/widgets/homework/walkthrough/HomeworkWalkthroughPanel'
 import { ProjectFlowNav } from '@/widgets/project/ProjectFlowNav'
 import { useHomeworkService } from '@/features/homework/useHomeworkService'
@@ -59,11 +60,14 @@ export function HomeworkPage(): JSX.Element {
   const viewParam = searchParams.get('view')
   /** Practice (answer hidden) or review (professor answer shown). */
   const mode: 'practice' | 'review' = viewParam === 'review' ? 'review' : 'practice'
-  /** One question at a time, or the whole assignment's walkthrough. */
-  const view: 'questions' | 'walkthrough' =
-    viewParam === 'walkthrough' ? 'walkthrough' : 'questions'
+  /**
+   * One question at a time, the whole assignment's walkthrough, or 引导练习
+   * (one question, step by step from its walkthrough).
+   */
+  const view: 'questions' | 'walkthrough' | 'guided' =
+    viewParam === 'walkthrough' ? 'walkthrough' : viewParam === 'guided' ? 'guided' : 'questions'
   const showView = useCallback(
-    (next: 'practice' | 'review' | 'walkthrough') =>
+    (next: 'practice' | 'review' | 'walkthrough' | 'guided') =>
       setSearchParams(
         (prev) => {
           const params = new URLSearchParams(prev)
@@ -205,6 +209,14 @@ export function HomeworkPage(): JSX.Element {
                   </Button>
                 )}
                 <Button
+                  variant={view === 'guided' ? 'default' : 'ghost'}
+                  size="sm"
+                  aria-pressed={view === 'guided'}
+                  onClick={() => showView('guided')}
+                >
+                  {t('homework.mode.guided')}
+                </Button>
+                <Button
                   variant={view === 'walkthrough' ? 'default' : 'ghost'}
                   size="sm"
                   aria-pressed={view === 'walkthrough'}
@@ -214,7 +226,7 @@ export function HomeworkPage(): JSX.Element {
                 </Button>
               </div>
             )}
-            {set?.status === 'ready' && questions.length > 0 && (
+            {set?.status === 'ready' && questions.length > 0 && set.kind !== 'practice' && (
               <Button variant="outline" onClick={() => void retrySet()} disabled={retrying}>
                 {retrying ? (
                   <Loader2 className="h-4 w-4 animate-spin" />
@@ -424,15 +436,23 @@ export function HomeworkPage(): JSX.Element {
                   </CardContent>
                 </Card>
 
-                {active && (
+                {active && view === 'guided' ? (
+                  <GuidedPracticeView
+                    key={active.id}
+                    setId={set.id}
+                    question={active}
+                    onOpenWalkthrough={() => showView('walkthrough')}
+                  />
+                ) : active ? (
                   <HomeworkQuestionView
                     key={active.id}
                     question={active}
                     service={service}
                     mode={mode}
+                    onStartGuided={() => showView('guided')}
                     {...(set.answerDocumentId ? { answerDocumentId: set.answerDocumentId } : {})}
                   />
-                )}
+                ) : null}
               </div>
             )}
 

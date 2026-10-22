@@ -14,6 +14,11 @@ vi.mock('@/widgets/homework/HomeworkQuestionView', () => ({
     <div data-testid="question-view">{question.prompt}</div>
   ),
 }))
+vi.mock('@/widgets/homework/guided/GuidedPracticeView', () => ({
+  GuidedPracticeView: ({ question }: { question: HomeworkQuestion }) => (
+    <div data-testid="guided-view">{question.prompt}</div>
+  ),
+}))
 vi.mock('@/features/homework/useHomeworkService', () => ({
   useHomeworkService: () => holder.service,
 }))
@@ -137,6 +142,18 @@ describe('HomeworkPage archive and re-analysis summary', () => {
     await user.click(review)
     expect(review).toHaveAttribute('aria-pressed', 'true')
     expect(practice).toHaveAttribute('aria-pressed', 'false')
+  })
+
+  it('switches to guided practice for the current question', async () => {
+    const user = userEvent.setup()
+    renderPage()
+    const guided = await screen.findByRole('button', { name: 'Guided practice' })
+    await user.click(guided)
+    expect(guided).toHaveAttribute('aria-pressed', 'true')
+    expect(await screen.findByTestId('guided-view')).toHaveTextContent('Compute the value.')
+    expect(screen.queryByTestId('question-view')).not.toBeInTheDocument()
+    // The question navigator stays available in guided practice.
+    expect(screen.getAllByRole('button', { name: /^\d+\./ })).toHaveLength(1)
   })
 
   it('navigates with the compact top question list', async () => {

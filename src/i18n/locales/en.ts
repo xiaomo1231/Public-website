@@ -361,28 +361,6 @@ export const en = {
   'homework.nav': 'Questions',
   'homework.viewQuestion': 'View question',
   'homework.questionNavHint': 'Jump to another question',
-  'homework.guide.title': 'Start with the question',
-  'homework.guide.intro':
-    'Work through these steps in your own order. Your notes stay in Your working; opening a step never calls AI.',
-  'homework.guide.steps': 'Problem-solving steps',
-  'homework.guide.step.read': 'Read',
-  'homework.guide.step.translate': 'Translate',
-  'homework.guide.step.match': 'Choose a method',
-  'homework.guide.step.solve': 'Solve',
-  'homework.guide.step.interpret': 'Interpret',
-  'homework.guide.step.check': 'Check',
-  'homework.guide.body.read':
-    'Read the original question on the left. Identify the requested result, given information, notation and every subpart. Open the source page if a figure or formula looks uncertain.',
-  'homework.guide.body.translate':
-    'Before calculating, write in one sentence what the question asks you to find or prove. Keep the original symbols and assumptions.',
-  'homework.guide.body.match':
-    'Which definition or equation turns that request into a task you can start? Choose a method yourself; the suggested one is only a clue.',
-  'homework.guide.body.solve':
-    'Write one step at a time in Your working. If you get stuck, reveal one hint or ask about the exact step.',
-  'homework.guide.body.interpret':
-    'Explain what your result means for the original question. State the conclusion in the question’s terms.',
-  'homework.guide.body.check':
-    'Compare your work with the original question before viewing the full solution.',
   'homework.guide.methodCaution':
     'These are general method cues, not the solution. The suggestion comes from keywords in the extracted question; check it against the original page.',
   'homework.guide.chooseMethod': 'Choose a linear algebra method',
@@ -405,30 +383,6 @@ export const en = {
     'Write the equations clearly, solve for the unknowns and substitute back into every original equation. A contradiction means no solution; free variables describe a family of solutions.',
   'homework.guide.template.flow':
     'At each node, list every incoming and outgoing flow, then write inflow = outflow. Verify each arrow against the original diagram before solving.',
-  'homework.guide.checkQuestion': 'Did I answer the exact question and every subpart?',
-  'homework.guide.checkConditions':
-    'Did I check each coordinate, sign, assumption and diagram edge I used?',
-  'homework.guide.checkConclusion':
-    'Does my final sentence explain the result, not just show a calculation?',
-  'homework.guide.examTitle': 'Exam answer outline',
-  'homework.guide.examOutline':
-    'After comparing with the worked solution, write a short version in your own words: starting definition or equation → decisive steps → explicit conclusion. Check it against the original question.',
-  'homework.guide.writeWorking': 'Write in my working',
-  'homework.guide.askAI': 'Ask about this step',
-  'homework.guide.nextStep': 'Next step',
-  'homework.guide.notGraded':
-    'These steps guide your practice; they do not grade your written reasoning.',
-  'homework.guide.ask.read': 'Please help me identify what this question asks, without solving it.',
-  'homework.guide.ask.translate':
-    'Please restate this question as a simple mathematical task, preserving its notation and assumptions. Do not solve it yet.',
-  'homework.guide.ask.match':
-    'Please help me choose a method for this question and explain why it fits. Do not solve the problem.',
-  'homework.guide.ask.solve':
-    'I am stuck on one step. Please give only the next small hint, not the full solution.',
-  'homework.guide.ask.interpret':
-    'Please help me explain what my result means for the original question. I will add my work here: ',
-  'homework.guide.ask.check':
-    'Please check the first incorrect or missing step in my work without replacing it with a full solution. I will add my work here: ',
   'homework.review.title': 'Guided review',
   'homework.review.aiNote':
     'AI teaching explanation for this question. Check its mathematics against the original question and any professor answer.',
@@ -744,6 +698,113 @@ export const en = {
   'homework.mode.practice': 'Practice',
   'homework.mode.review': 'Review',
   'homework.mode.walkthrough': 'Walkthrough',
+  'homework.mode.guided': 'Guided practice',
+  'guided.title': 'Guided practice',
+  'guided.start': 'Guided practice',
+  'guided.entryHint':
+    'Work this question step by step from its walkthrough: type each step yourself and it is checked locally as you go.',
+  'guided.exercise': 'Exercise {index}',
+  'guided.stepN': 'Step {index}',
+  'guided.startMatrix': 'Starting matrix',
+  'guided.resultOfStep': 'Matrix after step {index}',
+  'guided.stepCorrect': 'Correct — on to the next step.',
+  'guided.stepDone': 'Step done',
+  'guided.chainDone': 'Done. Your final matrix agrees with the walkthrough’s result.',
+  'guided.chainDoneDiffers':
+    'Done. Your final matrix differs from the walkthrough’s result — compare them in the walkthrough.',
+  'guided.waiting': 'Finish the exercise above first.',
+  'guided.routeLost':
+    'Your saved steps no longer fit this walkthrough. Use “Start over” to practise it again.',
+  'guided.hint': 'Hint',
+  'guided.hintGeneric':
+    'Find the column of the next pivot, make the pivot 1, then clear the other entries of that column.',
+  'guided.hintOffRoute':
+    'You are taking a different route from the walkthrough, which is fine. Next: find the column of the next pivot, make the pivot 1, then clear the other entries of that column.',
+  'guided.showStepAnswer': 'Show this step',
+  'guided.opLabel': 'Row operation for this step',
+  'guided.opPlaceholder': 'e.g. R2 -> R2 - 2R1',
+  'guided.opSyntax':
+    'Write it like R2 -> R2 - 2R1, R1 <-> R2 or R2 -> 1/3 R2. Several at once: separate with commas.',
+  'guided.opReadAs': 'Read as',
+  'guided.opAccepted': 'Operation',
+  'guided.checkOp': 'Check operation',
+  'guided.op.unreadable':
+    'This operation could not be read. Write it like R2 -> R2 - 2R1, R1 <-> R2 or R2 -> 1/3 R2.',
+  'guided.op.outOfRange': 'This matrix does not have that row.',
+  'guided.op.notInvertible':
+    'This is not an elementary row operation: the row being replaced must keep a non-zero multiple of itself (R2 -> 2R1 or R2 -> 0R2 loses information).',
+  'guided.op.noChange': 'This operation does not change the matrix.',
+  'guided.op.noProgress':
+    'This operation is valid but does not bring the matrix closer to reduced row echelon form. Try another one, or open the hint.',
+  'guided.op.acceptedRoute': 'Correct operation. Now fill in the resulting matrix.',
+  'guided.op.acceptedOwn':
+    'A valid operation that differs from the walkthrough — fine. Now fill in the resulting matrix.',
+  'guided.matrixLocked': 'The resulting matrix opens once the operation is correct.',
+  'guided.resultLabel': 'Resulting matrix',
+  'guided.fillUnchanged': 'Fill unchanged rows',
+  'guided.cellLabel': 'Row {row}, column {col}',
+  'guided.cellSyntax': 'Fractions or decimals both work: -2/5 or -0.4. Enter checks, Tab moves on.',
+  'guided.checkMatrix': 'Check matrix',
+  'guided.cellsEmpty': '{count} entries are still empty.',
+  'guided.cellUnreadable': 'not a number (write -2/5 or -0.4)',
+  'guided.cellInexact': 'close, but not exact: write it as a fraction',
+  'guided.cellUnchanged': 'this row does not change in this step: copy it from the matrix above',
+  'guided.cellCompute': 'compute',
+  'guided.cellWrong': 'not correct',
+  'guided.badge.hint': 'Hint used',
+  'guided.badge.answer': 'Answer viewed',
+  'guided.blankLabel': 'Blank {index}',
+  'guided.kind.expression': 'expression',
+  'guided.kind.number': 'number',
+  'guided.kind.quantity': 'number with unit',
+  'guided.kind.chemistry': 'chemical equation',
+  'guided.kind.text': 'term',
+  'guided.kind.exact': 'exact output',
+  'guided.checkBlanks': 'Check',
+  'guided.continue': 'Continue',
+  'guided.blank.correct': 'Correct.',
+  'guided.blank.wrong': 'Not correct yet.',
+  'guided.blank.empty': 'Fill in this blank.',
+  'guided.blank.unverified': 'This could not be checked automatically; it counts as done.',
+  'guided.blank.missingUnit': 'Add the unit.',
+  'guided.blank.wrongDimension': 'The unit measures a different quantity.',
+  'guided.blank.unbalanced': 'The equation is not balanced (atoms or charge).',
+  'guided.blank.species': 'Some reactants or products are missing or extra.',
+  'guided.blank.coefficients': 'Check the coefficients.',
+  'guided.blank.unreadable': 'This could not be read.',
+  'guided.fromStandard': 'From the standard walkthrough',
+  'guided.fromDetailed': 'From the detailed walkthrough',
+  'guided.introMatrix':
+    'Each step: type the row operation first; when it is right, fill in the resulting matrix. Any valid route towards the reduced form is accepted. Everything is checked on this device.',
+  'guided.introBlanks':
+    'Each step: fill in the blanks; they are checked on this device. Use a hint or show the step when stuck.',
+  'guided.droppedBlanks':
+    '{count} blanks were left out because their answers were not found in the walkthrough.',
+  'guided.noWalkthroughTitle': 'No walkthrough for this question yet',
+  'guided.noWalkthroughHint':
+    'Guided practice follows the steps of the complete walkthrough. Write the walkthrough first, then come back.',
+  'guided.openWalkthrough': 'Open the walkthrough',
+  'guided.prepareTitle': 'Prepare guided practice',
+  'guided.prepareHint':
+    'One short AI request turns this question’s walkthrough into steps with blanks. It is saved and reused; checking your answers never calls AI.',
+  'guided.prepare': 'Prepare',
+  'guided.preparing': 'Preparing…',
+  'guided.noAI': 'Set up an AI provider in Settings to prepare these steps.',
+  'guided.summaryTitle': 'Summary',
+  'guided.summarySteps': 'Steps done: {count}',
+  'guided.summaryHints': 'Hints used: {count}',
+  'guided.summaryAnswers': 'Answers viewed: {count}',
+  'guided.summaryOnOwn': 'All steps on your own — well done.',
+  'guided.summaryWithHints': 'Done with some hints. Try it once more without them later.',
+  'guided.summaryRetry': 'Some steps were shown. Start over later and do them yourself.',
+  'guided.restart': 'Start over',
+  'guided.restartConfirm': 'Clear your guided-practice progress for this question?',
+  'guided.methodTitle': 'Where to start',
+  'guided.errors.load': 'Guided practice could not be loaded.',
+  'guided.errors.noWalkthrough': 'This question has no walkthrough yet.',
+  'guided.errors.noSteps':
+    'No usable steps came back (their answers must come from the walkthrough). Try again.',
+  'guided.errors.changed': 'The walkthrough changed meanwhile. Try again.',
   'homework.walkthrough.title': 'Full walkthrough',
   'homework.walkthrough.toc': 'Contents',
   'homework.walkthrough.language.zh_terms': 'Chinese with English terms',
@@ -3402,6 +3463,56 @@ export const en = {
 
   'time.justNow': 'now',
 
+  'practiceSet.heading': 'Practice questions',
+  'practiceSet.open': 'Make practice questions',
+  'practiceSet.intro':
+    'New questions on what this assignment covers, saved as a practice set: answer them, check your answers, or open a walkthrough.',
+  'practiceSet.count': '{count} questions',
+  'practiceSet.status.paused': 'Paused',
+  'practiceSet.status.failed': 'Not finished',
+  'practiceSet.status.building': 'Building…',
+  'practiceSet.dialogTitle': 'Make practice questions',
+  'practiceSet.dialogBody':
+    'Choose a version. Linear systems are built locally with exact answers; other questions are written by the AI, and answers that can be recomputed are checked locally.',
+  'practiceSet.modeLabel': 'Version',
+  'practiceSet.mode.full': 'Full version',
+  'practiceSet.mode.fullHint':
+    'Mirrors the assignment: the same questions and sub-parts, the same kind of task and solution type, new numbers and contexts.',
+  'practiceSet.mode.compact': 'Compact version',
+  'practiceSet.mode.compactHint':
+    'One question per category of the summary, plus one or two that combine several points.',
+  'practiceSet.previewCount': '{count} questions ({local} built locally)',
+  'practiceSet.reviewNote':
+    'Every question is reviewed once by the AI (on topic, matching structure, clear, similar difficulty). Questions that fail are rebuilt once; those failing again are left out.',
+  'practiceSet.stage.writing': 'Writing questions ({done} / {total} batches of slots)',
+  'practiceSet.stage.reviewing': 'Reviewing questions ({done} / {total})',
+  'practiceSet.stage.saving': 'Saving…',
+  'practiceSet.done': '{count} practice questions are ready.',
+  'practiceSet.droppedSummary': '{count} were left out:',
+  'practiceSet.openSet': 'Open the practice set',
+  'practiceSet.retry': 'Try again',
+  'practiceSet.start': 'Make questions',
+  'practiceSet.listTitle': 'Practice sets',
+  'practiceSet.deleted': 'Practice set deleted',
+  'practiceSet.delete': 'Delete practice set',
+  'practiceSet.deleteTitle': 'Delete this practice set?',
+  'practiceSet.deleteBody':
+    '“{name}”, its questions, your answers, its walkthrough and saved questions are deleted. The assignment is not affected.',
+  'practiceSet.titleFull': '{title} · Practice (full) {n}',
+  'practiceSet.titleCompact': '{title} · Practice (compact) {n}',
+  'practiceSet.nothingToPlan':
+    'There is nothing to base practice questions on yet: the assignment has no questions.',
+  'practiceSet.notFromPractice':
+    'This is a practice set; make new practice questions from the original assignment.',
+  'practiceSet.droppedReview': 'Question {label}: did not pass review ({reason})',
+  'practiceSet.droppedCheck': 'Question {label}: {reason}',
+  'practiceSet.reason.notWritten': 'the AI did not write it',
+  'practiceSet.reason.structure': 'its sub-parts did not match the original',
+  'practiceSet.reason.localCheck': 'its answer did not pass the local check',
+  'practiceSet.reason.noVerdict': 'no review verdict',
+  'practiceSet.allDropped': 'No question passed the checks. Try again or choose the other version.',
+  'practiceSet.check.partial':
+    'Some parts are right and some are not (checked locally against the computed answers).',
   'generation.controls': 'Generation controls',
   'generation.pause': 'Pause',
   'generation.pauseHint': 'Finish the parts in progress, then pause',

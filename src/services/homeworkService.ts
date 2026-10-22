@@ -90,7 +90,10 @@ import {
   type HomeworkQuestion,
   type HomeworkSet,
   type ReanalysisSummary,
+  isPracticeSet,
 } from '@/entities/homework/types'
+import { checkPracticeAnswer } from '@/entities/homework/practice/verify'
+import { recordPracticeCheck } from './practiceLearning'
 import {
   ANALYZER_OUTPUT_CEILING,
   MIN_OUTPUT_TOKENS,
@@ -339,10 +342,15 @@ export class HomeworkService {
     if (!reference) throw new AppError(t('homework.check.noReference'), 'VALIDATION_ERROR')
     const inputHash = answerCheckInputHash(question, draft, language, checkVersion, imageKey)
     // With handwritten working attached, the whole answer goes to the model.
+    // Practice-set questions are graded against their locally computed answers.
     const local =
-      reference.kind === 'professor' && answerImages.length === 0
-        ? checkObjectiveAnswer(question, reference.text, submittedDraft)
-        : null
+      answerImages.length > 0
+        ? null
+        : question.practice
+          ? checkPracticeAnswer(question.practice, submittedDraft)
+          : reference.kind === 'professor'
+            ? checkObjectiveAnswer(question, reference.text, submittedDraft)
+            : null
     let check: HomeworkAnswerCheck
     if (local) {
       check = {
@@ -352,7 +360,9 @@ export class HomeworkService {
         feedback: t(
           local.verdict === 'correct'
             ? 'homework.check.objectiveCorrect'
-            : 'homework.check.objectiveIncorrect',
+            : local.verdict === 'partial'
+              ? 'practiceSet.check.partial'
+              : 'homework.check.objectiveIncorrect',
         ),
         referenceKind: reference.kind,
         inputHash,
@@ -431,6 +441,8 @@ export class HomeworkService {
     }
     const saved = await this.homework.applyAnswerCheck(questionId, draft, check)
     if (!saved) throw new AppError(t('homework.check.changed'), 'CONCURRENT_MODIFICATION')
+    // Practice-set answers count toward mastery and the mistake book.
+    if (saved.practice) await recordPracticeCheck(this.db, saved, set.title, submittedDraft, check)
     return check
   }
 
@@ -585,7 +597,10 @@ export class HomeworkService {
     let set: HomeworkSet | undefined
     let created = false
     await this.db.transaction('rw', this.db.homeworkSets, async () => {
-      const existing = await this.homework.listSetsByDocument(document.id)
+      // Practice sets share the document but are not its assignment.
+      const existing = (await this.homework.listSetsByDocument(document.id)).filter(
+        (item) => !isPracticeSet(item),
+      )
       if (existing.length > 0) {
         set = [...existing].sort((a, b) => b.createdAt - a.createdAt)[0]
         return
@@ -641,7 +656,8 @@ export class HomeworkService {
    * that merely share a name but have different `documentId` are untouched.
    */
   async reconcileSets(projectId: string): Promise<{ removed: number; ambiguous: string[] }> {
-    const sets = await this.homework.listSets(projectId)
+    // Practice sets share their assignment's document; they are never duplicates.
+    const sets = (await this.homework.listSets(projectId)).filter((set) => !isPracticeSet(set))
     const byDocument = new Map<string, HomeworkSet[]>()
     for (const set of sets) {
       const group = byDocument.get(set.documentId) ?? []
@@ -1342,6 +1358,9 @@ export class HomeworkService {
   ): Promise<HomeworkRunResult | undefined> {
     const existing = await this.homework.getSet(setId)
     if (!existing) return undefined
+    // A practice set has no document of its own to re-read.
+    if (isPracticeSet(existing))
+      throw new AppError(t('practiceSet.notFromPractice'), 'VALIDATION_ERROR')
     // What a paused re-read restores: the questions are untouched, so the set
     // goes back to how it was (a first read with nothing yet stays `paused`).
     let previous: HomeworkSet | undefined
