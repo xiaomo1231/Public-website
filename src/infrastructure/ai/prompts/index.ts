@@ -45,10 +45,12 @@ import * as InterviewSummaryCheckV1 from './interview-summary-check/v1'
 import * as OralExamV2 from './oral-exam/v2'
 import * as PracticeGenerateV3 from './practice-generate/v3'
 import * as PracticeReviewV1 from './practice-review/v1'
+import * as MockPaperV1 from './mock-paper/v1'
 import * as GuidedStepsV1 from './guided-steps/v1'
 import * as QuestionStyleV2 from './question-style/v2'
 import * as QuestionTranslateV2 from './question-translate/v2'
 import * as StudyPlanSummaryV1 from './study-plan-summary/v1'
+import * as HandwritingTranscribeV1 from './handwriting-transcribe/v1'
 
 export const PROMPT_VERSIONS = {
   documentAnalyzer: 'v3',
@@ -92,10 +94,12 @@ export const PROMPT_VERSIONS = {
   oralExam: 'v2',
   practiceGenerate: 'v3',
   practiceReview: 'v1',
+  mockPaper: 'v1',
   guidedSteps: 'v1',
   questionStyle: 'v2',
   questionTranslate: 'v2',
   studyPlanSummary: 'v1',
+  handwritingTranscribe: 'v1',
 } as const
 
 export const prompts = {
@@ -142,10 +146,14 @@ export const prompts = {
   oralExam: OralExamV2,
   practiceGenerate: PracticeGenerateV3,
   practiceReview: PracticeReviewV1,
+  /** AI 模拟卷: one question per request, then a batched review. */
+  mockPaper: MockPaperV1,
   guidedSteps: GuidedStepsV1,
   questionStyle: QuestionStyleV2,
   questionTranslate: QuestionTranslateV2,
   studyPlanSummary: StudyPlanSummaryV1,
+  /** 手写识别: transcribe a handwritten answer exactly (no corrections, `[?]` marks). */
+  handwritingTranscribe: HandwritingTranscribeV1,
 } as const
 
 export type { DocumentAnalyzerInput, DocumentAnalysisOutput } from './document-analyzer/v3'

@@ -75,8 +75,14 @@ export interface SchedulerExam {
   mocks: SchedulerMaterial[]
   /** Homework and professor practice sets picked as materials. */
   sets: Array<SchedulerMaterial & { kind: 'homework' | 'practice_set' }>
-  /** Plan a slot for an AI mock paper. */
+  /** Plan a slot for an AI mock paper (to generate; see `aiMock`). */
   aiMockSlot?: boolean
+  /**
+   * The AI 模拟卷 for this exam: a generated paper to take (its set id), or
+   * the generate task (`ai-mock:<examId>`). Replaces `aiMockSlot`; nothing is
+   * planned once it is `done`.
+   */
+  aiMock?: SchedulerMaterial
   /** Mistake re-tests due now. */
   mistakesDue: number
   /** Active mistakes in the exam's course. */
@@ -295,7 +301,10 @@ export function buildSchedule(input: ScheduleInput): ScheduleResult {
           item,
           kind: 'mock' as const,
         }))
-    if (exam.aiMockSlot) {
+    if (exam.aiMock) {
+      if (!exam.aiMock.done)
+        offsets.push({ offset: AI_MOCK_OFFSET, item: exam.aiMock, kind: 'ai_mock' })
+    } else if (exam.aiMockSlot) {
       offsets.push({
         offset: AI_MOCK_OFFSET,
         item: { id: `ai-mock:${exam.id}`, title: '', minutes: AI_MOCK_MINUTES },

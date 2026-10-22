@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Plus, Trash2 } from 'lucide-react'
+import { Link } from 'react-router-dom'
+import { Plus, Sparkles, Trash2 } from 'lucide-react'
 import { Button } from '@/shared/ui/Button'
 import { Input } from '@/shared/ui/Input'
 import { Label } from '@/shared/ui/Label'
@@ -145,6 +146,16 @@ export function ExamSetup({ projectId }: { projectId?: string }): JSX.Element {
                     {t(SCOPE_KEYS[exam.scope.kind])}
                   </p>
                 </div>
+                {!left.past && (
+                  <Button asChild size="sm" variant="outline">
+                    <Link
+                      to={`/projects/${exam.projectId}/homework?aiMock=${encodeURIComponent(exam.id)}`}
+                    >
+                      <Sparkles className="h-4 w-4" aria-hidden />
+                      {t('aiMock.generate')}
+                    </Link>
+                  </Button>
+                )}
                 <Button
                   size="sm"
                   variant="ghost"

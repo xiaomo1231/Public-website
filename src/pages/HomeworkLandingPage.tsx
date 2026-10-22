@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { Link, useParams, useSearchParams } from 'react-router-dom'
 import {
   ArrowRight,
   BarChart3,
@@ -11,10 +11,14 @@ import {
   Play,
   RefreshCw,
   RotateCcw,
+  Sparkles,
   Timer,
   Trash2,
   Upload,
 } from 'lucide-react'
+import { AiMockDialog } from '@/widgets/exam/aiMock/AiMockDialog'
+import { AiMockRows } from '@/widgets/exam/aiMock/AiMockRows'
+import { useAiMockService } from '@/features/exam/useAiMockService'
 import { DocumentRepository } from '@/entities/document/repository'
 import {
   PROCESSING_STATUS_LABEL_KEYS,
@@ -24,7 +28,10 @@ import {
 import { PracticeSetRows } from '@/widgets/homework/practice/PracticeSetRows'
 import { pausedCardActions } from '@/widgets/homework/pausedCardActions'
 import {
+  isAiMockSet,
+  isDerivedSet,
   isExamSet,
+  isPastPaperSet,
   isPracticeSet,
   HOMEWORK_STATUS_LABEL_KEYS,
   type HomeworkSet,
@@ -111,6 +118,27 @@ export function HomeworkLandingPage(): JSX.Element {
   const [error, setError] = useState<string | null>(null)
   const attempted = useRef<Set<string>>(new Set())
   const reconciled = useRef(false)
+  // AI 模拟卷: `?aiMock=<examId>` (from the study plan) or `?aiMock=new` opens 生成模拟卷.
+  const aiMockService = useAiMockService()
+  const [params, setParams] = useSearchParams()
+  const [aiMock, setAiMock] = useState<{
+    examId?: string
+    templateSetId?: string
+    setId?: string
+  } | null>(null)
+  const aiMockParam = params.get('aiMock')
+  useEffect(() => {
+    if (!aiMockParam) return
+    setAiMock(aiMockParam === 'new' ? {} : { examId: aiMockParam })
+    setParams(
+      (prev) => {
+        const next = new URLSearchParams(prev)
+        next.delete('aiMock')
+        return next
+      },
+      { replace: true },
+    )
+  }, [aiMockParam, setParams])
 
   const load = useCallback(async () => {
     if (!projectId) return
@@ -145,8 +173,9 @@ export function HomeworkLandingPage(): JSX.Element {
   const hasActiveWork =
     busyDocumentId !== null ||
     sets.some(
-      // Practice sets report their own build; a stranded one must not poll forever.
-      (set) => set.status === 'analyzing' && !isPracticeSet(set),
+      // Practice sets and AI mock papers report their own build; a stranded
+      // one must not poll forever.
+      (set) => set.status === 'analyzing' && !isDerivedSet(set),
     )
   useEffect(() => {
     if (!hasActiveWork) return
@@ -286,13 +315,19 @@ export function HomeworkLandingPage(): JSX.Element {
         nav={<ProjectFlowNav projectId={projectId} active="homework" />}
         actions={
           <>
-            {sets.some((set) => isExamSet(set) && set.status === 'ready') && (
-              <Button asChild variant="outline">
-                <Link to={`/projects/${projectId}/homework/exam-analysis`}>
-                  <BarChart3 className="h-4 w-4" />
-                  {t('examAnalysis.open')}
-                </Link>
-              </Button>
+            {sets.some((set) => isPastPaperSet(set) && set.status === 'ready') && (
+              <>
+                <Button asChild variant="outline">
+                  <Link to={`/projects/${projectId}/homework/exam-analysis`}>
+                    <BarChart3 className="h-4 w-4" />
+                    {t('examAnalysis.open')}
+                  </Link>
+                </Button>
+                <Button variant="outline" onClick={() => setAiMock({})}>
+                  <Sparkles className="h-4 w-4" />
+                  {t('aiMock.generate')}
+                </Button>
+              </>
             )}
             <Button onClick={() => setUploadOpen(true)}>
               <Upload className="h-4 w-4" />
@@ -366,7 +401,7 @@ export function HomeworkLandingPage(): JSX.Element {
             ) : (
               <ul className="grid gap-4 lecture:gap-0 lecture:border-t lab:gap-3 sm:grid-cols-2 sm:lecture:grid-cols-1 xl:grid-cols-3 xl:lecture:grid-cols-1">
                 {sets
-                  .filter((set) => !isPracticeSet(set))
+                  .filter((set) => !isDerivedSet(set))
                   .map((set) => {
                     const running =
                       busyDocumentId === set.documentId || Boolean(service?.isSetRunning(set.id))
@@ -528,6 +563,28 @@ export function HomeworkLandingPage(): JSX.Element {
                               )}
                               onChanged={() => void load()}
                             />
+                            {isExamSet(set) && set.status === 'ready' && (
+                              <Button
+                                variant="ghost"
+                                className="w-full"
+                                onClick={() => setAiMock({ templateSetId: set.id })}
+                                data-ai-mock-open
+                              >
+                                <Sparkles className="h-4 w-4" />
+                                {t('aiMock.generateFrom')}
+                              </Button>
+                            )}
+                            <AiMockRows
+                              projectId={projectId}
+                              sets={sets.filter(
+                                (item) =>
+                                  isAiMockSet(item) &&
+                                  item.exam?.aiMock?.config.templateSetId === set.id,
+                              )}
+                              service={aiMockService}
+                              onOpen={(setId) => setAiMock({ setId })}
+                              onChanged={() => void load()}
+                            />
                           </CardContent>
                         </Card>
                       </li>
@@ -581,6 +638,25 @@ export function HomeworkLandingPage(): JSX.Element {
           </>
         )}
       </PageContent>
+
+      {aiMock && aiMockService && (
+        <AiMockDialog
+          key={aiMock.setId ?? `${aiMock.examId ?? ''}:${aiMock.templateSetId ?? ''}`}
+          projectId={projectId}
+          service={aiMockService}
+          open
+          onOpenChange={(open) => {
+            if (!open) {
+              setAiMock(null)
+              void load()
+            }
+          }}
+          {...(aiMock.examId ? { examId: aiMock.examId } : {})}
+          {...(aiMock.templateSetId ? { templateSetId: aiMock.templateSetId } : {})}
+          {...(aiMock.setId ? { setId: aiMock.setId } : {})}
+          onChanged={() => void load()}
+        />
+      )}
 
       <DocumentUploadDialog
         projectId={projectId}

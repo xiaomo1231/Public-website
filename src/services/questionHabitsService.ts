@@ -11,7 +11,7 @@ import { DocumentRepository } from '@/entities/document/repository'
 import { resolveMaterialType } from '@/entities/document/types'
 import { ChunkRepository } from '@/entities/chunk/repository'
 import { HomeworkRepository } from '@/entities/homework/repository'
-import { isExamSet, isPracticeSet } from '@/entities/homework/types'
+import { isDerivedSet, isExamSet } from '@/entities/homework/types'
 import { isHeldOut } from '@/entities/evaluation/evalRole'
 import { PracticeRepository } from '@/entities/practice/repository'
 import { UserRepository } from '@/entities/user/repository'
@@ -149,8 +149,9 @@ export class QuestionHabitsService {
 
     const homework = new HomeworkRepository(this.db)
     for (const set of await homework.listSets(projectId)) {
-      // Independent evaluation items never feed the habits profile.
-      if (isPracticeSet(set) || isHeldOut(set)) continue
+      // Independent evaluation items never feed the habits profile, nor do
+      // the platform's own sets (练习作业, AI 模拟卷).
+      if (isDerivedSet(set) || isHeldOut(set)) continue
       const kind: QuestionHabitSourceKind = isExamSet(set) ? 'exam' : 'homework'
       const questions = (await homework.listQuestions(set.id)).filter(
         (question) => !question.retired && question.prompt.trim() && !isHeldOut(question),

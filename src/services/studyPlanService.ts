@@ -8,7 +8,9 @@ import {
   normalizeCalendar,
   weekStart,
 } from '@/entities/studyPlan/calendar'
+import { isAiMockSet, isPastPaperSet } from '@/entities/homework/types'
 import {
+  AI_MOCK_MINUTES,
   buildSchedule,
   CONFIRMED_ATTEMPTS,
   CONFIRMED_MASTERY,
@@ -96,6 +98,8 @@ export interface ExamContext {
   analysisReady: boolean
   topics: SchedulerTopic[]
   mocks: SchedulerMaterial[]
+  /** The AI 模拟卷 task: generate one (`ai-mock:<examId>`) or take the latest. */
+  aiMock: SchedulerMaterial
   sets: SchedulerExam['sets']
   mistakesDue: number
   openMistakes: number
@@ -281,9 +285,7 @@ export class StudyPlanService {
           topics: scope.topics.length,
         })),
       ),
-      pastExams: sets
-        .filter((set) => set.kind === 'exam')
-        .map((set) => ({ id: set.id, title: set.title })),
+      pastExams: sets.filter(isPastPaperSet).map((set) => ({ id: set.id, title: set.title })),
       homework: sets
         .filter((set) => !set.kind || set.kind === 'assignment')
         .map((set) => ({ id: set.id, title: set.title })),
@@ -346,7 +348,8 @@ export class StudyPlanService {
     const handled = handledMaterials(tasks, exam.id)
 
     // Past papers: marks per topic, difficulty, mock exams and their results.
-    const examSets = sets.filter((set) => set.kind === 'exam')
+    // Uploaded past papers; AI 模拟卷 are planned on their own (below).
+    const examSets = sets.filter(isPastPaperSet)
     const chosenPapers =
       exam.materials.pastExamSetIds.length > 0
         ? examSets.filter((set) => exam.materials.pastExamSetIds.includes(set.id))
@@ -430,7 +433,28 @@ export class StudyPlanService {
       minutes: set.exam?.durationMinutes ?? set.exam?.detectedMinutes ?? DEFAULT_EXAM_MINUTES,
       done: handled.has(set.id) || attemptsAfterStart(set).length > 0,
     }))
-    const checked = chosenPapers
+    // AI 模拟卷 written for this exam: the newest is planned (generate it when
+    // there is none ready yet, else take it); their results count like a mock's.
+    const aiMocks = sets
+      .filter((set) => isAiMockSet(set) && set.exam?.aiMock?.config.examId === exam.id)
+      .sort((a, b) => b.createdAt - a.createdAt)
+    const latestMock = aiMocks[0]
+    const placeholder = `ai-mock:${exam.id}`
+    const aiMock: SchedulerMaterial =
+      latestMock && latestMock.status === 'ready'
+        ? {
+            id: latestMock.id,
+            title: latestMock.title,
+            minutes: latestMock.exam?.durationMinutes ?? DEFAULT_EXAM_MINUTES,
+            done: handled.has(latestMock.id) || attemptsAfterStart(latestMock).length > 0,
+          }
+        : {
+            id: placeholder,
+            title: latestMock?.title ?? '',
+            minutes: AI_MOCK_MINUTES,
+            done: handled.has(placeholder),
+          }
+    const checked = [...chosenPapers, ...aiMocks]
       .flatMap((set) => [set.exam?.current, ...(set.exam?.attempts ?? [])])
       .filter((a): a is MockExamAttempt => !!a && !!a.checkedAt && !!a.results?.length)
       .sort((a, b) => (b.checkedAt ?? 0) - (a.checkedAt ?? 0))[0]
@@ -474,6 +498,7 @@ export class StudyPlanService {
       analysisReady: analysis?.status === 'ready',
       topics,
       mocks,
+      aiMock,
       sets: setsMaterial,
       mistakesDue: mistakes.filter((m) => isRetestDue(m, now)).length,
       openMistakes: mistakes.length,
@@ -578,7 +603,7 @@ export class StudyPlanService {
       topics: c.topics,
       mocks: c.mocks,
       sets: c.sets,
-      aiMockSlot: !handledMaterials(tasks, c.exam.id).has(`ai-mock:${c.exam.id}`),
+      aiMock: c.aiMock,
       mistakesDue: c.mistakesDue,
       openMistakes: c.openMistakes,
       cardsDue: c.cardsDue,

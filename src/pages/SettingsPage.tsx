@@ -24,6 +24,7 @@ import { PageContainer, PageContent, PageHeader } from '@/shared/ui/Page'
 import { ThemePicker } from '@/widgets/theme/ThemePicker'
 import { NoteMarkStyleSetting } from '@/widgets/settings/NoteMarkStyleSetting'
 import { WalkthroughLevelSetting } from '@/widgets/settings/WalkthroughLevelSetting'
+import { HandwritingRecognitionSetting } from '@/widgets/settings/HandwritingRecognitionSetting'
 import { PomodoroSettingsCard } from '@/widgets/focus/PomodoroSettingsCard'
 import { FocusStatsCard } from '@/widgets/focus/FocusStatsCard'
 import { QuestionLanguageSetting } from '@/widgets/settings/QuestionLanguageSetting'
@@ -324,6 +325,8 @@ export function SettingsPage(): JSX.Element {
             <NoteMarkStyleSetting {...SETTINGS_SHELL} />
 
             <WalkthroughLevelSetting {...SETTINGS_SHELL} />
+
+            <HandwritingRecognitionSetting {...SETTINGS_SHELL} />
 
             {/* 番茄钟 + 学习时长 (focus records); both apply / read at once. */}
             <PomodoroSettingsCard {...SETTINGS_SHELL} />

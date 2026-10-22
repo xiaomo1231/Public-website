@@ -1,3 +1,6 @@
+import type { StoredStrokePage } from '@/entities/handwriting/strokes'
+import type { CropRect } from '@/entities/handwriting/crop'
+
 /**
  * Images the learner attaches to a homework answer: photos of handwritten
  * working, or pages drawn on the in-app pen board. Stored in IndexedDB
@@ -17,7 +20,26 @@ export interface HomeworkAnswerImage {
   width?: number
   height?: number
   createdAt: number
+  /**
+   * Written in a mock exam attempt (`MockExamAttempt.id`). Such images belong
+   * to that attempt only: they are not part of the question's homework
+   * answer (`AnswerImageRepository.list`) and are graded only through a
+   * confirmed transcript. Absent on homework images.
+   */
+  examAttemptId?: string
+  /** Tablet writing area: page index within the question's area (pen pages only). */
+  writingPage?: number
+  /** Tablet writing area: the ink of this page, kept for re-editing and stroke recognition. */
+  strokes?: StoredStrokePage
+  /** Paper photo: the region of the uploaded page this image was cut from. */
+  crop?: CropRect & { page: number }
 }
+
+/** Optional fields set when an image is added (exam attempt, strokes, crop). */
+export type AnswerImageExtras = Pick<
+  HomeworkAnswerImage,
+  'examAttemptId' | 'writingPage' | 'strokes' | 'crop'
+>
 
 export const ANSWER_IMAGE_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp'] as const
 export type AnswerImageMimeType = (typeof ANSWER_IMAGE_MIME_TYPES)[number]

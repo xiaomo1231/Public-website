@@ -98,6 +98,8 @@ import {
   type HomeworkQuestion,
   type HomeworkSet,
   type ReanalysisSummary,
+  isAiMockSet,
+  isDerivedSet,
   isPracticeSet,
 } from '@/entities/homework/types'
 import { checkPracticeAnswer } from '@/entities/homework/practice/verify'
@@ -392,10 +394,18 @@ export class HomeworkService {
     questionId: string,
     draft: string,
     language: 'zh' | 'en',
-    options: HomeworkRequestOptions = {},
+    options: HomeworkRequestOptions & {
+      /**
+       * Grade the text only, never images (模拟考试: handwriting reaches the
+       * grader only as the transcript the student confirmed).
+       */
+      ignoreImages?: boolean
+    } = {},
   ): Promise<HomeworkAnswerCheck> {
     const submittedDraft = draft.trim()
-    const answerImages = await new AnswerImageRepository(this.db).list(questionId)
+    const answerImages = options.ignoreImages
+      ? []
+      : await new AnswerImageRepository(this.db).list(questionId)
     const imageKey = answerImageKey(answerImages)
     if (!submittedDraft && answerImages.length === 0)
       throw new AppError(t('homework.check.empty'), 'VALIDATION_ERROR')
@@ -533,10 +543,21 @@ export class HomeworkService {
         createdAt: Date.now(),
       }
     }
-    const saved = await this.homework.applyAnswerCheck(questionId, draft, check)
+    const saved = await this.homework.applyAnswerCheck(questionId, draft, check, {
+      ...(options.ignoreImages ? { ignoreImages: true } : {}),
+    })
     if (!saved) throw new AppError(t('homework.check.changed'), 'CONCURRENT_MODIFICATION')
     // Practice-set answers count toward mastery and the mistake book.
-    if (saved.practice) await recordPracticeCheck(this.db, saved, set.title, submittedDraft, check)
+    // (AI 模拟卷 questions too, as mock-exam answers; the mock exam does not record them again.)
+    if (saved.practice)
+      await recordPracticeCheck(
+        this.db,
+        saved,
+        set.title,
+        submittedDraft,
+        check,
+        isAiMockSet(set) ? { origin: 'mock_exam' } : {},
+      )
     return check
   }
 
@@ -757,7 +778,7 @@ export class HomeworkService {
     await this.db.transaction('rw', this.db.homeworkSets, async () => {
       // Practice sets share the document but are not its assignment.
       const existing = (await this.homework.listSetsByDocument(document.id)).filter(
-        (item) => !isPracticeSet(item),
+        (item) => !isDerivedSet(item),
       )
       if (existing.length > 0) {
         set = [...existing].sort((a, b) => b.createdAt - a.createdAt)[0]
@@ -827,7 +848,7 @@ export class HomeworkService {
    */
   async reconcileSets(projectId: string): Promise<{ removed: number; ambiguous: string[] }> {
     // Practice sets share their assignment's document; they are never duplicates.
-    const sets = (await this.homework.listSets(projectId)).filter((set) => !isPracticeSet(set))
+    const sets = (await this.homework.listSets(projectId)).filter((set) => !isDerivedSet(set))
     const byDocument = new Map<string, HomeworkSet[]>()
     for (const set of sets) {
       const group = byDocument.get(set.documentId) ?? []
@@ -1587,7 +1608,7 @@ export class HomeworkService {
     const existing = await this.homework.getSet(setId)
     if (!existing) return undefined
     // A practice set has no document of its own to re-read.
-    if (isPracticeSet(existing))
+    if (isDerivedSet(existing))
       throw new AppError(t('practiceSet.notFromPractice'), 'VALIDATION_ERROR')
     // What a paused re-read restores: the questions are untouched, so the set
     // goes back to how it was (a first read with nothing yet stays `paused`).
@@ -2263,7 +2284,8 @@ export class HomeworkService {
           if (!blank) continue
           const sectionId = questionSectionId(blank.id)
           const attached = hasAttachedRecords(blank, {
-            answerImages: (await new AnswerImageRepository(this.db).list(blank.id)).length > 0,
+            // Mock exam pages are the student's work too.
+            answerImages: (await new AnswerImageRepository(this.db).listAll(blank.id)).length > 0,
             walkthroughSection: walkthroughSectionIds.has(sectionId),
             walkthroughNotes: notedSectionIds.has(sectionId),
           })

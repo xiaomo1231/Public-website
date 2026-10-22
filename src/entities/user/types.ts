@@ -1,5 +1,6 @@
 import type { UILanguage } from '@/i18n/types'
 import type { PomodoroSettings } from '@/entities/focus/pomodoro'
+import type { HandwritingRecognitionMode } from '@/entities/handwriting/types'
 import { examLanguageKey, type ExamLanguageKey } from '@/infrastructure/ai/prompts/exam-language/v1'
 
 export type UserLanguage = 'auto' | 'zh' | 'en'
@@ -142,6 +143,8 @@ export interface UserProfile {
   vocabReviewMode?: 'auto' | 'recognize' | 'spell' | 'dictation'
   /** Homework walkthrough: the version sections show by default (普通 / 详细). */
   walkthroughLevel?: 'standard' | 'detailed'
+  /** 手写识别方式; absent means `DEFAULT_HANDWRITING_RECOGNITION_MODE` (自动). */
+  handwritingRecognition?: HandwritingRecognitionMode
   /**
    * Pomodoro timer settings (lengths, cycle, sound, dim, shown). Absent or
    * partial fields fall back to `DEFAULT_POMODORO` via `normalizePomodoroSettings`.
@@ -167,5 +170,6 @@ export interface UpdateUserInput {
   vocabDailyNew?: number
   vocabReviewMode?: 'auto' | 'recognize' | 'spell' | 'dictation'
   walkthroughLevel?: 'standard' | 'detailed'
+  handwritingRecognition?: HandwritingRecognitionMode
   pomodoro?: Partial<PomodoroSettings>
 }

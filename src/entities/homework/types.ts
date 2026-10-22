@@ -138,6 +138,22 @@ export const isPracticeSet = (set: Pick<HomeworkSet, 'kind'>): boolean => set.ki
 /** A past exam / mock paper (往年试卷 / 模拟卷), not an assignment. */
 export const isExamSet = (set: Pick<HomeworkSet, 'kind'>): boolean => set.kind === 'exam'
 
+/** An AI 模拟卷: an exam set written by the platform, not an uploaded paper. */
+export const isAiMockSet = (set: Pick<HomeworkSet, 'kind' | 'exam'>): boolean =>
+  set.kind === 'exam' && set.exam?.origin === 'ai_mock'
+
+/** An uploaded past paper (往年试卷), not an AI 模拟卷. */
+export const isPastPaperSet = (set: Pick<HomeworkSet, 'kind' | 'exam'>): boolean =>
+  isExamSet(set) && !isAiMockSet(set)
+
+/**
+ * A set the platform made (练习作业 / AI 模拟卷): it shares a document with an
+ * uploaded set but is never re-read from it, never its duplicate, and never
+ * a source of the professor's habits.
+ */
+export const isDerivedSet = (set: Pick<HomeworkSet, 'kind' | 'exam'>): boolean =>
+  isPracticeSet(set) || isAiMockSet(set)
+
 /**
  * Progress of an in-flight homework run.
  *

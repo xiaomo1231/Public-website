@@ -54,6 +54,19 @@ export function initialBoard(): BoardState {
   return { pages: [[]], page: 0, undo: [], redo: [], active: null, lastPenAt: null, nextId: 1 }
 }
 
+/** A board opened on saved pages (a writing area after a reload); history starts empty. */
+export function boardFromPages(
+  pages: ReadonlyArray<ReadonlyArray<Omit<Stroke, 'id'>>>,
+): BoardState {
+  let nextId = 1
+  const restored = pages
+    .slice(0, MAX_PAGES)
+    .map((strokes) =>
+      strokes.map((stroke) => ({ ...stroke, points: [...stroke.points], id: nextId++ })),
+    )
+  return { ...initialBoard(), pages: restored.length ? restored : [[]], nextId }
+}
+
 export function asPointerKind(type: string): PointerKind {
   return type === 'pen' || type === 'touch' ? type : 'mouse'
 }

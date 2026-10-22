@@ -1,8 +1,12 @@
 import type { TranslationKey } from './en'
 import { studyPlanZhCN } from './studyPlan.zh-CN'
+import { aiMockZhCN } from './aiMock.zh-CN'
+import { handwritingZhCN } from './handwriting.zh-CN'
 
 export const zhCN: Record<TranslationKey, string> = {
   ...studyPlanZhCN,
+  ...aiMockZhCN,
+  ...handwritingZhCN,
   'common.save': '保存',
   'common.cancel': '取消',
   'common.delete': '删除',

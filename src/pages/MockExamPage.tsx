@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useParams } from 'react-router-dom'
-import { CheckCircle2, Loader2, RotateCcw, Timer } from 'lucide-react'
+import { CheckCircle2, Loader2, Printer, RotateCcw, Timer } from 'lucide-react'
 import { Badge } from '@/shared/ui/Badge'
 import { Button } from '@/shared/ui/Button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/shared/ui/Card'
@@ -11,16 +11,24 @@ import { Label } from '@/shared/ui/Label'
 import { LoadingState } from '@/shared/ui/LoadingState'
 import { PageContainer, PageContent } from '@/shared/ui/Page'
 import { RichText } from '@/shared/ui/RichText'
-import { Textarea } from '@/shared/ui/Textarea'
 import { GenerationControls } from '@/shared/ui/GenerationControls'
 import { FocusPageHeader } from '@/widgets/focus/FocusPageHeader'
 import { FormulaSheetPanel } from '@/widgets/exam/FormulaSheetPanel'
 import { MockExamResults } from '@/widgets/exam/MockExamResults'
+import { AiMockNotice } from '@/widgets/exam/aiMock/AiMockNotice'
 import { QuestionWindowButton, QuestionWindowLayer } from '@/widgets/homework/QuestionWindowLayer'
-import { AnswerImages } from '@/widgets/handwriting/AnswerImages'
+import { ExamAnswerInput } from '@/widgets/exam/ExamAnswerInput'
+import { ExamModeChooser } from '@/widgets/exam/ExamModeChooser'
+import { ExamHandwritingStage } from '@/widgets/exam/ExamHandwritingStage'
+import { WalkthroughPrint } from '@/widgets/homework/walkthrough/WalkthroughPrint'
 import { useHomeworkService } from '@/features/homework/useHomeworkService'
+import { useAuth } from '@/features/auth/useAuth'
 import { MockExamService, type MockExamState } from '@/services/mockExamService'
-import type { MockExamAttempt } from '@/entities/exam/types'
+import type { HandwritingRecognitionService } from '@/services/handwriting/recognition'
+import { buildHandwritingRecognitionService } from '@/services/handwriting/buildRecognition'
+import type { ExamAnswerMode, MockExamAttempt } from '@/entities/exam/types'
+import { attemptMode } from '@/entities/exam/handwritingStage'
+import { DEFAULT_HANDWRITING_RECOGNITION_MODE } from '@/entities/handwriting/types'
 import { formatHomeworkQuestion } from '@/entities/homework/formatQuestion'
 import { useGenerationRun } from '@/shared/lib/useGenerationRun'
 import { friendlyAIError } from '@/shared/lib/aiErrors'
@@ -38,7 +46,36 @@ export function MockExamPage(): JSX.Element {
   const { t, language } = useTranslation()
   const { id: projectId, assignmentId } = useParams<{ id: string; assignmentId: string }>()
   const homework = useHomeworkService()
-  const service = useMemo(() => (homework ? new MockExamService({ homework }) : null), [homework])
+  const { profile } = useAuth()
+  const recognitionMode = profile?.handwritingRecognition ?? DEFAULT_HANDWRITING_RECOGNITION_MODE
+  const [recognition, setRecognition] = useState<HandwritingRecognitionService | null>(null)
+  useEffect(() => {
+    let alive = true
+    void buildHandwritingRecognitionService()
+      .then((next) => alive && setRecognition(next))
+      .catch(() => undefined)
+    return () => {
+      alive = false
+    }
+  }, [])
+  const service = useMemo(
+    () => (homework ? new MockExamService({ homework, recognition }) : null),
+    [homework, recognition],
+  )
+  const [answerMode, setAnswerMode] = useState<ExamAnswerMode>('online')
+  // Handwriting of the current attempt (tagged with it, locked once handed in).
+  const examImages = useMemo(
+    () => (service && assignmentId ? service.imageStore(assignmentId) : null),
+    [service, assignmentId],
+  )
+  const [printing, setPrinting] = useState(false)
+  const [handwritingActive, setHandwritingActive] = useState(false)
+  // Writing areas save their ink here before the paper is handed in.
+  const flushers = useRef(new Map<string, () => Promise<void>>())
+  const registerFlush = useCallback((questionId: string, flush: (() => Promise<void>) | null) => {
+    if (flush) flushers.current.set(questionId, flush)
+    else flushers.current.delete(questionId)
+  }, [])
   const [state, setState] = useState<MockExamState | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [minutes, setMinutes] = useState('')
@@ -107,12 +144,18 @@ export function MockExamPage(): JSX.Element {
         const answers = state?.set.exam?.current?.answers ?? {}
         for (const [questionId, text] of Object.entries(answers))
           await service.saveAnswer(assignmentId, questionId, text)
+        // Pending pen ink of the writing areas is saved before the paper is frozen.
+        for (const flush of flushers.current.values()) await flush().catch(() => undefined)
         await service.submit(assignmentId, { timedOut })
         await load()
       } finally {
         submitting.current = false
       }
-      void runCheck()
+      // Handwriting is recognised and confirmed first (ExamHandwritingStage);
+      // only a typed-only attempt goes straight to checking.
+      const handwriting = await service.handwriting(assignmentId)
+      const mode = attemptMode(state?.set.exam?.current ?? {})
+      if (mode !== 'paper' && !handwriting.items.some((item) => item.imageKey)) void runCheck()
     },
     [service, assignmentId, load, runCheck, state],
   )
@@ -141,6 +184,7 @@ export function MockExamPage(): JSX.Element {
     )
 
   const set = state.set
+  const currentMode: ExamAnswerMode = attempt ? attemptMode(attempt) : 'online'
   const allMarked =
     state.questions.length > 0 && state.questions.every((view) => view.marks.total !== undefined)
   const paperMarks = state.questions.reduce((sum, view) => sum + (view.marks.total ?? 0), 0)
@@ -200,6 +244,8 @@ export function MockExamPage(): JSX.Element {
         }
       />
       <PageContent className="space-y-5">
+        {/* AI 模拟卷: the disclaimer always; before writing, the questions it lacks. */}
+        {state.aiMock && <AiMockNotice report={state.aiMock} detailed={!writing} />}
         {!writing && (
           <Card>
             <CardHeader>
@@ -221,6 +267,7 @@ export function MockExamPage(): JSX.Element {
                   </li>
                 )}
               </ul>
+              <ExamModeChooser value={answerMode} onChange={setAnswerMode} disabled={checking} />
               <div className="flex flex-wrap items-end gap-3">
                 <div className="space-y-1">
                   <Label htmlFor="mock-exam-minutes">{t('mockExam.minutes')}</Label>
@@ -248,6 +295,7 @@ export function MockExamPage(): JSX.Element {
                     await service.start(
                       set.id,
                       Number.isFinite(value) && value > 0 ? value : state.defaultMinutes,
+                      answerMode,
                     )
                     setNow(Date.now())
                     await load()
@@ -294,26 +342,27 @@ export function MockExamPage(): JSX.Element {
                     format="markdown"
                     className="space-y-2"
                   />
-                  <Label htmlFor={`exam-answer-${view.question.id}`} className="sr-only">
-                    {t('mockExam.answerFor', {
-                      number: view.question.number ?? String(index + 1),
-                    })}
-                  </Label>
-                  <Textarea
-                    id={`exam-answer-${view.question.id}`}
-                    rows={4}
-                    value={attempt.answers[view.question.id] ?? ''}
-                    onChange={(event) => saveAnswer(view.question.id, event.target.value)}
-                    placeholder={t('mockExam.answerPlaceholder')}
-                  />
-                  <AnswerImages
+                  <ExamAnswerInput
+                    mode={currentMode}
+                    setId={set.id}
                     questionId={view.question.id}
-                    service={homework!.answerImageService()}
+                    number={view.question.number ?? String(index + 1)}
+                    value={attempt.answers[view.question.id] ?? ''}
+                    onChange={(text) => saveAnswer(view.question.id, text)}
+                    service={service}
+                    store={examImages!}
+                    registerFlush={registerFlush}
                   />
                 </li>
               ))}
             </ol>
             <div className="space-y-3 lg:sticky lg:top-4 lg:self-start">
+              {currentMode === 'paper' && (
+                <Button variant="outline" className="h-11 w-full" onClick={() => setPrinting(true)}>
+                  <Printer className="h-4 w-4" aria-hidden />
+                  {t('examMode.print')}
+                </Button>
+              )}
               {state.formulaSheet ? (
                 <FormulaSheetPanel
                   sheet={state.formulaSheet}
@@ -333,9 +382,24 @@ export function MockExamPage(): JSX.Element {
           </div>
         )}
 
+        {/* After 交卷: upload (纸上作答), recognise, confirm — before any grading. */}
+        {!writing && attempt?.submittedAt && !attempt.checkedAt && (
+          <ExamHandwritingStage
+            service={service}
+            state={state}
+            attempt={attempt}
+            mode={recognitionMode}
+            language={checkLanguage}
+            checking={checking}
+            onChanged={load}
+            onStartCheck={() => void runCheck()}
+            onActiveChange={setHandwritingActive}
+          />
+        )}
+
         {!writing && shown && (
           <div className="space-y-3">
-            {(checking || (shown.submittedAt && !shown.checkedAt)) && (
+            {(checking || (shown.submittedAt && !shown.checkedAt && !handwritingActive)) && (
               <div className="flex flex-wrap items-center gap-3 text-sm">
                 {checking && <Loader2 className="h-4 w-4 animate-spin" aria-hidden />}
                 <span>
@@ -368,10 +432,15 @@ export function MockExamPage(): JSX.Element {
         open={confirmSubmit}
         onOpenChange={setConfirmSubmit}
         title={t('mockExam.submitConfirmTitle')}
-        description={t('mockExam.submitConfirm', {
-          answered: Object.values(attempt?.answers ?? {}).filter((text) => text.trim()).length,
-          total: state.questions.length,
-        })}
+        description={
+          currentMode === 'online'
+            ? t('mockExam.submitConfirm', {
+                answered: Object.values(attempt?.answers ?? {}).filter((text) => text.trim())
+                  .length,
+                total: state.questions.length,
+              })
+            : t(currentMode === 'paper' ? 'examMode.submitPaper' : 'examMode.submitTablet')
+        }
         confirmLabel={t('mockExam.submit')}
         onConfirm={async () => {
           setConfirmSubmit(false)
@@ -392,6 +461,25 @@ export function MockExamPage(): JSX.Element {
         }}
       />
       <QuestionWindowLayer setId={set.id} />
+      {/* 只看题目 / 打印: the questions alone, for writing on paper. */}
+      {printing && (
+        <WalkthroughPrint
+          title={set.title}
+          sections={state.questions.map((view, index) => ({
+            id: view.question.id,
+            title: [
+              t('mockExam.questionLabel', { number: view.question.number ?? String(index + 1) }),
+              view.marks.total !== undefined
+                ? t('mockExam.marksBadge', { marks: view.marks.total })
+                : '',
+            ]
+              .filter(Boolean)
+              .join(' · '),
+            body: formatHomeworkQuestion(view.question.prompt),
+          }))}
+          onDone={() => setPrinting(false)}
+        />
+      )}
     </PageContainer>
   )
 }

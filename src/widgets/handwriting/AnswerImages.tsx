@@ -9,9 +9,16 @@ import { friendlyAIError } from '@/shared/lib/aiErrors'
 import { useTranslation } from '@/i18n'
 import { PenBoardDialog } from './PenBoardDialog'
 
+/**
+ * Where the images are kept: the question's homework answer
+ * (`HomeworkAnswerImageService`) or one mock exam attempt
+ * (`MockExamService.imageStore`).
+ */
+export type AnswerImageStore = Pick<HomeworkAnswerImageService, 'list' | 'add' | 'remove' | 'move'>
+
 export interface AnswerImagesProps {
   questionId: string
-  service: HomeworkAnswerImageService
+  service: AnswerImageStore
   /** Called with the current images after every load / change. */
   onChange?: (images: HomeworkAnswerImage[]) => void
   disabled?: boolean

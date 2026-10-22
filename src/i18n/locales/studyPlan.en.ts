@@ -42,7 +42,6 @@ export const studyPlanEn = {
   'plan.task.weak_spots': 'Weak spots',
   'plan.task.minutes': '{minutes} min',
   'plan.task.pinned': 'moved by you',
-  'plan.task.aiMockSoon': 'not available yet — use the diagnostic paper meanwhile',
   'plan.task.open': 'Start',
   'plan.task.done': 'Done',
   'plan.task.skip': 'Skip',

@@ -47,7 +47,7 @@ export type PlannedExamScope =
 
 /** Materials the student picked for this exam (ids within the course). */
 export interface PlannedExamMaterials {
-  /** Past papers / mock papers (`HomeworkSet.kind === 'exam'`). */
+  /** Past papers (`HomeworkSet.kind === 'exam'`, not AI 模拟卷). */
   pastExamSetIds: string[]
   /** Review documents (notes, review sheets…). */
   reviewDocumentIds: string[]
@@ -131,7 +131,10 @@ export type StudyTaskKind =
   | 'vocab'
   /** A professor mock / past paper (existing mock exam). */
   | 'mock'
-  /** A slot for an AI-written mock paper (not available yet). */
+  /**
+   * The AI 模拟卷: `refId` = `ai-mock:<examId>` (generate one) or the
+   * generated paper's set id (take it).
+   */
   | 'ai_mock'
   /** A homework set (guided practice). */
   | 'homework'

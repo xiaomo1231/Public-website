@@ -15,6 +15,8 @@ import {
 import type { AnswerDimensions } from '@/entities/question/answerDimensions'
 import { compareEquations, imbalances, parseEquation } from '@/infrastructure/chemistry/equation'
 import { parseMatrix, rref, solutionKind, type SolutionKind } from '@/infrastructure/math/rref'
+import { compareVector } from '@/infrastructure/math/vectorAnswer'
+import { compareFormula, nameAccepted } from '@/infrastructure/chemistry/nomenclature'
 import { walkthroughSubparts } from '../splitQuestion'
 import { freeCount, linearSystemPart, type PracticeLanguage } from './linearSystem'
 import type { PracticeGrader, PracticePart, PracticeQuestionInfo, PracticeSlotPart } from './types'
@@ -270,9 +272,45 @@ export function gradePart(grader: PracticeGrader, answer: string): boolean | nul
           ? null
           : false
     }
+    case 'choice': {
+      const letter = choiceLetter(text, grader.count)
+      return letter === null ? null : letter === grader.correct.toUpperCase()
+    }
+    case 'vector': {
+      const outcome = compareVector(text, {
+        components: grader.components,
+        ...(grader.unit ? { unit: grader.unit } : {}),
+      }).outcome
+      return outcome === 'correct'
+        ? true
+        : outcome === 'unreadable' || outcome === 'unreadable-unit'
+          ? null
+          : false
+    }
+    case 'nomenclature': {
+      if (grader.direction === 'formula_to_name')
+        // An unlisted wording may still be right: the AI check decides then.
+        return nameAccepted(text, grader.names) ? true : null
+      const outcome = compareFormula(text, grader.formula)
+      return outcome === 'correct'
+        ? true
+        : outcome === 'unreadable' || outcome === 'isomers'
+          ? null
+          : false
+    }
     default:
       return null
   }
+}
+
+/** The option letter an answer picks ("C", "(c)", "C.", "选 C"); null when unclear. */
+export function choiceLetter(answer: string, count: number): string | null {
+  const text = answer.normalize('NFKC').trim()
+  const match = /^(?:选|answer[:：]?\s*)?\s*[([]?\s*([A-Za-z])\s*[)\].:：]?$/i.exec(text)
+  if (!match) return null
+  const letter = match[1]!.toUpperCase()
+  const index = letter.charCodeAt(0) - 65
+  return index >= 0 && index < count ? letter : null
 }
 
 const NO_SOLUTION = /(无解|没有解|不相容|no solution|inconsistent|has no solutions?)/i

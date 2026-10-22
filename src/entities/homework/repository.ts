@@ -142,10 +142,14 @@ export class HomeworkRepository {
     id: string,
     submittedDraft: string,
     check: HomeworkAnswerCheck,
+    options: { ignoreImages?: boolean } = {},
   ): Promise<HomeworkQuestion | undefined> {
     return this.db.transaction('rw', this.questions(), this.db.homeworkAnswerImages, async () => {
       const existing = await this.questions().get(id)
-      const imageKey = answerImageKey(await new AnswerImageRepository(this.db).list(id))
+      // A text-only check (模拟考试 transcript) was made without the images.
+      const imageKey = options.ignoreImages
+        ? ''
+        : answerImageKey(await new AnswerImageRepository(this.db).list(id))
       if (
         !existing ||
         existing.draftText !== submittedDraft ||

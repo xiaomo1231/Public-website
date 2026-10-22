@@ -97,7 +97,9 @@ export function MockExamResults({
         {state.questions.map((view, index) => {
           const result = results.get(view.question.id)
           const key = statusKey(result)
-          const answer = attempt.answers[view.question.id] ?? ''
+          // What was graded: typed text plus the confirmed handwriting transcript.
+          const answer =
+            attempt.gradedAnswers?.[view.question.id] ?? attempt.answers[view.question.id] ?? ''
           const professor =
             view.question.answerStatus === 'matched' ? view.question.answerText : undefined
           const number = view.question.number ?? String(index + 1)
@@ -120,7 +122,13 @@ export function MockExamResults({
               />
               <dl className="grid gap-2 text-sm sm:grid-cols-2">
                 <div className="rounded-md border p-2" data-professor-scheme>
-                  <dt className="text-xs font-medium">{t('mockExam.professorScheme')}</dt>
+                  <dt className="text-xs font-medium" data-scheme-source={view.schemeSource}>
+                    {t(
+                      view.schemeSource === 'platform'
+                        ? 'aiMock.platformScheme'
+                        : 'mockExam.professorScheme',
+                    )}
+                  </dt>
                   <dd className="space-y-1 text-xs text-muted-foreground">
                     {view.marks.total !== undefined ? (
                       <p>

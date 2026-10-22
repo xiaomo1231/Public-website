@@ -171,7 +171,8 @@ function TaskRow({
           {examName && ` · ${examName}`}
           {courseName && ` · ${courseName}`}
           {task.pinned && ` · ${t('plan.task.pinned')}`}
-          {task.kind === 'ai_mock' && ` · ${t('plan.task.aiMockSoon')}`}
+          {task.kind === 'ai_mock' &&
+            ` · ${t(task.refId?.startsWith('ai-mock:') ? 'aiMock.task.generate' : 'aiMock.task.take')}`}
         </p>
       </div>
       <div className="flex flex-wrap items-center gap-1.5">

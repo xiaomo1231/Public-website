@@ -24,8 +24,12 @@ export function taskLink(
       return '/vocab'
     case 'mock':
       return task.refId ? `${base}/homework/${task.refId}/exam` : `${base}/homework`
-    case 'ai_mock':
-      return '/plan?tab=diagnostic'
+    case 'ai_mock': {
+      // `ai-mock:<examId>`: open 生成模拟卷 for that exam; else take the paper.
+      const examId = task.refId?.startsWith('ai-mock:') ? task.refId.slice('ai-mock:'.length) : ''
+      if (task.refId && !examId) return `${base}/homework/${task.refId}/exam`
+      return `${base}/homework?aiMock=${encodeURIComponent(examId || 'new')}`
+    }
     case 'homework':
       return task.refId ? `${base}/homework/${task.refId}?view=guided` : `${base}/homework`
     case 'practice_set':

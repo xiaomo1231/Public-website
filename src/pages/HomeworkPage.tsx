@@ -12,7 +12,7 @@ import {
   RotateCcw,
 } from 'lucide-react'
 import type { HomeworkQuestion, HomeworkSet, ReanalysisSummary } from '@/entities/homework/types'
-import { isPracticeSet } from '@/entities/homework/types'
+import { isDerivedSet, isPracticeSet } from '@/entities/homework/types'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -257,7 +257,7 @@ export function HomeworkPage(): JSX.Element {
   }
 
   if (!projectId) return <div />
-  const canReanalyze = set?.status === 'ready' && questions.length > 0 && set.kind !== 'practice'
+  const canReanalyze = set?.status === 'ready' && questions.length > 0 && !isDerivedSet(set)
 
   return (
     <PageContainer>
@@ -311,7 +311,7 @@ export function HomeworkPage(): JSX.Element {
                 >
                   {t('homework.mode.walkthrough')}
                 </Button>
-                {set.kind !== 'practice' && (
+                {!isDerivedSet(set) && (
                   <Button
                     variant={view === 'proofread' ? 'default' : 'ghost'}
                     size="sm"
@@ -357,7 +357,7 @@ export function HomeworkPage(): JSX.Element {
                 onStopNow={runHandle.stopNow}
               />
             )}
-            {set?.status === 'ready' && set.kind !== 'practice' && (
+            {set?.status === 'ready' && !isDerivedSet(set) && (
               <Button
                 variant={view === 'evaluate' ? 'default' : 'outline'}
                 className="hidden xl:inline-flex"
@@ -392,7 +392,7 @@ export function HomeworkPage(): JSX.Element {
                     {t('homework.reanalyze')}
                   </DropdownMenuItem>
                 )}
-                {set?.status === 'ready' && set.kind !== 'practice' && (
+                {set?.status === 'ready' && !isDerivedSet(set) && (
                   <DropdownMenuItem onSelect={() => showView('evaluate')}>
                     <ClipboardList className="h-4 w-4" />
                     {t('evaluation.menu')}
@@ -503,7 +503,7 @@ export function HomeworkPage(): JSX.Element {
             )}
 
             {set.status === 'ready' &&
-              set.kind !== 'practice' &&
+              !isDerivedSet(set) &&
               unverified > 0 &&
               !bannerHidden &&
               view !== 'proofread' &&

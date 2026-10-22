@@ -1,4 +1,6 @@
 import type { AnswerVerdict } from '@/entities/homework/answerCheck'
+import type { AnswerTranscript } from '@/entities/handwriting/types'
+import type { AiMockInfo } from './mockPaper'
 
 /**
  * 往年试卷 / 模拟卷: a past paper is recognised like an assignment and stored as
@@ -44,7 +46,36 @@ export interface MockExamAttempt {
   results?: MockExamQuestionResult[]
   /** All questions have a result (checking can be stopped and continued). */
   checkedAt?: number
+  /**
+   * How the paper is answered, chosen at the start (absent on attempts from
+   * before the choice existed = `online`). See `ExamAnswerMode`.
+   */
+  mode?: ExamAnswerMode
+  /**
+   * 纸上作答: the student said all page photos are uploaded and assigned
+   * (recognition starts then; no more uploads).
+   */
+  uploadsDoneAt?: number
+  /**
+   * Transcripts of the handwritten answers, by question id. Made only after
+   * submitting; graded only once confirmed by the student.
+   */
+  transcripts?: Record<string, AnswerTranscript>
+  /** The exact text that was graded per question (typed + confirmed transcript). */
+  gradedAnswers?: Record<string, string>
 }
+
+/**
+ * - `online` — 在网站上作答: type the answers (handwritten pages may be added).
+ * - `paper`  — 只看题目 / 打印: write on paper, then photograph the pages and
+ *              assign each region to its question.
+ * - `tablet` — 平板手写: write with a pen in a writing area under each question.
+ *
+ * Whatever the mode, handwriting is recognised only after submitting, shown
+ * next to the original, and graded only as the text the student confirms.
+ */
+export type ExamAnswerMode = 'online' | 'paper' | 'tablet'
+export const EXAM_ANSWER_MODES: readonly ExamAnswerMode[] = ['online', 'paper', 'tablet']
 
 export interface ExamSetInfo {
   /** Duration the student chose (minutes). */
@@ -55,6 +86,13 @@ export interface ExamSetInfo {
   current?: MockExamAttempt
   /** Finished attempts, newest first (capped). */
   attempts?: MockExamAttempt[]
+  /**
+   * `ai_mock` — an AI 模拟卷 written by the platform in the style of a past
+   * paper (`aiMock` holds how). Absent = an uploaded past paper.
+   */
+  origin?: 'ai_mock'
+  /** AI 模拟卷: settings, per-question build state and the structure report. */
+  aiMock?: AiMockInfo
 }
 
 export const MAX_EXAM_ATTEMPTS = 10

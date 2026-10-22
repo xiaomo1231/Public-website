@@ -65,6 +65,9 @@ export class UserRepository {
           ...(patch.walkthroughLevel !== undefined
             ? { walkthroughLevel: patch.walkthroughLevel }
             : {}),
+          ...(patch.handwritingRecognition !== undefined
+            ? { handwritingRecognition: patch.handwritingRecognition }
+            : {}),
           // Merged field by field, so a quick edit of one length keeps the rest.
           ...(patch.pomodoro !== undefined
             ? { pomodoro: { ...current.pomodoro, ...patch.pomodoro } }

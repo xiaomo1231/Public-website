@@ -44,7 +44,6 @@ export const studyPlanZhCN: Record<keyof typeof studyPlanEn, string> = {
   'plan.task.weak_spots': '薄弱点',
   'plan.task.minutes': '{minutes} 分钟',
   'plan.task.pinned': '你调整过日期',
-  'plan.task.aiMockSoon': '暂未提供，可先做摸底卷',
   'plan.task.open': '开始',
   'plan.task.done': '完成',
   'plan.task.skip': '跳过',

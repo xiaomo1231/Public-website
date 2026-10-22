@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { ArrowLeft, BarChart3 } from 'lucide-react'
+import { ArrowLeft, BarChart3, Sparkles } from 'lucide-react'
 import { Button } from '@/shared/ui/Button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/shared/ui/Card'
 import { ErrorState } from '@/shared/ui/ErrorState'
@@ -72,6 +72,14 @@ export function ExamAnalysisPage(): JSX.Element {
         }
         description={t('examAnalysis.disclaimer')}
         nav={<ProjectFlowNav projectId={projectId} active="homework" />}
+        actions={
+          <Button asChild variant="outline">
+            <Link to={`/projects/${projectId}/homework?aiMock=new`}>
+              <Sparkles className="h-4 w-4" aria-hidden />
+              {t('aiMock.generate')}
+            </Link>
+          </Button>
+        }
       />
       <PageContent className="space-y-5">
         <p

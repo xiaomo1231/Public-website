@@ -39,6 +39,17 @@ export type PracticeGrader =
   | { kind: 'numeric'; expected: number; relTol: number; sigFigs?: number }
   | { kind: 'quantity'; value: number; unit: string; sigFigs?: number }
   | { kind: 'chem_equation'; equation: string }
+  /** AI 模拟卷 multiple choice: the correct option letter (`A` = first). */
+  | { kind: 'choice'; correct: string; count: number }
+  /** AI 模拟卷 vector answer (components in `unit`), compared like the quiz's vector questions. */
+  | { kind: 'vector'; components: number[]; unit?: string }
+  /** AI 模拟卷 nomenclature: formula ⇄ name, compared like the quiz's 命名题. */
+  | {
+      kind: 'nomenclature'
+      direction: 'name_to_formula' | 'formula_to_name'
+      formula: string
+      names: string[]
+    }
   | { kind: 'text' }
 
 /** One answerable part of a practice question (the whole question when it has no sub-parts). */
@@ -153,6 +164,15 @@ export interface PracticeQuestionInfo {
   templates: string[]
   /** Full mode: the original question it mirrors. */
   sourceQuestionId?: string
+  /**
+   * AI 模拟卷: the platform's marking scheme (平台拟定), one line per mark
+   * allocation. Never the professor's.
+   */
+  markingScheme?: string[]
+  /** AI 模拟卷: the course topics the question was written for. */
+  topicIds?: string[]
+  /** AI 模拟卷: the difficulty it was written at. */
+  difficulty?: 'foundation' | 'medium' | 'exam' | 'above'
 }
 
 export const MAX_PRACTICE_QUESTIONS = 12

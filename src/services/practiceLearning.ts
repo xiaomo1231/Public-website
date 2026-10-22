@@ -129,6 +129,8 @@ export async function recordPracticeCheck(
   setTitle: string,
   draft: string,
   check: HomeworkAnswerCheck,
+  /** AI 模拟卷 questions are recorded as mock-exam answers. */
+  options: { origin?: 'mock_exam' } = {},
 ): Promise<void> {
   const info = question.practice
   if (!info || check.verdict === 'uncertain') return
@@ -138,6 +140,7 @@ export async function recordPracticeCheck(
     prompt: question.prompt,
     ...(question.solution ? { solution: question.solution } : {}),
     knowledgePoint: info.knowledgePoints[0]?.trim() || setTitle,
+    ...(info.topicIds?.[0] ? { topicId: info.topicIds[0] } : {}),
     answer: draft,
     correctAnswer:
       check.expectedAnswer ??
@@ -146,7 +149,7 @@ export async function recordPracticeCheck(
         .join('; '),
     check,
     hintsUsed: question.revealedHints,
-    origin: 'homework_practice',
+    origin: options.origin ?? 'homework_practice',
     homeworkSetId: question.setId,
     ...(isHeldOut(question) ? { noFollowUp: true } : {}),
   })

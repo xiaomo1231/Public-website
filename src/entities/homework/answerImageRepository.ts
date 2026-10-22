@@ -21,12 +21,61 @@ export class AnswerImageRepository {
     return this.db.table<HomeworkAnswerImage, string>('homeworkAnswerImages')
   }
 
-  /** A question's images in their display order. */
-  list(questionId: string): Promise<HomeworkAnswerImage[]> {
+  /**
+   * A question's homework answer images in their display order. Images
+   * written in a mock exam attempt are not part of it (see `listForAttempt`).
+   */
+  async list(questionId: string): Promise<HomeworkAnswerImage[]> {
+    return (await this.listAll(questionId)).filter((image) => !image.examAttemptId)
+  }
+
+  /** Every image of a question (homework and mock exam), in display order. */
+  listAll(questionId: string): Promise<HomeworkAnswerImage[]> {
     return this.images()
       .where('[questionId+order]')
       .between([questionId, -Infinity], [questionId, Infinity])
       .toArray()
+  }
+
+  /** A question's images written in one mock exam attempt, in display order. */
+  async listForAttempt(questionId: string, attemptId: string): Promise<HomeworkAnswerImage[]> {
+    return (await this.listAll(questionId)).filter((image) => image.examAttemptId === attemptId)
+  }
+
+  /** Same scope as `image`: its attempt's images, or the homework images. */
+  private listScope(questionId: string, attemptId: string | undefined) {
+    return attemptId ? this.listForAttempt(questionId, attemptId) : this.list(questionId)
+  }
+
+  /**
+   * Replace the tablet writing-area pages of one question in one attempt:
+   * the previous pen pages of that attempt are removed and `pages` added, in
+   * one transaction (a reload never sees half of the area).
+   */
+  async replaceWritingArea(
+    questionId: string,
+    attemptId: string,
+    pages: ReadonlyArray<Omit<HomeworkAnswerImage, 'order'>>,
+  ): Promise<HomeworkAnswerImage[]> {
+    return this.db.transaction('rw', [this.images(), this.db.homeworkQuestions], async () => {
+      const current = await this.listForAttempt(questionId, attemptId)
+      for (const row of current)
+        if (row.writingPage !== undefined) await this.images().delete(row.id)
+      const rest = current.filter((row) => row.writingPage === undefined)
+      if (rest.length + pages.length > MAX_ANSWER_IMAGES_PER_QUESTION)
+        throw new AppError(
+          t('homework.images.tooMany', { max: MAX_ANSWER_IMAGES_PER_QUESTION }),
+          'VALIDATION_ERROR',
+        )
+      const out: HomeworkAnswerImage[] = []
+      const base = rest.reduce((max, row) => Math.max(max, row.order + 1), 0)
+      for (const [index, page] of pages.entries()) {
+        const row: HomeworkAnswerImage = { ...page, order: base + index }
+        await this.images().add(row)
+        out.push(row)
+      }
+      return out
+    })
   }
 
   get(id: string): Promise<HomeworkAnswerImage | undefined> {
@@ -43,7 +92,7 @@ export class AnswerImageRepository {
       const question = await this.db.homeworkQuestions.get(image.questionId)
       if (!question || question.setId !== image.setId || question.projectId !== image.projectId)
         throw new AppError(t('homework.questionMissing'), 'NOT_FOUND')
-      const existing = await this.list(image.questionId)
+      const existing = await this.listScope(image.questionId, image.examAttemptId)
       if (existing.length >= MAX_ANSWER_IMAGES_PER_QUESTION)
         throw new AppError(
           t('homework.images.tooMany', { max: MAX_ANSWER_IMAGES_PER_QUESTION }),
@@ -62,7 +111,7 @@ export class AnswerImageRepository {
       const row = await this.images().get(id)
       if (!row || row.questionId !== questionId) return
       await this.images().delete(id)
-      const rest = await this.list(questionId)
+      const rest = await this.listScope(questionId, row.examAttemptId)
       await this.writeOrder(rest.map((image) => image.id))
     })
   }
@@ -72,9 +121,13 @@ export class AnswerImageRepository {
    * question's images are ignored; images missing from the list keep their
    * relative order after the listed ones.
    */
-  async reorder(questionId: string, orderedIds: readonly string[]): Promise<void> {
+  async reorder(
+    questionId: string,
+    orderedIds: readonly string[],
+    attemptId?: string,
+  ): Promise<void> {
     await this.db.transaction('rw', this.images(), async () => {
-      const current = await this.list(questionId)
+      const current = await this.listScope(questionId, attemptId)
       const known = new Set(current.map((image) => image.id))
       const listed = orderedIds.filter(
         (id, index) => known.has(id) && orderedIds.indexOf(id) === index,

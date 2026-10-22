@@ -1,7 +1,11 @@
 import { studyPlanEn } from './studyPlan.en'
+import { aiMockEn } from './aiMock.en'
+import { handwritingEn } from './handwriting.en'
 
 export const en = {
   ...studyPlanEn,
+  ...aiMockEn,
+  ...handwritingEn,
   'common.save': 'Save',
   'common.cancel': 'Cancel',
   'common.delete': 'Delete',
