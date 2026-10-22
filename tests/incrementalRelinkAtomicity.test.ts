@@ -27,7 +27,15 @@ const mocks = vi.hoisted(() => ({ chatJSON: vi.fn() }))
 
 vi.mock('@/services/aiServices', () => ({
   buildAIServices: vi.fn(async () => ({
-    ai: { chatJSON: mocks.chatJSON, maxOutputTokens: 2048 },
+    ai: {
+      // document/topic analyzers print short aliases: fakes written with stored
+      // chunk ids answer with the alias of each chunk.
+      chatJSON: async (messages: Array<{ content: string }>, options?: unknown) => {
+        const { aliasResponse } = await import('./helpers/chunkAliases')
+        return aliasResponse(messages, await mocks.chatJSON(messages, options))
+      },
+      maxOutputTokens: 2048,
+    },
     documentAnalysis: { analyzeProject: vi.fn() },
   })),
 }))

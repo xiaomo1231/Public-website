@@ -479,7 +479,8 @@ function courseAnalysis(): RecordedRequest[] {
       .slice(from, from + 52)
       .map(
         (p, i) =>
-          `[c:0f8e${String(from + i).padStart(4, '0')}-6a1b-4c2d-9e3f-a1b2c3d4e5f6 · Ch 1 · 1.${(i % 5) + 1} · p${from + i}] ${p}`,
+          // document-analyzer/v3: short per-request aliases instead of UUIDs.
+          `[c${i + 1} · Ch 1 · 1.${(i % 5) + 1} · p${from + i}] ${p}`,
       )
       .join('\n')
   return [0, 52].map((from, index) =>

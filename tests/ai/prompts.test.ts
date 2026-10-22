@@ -3,8 +3,8 @@ import { prompts, PROMPT_VERSIONS } from '@/infrastructure/ai/prompts'
 
 describe('Prompt registry', () => {
   it('exposes versions for every prompt family', () => {
-    expect(PROMPT_VERSIONS.documentAnalyzer).toBe('v2')
-    expect(PROMPT_VERSIONS.topicAnalyzer).toBe('v1')
+    expect(PROMPT_VERSIONS.documentAnalyzer).toBe('v3')
+    expect(PROMPT_VERSIONS.topicAnalyzer).toBe('v2')
     expect(PROMPT_VERSIONS.tutorIntroduce).toBe('v1')
     expect(PROMPT_VERSIONS.tutorQuestion).toBe('v3')
     expect(PROMPT_VERSIONS.tutorEvaluate).toBe('v2')
@@ -12,7 +12,7 @@ describe('Prompt registry', () => {
     expect(PROMPT_VERSIONS.mistakeAnalyzer).toBe('v2')
   })
 
-  it('document-analyzer v2 emits a JSON-shaped prompt that requires source chunk ids', () => {
+  it('document-analyzer v3 emits a JSON-shaped prompt that requires source chunk ids', () => {
     const sys = prompts.documentAnalyzer.buildSystemPrompt()
     expect(sys).toMatch(/JSON/)
     expect(sys).toMatch(/sourceChunkIds/)
@@ -25,9 +25,12 @@ describe('Prompt registry', () => {
     expect(user).toContain('hello world')
     expect(user).toContain('English')
     expect(user).toMatch(/chunk id/)
+    // v3: short per-request aliases, never `c:<uuid>`.
+    expect(sys).toContain('`[c12 · Ch 3 · 3.1 · p12]` has the id `c12`')
+    expect(sys).not.toContain('c:9f3a')
   })
 
-  it('topic-analyzer v1 is scoped to one topic and demands chunk ids', () => {
+  it('topic-analyzer v2 is scoped to one topic and demands chunk ids', () => {
     const sys = prompts.topicAnalyzer.buildSystemPrompt()
     expect(sys).toMatch(/ONE topic/)
     expect(sys).toMatch(/sourceChunkIds/)
@@ -38,7 +41,8 @@ describe('Prompt registry', () => {
       chunks: [{ id: 'c1', label: 'Ch 3 · 3.1 · p12', text: 'the derivative is' }],
     })
     expect(user).toContain('Derivatives')
-    expect(user).toContain('[c:c1 · Ch 3 · 3.1 · p12]')
+    expect(user).toContain('[c1 · Ch 3 · 3.1 · p12]')
+    expect(sys).not.toContain('c:9f3a')
   })
 
   it('tutor introduce v1 produces concise system prompt', () => {

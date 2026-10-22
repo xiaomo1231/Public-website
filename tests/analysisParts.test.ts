@@ -5,14 +5,23 @@ import { CourseAnalysisRepository } from '@/entities/courseAnalysis/repository'
 import { DocumentRepository } from '@/entities/document/repository'
 import { ChunkRepository } from '@/entities/chunk/repository'
 import { ProjectService } from '@/services/projectService'
-import { DocumentAnalysisService } from '@/services/documentAnalysisService'
+import {
+  DocumentAnalysisService,
+  resolveAnalysisChunkAliases,
+} from '@/services/documentAnalysisService'
 import {
   legacyInputWasTruncated,
   planAnalysisSegments,
   segmentText,
   type AnalysisInputDocument,
 } from '@/entities/courseContent/analysisInput'
-import { buildCandidateChunkLabel } from '@/entities/courseContent/topicDependency'
+import {
+  buildCandidateChunkLabel,
+  createChunkAliases,
+  resolveChunkAliases,
+  validateTopicSourceChunks,
+} from '@/entities/courseContent/topicDependency'
+import { CourseContentRepository } from '@/entities/courseContent/repository'
 import { mergeDocumentAnalyses } from '@/entities/courseAnalysis/mergeAnalyses'
 import { evaluateFreshness, type CourseContentVersions } from '@/entities/courseContent/types'
 import type { DocumentChunk } from '@/entities/chunk/types'
@@ -44,7 +53,7 @@ function chunk(
 const plain = (c: DocumentChunk) => c.text
 
 describe('planning the analysis parts', () => {
-  it('keeps a course that fits in one request, in the old input format', () => {
+  it('keeps a course that fits in one request, under the document name', () => {
     const doc: AnalysisInputDocument = {
       id: 'doc',
       name: 'book.pdf',
@@ -54,7 +63,7 @@ describe('planning the analysis parts', () => {
     const segments = planAnalysisSegments([doc], format)
     expect(segments).toHaveLength(1)
     expect(segmentText(segments[0]!, format)).toBe(
-      '=== doc ===\n[c:a · Ch 1] one\n\n[c:b · Ch 2] two',
+      '=== book.pdf ===\n[c:a · Ch 1] one\n\n[c:b · Ch 2] two',
     )
     expect(segments[0]!.label).toBe('Ch 1 – Ch 2')
   })
@@ -128,6 +137,57 @@ function analysis(partial: Partial<DocumentAnalysisOutput>): DocumentAnalysisOut
 }
 
 const ref = (page: number) => ({ documentId: '', documentName: 'book.pdf', page })
+
+describe('short chunk aliases', () => {
+  const chunks = [
+    chunk('uuid-a', 'one', 0, 1),
+    chunk('uuid-b', 'two', 1, 1),
+    chunk('uuid-c', 'three', 2, 2),
+  ]
+
+  it('round-trips aliases to the real chunk ids of the same request', () => {
+    const aliases = createChunkAliases(chunks)
+    expect(chunks.map((c) => aliases.aliasOf(c.id))).toEqual(['c1', 'c2', 'c3'])
+    expect(buildCandidateChunkLabel(chunks[2]!, 'c3')).toBe('c3 · Ch 2')
+    expect(resolveChunkAliases(['c3', ' C1 ', 'c3'], aliases)).toEqual(['uuid-c', 'uuid-a'])
+    const dependency = validateTopicSourceChunks(resolveChunkAliases(['c2'], aliases), chunks)
+    expect(dependency?.sourceChunkIds).toEqual(['uuid-b'])
+  })
+
+  it('drops aliases outside the request and real ids the model never saw', () => {
+    const aliases = createChunkAliases(chunks.slice(0, 2))
+    const resolved = resolveChunkAliases(['c3', 'c0', 'uuid-a', 'c:uuid-a', 5, null], aliases)
+    expect(resolved).toEqual([])
+    expect(validateTopicSourceChunks(resolved, chunks)).toBeNull()
+    expect(resolveChunkAliases('c1', aliases)).toEqual([])
+  })
+
+  it('maps each part with its own aliases before parts are merged', () => {
+    const partOne = createChunkAliases(chunks.slice(0, 2))
+    const partTwo = createChunkAliases(chunks.slice(2))
+    const topic = (ids: unknown[]) => ({
+      name: '本章小结',
+      description: 's',
+      sourceRefs: [],
+      sourceChunkIds: ids as string[],
+    })
+    const merged = mergeDocumentAnalyses([
+      {
+        label: 'Ch 1',
+        chapterIds: ['ch1'],
+        output: resolveAnalysisChunkAliases(analysis({ topics: [topic(['c2'])] }), partOne),
+      },
+      {
+        label: 'Ch 1',
+        chapterIds: ['ch1'],
+        output: resolveAnalysisChunkAliases(analysis({ topics: [topic(['c1'])] }), partTwo),
+      },
+    ])
+    // The same alias `c1` / `c2` means a different chunk in each part.
+    expect(merged.topics).toHaveLength(1)
+    expect(merged.topics[0]!.sourceChunkIds).toEqual(['uuid-b', 'uuid-c'])
+  })
+})
 
 describe('merging the parts', () => {
   it('combines repeated concepts, formulas and symbols', () => {
@@ -251,7 +311,7 @@ describe('analysing a long textbook', () => {
       calls++
       if (calls === fail) throw new Error('provider down')
       const user = messages[1]!.content
-      const firstChunk = /\[c:([^\s\]·]+)/.exec(user)![1]!
+      const firstChunk = /\[(c\d+)\b/.exec(user)![1]!
       const part = /This is part (\d+) of/.exec(user)?.[1] ?? '1'
       return {
         data: {
@@ -344,6 +404,69 @@ describe('analysing a long textbook', () => {
       inputParts: 4,
     })
     expect(progress).toContain('Asking AI to extract knowledge (part 4 of 4)')
+
+    // Every part numbers its own aliases from c1 and never prints a chunk UUID;
+    // each part's `c1` was mapped back to that part's own first chunk.
+    const chunks = await new ChunkRepository(db).listByProject(projectId)
+    for (const user of users) {
+      expect(user).toMatch(/\[c1 · Ch \d+\]/)
+      expect(chunks.some((c) => user.includes(c.id))).toBe(false)
+    }
+    const firstOfChapter = (n: number) => chunks.find((c) => c.chapterId === `ch-${n}`)!.id
+    for (const n of [1, 2, 3, 4]) {
+      const topic = topics.find((t) => t.name === `Topic ${n}`)!
+      expect(topic.sourceChunkIds).toEqual([firstOfChapter(n)])
+      expect(topic.needsFullReanalysis).toBeUndefined()
+    }
+  })
+
+  it('flags a topic whose aliases are not in its own request, never guessing', async () => {
+    const { projects, projectId } = await seedBook(4, 60, 500)
+    const chunks = await new ChunkRepository(db).listByProject(projectId)
+    const streamJSON = vi.fn(async (messages: ChatMessage[]) => {
+      const part = /This is part (\d+) of/.exec(messages[1]!.content)![1]!
+      return {
+        data: {
+          language: 'en',
+          topics: [
+            {
+              name: `Topic ${part}`,
+              description: 'd',
+              // An alias beyond this part, a real UUID the model never saw,
+              // and a non-string: all discarded.
+              sourceChunkIds: ['c9999', chunks[0]!.id, 7],
+              sourceRefs: [],
+            },
+          ],
+        },
+        raw: { content: '{}', finishReason: 'stop', model: 'm' },
+      }
+    })
+    const ai = {
+      streamJSON,
+      chatJSON: vi.fn(),
+      currentProvider: { id: 'custom' },
+      maxOutputTokens: 2048,
+    } as unknown as AIService
+    await service(projects, ai).analyzeProject(projectId)
+    const topics = await new CourseAnalysisRepository(db).listTopics(projectId)
+    expect(topics).toHaveLength(4)
+    for (const topic of topics) {
+      expect(topic.needsFullReanalysis).toBe(true)
+      expect(topic.sourceChunkIds).toBeUndefined()
+    }
+  })
+
+  it('reports prompt-changed for an analysis written with document-analyzer v2', async () => {
+    const { projects, projectId } = await seedBook(1, 2, 50)
+    await service(projects, partAI().ai).analyzeProject(projectId)
+    const content = new CourseContentRepository({ db })
+    expect((await content.isFresh(projectId)).fresh).toBe(true)
+    const analyses = new CourseAnalysisRepository(db)
+    const row = (await analyses.getByProject(projectId))!
+    expect(row.promptVersion.startsWith('v3+')).toBe(true)
+    await analyses.upsert({ ...row, promptVersion: row.promptVersion.replace(/^v3\+/, 'v2+') })
+    expect((await content.isFresh(projectId)).reasons).toEqual(['prompt-changed'])
   })
 
   it('analyses a short course in one request with the unchanged prompt', async () => {

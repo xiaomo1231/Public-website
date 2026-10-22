@@ -14,12 +14,16 @@ import {
 import {
   buildCandidateChunkLabel,
   chunkFingerprintMap,
+  createChunkAliases,
+  resolveChunkAliases,
   validateTopicSourceChunks,
+  type ChunkAliases,
 } from '@/entities/courseContent/topicDependency'
 import { matchTopicIdentities, normalizeTopicName } from '@/entities/courseAnalysis/topicIdentity'
 import { mergeDocumentAnalyses } from '@/entities/courseAnalysis/mergeAnalyses'
 import {
   planAnalysisSegments,
+  segmentChunks,
   segmentText,
   type AnalysisSegment,
   type ChunkFormatter,
@@ -230,26 +234,33 @@ export class DocumentAnalysisService {
 
     // Every chunk goes to the analyzer: in one request when the course fits,
     // otherwise in parts cut at chapter boundaries and merged afterwards.
-    const formatted = new Map<string, string>()
-    const format: ChunkFormatter = (chunk) => {
-      let text = formatted.get(chunk.id)
+    // Maths is canonicalised (Symbol-font glyphs recovered, Unicode maths to
+    // LaTeX) so the analyzer never ingests opaque characters; the stored chunk
+    // is untouched.
+    const bodies = new Map<string, string>()
+    const body = (chunk: DocumentChunk): string => {
+      let text = bodies.get(chunk.id)
       if (text === undefined) {
-        // The stable chunk id is what the model echoes back in each topic's
-        // `sourceChunkIds`. Maths is canonicalised (Symbol-font glyphs
-        // recovered, Unicode maths to LaTeX) so the analyzer never ingests
-        // opaque characters; the stored chunk is untouched.
-        text = `[${buildCandidateChunkLabel(chunk)}] ${normalizeMathNotation(chunk.text).text}`
-        formatted.set(chunk.id, text)
+        text = normalizeMathNotation(chunk.text).text
+        bodies.set(chunk.id, text)
       }
       return text
     }
+    // Each passage is labelled with a short alias (`c12`) that is valid for its
+    // own request only; the model echoes it in `sourceChunkIds` and it is
+    // mapped back to the real chunk id below. Planning sizes every chunk with
+    // its course-wide position as the alias — never shorter than the alias it
+    // gets inside its part, so a planned part never exceeds the budget.
+    const courseIndex = new Map(analysisChunks.map((chunk, index) => [chunk.id, index]))
+    const planningFormat: ChunkFormatter = (chunk) =>
+      `[${buildCandidateChunkLabel(chunk, `c${(courseIndex.get(chunk.id) ?? analysisChunks.length) + 1}`)}] ${body(chunk)}`
     const planned = planAnalysisSegments(
       analysisDocs.map((doc, index) => ({
         id: doc.id,
         name: doc.name,
         chunks: chunkLists[index]!,
       })),
-      format,
+      planningFormat,
     )
     const segments: AnalysisSegment[] =
       planned.length > 0
@@ -262,6 +273,12 @@ export class DocumentAnalysisService {
               chars: 0,
             },
           ]
+    const segmentAliases = segments.map((segment) => createChunkAliases(segmentChunks(segment)))
+    const formats = segmentAliases.map(
+      (aliases): ChunkFormatter =>
+        (chunk) =>
+          `[${buildCandidateChunkLabel(chunk, aliases.aliasOf(chunk.id))}] ${body(chunk)}`,
+    )
     logger.debug('Analysis input planned', {
       projectId,
       chunks: analysisChunks.length,
@@ -269,7 +286,7 @@ export class DocumentAnalysisService {
       chars: segments.map((segment) => segment.chars),
     })
     onProgress?.({ stage: 'extracting', progress: 25 })
-    const language = await this.detectLanguage(segmentText(segments[0]!, format))
+    const language = await this.detectLanguage(segmentText(segments[0]!, formats[0]!))
     onProgress?.({ stage: 'analyzing', progress: 30, message: t('stage.askingAi') })
 
     const seed = await this.analyses.getByProject(projectId)
@@ -306,7 +323,7 @@ export class DocumentAnalysisService {
 
     let output: DocumentAnalysisOutput
     try {
-      const outputs = await this.analyzeSegments(segments, format, {
+      const outputs = await this.analyzeSegments(segments, formats, {
         projectId,
         subject,
         language,
@@ -315,9 +332,11 @@ export class DocumentAnalysisService {
         control,
         ...(onProgress ? { onProgress } : {}),
       })
+      // Aliases belong to one request: each part's answer is mapped back to
+      // real chunk ids before the parts are merged.
       output = mergeDocumentAnalyses(
         outputs.map((part, index) => ({
-          output: part,
+          output: resolveAnalysisChunkAliases(part, segmentAliases[index]!),
           label: segments[index]!.label,
           chapterIds: segments[index]!.chapterIds,
         })),
@@ -573,7 +592,7 @@ export class DocumentAnalysisService {
    */
   private async analyzeSegments(
     segments: AnalysisSegment[],
-    format: ChunkFormatter,
+    formats: ChunkFormatter[],
     context: {
       projectId: string
       subject: Parameters<typeof prompts.subjectProfile.withSubject>[1]
@@ -603,7 +622,7 @@ export class DocumentAnalysisService {
               total === 1
                 ? context.documentNames.join(', ')
                 : segment.documents.map((d) => d.name).join(', '),
-            documentText: segmentText(segment, format),
+            documentText: segmentText(segment, formats[index]!),
             language: context.language,
             ...(total > 1 ? { part: { index: index + 1, total, label: segment.label } } : {}),
           }),
@@ -762,6 +781,27 @@ export class DocumentAnalysisService {
     if (zh > en * 2) return 'zh'
     if (en > zh * 2) return 'en'
     return 'mixed'
+  }
+}
+
+/**
+ * Map one part's `sourceChunkIds` from the aliases printed in its request back
+ * to real chunk ids. Aliases outside that request's set are dropped (the
+ * topic is then validated — and flagged — exactly like an unknown id).
+ *
+ * Remembered parts are stored in alias form and mapped at use, so a cached
+ * part never carries chunk ids from an earlier processing of the material.
+ */
+export function resolveAnalysisChunkAliases(
+  output: DocumentAnalysisOutput,
+  aliases: ChunkAliases,
+): DocumentAnalysisOutput {
+  return {
+    ...output,
+    topics: output.topics.map((topic) => {
+      if (topic.sourceChunkIds === undefined) return topic
+      return { ...topic, sourceChunkIds: resolveChunkAliases(topic.sourceChunkIds, aliases) }
+    }),
   }
 }
 

@@ -733,7 +733,9 @@ export class HomeworkWalkthroughService {
           )
         // Only the standard version is rewritten; the detailed one stays —
         // unless it was rewritten onto the professor's route (按教授答案修改).
-        await save(withLevel(withPrevious(section, current), current, !align))
+        // The dropped detailed version stays with the replaced one, so
+        // 恢复上一版 brings both back.
+        await save(withLevel(withPrevious(section, current, align), current, !align))
       } else {
         // Only the requested part is asked for and rewritten.
         const next = await this.writeFramePart(
@@ -784,13 +786,7 @@ export class HomeworkWalkthroughService {
         setId,
         language: state.language,
       },
-      section.previous.level === 'detailed'
-        ? swapDetailed(section)
-        : withLevel(
-            { ...applyVersion(section, section.previous), previous: versionOf(section) },
-            section,
-            true,
-          ),
+      section.previous.level === 'detailed' ? swapDetailed(section) : swapStandard(section),
     )
   }
 
@@ -2129,16 +2125,54 @@ function applyVersion(
     ...(version.sourceDocumentId ? { sourceDocumentId: version.sourceDocumentId } : {}),
     ...(version.issues ? { issues: version.issues } : {}),
     ...(version.professorAligned ? { professorAligned: version.professorAligned } : {}),
+    ...(version.variants?.detailed ? { variants: { detailed: version.variants.detailed } } : {}),
     generatedAt: version.generatedAt,
   }
 }
 
-/** The rewritten section, keeping the ready one it replaces (one level). */
+/**
+ * `versionOf` plus the section's detailed version (`{}` when it has none), for
+ * a version whose detailed version does not stay on the section.
+ */
+function versionWithVariants(section: WalkthroughSection): WalkthroughSectionVersion {
+  return { ...versionOf(section), variants: section.variants ?? {} }
+}
+
+/**
+ * The rewritten section, keeping the ready one it replaces (one level). With
+ * `withVariants` (the rewrite drops the detailed version), the replaced
+ * version keeps its detailed version too.
+ */
 function withPrevious(
   section: WalkthroughSection,
   replaced: WalkthroughSection | undefined,
+  withVariants = false,
 ): WalkthroughSection {
-  return replaced ? { ...section, previous: versionOf(replaced) } : section
+  if (!replaced) return section
+  return {
+    ...section,
+    previous: withVariants ? versionWithVariants(replaced) : versionOf(replaced),
+  }
+}
+
+/**
+ * 恢复上一版 of the standard version (toggles). A previous version that
+ * carries its own detailed version brings it back, and the version it swaps
+ * out keeps its own (so swapping again restores it); otherwise only the
+ * standard text swaps and the section's detailed version stays.
+ */
+export function swapStandard(section: WalkthroughSection): WalkthroughSection {
+  const previous = section.previous!
+  if (previous.variants === undefined)
+    return withLevel(
+      { ...applyVersion(section, previous), previous: versionOf(section) },
+      section,
+      true,
+    )
+  return withLevel(
+    { ...applyVersion(section, previous), previous: versionWithVariants(section) },
+    section,
+  )
 }
 
 /** An opening / summary as the revision request shows it. */

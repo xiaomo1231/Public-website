@@ -230,6 +230,64 @@ describe('ProcessingService — visual source preservation', () => {
     expect(await visuals.getImage(oldFigures[0]!.id)).toBeTruthy()
     expect((await documents.get(documentId)).status).toBe('ready')
   })
+
+  it('opens the PDF once for all of its figure pages', async () => {
+    pdfState.pages = [
+      { text: '', imageOps: [85] },
+      { text: 'Plain text page with enough words to not be a figure page at all.', imageOps: [] },
+      { text: '', imageOps: [86] },
+      { text: '', imageOps: [85] },
+    ]
+    const render = vi.fn().mockResolvedValue({
+      bytes: new Uint8Array([137, 80, 78, 71]).buffer,
+      mimeType: 'image/png',
+      width: 10,
+      height: 10,
+    })
+    const close = vi.fn().mockResolvedValue(undefined)
+    const open = vi.fn().mockResolvedValue({ render, close })
+    const doc = await documents.create({
+      projectId,
+      type: 'pdf',
+      name: 'figures.pdf',
+      sizeBytes: 0,
+      blob: PDF_BLOB(),
+    })
+    await new ProcessingService({
+      documents,
+      chunks,
+      jobs,
+      projects,
+      visuals,
+      openPageImages: open,
+    }).process(doc.id)
+
+    expect(open).toHaveBeenCalledTimes(1)
+    expect(render.mock.calls.map((call) => call[0])).toEqual([1, 3, 4])
+    expect(close).toHaveBeenCalledTimes(1)
+    expect(await visuals.listByDocument(doc.id)).toHaveLength(3)
+  })
+
+  it('does not open the PDF when no page needs a figure', async () => {
+    pdfState.pages = [{ text: 'Only text here, plenty of it to read.', imageOps: [] }]
+    const open = vi.fn()
+    const doc = await documents.create({
+      projectId,
+      type: 'pdf',
+      name: 'text.pdf',
+      sizeBytes: 0,
+      blob: PDF_BLOB(),
+    })
+    await new ProcessingService({
+      documents,
+      chunks,
+      jobs,
+      projects,
+      visuals,
+      openPageImages: open,
+    }).process(doc.id)
+    expect(open).not.toHaveBeenCalled()
+  })
 })
 
 describe('TutorLessonService — visual sources', () => {

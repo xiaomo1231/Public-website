@@ -56,7 +56,11 @@ export interface UseBatchUploadResult {
 export function useBatchUpload(projectId: string): UseBatchUploadResult {
   const [items, setItems] = useState<UploadQueueItem[]>([])
   const [running, setRunning] = useState(false)
-  const cancelledRef = useRef(false)
+  // The run in progress. Each run owns its cancel flag, so closing the dialog
+  // (reset) detaches a run that is still finishing its current file: its late
+  // updates and its `finally` can no longer touch a reopened dialog, and a new
+  // run cannot "un-cancel" the old one's remaining items.
+  const runRef = useRef<{ cancelled: boolean } | null>(null)
   const refresh = useDocumentsStore((s) => s.refresh)
 
   // Mirror of `items` so event handlers always read the latest queue.
@@ -132,18 +136,20 @@ export function useBatchUpload(projectId: string): UseBatchUploadResult {
       const queued = snapshot.filter((item) => item.status === 'queued')
       if (queued.length === 0) return
 
-      cancelledRef.current = false
+      const token = { cancelled: false }
+      if (runRef.current) runRef.current.cancelled = true
+      runRef.current = token
       setRunning(true)
       let completed = 0
       try {
         await runBatchQueue(snapshot, {
           onUpdate: (id, patch) => {
             if (patch.status === 'completed') completed += 1
-            update(id, patch)
+            if (runRef.current === token) update(id, patch)
           },
-          isCancelled: () => cancelledRef.current,
+          isCancelled: () => token.cancelled,
           worker: async (item, { report, setDocumentId }) => {
-            const isCancelled = () => cancelledRef.current
+            const isCancelled = () => token.cancelled
             const onStage = (stage: {
               phase: 'validating' | 'saving' | 'processing'
               progress?: number
@@ -188,7 +194,10 @@ export function useBatchUpload(projectId: string): UseBatchUploadResult {
           },
         })
       } finally {
-        setRunning(false)
+        if (runRef.current === token) {
+          runRef.current = null
+          setRunning(false)
+        }
         // Reuse the existing document store as the single source of truth. A
         // failed list refresh must not skip the analysis below.
         await refresh(projectId).catch((err: unknown) => {
@@ -231,7 +240,7 @@ export function useBatchUpload(projectId: string): UseBatchUploadResult {
   }, [run])
 
   const cancelRemaining = useCallback(() => {
-    cancelledRef.current = true
+    if (runRef.current) runRef.current.cancelled = true
   }, [])
 
   const clearFinished = useCallback(() => {
@@ -239,7 +248,11 @@ export function useBatchUpload(projectId: string): UseBatchUploadResult {
   }, [])
 
   const reset = useCallback(() => {
-    cancelledRef.current = true
+    // Stop the queue and detach it: the file being processed right now still
+    // finishes in the background (and is kept), but the dialog starts clean.
+    if (runRef.current) runRef.current.cancelled = true
+    runRef.current = null
+    setRunning(false)
     setItems([])
   }, [])
 

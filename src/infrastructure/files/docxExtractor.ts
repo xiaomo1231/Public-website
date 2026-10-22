@@ -1,12 +1,15 @@
 import mammoth from 'mammoth'
+import { toMarkdownTable } from '@/shared/lib/markdownTable'
 
 export interface DocxExtractedBlock {
   type: 'heading' | 'paragraph' | 'table' | 'list'
   level?: number
+  /**
+   * Plain text. Lists: one line per item (`• item` / `1. item`, nested items
+   * indented). Tables: a Markdown pipe table built from `rows`.
+   */
   text: string
-  /** Raw HTML for tables (inner HTML of <table>) */
-  html?: string
-  /** Rows when type === 'table' (best-effort plain text) */
+  /** Rows when type === 'table' (plain text cells; merged cells expanded). */
   rows?: string[][]
 }
 
@@ -17,116 +20,138 @@ export interface DocxExtractionResult {
   metadata: { title?: string; author?: string }
 }
 
-interface ParseState {
-  blocks: DocxExtractedBlock[]
-  warnings: string[]
-  inTable: number
-}
+const HEADING = /^h([1-6])$/
+/** Upper bound for a cell's colspan / rowspan; guards against hostile values. */
+const MAX_SPAN = 50
 
-function handleTag(state: ParseState, tag: string, attrs: Record<string, string>): string {
-  const lower = tag.toLowerCase()
-  if (
-    lower === 'h1' ||
-    lower === 'h2' ||
-    lower === 'h3' ||
-    lower === 'h4' ||
-    lower === 'h5' ||
-    lower === 'h6'
-  ) {
-    state.blocks.push({ type: 'heading', level: Number(lower[1]), text: '' })
-    return ''
-  }
-  if (lower === 'p') {
-    state.blocks.push({ type: 'paragraph', text: '' })
-    return ''
-  }
-  if (lower === 'table') {
-    state.inTable++
-    state.blocks.push({ type: 'table', text: '', rows: [], html: '<table>' })
-    return ''
-  }
-  if (lower === 'ul' || lower === 'ol') {
-    state.blocks.push({ type: 'list', text: '' })
-    return ''
-  }
-  if (lower === 'tr' && state.inTable > 0) {
-    const tbl = state.blocks[state.blocks.length - 1]
-    if (tbl && tbl.type === 'table') tbl.rows!.push([])
-    return ''
-  }
-  if (lower === 'td' || lower === 'th') {
-    /* handled in text path */
-    return ''
-  }
-  if (lower === 'br') return '\n'
-  if (lower === 'li') return '\n• '
-  void attrs
-  return ''
-}
-
-function handleText(state: ParseState, text: string): void {
-  const current = state.blocks[state.blocks.length - 1]
-  if (!current) return
-  current.text += text
-  if (current.type === 'table' && current.html !== undefined) {
-    // crude HTML preservation
-    current.html += escapeHtml(text)
-  }
-}
-
-function escapeHtml(s: string): string {
-  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-}
-
-function handleCloseTag(state: ParseState, tag: string): void {
-  const lower = tag.toLowerCase()
-  if (lower === 'table') {
-    state.inTable = Math.max(0, state.inTable - 1)
-    const tbl = state.blocks[state.blocks.length - 1]
-    if (tbl && tbl.type === 'table' && tbl.html !== undefined) tbl.html += '</table>'
-  }
+function tagOf(el: Element): string {
+  return el.tagName.toLowerCase()
 }
 
 /**
- * Very small streaming HTML parser tailored to mammoth's output.
- * Handles headings, paragraphs, tables, lists.
+ * Inline text of an element, with `<br>` as a line break. Nested lists and
+ * tables are skipped — they become their own lines / blocks.
  */
-function parseMammothHtml(html: string): DocxExtractedBlock[] {
-  const state: ParseState = { blocks: [], warnings: [], inTable: 0 }
-  const tagRe = /<\/?([a-zA-Z][a-zA-Z0-9]*)\b([^>]*)>/g
-  let cursor = 0
-  let match: RegExpExecArray | null
-
-  while ((match = tagRe.exec(html)) !== null) {
-    const before = html.slice(cursor, match.index)
-    if (before) handleText(state, before)
-    const tag = match[1]!
-    const attrs = parseAttrs(match[2] ?? '')
-    if (match[0].startsWith('</')) {
-      handleCloseTag(state, tag)
-    } else if (!isSelfClosing(tag)) {
-      handleTag(state, tag, attrs)
+function inlineText(el: Element, skipNested = true): string {
+  let out = ''
+  for (const node of Array.from(el.childNodes)) {
+    if (node.nodeType === 3) {
+      out += node.nodeValue ?? ''
+    } else if (node.nodeType === 1) {
+      const child = node as Element
+      const tag = tagOf(child)
+      if (tag === 'br') out += '\n'
+      else if (skipNested && (tag === 'ul' || tag === 'ol' || tag === 'table')) continue
+      else if (tag === 'p' || HEADING.test(tag))
+        out += `${out && !out.endsWith('\n') ? '\n' : ''}${inlineText(child, skipNested)}\n`
+      else out += inlineText(child, skipNested)
     }
-    cursor = match.index + match[0].length
   }
-  const tail = html.slice(cursor)
-  if (tail) handleText(state, tail)
-
-  return state.blocks.filter(
-    (b) => b.text.trim().length > 0 || (b.type === 'table' && (b.rows?.length ?? 0) > 0),
-  )
+  return out
 }
 
-function parseAttrs(raw: string): Record<string, string> {
-  const attrs: Record<string, string> = {}
-  const re = /([a-zA-Z][\w:-]*)\s*=\s*"([^"]*)"/g
-  let m: RegExpExecArray | null
-  while ((m = re.exec(raw)) !== null) attrs[m[1]!.toLowerCase()] = m[2] ?? ''
-  return attrs
+function tidy(text: string): string {
+  return text
+    .split('\n')
+    .map((line) => line.replace(/[ \t\u00a0]+/g, ' ').trim())
+    .filter(Boolean)
+    .join('\n')
 }
 
-function isSelfClosing(tag: string): boolean {
-  return ['br', 'img', 'hr', 'meta', 'link'].includes(tag.toLowerCase())
+/** One line per list item; ordered lists keep their numbers, nesting is indented. */
+function listLines(list: Element, depth: number): string[] {
+  const ordered = tagOf(list) === 'ol'
+  let number = Number(list.getAttribute('start') ?? '1')
+  if (!Number.isFinite(number)) number = 1
+  const lines: string[] = []
+  for (const item of Array.from(list.children)) {
+    if (tagOf(item) !== 'li') continue
+    const text = tidy(inlineText(item)).replace(/\n/g, ' ')
+    const marker = ordered ? `${number}.` : '•'
+    number += 1
+    if (text) lines.push(`${'  '.repeat(depth)}${marker} ${text}`)
+    for (const nested of Array.from(item.children)) {
+      const tag = tagOf(nested)
+      if (tag === 'ul' || tag === 'ol') lines.push(...listLines(nested, depth + 1))
+    }
+  }
+  return lines
+}
+
+function span(el: Element, name: 'colspan' | 'rowspan'): number {
+  const value = Number(el.getAttribute(name) ?? '1')
+  return Number.isFinite(value) && value >= 1 ? Math.min(MAX_SPAN, Math.floor(value)) : 1
+}
+
+/**
+ * Table rows as plain text. A merged cell's text goes in its first (top-left)
+ * position and the positions it also covers are left empty, so every row keeps
+ * the table's column alignment.
+ */
+function tableRows(table: Element): string[][] {
+  const rows: string[][] = []
+  // Columns still covered by a rowspan from an earlier row: column → rows left.
+  const covered = new Map<number, number>()
+  const trs = Array.from(table.querySelectorAll('tr')).filter((tr) => tr.closest('table') === table)
+  for (const tr of trs) {
+    const row: string[] = []
+    let column = 0
+    const skipCovered = () => {
+      while ((covered.get(column) ?? 0) > 0) {
+        row[column] = ''
+        column += 1
+      }
+    }
+    for (const cell of Array.from(tr.children)) {
+      const tag = tagOf(cell)
+      if (tag !== 'td' && tag !== 'th') continue
+      skipCovered()
+      const colspan = span(cell, 'colspan')
+      const rowspan = span(cell, 'rowspan')
+      row[column] = tidy(inlineText(cell, false)).replace(/\n/g, ' ')
+      for (let k = 0; k < colspan; k++) {
+        if (k > 0) row[column + k] = ''
+        if (rowspan > 1) covered.set(column + k, rowspan)
+      }
+      column += colspan
+    }
+    skipCovered()
+    // This row consumed one row of every rowspan that covers it.
+    for (const [col, left] of [...covered]) {
+      if (left <= 1) covered.delete(col)
+      else covered.set(col, left - 1)
+    }
+    rows.push(Array.from({ length: row.length }, (_, i) => row[i] ?? ''))
+  }
+  return rows
+}
+
+/**
+ * Turn mammoth's HTML into blocks. Parsed with the browser's HTML parser, so
+ * character references (`&lt;`, `&amp;`, `&#x3B1;`) are decoded once.
+ */
+export function parseMammothHtml(html: string): DocxExtractedBlock[] {
+  const doc = new DOMParser().parseFromString(`<body>${html}</body>`, 'text/html')
+  const blocks: DocxExtractedBlock[] = []
+  for (const el of Array.from(doc.body.children)) {
+    const tag = tagOf(el)
+    const heading = HEADING.exec(tag)
+    if (heading) {
+      const text = tidy(inlineText(el)).replace(/\n/g, ' ')
+      if (text) blocks.push({ type: 'heading', level: Number(heading[1]), text })
+    } else if (tag === 'ul' || tag === 'ol') {
+      const text = listLines(el, 0).join('\n')
+      if (text) blocks.push({ type: 'list', text })
+    } else if (tag === 'table') {
+      const rows = tableRows(el)
+      const text = toMarkdownTable(rows)
+      if (text) blocks.push({ type: 'table', text, rows })
+    } else {
+      const text = tidy(inlineText(el, false))
+      if (text) blocks.push({ type: 'paragraph', text })
+    }
+  }
+  return blocks
 }
 
 /**

@@ -26,6 +26,7 @@ import type { CourseStructure, CourseStructureNode } from '@/entities/courseStru
 import type { DocumentChunk } from '@/entities/chunk/types'
 import type { TutorLesson } from '@/entities/tutorLesson/types'
 import type { Topic } from '@/entities/courseAnalysis/types'
+import { toPromptAliases } from './helpers/chunkAliases'
 import type { AIService } from '@/services/aiService'
 
 // ---------------------------------------------------------------------------
@@ -324,11 +325,30 @@ async function seedProject(db: AppDatabase) {
   return { project, doc, chunks, stored }
 }
 
-function fakeAnalysisAI(topics: Array<Record<string, unknown>>) {
-  const streamJSON = vi.fn().mockResolvedValue({
+/**
+ * Answers with `topics`; real chunk ids in their `sourceChunkIds` are turned
+ * into the aliases the prompt printed (document-analyzer/v3), ids of `chunks`
+ * only — anything else stays as written, i.e. invalid.
+ */
+function fakeAnalysisAI(
+  topics: Array<Record<string, unknown>>,
+  chunks: ReadonlyArray<{ id: string; text: string }> = [],
+) {
+  const streamJSON = vi.fn(async (messages: Array<{ role: string; content: string }>) => ({
     data: {
       language: 'en',
-      topics,
+      topics: topics.map((topic) =>
+        Array.isArray(topic.sourceChunkIds)
+          ? {
+              ...topic,
+              sourceChunkIds: toPromptAliases(
+                messages[1]!.content,
+                topic.sourceChunkIds as string[],
+                chunks,
+              ),
+            }
+          : topic,
+      ),
       concepts: [],
       formulas: [],
       symbols: [],
@@ -337,7 +357,7 @@ function fakeAnalysisAI(topics: Array<Record<string, unknown>>) {
       prerequisites: [],
     },
     raw: { content: '{}', model: 'test' },
-  })
+  }))
   return {
     streamJSON,
     maxOutputTokens: 2048,
@@ -363,14 +383,17 @@ describe('analyzer writes stable ids and validated dependencies', () => {
 
     const run = () =>
       new DocumentAnalysisService({
-        ai: fakeAnalysisAI([
-          {
-            name: 'Derivatives',
-            description: 'rate of change',
-            sourceChunkIds: [stored[0]!.id],
-            sourceRefs: [],
-          },
-        ]),
+        ai: fakeAnalysisAI(
+          [
+            {
+              name: 'Derivatives',
+              description: 'rate of change',
+              sourceChunkIds: [stored[0]!.id],
+              sourceRefs: [],
+            },
+          ],
+          stored,
+        ),
         projects: new ProjectService(db),
         db,
         documents: new DocumentRepository(db),
@@ -502,10 +525,10 @@ describe('analyzer writes stable ids and validated dependencies', () => {
       sourceRefs: [],
     }
 
-    await run(fakeAnalysisAI([topicPayload]))
+    await run(fakeAnalysisAI([topicPayload], stored))
     const first = (await analyses.listTopics(project.id))[0]!
 
-    await run(fakeAnalysisAI([{ ...topicPayload }]))
+    await run(fakeAnalysisAI([{ ...topicPayload }], stored))
     const second = (await analyses.listTopics(project.id))[0]!
 
     expect(second.id).toBe(first.id)
@@ -516,14 +539,17 @@ describe('analyzer writes stable ids and validated dependencies', () => {
     const analyses = new CourseAnalysisRepository(db)
 
     await new DocumentAnalysisService({
-      ai: fakeAnalysisAI([
-        {
-          name: 'Derivatives and the Chain Rule',
-          description: 'spans two chapters',
-          sourceChunkIds: [stored[0]!.id, stored[1]!.id],
-          sourceRefs: [],
-        },
-      ]),
+      ai: fakeAnalysisAI(
+        [
+          {
+            name: 'Derivatives and the Chain Rule',
+            description: 'spans two chapters',
+            sourceChunkIds: [stored[0]!.id, stored[1]!.id],
+            sourceRefs: [],
+          },
+        ],
+        stored,
+      ),
       projects: new ProjectService(db),
       db,
       documents: new DocumentRepository(db),
@@ -537,7 +563,7 @@ describe('analyzer writes stable ids and validated dependencies', () => {
     expect(saved.sourceSectionIds).toEqual(['s1', 's2'])
     expect(saved.dependencyHash).toMatch(/^[0-9a-f]{8}$/)
     expect(saved.needsFullReanalysis).toBeUndefined()
-    expect(saved.promptVersion).toBe('v2+subject-profile/v1:calculus.r2')
+    expect(saved.promptVersion).toBe('v3+subject-profile/v1:calculus.r2')
   })
 
   it('6 �?a topic with no valid source ids is flagged instead of guessed', async () => {
@@ -565,14 +591,17 @@ describe('analyzer writes stable ids and validated dependencies', () => {
     const analyses = new CourseAnalysisRepository(db)
 
     await new DocumentAnalysisService({
-      ai: fakeAnalysisAI([
-        {
-          name: 'Derivatives',
-          description: '',
-          sourceChunkIds: [stored[0]!.id],
-          sourceRefs: [],
-        },
-      ]),
+      ai: fakeAnalysisAI(
+        [
+          {
+            name: 'Derivatives',
+            description: '',
+            sourceChunkIds: [stored[0]!.id],
+            sourceRefs: [],
+          },
+        ],
+        stored,
+      ),
       projects: new ProjectService(db),
       db,
       documents: new DocumentRepository(db),
@@ -589,7 +618,7 @@ describe('analyzer writes stable ids and validated dependencies', () => {
     expect(after.id).toBe(before.id)
     expect(after.sourceChunkIds).toEqual(before.sourceChunkIds)
     expect(after.dependencyHash).toBe(before.dependencyHash)
-    expect(after.promptVersion).toBe('v2+subject-profile/v1:calculus.r2')
+    expect(after.promptVersion).toBe('v3+subject-profile/v1:calculus.r2')
   })
 })
 
@@ -822,13 +851,18 @@ describe('incremental scope execution', () => {
       language: 'en',
     })
 
-    mocks.chatJSON.mockResolvedValue({
+    mocks.chatJSON.mockImplementation(async (messages: Array<{ content: string }>) => ({
       data: {
         language: 'en',
         topic: {
           name: 'Spanning Topic',
           description: 'regenerated',
-          sourceChunkIds: [replacement[0]!.id, stored[1]!.id],
+          // topic-analyzer/v2: the aliases printed in this request.
+          sourceChunkIds: toPromptAliases(
+            messages[1]!.content,
+            [replacement[0]!.id, stored[1]!.id],
+            [...replacement, ...stored],
+          ),
         },
         concepts: [
           { name: 'Derivative', definition: 'rate of change', topicNames: ['Spanning Topic'] },
@@ -839,7 +873,7 @@ describe('incremental scope execution', () => {
         exercises: [],
         prerequisites: [],
       },
-    })
+    }))
 
     const service = new CourseContentService({ content: new CourseContentRepository({ db }) })
     const result = await service.executeIncrementalScope({
@@ -854,7 +888,10 @@ describe('incremental scope execution', () => {
     // The regeneration input carried the still-valid source (c2 / ch2).
     const prompt = mocks.chatJSON.mock.calls[0]![0] as Array<{ role: string; content: string }>
     const user = prompt.find((message) => message.role === 'user')!.content
-    expect(user).toContain(stored[1]!.id)
+    expect(user).toContain(stored[1]!.text)
+    // Short aliases, never chunk UUIDs.
+    expect(user).toMatch(/\[c\d+[\] ]/)
+    expect(user).not.toContain(stored[1]!.id)
 
     // The regenerated topic keeps its id and now carries both chapters.
     const after = (await analyses.listTopics(project.id)).find(
@@ -931,7 +968,7 @@ describe('incremental scope execution', () => {
 
     // The AI call mutates the material mid-flight �?exactly the race the
     // pre-commit revalidation exists to catch.
-    mocks.chatJSON.mockImplementation(async () => {
+    mocks.chatJSON.mockImplementation(async (messages: Array<{ content: string }>) => {
       await new ChunkRepository(db).addMany([
         {
           documentId: doc.id,
@@ -950,7 +987,11 @@ describe('incremental scope execution', () => {
           topic: {
             name: 'Spanning Topic',
             description: 'regenerated',
-            sourceChunkIds: [replacement[0]!.id],
+            sourceChunkIds: toPromptAliases(
+              messages[1]!.content,
+              [replacement[0]!.id],
+              replacement,
+            ),
           },
           concepts: [],
           formulas: [],

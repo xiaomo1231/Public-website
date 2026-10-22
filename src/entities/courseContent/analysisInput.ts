@@ -150,11 +150,20 @@ export function planAnalysisSegments(
   })
 }
 
-/** The analyzer text for one part: each document under its id heading. */
+/**
+ * The analyzer text for one part: each document under its name heading (the
+ * name is what the model cites in `sourceRefs.documentName`; a UUID heading
+ * only cost tokens).
+ */
 export function segmentText(segment: AnalysisSegment, format: ChunkFormatter): string {
   return segment.documents
-    .map((doc) => `=== ${doc.id} ===\n${doc.chunks.map(format).join('\n\n')}`)
+    .map((doc) => `=== ${doc.name} ===\n${doc.chunks.map(format).join('\n\n')}`)
     .join('\n\n')
+}
+
+/** Every chunk of one part, in prompt order (the order its aliases are issued in). */
+export function segmentChunks(segment: AnalysisSegment): DocumentChunk[] {
+  return segment.documents.flatMap((doc) => doc.chunks)
 }
 
 /**

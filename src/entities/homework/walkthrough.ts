@@ -160,6 +160,16 @@ export interface WalkthroughSectionVersion {
   sourceDocumentId?: string
   issues?: WalkthroughImportIssue[]
   professorAligned?: ProfessorAlignment
+  /**
+   * The detailed version that belonged to this version, when a rewrite dropped
+   * it (按教授答案修改 rewrites onto the professor's route, so the old detailed
+   * version no longer fits the new standard one). `{}` = it had none. Travels
+   * with the version on 恢复上一版, so swapping brings back both the standard
+   * and the detailed version and swapping again restores the aligned one.
+   * Absent on older rows and on rewrites that kept the section's detailed
+   * version (then the section's own `variants` stay, as before).
+   */
+  variants?: { detailed?: WalkthroughVariant }
   inputHash: string
   generatedAt: number
 }
@@ -324,6 +334,7 @@ export function sectionFromVersion(
     ...(version.sourceDocumentId ? { sourceDocumentId: version.sourceDocumentId } : {}),
     ...(version.issues ? { issues: version.issues } : {}),
     ...(version.professorAligned ? { professorAligned: version.professorAligned } : {}),
+    ...(version.variants?.detailed ? { variants: { detailed: version.variants.detailed } } : {}),
     generatedAt: version.generatedAt,
   }
 }

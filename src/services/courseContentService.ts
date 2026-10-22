@@ -14,6 +14,8 @@ import {
 import {
   buildTopicDependency,
   buildCandidateChunkLabel,
+  createChunkAliases,
+  resolveChunkAliases,
   chunkFingerprintMap,
   validateTopicSourceChunks,
 } from '@/entities/courseContent/topicDependency'
@@ -758,6 +760,8 @@ export class CourseContentService {
     signal?: AbortSignal,
   ) {
     const chapterLabel = [topic.chapterNumber, topic.chapterTitle].filter(Boolean).join(' — ')
+    // Short per-request aliases instead of chunk UUIDs; mapped back below.
+    const aliases = createChunkAliases(candidateChunks)
     const sectionLabel = [topic.sectionNumber, topic.sectionTitle].filter(Boolean).join(' — ')
 
     const messages = [
@@ -777,7 +781,7 @@ export class CourseContentService {
           ...(chapterLabel ? { chapterLabel } : {}),
           ...(sectionLabel ? { sectionLabel } : {}),
           chunks: candidateChunks.map((chunk) => ({
-            id: chunk.id,
+            id: aliases.aliasOf(chunk.id)!,
             label: buildCandidateChunkLabel(chunk).split(' · ').slice(1).join(' · '),
             text: normalizeMathNotation(chunk.text).text,
           })),
@@ -792,7 +796,10 @@ export class CourseContentService {
         ...(signal ? { signal } : {}),
       })
       const output = normalizeTopicAnalysis(data)
-      const dependency = validateTopicSourceChunks(output.topic.sourceChunkIds, candidateChunks)
+      const dependency = validateTopicSourceChunks(
+        resolveChunkAliases(output.topic.sourceChunkIds, aliases),
+        candidateChunks,
+      )
       if (!dependency) {
         logger.warn('Incremental topic had no verifiable sources; flagging for full re-analysis', {
           topicId: topic.id,

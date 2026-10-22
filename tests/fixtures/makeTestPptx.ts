@@ -11,30 +11,45 @@ export interface TestPptxSlide {
   title?: string
   body?: string
   notes?: string
+  /**
+   * Number used for this slide's notes file (`notesSlide{n}.xml`). Defaults to
+   * the slide's own file number; set it to prove notes are resolved through
+   * the slide's relationships rather than by file name.
+   */
+  notesFileNumber?: number
   /** Images embedded in this slide (written to `ppt/media`). */
   images?: TestPptxImage[]
 }
 
 export interface TestPptxOptions {
+  /** Slides in file order: `slides[i]` is written to `ppt/slides/slide{i+1}.xml`. */
   slides?: TestPptxSlide[]
+  /**
+   * Presentation order as 1-based file numbers (the `p:sldIdLst`). Defaults to
+   * file order. A slide left out is an orphan part that is not in the deck.
+   */
+  order?: number[]
 }
+
+const REL = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships'
 
 /**
  * Build a minimal valid .pptx file in memory.
  *
- * Required parts for jszip parsing:
+ * Parts:
  *   - [Content_Types].xml
  *   - _rels/.rels
- *   - ppt/presentation.xml
- *   - ppt/_rels/presentation.xml.rels
- *   - ppt/slides/slide{1..N}.xml
- *   - ppt/notesSlides/notesSlide{1..N}.xml (optional, only if notes present)
+ *   - ppt/presentation.xml (`p:sldIdLst`) + ppt/_rels/presentation.xml.rels
+ *   - ppt/slides/slide{1..N}.xml (+ _rels when the slide has notes or images)
+ *   - ppt/notesSlides/notesSlide{n}.xml, linked from the slide's rels
  */
 export async function makeTestPptx(options: TestPptxOptions = {}): Promise<Blob> {
   const slides = options.slides ?? [
     { title: 'Introduction', body: 'Welcome to the course.', notes: 'Greet the class.' },
     { title: 'Vectors', body: 'A vector has magnitude and direction.', notes: '' },
   ]
+  const order = options.order ?? slides.map((_, i) => i + 1)
+  const notesNumber = (slide: TestPptxSlide, i: number) => slide.notesFileNumber ?? i + 1
 
   const contentTypes = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
@@ -48,30 +63,31 @@ export async function makeTestPptx(options: TestPptxOptions = {}): Promise<Blob>
     )
     .join('\n')}
   ${slides
-    .filter((s) => s.notes)
-    .map(
-      (_, i) =>
-        `<Override PartName="/ppt/notesSlides/notesSlide${i + 1}.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.notesSlide+xml"/>`,
+    .map((s, i) =>
+      s.notes
+        ? `<Override PartName="/ppt/notesSlides/notesSlide${notesNumber(s, i)}.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.notesSlide+xml"/>`
+        : '',
     )
     .join('\n')}
 </Types>`
 
   const rels = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
-  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="ppt/presentation.xml"/>
+  <Relationship Id="rId1" Type="${REL}/officeDocument" Target="ppt/presentation.xml"/>
 </Relationships>`
 
   const presentationXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <p:presentation xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
-                xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+                xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"
+                xmlns:r="${REL}">
   <p:sldIdLst>
-    ${slides.map((_, i) => `<p:sldId id="${100 + i}" r:id="rId${i + 2}"/>`).join('\n')}
+    ${order.map((n, k) => `<p:sldId id="${256 + k}" r:id="rIdSlide${n}"/>`).join('\n')}
   </p:sldIdLst>
 </p:presentation>`
 
   const presentationRels = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
-  ${slides.map((s, i) => `<Relationship Id="rId${i + 2}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide" Target="slides/slide${i + 1}.xml"/>${s.notes ? `<Relationship Id="rIdNotes${i + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/notesSlide" Target="notesSlides/notesSlide${i + 1}.xml"/>` : ''}`).join('\n')}
+  ${slides.map((_, i) => `<Relationship Id="rIdSlide${i + 1}" Type="${REL}/slide" Target="slides/slide${i + 1}.xml"/>`).join('\n')}
 </Relationships>`
 
   const zip = new JSZip()
@@ -86,23 +102,28 @@ export async function makeTestPptx(options: TestPptxOptions = {}): Promise<Blob>
   for (let i = 0; i < slides.length; i++) {
     const slide = slides[i]!
     slideFolder.file(`slide${i + 1}.xml`, makeSlideXml(slide))
+    const relationships: string[] = []
     if (slide.notes) {
-      notesFolder.file(`notesSlide${i + 1}.xml`, makeNotesXml(slide.notes))
+      const n = notesNumber(slide, i)
+      notesFolder.file(`notesSlide${n}.xml`, makeNotesXml(slide.notes))
+      relationships.push(
+        `<Relationship Id="rIdNotes" Type="${REL}/notesSlide" Target="../notesSlides/notesSlide${n}.xml"/>`,
+      )
     }
     const images = slide.images ?? []
-    if (images.length > 0) {
-      const relationships = images
-        .map((image, k) => {
-          const name = image.name ?? `image${i + 1}_${k + 1}.png`
-          mediaFolder.file(name, image.bytes ?? new Uint8Array(2048))
-          return `<Relationship Id="rIdImg${k + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="../media/${name}"/>`
-        })
-        .join('\n')
+    images.forEach((image, k) => {
+      const name = image.name ?? `image${i + 1}_${k + 1}.png`
+      mediaFolder.file(name, image.bytes ?? new Uint8Array(2048))
+      relationships.push(
+        `<Relationship Id="rIdImg${k + 1}" Type="${REL}/image" Target="../media/${name}"/>`,
+      )
+    })
+    if (relationships.length > 0) {
       slideRelsFolder.file(
         `slide${i + 1}.xml.rels`,
         `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
-  ${relationships}
+  ${relationships.join('\n')}
 </Relationships>`,
       )
     }

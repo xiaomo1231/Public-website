@@ -329,19 +329,31 @@ export const SYMBOL_FONT_MAP: Readonly<Record<number, string>> = {
   0xe3: '©',
   0xe4: '™',
   0xe5: '∑',
+  // Large delimiter pieces (Adobe glyph names in comments). 0xF0 is unused.
+  0xe6: '⎛', // parenlefttp
+  0xe7: '⎜', // parenleftex
+  0xe8: '⎝', // parenleftbt
+  0xe9: '⎡', // bracketlefttp
+  0xea: '⎢', // bracketleftex
+  0xeb: '⎣', // bracketleftbt
+  0xec: '⎧', // bracelefttp
+  0xed: '⎨', // braceleftmid
+  0xee: '⎩', // braceleftbt
+  0xef: '⎪', // braceex
   0xf1: '⟩',
   0xf2: '∫',
-  0xf3: '⌠',
-  0xf5: '⌡',
-  0xf6: '⎞',
-  0xf7: '⎟',
-  0xf8: '⎠',
-  0xf9: '⎡',
-  0xfa: '⎢',
-  0xfb: '⎣',
-  0xfc: '⎧',
-  0xfd: '⎨',
-  0xfe: '⎩',
+  0xf3: '⌠', // integraltp
+  0xf4: '⎮', // integralex
+  0xf5: '⌡', // integralbt
+  0xf6: '⎞', // parenrighttp
+  0xf7: '⎟', // parenrightex
+  0xf8: '⎠', // parenrightbt
+  0xf9: '⎤', // bracketrighttp
+  0xfa: '⎥', // bracketrightex
+  0xfb: '⎦', // bracketrightbt
+  0xfc: '⎫', // bracerighttp
+  0xfd: '⎬', // bracerightmid
+  0xfe: '⎭', // bracerightbt
 }
 
 /** True when `codePoint` is the PUA form of a standard Symbol font byte. */

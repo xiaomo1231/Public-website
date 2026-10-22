@@ -31,6 +31,7 @@ import { getUILanguage, t } from '@/i18n'
 import { HomeworkRepository } from '@/entities/homework/repository'
 import { AnswerImageRepository } from '@/entities/homework/answerImageRepository'
 import { WalkthroughRepository } from '@/entities/homework/walkthroughRepository'
+import { questionSectionId } from '@/entities/homework/walkthrough'
 import { answerImageKey } from '@/entities/homework/answerImages'
 import { answerImageNote, answerImageUrls, withAnswerImages } from './answerImagesAI'
 import { HomeworkAnswerImageService } from './homeworkAnswerImageService'
@@ -48,6 +49,7 @@ import {
   type HomeworkAnswerCheck,
 } from '@/entities/homework/answerCheck'
 import {
+  hasAttachedRecords,
   hasStudentWork,
   homeworkContentFingerprint,
   matchHomeworkQuestions,
@@ -1840,9 +1842,13 @@ export class HomeworkService {
 
     await this.db.transaction(
       'rw',
-      this.db.homeworkSets,
-      this.db.homeworkQuestions,
-      this.db.homeworkAnswerImages,
+      [
+        this.db.homeworkSets,
+        this.db.homeworkQuestions,
+        this.db.homeworkAnswerImages,
+        this.db.homeworkWalkthroughs,
+        this.db.walkthroughNotes,
+      ],
       async () => {
         // If the assignment was deleted while the AI was running, drop the whole
         // result instead of resurrecting the card.
@@ -1994,14 +2000,36 @@ export class HomeworkService {
         }
 
         // Blank active duplicates that a restored archive row replaced are removed
-        // — they hold no student input, so nothing is lost. Archived rows that
-        // were not restored are left exactly as they were.
+        // only when nothing at all is attached to them. A professor-answer link,
+        // a cached review / answer check / translation, answer images, a
+        // walkthrough section or saved walkthrough Q&A keyed to the row make it
+        // archived instead (it stays restorable). Moving those records onto the
+        // restored row is not attempted: that row usually has its own, and
+        // choosing between them would be a guess. Archived rows that were not
+        // restored are left exactly as they were.
+        const walkthroughSectionIds = new Set<string>()
+        const notedSectionIds = new Set<string>()
+        if (supersededActiveNew.size > 0) {
+          const walkthroughs = await this.db.homeworkWalkthroughs
+            .where('setId')
+            .equals(set.id)
+            .toArray()
+          for (const walkthrough of walkthroughs)
+            for (const section of walkthrough.sections) walkthroughSectionIds.add(section.id)
+          const notes = await this.db.walkthroughNotes.where('setId').equals(set.id).toArray()
+          for (const note of notes) notedSectionIds.add(note.sectionId)
+        }
         for (const newIndex of supersededActiveNew) {
           const pair = activePairByNew.get(newIndex)
           const blank = pair ? active[pair.oldIndex] : undefined
           if (!blank) continue
-          // Attached answer images are student work: archive, never delete.
-          if ((await new AnswerImageRepository(this.db).list(blank.id)).length > 0) {
+          const sectionId = questionSectionId(blank.id)
+          const attached = hasAttachedRecords(blank, {
+            answerImages: (await new AnswerImageRepository(this.db).list(blank.id)).length > 0,
+            walkthroughSection: walkthroughSectionIds.has(sectionId),
+            walkthroughNotes: notedSectionIds.has(sectionId),
+          })
+          if (attached) {
             await this.homework.upsertQuestion({
               ...blank,
               retired: true,

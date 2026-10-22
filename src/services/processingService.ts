@@ -16,7 +16,7 @@ import {
 } from '@/infrastructure/files/visualDetection'
 import {
   extractPdf,
-  renderPdfPageImage,
+  openPdfPageRenderer,
   type RenderedPageImage,
 } from '@/infrastructure/files/pdfExtractor'
 import { extractDocx } from '@/infrastructure/files/docxExtractor'
@@ -25,7 +25,7 @@ import {
   extractPptxSlideImages,
   type PptxSlideImage,
 } from '@/infrastructure/files/pptxExtractor'
-import { extractOcr } from '@/infrastructure/files/ocrExtractor'
+import { extractOcr, hasCjk } from '@/infrastructure/files/ocrExtractor'
 import {
   chunksFromDocx,
   chunksFromOcr,
@@ -72,9 +72,35 @@ interface PreparedVisualSource {
   image?: RenderedPageImage
 }
 
-const defaultPageImageRenderer: PageImageRenderer = async (input) => {
+/**
+ * Renders the pages of one file. The default implementation parses the PDF
+ * once for all of its figure pages instead of once per page.
+ */
+export interface PageImageRenderSession {
+  render(pageNumber: number): Promise<RenderedPageImage | null>
+  close(): Promise<void>
+}
+
+export type PageImageRenderSessionOpener = (
+  input: Omit<PageImageRenderInput, 'pageNumber'>,
+) => Promise<PageImageRenderSession | null>
+
+const defaultPageImageSessionOpener: PageImageRenderSessionOpener = async (input) => {
   if (input.type !== 'pdf') return null
-  return renderPdfPageImage(new Blob([input.bytes], { type: input.mimeType }), input.pageNumber, 2)
+  const renderer = await openPdfPageRenderer(new Blob([input.bytes], { type: input.mimeType }))
+  if (!renderer) return null
+  return {
+    render: (pageNumber) => renderer.render(pageNumber, 2),
+    close: () => renderer.close(),
+  }
+}
+
+/** Adapts an injected per-page renderer (tests) to the session shape. */
+function sessionFromPageRenderer(render: PageImageRenderer): PageImageRenderSessionOpener {
+  return async (input) => ({
+    render: (pageNumber) => render({ ...input, pageNumber }),
+    close: async () => undefined,
+  })
 }
 
 /** A page whose extracted text is shorter than this is treated as figure-dominant. */
@@ -94,7 +120,7 @@ export class ProcessingService {
   private jobs: ProcessingJobRepository
   private projects: ProjectService
   private visuals: VisualSourceRepository
-  private renderPageImage: PageImageRenderer
+  private openPageImages: PageImageRenderSessionOpener
   private structure: CourseStructureService
 
   constructor(deps: {
@@ -104,6 +130,7 @@ export class ProcessingService {
     projects: ProjectService
     visuals?: VisualSourceRepository
     renderPageImage?: PageImageRenderer
+    openPageImages?: PageImageRenderSessionOpener
     structure?: CourseStructureService
     db?: AppDatabase
   }) {
@@ -113,7 +140,11 @@ export class ProcessingService {
     this.jobs = deps.jobs
     this.projects = deps.projects
     this.visuals = deps.visuals ?? new VisualSourceRepository()
-    this.renderPageImage = deps.renderPageImage ?? defaultPageImageRenderer
+    this.openPageImages =
+      deps.openPageImages ??
+      (deps.renderPageImage
+        ? sessionFromPageRenderer(deps.renderPageImage)
+        : defaultPageImageSessionOpener)
     this.structure = deps.structure ?? new CourseStructureService()
   }
 
@@ -356,7 +387,9 @@ export class ProcessingService {
         }
       }
       case 'image': {
-        const result = await extractOcr(blob)
+        const result = await extractOcr(blob, {
+          preferChinese: await this.prefersChineseOcr(document),
+        })
         return {
           textLength: result.text.length,
           metadata: { language: result.language, ocrConfidence: result.confidence },
@@ -371,6 +404,17 @@ export class ProcessingService {
         throw new ValidationError(t('errors.unsupportedType', { type: exhaustive as string }))
       }
     }
+  }
+
+  /**
+   * Read an image with Chinese + English straight away when the file or the
+   * course is named in Chinese (or the course teaches Chinese). Otherwise OCR
+   * reads English first and only retries with Chinese when that looks misread.
+   */
+  private async prefersChineseOcr(document: Document): Promise<boolean> {
+    const project = await this.projects.get(document.projectId).catch(() => undefined)
+    if (project?.targetLanguage === 'zh') return true
+    return [document.name, project?.name, project?.description].some((text) => hasCjk(text))
   }
 
   /**
@@ -428,50 +472,58 @@ export class ProcessingService {
     const stored = await this.documents.getBytes(document.id)
     if (!stored) return []
     const result: PreparedVisualSource[] = []
+    // Opened lazily on the first figure page, then reused for every other one.
+    let session: PageImageRenderSession | null | undefined
 
-    for (const page of pages) {
-      if (!page.imageCount || page.imageCount <= 0) continue
-      const pageChunks = chunksByPage.get(page.pageNumber) ?? []
-      const pageText = pageChunks.map((c) => c.text).join('\n')
-      const compact = pageText.replace(/\s/g, '')
-      const unreliable = looksLikeUnreliableVisualText(pageText)
-      // A page that is almost all picture (little or no extractable text) is a
-      // figure page, even when its text was not garbled.
-      const figureDominant = compact.length < FIGURE_PAGE_MAX_CHARS
-      if (!unreliable && !figureDominant) continue
+    try {
+      for (const page of pages) {
+        if (!page.imageCount || page.imageCount <= 0) continue
+        const pageChunks = chunksByPage.get(page.pageNumber) ?? []
+        const pageText = pageChunks.map((c) => c.text).join('\n')
+        const compact = pageText.replace(/\s/g, '')
+        const unreliable = looksLikeUnreliableVisualText(pageText)
+        // A page that is almost all picture (little or no extractable text) is a
+        // figure page, even when its text was not garbled.
+        const figureDominant = compact.length < FIGURE_PAGE_MAX_CHARS
+        if (!unreliable && !figureDominant) continue
 
-      const source: VisualSource = {
-        id: crypto.randomUUID(),
-        projectId: document.projectId,
-        documentId: document.id,
-        pageNumber: page.pageNumber,
-        type: classifyVisualType(pageText, true),
-        caption: fallbackVisualCaption(page.pageNumber),
-        sourceChunkIds: pageChunks.map((c) => c.id),
-        imageMimeType: 'image/png',
-        createdAt: Date.now(),
+        const source: VisualSource = {
+          id: crypto.randomUUID(),
+          projectId: document.projectId,
+          documentId: document.id,
+          pageNumber: page.pageNumber,
+          type: classifyVisualType(pageText, true),
+          caption: fallbackVisualCaption(page.pageNumber),
+          sourceChunkIds: pageChunks.map((c) => c.id),
+          imageMimeType: 'image/png',
+          createdAt: Date.now(),
+        }
+
+        if (session === undefined) {
+          session = await this.openPageImages({
+            documentId: document.id,
+            projectId: document.projectId,
+            type: document.type,
+            bytes: stored.bytes,
+            mimeType: stored.mimeType,
+          })
+        }
+        const rendered = session ? await session.render(page.pageNumber) : null
+
+        if (rendered) {
+          source.imageMimeType = rendered.mimeType
+          if (rendered.width > 0) source.width = rendered.width
+          if (rendered.height > 0) source.height = rendered.height
+          result.push({ source, image: rendered })
+        } else {
+          // No renderer available (e.g. no canvas). Keep the provenance so the
+          // unreliable text is still suppressed and the source is disclosed.
+          source.imageMimeType = ''
+          result.push({ source })
+        }
       }
-
-      const rendered = await this.renderPageImage({
-        documentId: document.id,
-        projectId: document.projectId,
-        type: document.type,
-        bytes: stored.bytes,
-        mimeType: stored.mimeType,
-        pageNumber: page.pageNumber,
-      })
-
-      if (rendered) {
-        source.imageMimeType = rendered.mimeType
-        if (rendered.width > 0) source.width = rendered.width
-        if (rendered.height > 0) source.height = rendered.height
-        result.push({ source, image: rendered })
-      } else {
-        // No renderer available (e.g. no canvas). Keep the provenance so the
-        // unreliable text is still suppressed and the source is disclosed.
-        source.imageMimeType = ''
-        result.push({ source })
-      }
+    } finally {
+      await session?.close().catch(() => undefined)
     }
     return result
   }

@@ -4,8 +4,8 @@
  * here in one place.
  */
 
-import * as DocumentAnalyzerV2 from './document-analyzer/v2'
-import * as TopicAnalyzerV1 from './topic-analyzer/v1'
+import * as DocumentAnalyzerV3 from './document-analyzer/v3'
+import * as TopicAnalyzerV2 from './topic-analyzer/v2'
 import * as TutorLessonV5 from './tutor/v5-lesson'
 import * as TutorIntroduceV1 from './tutor/v1-introduce'
 import * as TutorQuestionV3 from './tutor/v3-question'
@@ -47,8 +47,8 @@ import * as QuestionStyleV1 from './question-style/v1'
 import * as QuestionTranslateV1 from './question-translate/v1'
 
 export const PROMPT_VERSIONS = {
-  documentAnalyzer: 'v2',
-  topicAnalyzer: 'v1',
+  documentAnalyzer: 'v3',
+  topicAnalyzer: 'v2',
   tutorLesson: 'v5',
   tutorIntroduce: 'v1',
   tutorQuestion: 'v3',
@@ -91,8 +91,8 @@ export const PROMPT_VERSIONS = {
 } as const
 
 export const prompts = {
-  documentAnalyzer: DocumentAnalyzerV2,
-  topicAnalyzer: TopicAnalyzerV1,
+  documentAnalyzer: DocumentAnalyzerV3,
+  topicAnalyzer: TopicAnalyzerV2,
   tutorLesson: TutorLessonV5,
   tutorIntroduce: TutorIntroduceV1,
   tutorQuestion: TutorQuestionV3,
@@ -135,7 +135,7 @@ export const prompts = {
   questionTranslate: QuestionTranslateV1,
 } as const
 
-export type { DocumentAnalyzerInput, DocumentAnalysisOutput } from './document-analyzer/v2'
+export type { DocumentAnalyzerInput, DocumentAnalysisOutput } from './document-analyzer/v3'
 export type { LessonInput } from './tutor/v5-lesson'
 export type { IntroduceConceptInput } from './tutor/v1-introduce'
 export type { QuestionGeneratorInput } from './tutor/v2-question'

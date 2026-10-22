@@ -121,6 +121,51 @@ async function releasePdf(pdf: { cleanup(): unknown; destroy?: () => unknown }):
   }
 }
 
+type LoadedPdf = Awaited<ReturnType<typeof pdfjsLib.getDocument>['promise']>
+
+/** A PDF parsed once, from which several pages can be rendered. */
+export interface PdfPageRenderer {
+  render(pageNumber: number, scale?: number): Promise<RenderedPageImage | null>
+  close(): Promise<void>
+}
+
+/**
+ * Parse a PDF once and render any number of its pages. Use this instead of
+ * calling `renderPdfPageImage` in a loop — that re-parses the whole file for
+ * every page. Returns `null` where no canvas exists (jsdom) or the file cannot
+ * be opened; a page that fails to render yields `null` for that page only.
+ * Always `close()` the renderer to release the parsed document.
+ */
+export async function openPdfPageRenderer(blob: Blob): Promise<PdfPageRenderer | null> {
+  if (typeof document === 'undefined') return null
+  try {
+    ensureWorker()
+    const arrayBuffer = await blob.arrayBuffer()
+    const pdf = await pdfjsLib.getDocument({
+      data: arrayBuffer,
+      ...(isTestEnvironment() ? { disableWorker: true } : {}),
+    }).promise
+    let closed = false
+    return {
+      render: async (pageNumber, scale = 2) => {
+        if (closed) return null
+        try {
+          return await renderLoadedPage(pdf, pageNumber, scale)
+        } catch {
+          return null
+        }
+      },
+      close: async () => {
+        if (closed) return
+        closed = true
+        await releasePdf(pdf)
+      },
+    }
+  } catch {
+    return null
+  }
+}
+
 export async function renderPdfPageImage(
   blob: Blob,
   pageNumber: number,
@@ -136,101 +181,108 @@ export async function renderPdfPageImage(
       ...(isTestEnvironment() ? { disableWorker: true } : {}),
     }).promise
     try {
-      const page = await pdf.getPage(pageNumber)
-      const viewport = page.getViewport({ scale })
-      const canvas = document.createElement('canvas')
-      canvas.width = Math.max(1, Math.ceil(viewport.width))
-      canvas.height = Math.max(1, Math.ceil(viewport.height))
-      const context = canvas.getContext('2d')
-      if (!context) return null
-      await page.render({ canvas, canvasContext: context, viewport }).promise
-      let output = canvas
-      if (questionRegion) {
-        try {
-          const content = await page.getTextContent()
-          const items = (content.items as unknown[]).filter(isTextItem)
-          const rows = new Map<number, string>()
-          for (const item of items) {
-            const y = item.transform?.[5]
-            if (y === undefined) continue
-            const key = Math.round(y / 3) * 3
-            rows.set(key, `${rows.get(key) ?? ''} ${item.str ?? ''}`)
-          }
-          const headings = [...rows]
-            .map(([y, value]) => ({ y, value: value.trim() }))
-            .filter(({ value }) =>
-              /(?:problem|question|exercise)\s*\d+\s*[:：.]|第\s*\d+\s*题/i.test(value),
-            )
-            .sort((a, b) => b.y - a.y)
-          const number = questionRegion.number.match(/\d+/)?.[0]
-          const marker = number
-            ? new RegExp(
-                `(?:problem|question|exercise)\\s*${number}\\s*[:：.]|第\\s*${number}\\s*题`,
-                'i',
-              )
-            : undefined
-          const ownIndex = marker ? headings.findIndex(({ value }) => marker.test(value)) : -1
-          const start =
-            !questionRegion.continuation && ownIndex >= 0
-              ? Math.max(
-                  0,
-                  Math.floor(viewport.convertToViewportPoint(0, headings[ownIndex]!.y)[1] - 32),
-                )
-              : 0
-          const nextHeading = questionRegion.continuation
-            ? headings.find(({ value }) => !marker?.test(value))
-            : ownIndex >= 0
-              ? headings[ownIndex + 1]
-              : undefined
-          const end = nextHeading
-            ? Math.min(
-                canvas.height,
-                Math.ceil(viewport.convertToViewportPoint(0, nextHeading.y)[1] - 12),
-              )
-            : canvas.height
-          if (
-            (ownIndex >= 0 || questionRegion.continuation) &&
-            end - start >= 80 &&
-            end - start < canvas.height - 40
-          ) {
-            const cropped = document.createElement('canvas')
-            cropped.width = canvas.width
-            cropped.height = end - start
-            const croppedContext = cropped.getContext('2d')
-            if (croppedContext) {
-              croppedContext.drawImage(
-                canvas,
-                0,
-                start,
-                canvas.width,
-                cropped.height,
-                0,
-                0,
-                canvas.width,
-                cropped.height,
-              )
-              output = cropped
-            }
-          }
-        } catch {
-          // A missing or unusual text layer must never hide the original page.
-        }
-      }
-      const rendered = await new Promise<Blob | null>((resolve) =>
-        output.toBlob(resolve, 'image/png'),
-      )
-      if (!rendered) return null
-      return {
-        bytes: await rendered.arrayBuffer(),
-        mimeType: 'image/png',
-        width: output.width,
-        height: output.height,
-      }
+      return await renderLoadedPage(pdf, pageNumber, scale, questionRegion)
     } finally {
       await releasePdf(pdf)
     }
   } catch {
     return null
+  }
+}
+
+async function renderLoadedPage(
+  pdf: LoadedPdf,
+  pageNumber: number,
+  scale: number,
+  questionRegion?: { number: string; continuation?: boolean },
+): Promise<RenderedPageImage | null> {
+  const page = await pdf.getPage(pageNumber)
+  const viewport = page.getViewport({ scale })
+  const canvas = document.createElement('canvas')
+  canvas.width = Math.max(1, Math.ceil(viewport.width))
+  canvas.height = Math.max(1, Math.ceil(viewport.height))
+  const context = canvas.getContext('2d')
+  if (!context) return null
+  await page.render({ canvas, canvasContext: context, viewport }).promise
+  let output = canvas
+  if (questionRegion) {
+    try {
+      const content = await page.getTextContent()
+      const items = (content.items as unknown[]).filter(isTextItem)
+      const rows = new Map<number, string>()
+      for (const item of items) {
+        const y = item.transform?.[5]
+        if (y === undefined) continue
+        const key = Math.round(y / 3) * 3
+        rows.set(key, `${rows.get(key) ?? ''} ${item.str ?? ''}`)
+      }
+      const headings = [...rows]
+        .map(([y, value]) => ({ y, value: value.trim() }))
+        .filter(({ value }) =>
+          /(?:problem|question|exercise)\s*\d+\s*[:：.]|第\s*\d+\s*题/i.test(value),
+        )
+        .sort((a, b) => b.y - a.y)
+      const number = questionRegion.number.match(/\d+/)?.[0]
+      const marker = number
+        ? new RegExp(
+            `(?:problem|question|exercise)\\s*${number}\\s*[:：.]|第\\s*${number}\\s*题`,
+            'i',
+          )
+        : undefined
+      const ownIndex = marker ? headings.findIndex(({ value }) => marker.test(value)) : -1
+      const start =
+        !questionRegion.continuation && ownIndex >= 0
+          ? Math.max(
+              0,
+              Math.floor(viewport.convertToViewportPoint(0, headings[ownIndex]!.y)[1] - 32),
+            )
+          : 0
+      const nextHeading = questionRegion.continuation
+        ? headings.find(({ value }) => !marker?.test(value))
+        : ownIndex >= 0
+          ? headings[ownIndex + 1]
+          : undefined
+      const end = nextHeading
+        ? Math.min(
+            canvas.height,
+            Math.ceil(viewport.convertToViewportPoint(0, nextHeading.y)[1] - 12),
+          )
+        : canvas.height
+      if (
+        (ownIndex >= 0 || questionRegion.continuation) &&
+        end - start >= 80 &&
+        end - start < canvas.height - 40
+      ) {
+        const cropped = document.createElement('canvas')
+        cropped.width = canvas.width
+        cropped.height = end - start
+        const croppedContext = cropped.getContext('2d')
+        if (croppedContext) {
+          croppedContext.drawImage(
+            canvas,
+            0,
+            start,
+            canvas.width,
+            cropped.height,
+            0,
+            0,
+            canvas.width,
+            cropped.height,
+          )
+          output = cropped
+        }
+      }
+    } catch {
+      // A missing or unusual text layer must never hide the original page.
+    }
+  }
+  const rendered = await new Promise<Blob | null>((resolve) => output.toBlob(resolve, 'image/png'))
+  if (!rendered) return null
+  return {
+    bytes: await rendered.arrayBuffer(),
+    mimeType: 'image/png',
+    width: output.width,
+    height: output.height,
   }
 }
 

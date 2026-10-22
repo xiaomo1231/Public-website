@@ -184,11 +184,64 @@ export function hasTrustedDependency(topic: {
  * The id is the only machine-readable part; the rest is human context the model
  * uses to decide which chunks a topic belongs to.
  */
-export function buildCandidateChunkLabel(chunk: DocumentChunk): string {
+export function buildCandidateChunkLabel(chunk: DocumentChunk, alias?: string): string {
   const parts = [
     chunk.chapterNumber ? `Ch ${chunk.chapterNumber}` : chunk.chapterTitle,
     chunk.sectionNumber ?? (chunk.section || undefined),
     chunk.pageNumber !== undefined ? `p${chunk.pageNumber}` : undefined,
   ].filter((part): part is string => Boolean(part))
-  return [`c:${chunk.id}`, ...parts].join(' · ')
+  return [alias ?? `c:${chunk.id}`, ...parts].join(' · ')
+}
+
+/**
+ * Short, per-request aliases for the candidate chunks (`c1`, `c2`, …).
+ *
+ * A chunk id is a 36-character UUID; printing it in front of every passage and
+ * having the model echo it back in `sourceChunkIds` costs roughly a tenth of
+ * the analysis input. The analyzer prompts (`document-analyzer/v3`,
+ * `topic-analyzer/v2`) therefore print a short alias instead, and the model's
+ * answer is mapped back to real chunk ids here before any validation.
+ *
+ * The alias set is closed and belongs to ONE request: an alias that is not in
+ * it (or a real UUID the model never saw) resolves to nothing, exactly like an
+ * unknown id did before. Nothing is ever guessed.
+ */
+export interface ChunkAliases {
+  /** Alias for a chunk id in this request. */
+  aliasOf(chunkId: string): string | undefined
+  /** Real chunk id for an alias, or `undefined` when it is not in this request. */
+  resolve(alias: string): string | undefined
+  readonly size: number
+}
+
+export function createChunkAliases(chunks: readonly DocumentChunk[]): ChunkAliases {
+  const byId = new Map<string, string>()
+  const byAlias = new Map<string, string>()
+  for (const chunk of chunks) {
+    if (byId.has(chunk.id)) continue
+    const alias = `c${byId.size + 1}`
+    byId.set(chunk.id, alias)
+    byAlias.set(alias, chunk.id)
+  }
+  return {
+    aliasOf: (chunkId) => byId.get(chunkId),
+    resolve: (alias) => byAlias.get(alias.trim().toLowerCase()),
+    size: byAlias.size,
+  }
+}
+
+/**
+ * Map the model's `sourceChunkIds` (aliases) back to real chunk ids. Values
+ * that are not strings or not aliases of this request are dropped; the result
+ * still goes through `validateTopicSourceChunks`.
+ */
+export function resolveChunkAliases(raw: unknown, aliases: ChunkAliases): string[] {
+  if (!Array.isArray(raw)) return []
+  const ids: string[] = []
+  for (const value of raw) {
+    if (typeof value !== 'string') continue
+    const id = aliases.resolve(value)
+    if (id !== undefined && !ids.includes(id)) ids.push(id)
+  }
+  return ids
 }

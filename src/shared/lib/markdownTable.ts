@@ -175,3 +175,28 @@ export function tryParseTable(
 
   return { header, align, rows, nextIndex: i }
 }
+
+/** Escape one cell for a pipe table: `|` becomes `\|`, line breaks become spaces. */
+export function escapeTableCell(cell: string): string {
+  return cell
+    .replace(/\s*\n\s*/g, ' ')
+    .replace(/\|/g, '\\|')
+    .trim()
+}
+
+/**
+ * Serialize rows as a GitHub-flavoured pipe table (the first row is the
+ * header). Short rows are padded so every row has the same column count; an
+ * all-empty table yields ''.
+ */
+export function toMarkdownTable(rows: string[][]): string {
+  const cleaned = rows.map((row) => row.map(escapeTableCell))
+  if (!cleaned.some((row) => row.some(Boolean))) return ''
+  const width = Math.max(1, ...cleaned.map((row) => row.length))
+  const line = (row: string[]) =>
+    `| ${Array.from({ length: width }, (_, i) => row[i] ?? '').join(' | ')} |`
+  const [header = [], ...body] = cleaned
+  return [line(header), line(Array.from({ length: width }, () => '---')), ...body.map(line)].join(
+    '\n',
+  )
+}

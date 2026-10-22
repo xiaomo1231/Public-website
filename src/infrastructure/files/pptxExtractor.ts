@@ -106,6 +106,91 @@ function parseSlide(slideXml: string): {
   return { title, body: bodyParts.join('\n\n'), tables, imageCount }
 }
 
+/** Relationship type suffixes (the namespace prefix differs between OOXML editions). */
+const REL_SLIDE = '/slide'
+const REL_NOTES = '/notesSlide'
+
+interface Relationship {
+  id: string
+  type: string
+  target: string
+  external: boolean
+}
+
+function parseRelationships(xml: string | undefined): Relationship[] {
+  if (!xml) return []
+  const doc = new DOMParser().parseFromString(xml, 'application/xml')
+  if (doc.getElementsByTagName('parsererror').length > 0) return []
+  return Array.from(doc.getElementsByTagName('Relationship')).map((rel) => ({
+    id: rel.getAttribute('Id') ?? '',
+    type: rel.getAttribute('Type') ?? '',
+    target: rel.getAttribute('Target') ?? '',
+    external: (rel.getAttribute('TargetMode') ?? '').toLowerCase() === 'external',
+  }))
+}
+
+/** `ppt/slides/slide3.xml` → `ppt/slides/_rels/slide3.xml.rels`. */
+function relsPathOf(partPath: string): string {
+  const slash = partPath.lastIndexOf('/')
+  return `${partPath.slice(0, slash)}/_rels/${partPath.slice(slash + 1)}.rels`
+}
+
+function dirOf(partPath: string): string {
+  return partPath.slice(0, partPath.lastIndexOf('/'))
+}
+
+function slideFileNumber(path: string): number {
+  return Number(path.match(/slide(\d+)\.xml$/)?.[1] ?? '0')
+}
+
+/**
+ * The deck's slides in presentation order: `p:sldIdLst` in
+ * `ppt/presentation.xml`, resolved through `ppt/_rels/presentation.xml.rels`.
+ * File names (`slide7.xml`) do not follow the order once slides have been
+ * moved in PowerPoint. Falls back to file-name order when the presentation
+ * part is missing or unreadable. Slide numbers are 1-based positions in the
+ * returned list — the number PowerPoint shows.
+ */
+async function orderedSlidePaths(zip: JSZip): Promise<string[]> {
+  const byFileName = Object.keys(zip.files)
+    .filter((n) => /^ppt\/slides\/slide\d+\.xml$/.test(n))
+    .sort((a, b) => slideFileNumber(a) - slideFileNumber(b))
+  try {
+    const presentationXml = await zip.file('ppt/presentation.xml')?.async('text')
+    if (!presentationXml) return byFileName
+    const doc = new DOMParser().parseFromString(presentationXml, 'application/xml')
+    if (doc.getElementsByTagName('parsererror').length > 0) return byFileName
+    const rels = parseRelationships(
+      await zip.file('ppt/_rels/presentation.xml.rels')?.async('text'),
+    )
+    const targets = new Map(
+      rels
+        .filter((rel) => rel.type.endsWith(REL_SLIDE) && !rel.external)
+        .map((rel) => [rel.id, resolvePart('ppt', rel.target)]),
+    )
+    const ordered: string[] = []
+    for (const sldId of Array.from(doc.getElementsByTagNameNS(NS.p, 'sldId'))) {
+      const relId = sldId.getAttributeNS(NS.r, 'id') ?? sldId.getAttribute('r:id') ?? ''
+      const path = targets.get(relId)
+      if (path && zip.file(path) && !ordered.includes(path)) ordered.push(path)
+    }
+    return ordered.length > 0 ? ordered : byFileName
+  } catch {
+    return byFileName
+  }
+}
+
+/**
+ * The notes part of a slide, found through the slide's own relationships
+ * (`ppt/slides/_rels/slideN.xml.rels`, type notesSlide). Notes files are not
+ * numbered like the slides they belong to, so matching by file name attaches
+ * notes to the wrong slide.
+ */
+function notesPathOf(slidePath: string, slideRels: Relationship[]): string | undefined {
+  const rel = slideRels.find((r) => r.type.endsWith(REL_NOTES) && !r.external && r.target)
+  return rel ? resolvePart(dirOf(slidePath), rel.target) : undefined
+}
+
 function parseNotes(notesXml: string | undefined): string {
   if (!notesXml) return ''
   const parser = new DOMParser()
@@ -120,24 +205,19 @@ export async function extractPptx(blob: Blob): Promise<PptxExtractionResult> {
   const zip = await JSZip.loadAsync(arrayBuffer)
   const warnings: string[] = []
 
-  const slideFiles = Object.keys(zip.files)
-    .filter((n) => /^ppt\/slides\/slide\d+\.xml$/.test(n))
-    .sort((a, b) => {
-      const na = Number(a.match(/slide(\d+)/)?.[1] ?? '0')
-      const nb = Number(b.match(/slide(\d+)/)?.[1] ?? '0')
-      return na - nb
-    })
+  const slideFiles = await orderedSlidePaths(zip)
 
   const slides: PptxSlide[] = []
   let totalText = 0
   for (let i = 0; i < slideFiles.length; i++) {
     const name = slideFiles[i]!
-    const num = Number(name.match(/slide(\d+)/)?.[1] ?? `${i + 1}`)
+    const num = i + 1
     try {
-      const xml = await zip.files[name]!.async('text')
+      const xml = await zip.file(name)!.async('text')
       const parsed = parseSlide(xml)
-      const notesName = name.replace('/slides/slide', '/notesSlides/notesSlide')
-      const notes = parseNotes(await zip.file(notesName)?.async('text'))
+      const slideRels = parseRelationships(await zip.file(relsPathOf(name))?.async('text'))
+      const notesName = notesPathOf(name, slideRels)
+      const notes = notesName ? parseNotes(await zip.file(notesName)?.async('text')) : ''
       const body = [parsed.title, parsed.body].filter(Boolean).join('\n')
       totalText += body.length + notes.length
       slides.push({
@@ -232,18 +312,13 @@ export async function extractPptxSlideImages(
   const parser = new DOMParser()
   const out: PptxSlideImage[] = []
 
-  const slideFiles = Object.keys(zip.files)
-    .filter((n) => /^ppt\/slides\/slide\d+\.xml$/.test(n))
-    .sort((a, b) => {
-      const na = Number(a.match(/slide(\d+)/)?.[1] ?? '0')
-      const nb = Number(b.match(/slide(\d+)/)?.[1] ?? '0')
-      return na - nb
-    })
+  const slideFiles = await orderedSlidePaths(zip)
 
-  for (const name of slideFiles) {
-    const slideNumber = Number(name.match(/slide(\d+)/)?.[1] ?? '0')
-    if (!slideNumber) continue
-    const relsName = name.replace('/slides/slide', '/slides/_rels/slide') + '.rels'
+  for (let index = 0; index < slideFiles.length; index++) {
+    const name = slideFiles[index]!
+    // Same numbering as `extractPptx`: the slide's position in the deck.
+    const slideNumber = index + 1
+    const relsName = relsPathOf(name)
     const relsXml = await zip.file(relsName)?.async('text')
     if (!relsXml) continue
 
@@ -256,7 +331,7 @@ export async function extractPptxSlideImages(
       if (!type.endsWith('/image')) continue
       const target = rel.getAttribute('Target')
       if (!target || /^https?:/i.test(target)) continue
-      const path = resolvePart('ppt/slides', target)
+      const path = resolvePart(dirOf(name), target)
       const mimeType = mimeFromPath(path)
       if (!mimeType) continue
       const file = zip.file(path)

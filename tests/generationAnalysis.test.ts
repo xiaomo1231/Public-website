@@ -59,7 +59,7 @@ function partAI(options: { onCall?: (n: number) => void; hang?: (n: number) => b
       }
       await Promise.resolve()
       const user = messages[1]!.content
-      const firstChunk = /\[c:([^\s\]·]+)/.exec(user)![1]!
+      const firstChunk = /\[(c\d+)\b/.exec(user)![1]!
       const part = /This is part (\d+) of/.exec(user)?.[1] ?? '1'
       return {
         data: {

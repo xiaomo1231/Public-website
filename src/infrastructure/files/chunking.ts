@@ -21,11 +21,156 @@ interface ChunkLine {
   section?: string
 }
 
-function splitSentences(text: string): string[] {
-  return text
-    .split(/(?<=[.!?。！？\n])\s+/)
-    .map((s) => s.trim())
-    .filter(Boolean)
+/** What joins a sentence to the previous one: a line break, a space, or nothing (CJK). */
+type Joiner = '' | ' ' | '\n'
+
+interface Sentence {
+  text: string
+  joiner: Joiner
+}
+
+/** The joiner a run of whitespace stands for: a line break survives as one. */
+function joinerFor(whitespace: string): Joiner {
+  if (!whitespace) return ''
+  return whitespace.includes('\n') ? '\n' : ' '
+}
+
+/** Inline (`$…$`) and display (`$$…$$`) maths spans; never split inside. */
+function mathSpans(text: string): Array<[number, number]> {
+  const spans: Array<[number, number]> = []
+  const re = /\$\$[\s\S]+?\$\$|(?<!\\)\$[^$\n]+?(?<!\\)\$/g
+  let m: RegExpExecArray | null
+  while ((m = re.exec(text)) !== null) spans.push([m.index, m.index + m[0].length])
+  return spans
+}
+
+function insideSpan(spans: Array<[number, number]>, index: number): boolean {
+  return spans.some(([start, end]) => index > start && index < end)
+}
+
+const ASCII_TERMINATOR = /[.!?]/
+const CJK_TERMINATOR = /[。！？；]/
+/** Closing quotes / brackets that stay with the sentence they end. */
+const CLOSERS = /[」』”’）)】〉》"']/
+
+/**
+ * Split text into sentences. A line break always ends one (and is kept as the
+ * joiner); Latin terminators only end a sentence when whitespace follows; CJK
+ * terminators (。！？；) end one even without a following space, since Chinese
+ * text has none. Nothing inside a `$…$` / `$$…$$` formula is ever a boundary.
+ */
+export function splitSentences(text: string): Sentence[] {
+  const spans = mathSpans(text)
+  const out: Sentence[] = []
+  let start = 0
+  let pendingJoiner: Joiner = ''
+  const push = (end: number, next: number) => {
+    const piece = text.slice(start, end).trim()
+    if (piece) {
+      out.push({ text: piece, joiner: out.length === 0 ? '' : pendingJoiner })
+      pendingJoiner = joinerFor(text.slice(end, next))
+    } else if (text.slice(end, next).includes('\n')) {
+      pendingJoiner = '\n'
+    }
+    start = next
+  }
+  let i = 0
+  while (i < text.length) {
+    const ch = text[i]!
+    if (insideSpan(spans, i)) {
+      i++
+      continue
+    }
+    if (ch === '\n') {
+      let next = i
+      while (next < text.length && /\s/.test(text[next]!)) next++
+      push(i, next)
+      i = next
+      continue
+    }
+    const cjk = CJK_TERMINATOR.test(ch)
+    if (cjk || ASCII_TERMINATOR.test(ch)) {
+      let end = i + 1
+      while (end < text.length && (CJK_TERMINATOR.test(text[end]!) || CLOSERS.test(text[end]!)))
+        end++
+      let next = end
+      while (next < text.length && /\s/.test(text[next]!)) next++
+      if (next > end || (cjk && end < text.length)) {
+        push(end, next)
+        i = next
+        continue
+      }
+      i = end
+      continue
+    }
+    i++
+  }
+  push(text.length, text.length)
+  return out
+}
+
+/** Preferred break characters for a sentence longer than a whole chunk. */
+const SOFT_BREAK = /[，、,：:\s]/
+
+/**
+ * Split one over-long sentence (no terminator for > max chars) at the last
+ * comma / space before the limit, else at the limit — never inside maths.
+ */
+function splitLongSentence(sentence: Sentence, max: number): Sentence[] {
+  if (sentence.text.length <= max) return [sentence]
+  const out: Sentence[] = []
+  let rest = sentence.text
+  let restSpans = mathSpans(rest)
+  let joiner = sentence.joiner
+  while (rest.length > max) {
+    let cut = -1
+    for (let k = max; k > max / 2; k--) {
+      if (SOFT_BREAK.test(rest[k - 1]!) && !insideSpan(restSpans, k)) {
+        cut = k
+        break
+      }
+    }
+    if (cut < 0) {
+      cut = max
+      const span = restSpans.find(([start, end]) => cut > start && cut < end)
+      // A formula straddling the limit moves whole to the next piece; one that
+      // starts the piece stays whole even if it is longer than the limit.
+      if (span) cut = span[0] > 0 ? span[0] : span[1]
+    }
+    const head = rest.slice(0, cut)
+    const tail = rest.slice(cut)
+    if (head.trim()) out.push({ text: head.trim(), joiner })
+    joiner = joinerFor(`${/\s*$/.exec(head)![0]}${/^\s*/.exec(tail)![0]}`)
+    rest = tail.trimStart()
+    restSpans = mathSpans(rest)
+  }
+  if (rest.trim()) out.push({ text: rest.trim(), joiner })
+  return out
+}
+
+/** A Markdown pipe-table header: a row followed by a `| --- |` separator. */
+const TABLE_SEPARATOR = /^\|(?:\s*:?-{3,}:?\s*\|)+\s*$/
+
+/**
+ * Split an over-long table by rows. Each piece repeats the header row (and its
+ * separator) so every chunk is still a readable table; rows are never cut.
+ */
+function splitTable(piece: ChunkLine): ChunkLine[] {
+  const lines = piece.text.split('\n')
+  const header = lines.length > 2 && TABLE_SEPARATOR.test(lines[1]!) ? lines.slice(0, 2) : []
+  const rows = lines.slice(header.length)
+  const out: ChunkLine[] = []
+  let current: string[] = []
+  const size = (list: string[]) => [...header, ...list].join('\n').length
+  for (const row of rows) {
+    if (current.length > 0 && size([...current, row]) > MAX_CHUNK_CHARS) {
+      out.push({ ...piece, text: [...header, ...current].join('\n') })
+      current = []
+    }
+    current.push(row)
+  }
+  if (current.length > 0) out.push({ ...piece, text: [...header, ...current].join('\n') })
+  return out
 }
 
 function pack(lines: ChunkLine[]): ChunkLine[] {
@@ -34,6 +179,8 @@ function pack(lines: ChunkLine[]): ChunkLine[] {
   for (const line of lines) {
     if (
       buffer &&
+      // Two tables merged would read as one table with mismatched columns.
+      line.contentType !== 'table' &&
       buffer.contentType === line.contentType &&
       buffer.pageNumber === line.pageNumber &&
       buffer.section === line.section &&
@@ -53,19 +200,25 @@ function pack(lines: ChunkLine[]): ChunkLine[] {
       final.push(piece)
       continue
     }
-    const sentences = splitSentences(piece.text)
+    if (piece.contentType === 'table' && piece.text.trimStart().startsWith('|')) {
+      final.push(...splitTable(piece))
+      continue
+    }
+    const sentences = splitSentences(piece.text).flatMap((sentence) =>
+      splitLongSentence(sentence, MAX_CHUNK_CHARS - OVERLAP_CHARS - 1),
+    )
     let acc = ''
     let current: ChunkLine = { ...piece, text: '' }
     for (const sentence of sentences) {
-      if ((acc + sentence).length > MAX_CHUNK_CHARS && acc) {
+      if ((acc + sentence.text).length > MAX_CHUNK_CHARS && acc) {
         current.text = acc.trim()
         final.push(current)
         // A tiny overlap from the chunk just closed, then the WHOLE sentence:
         // keeping only the sentence's tail would lose the rest of it.
-        acc = `${acc.slice(-OVERLAP_CHARS).trimStart()} ${sentence}`
+        acc = `${acc.slice(-OVERLAP_CHARS).trimStart()}${sentence.joiner}${sentence.text}`
         current = { ...piece, text: '' }
       } else {
-        acc += (acc ? ' ' : '') + sentence
+        acc += (acc ? sentence.joiner : '') + sentence.text
       }
     }
     if (acc) {
@@ -149,8 +302,12 @@ export function chunksFromDocx(
         section,
       })
     } else if (block.type === 'table') {
-      const rowsText = (block.rows ?? []).map((r) => r.join(' | ')).join('\n')
-      lines.push({ contentType: 'table', text: rowsText, section })
+      // The extractor stores tables as Markdown pipe tables; fall back to the
+      // rows for blocks produced by older code paths.
+      const rowsText = block.text.trim()
+        ? block.text
+        : (block.rows ?? []).map((r) => r.join(' | ')).join('\n')
+      if (rowsText.trim()) lines.push({ contentType: 'table', text: rowsText, section })
     }
   }
   const packed = pack(lines)

@@ -13,6 +13,7 @@ import type { AIService } from '@/services/aiService'
 import type { Document } from '@/entities/document/types'
 import type { DocumentChunk } from '@/entities/chunk/types'
 import type { HomeworkQuestion } from '@/entities/homework/types'
+import { hasAttachedRecords } from '@/entities/homework/matching'
 
 type StubMessage = { role: string; content: string }
 type StubHandler = (system: string, user: string) => unknown
@@ -714,6 +715,101 @@ describe('HomeworkService', () => {
     expect(active[0]!.messages).toHaveLength(1)
     expect(await db.homeworkQuestions.get('blank-active')).toBeUndefined()
     expect(await service.listRetiredQuestions(set.id)).toHaveLength(0)
+  })
+
+  it.each([
+    ['a professor-answer link', { answerText: 'x = 2', answerStatus: 'matched' as const }, 'none'],
+    ['a cached answer check', { answerCheck: { verdict: 'correct' } as never }, 'none'],
+    ['a walkthrough section', {}, 'section'],
+    ['saved walkthrough Q&A', {}, 'note'],
+    ['an answer image', {}, 'image'],
+  ])(
+    'archives (never deletes) a superseded duplicate that has %s attached',
+    async (_label, fields, linked) => {
+      const service = new HomeworkService({
+        db,
+        ai: stubAI((system) =>
+          system.includes('extract the individual questions')
+            ? analyzer([chunks[0]!.id], ['Alpha beta gamma.'])
+            : { hints: ['h'], solution: 's' },
+        ),
+      })
+      const set = await service.createFromDocument(documentId)
+      const [original] = await service.listQuestions(set.id)
+      const blank: HomeworkQuestion = {
+        ...original!,
+        id: 'blank-active',
+        draftText: '',
+        revealedHints: 0,
+        solutionRevealed: false,
+        messages: [],
+        ...fields,
+      }
+      const worked: HomeworkQuestion = {
+        ...original!,
+        id: 'retired-worked',
+        retired: true,
+        retiredAt: Date.now(),
+        draftText: 'kept work',
+        messages: [],
+      }
+      await db.homeworkQuestions.delete(original!.id)
+      await db.homeworkQuestions.put(blank)
+      await db.homeworkQuestions.put(worked)
+      if (linked === 'section')
+        await db.homeworkWalkthroughs.put({
+          id: `${set.id}:zh_terms`,
+          projectId: set.projectId,
+          setId: set.id,
+          language: 'zh_terms',
+          sections: [{ id: 'q:blank-active', kind: 'question', body: 'b' } as never],
+          createdAt: 1,
+          updatedAt: 1,
+        } as never)
+      if (linked === 'note')
+        await db.walkthroughNotes.put({
+          id: 'n1',
+          projectId: set.projectId,
+          setId: set.id,
+          sectionId: 'q:blank-active',
+          turns: [],
+          createdAt: 1,
+          updatedAt: 1,
+        } as never)
+      if (linked === 'image')
+        await db.homeworkAnswerImages.put({
+          id: 'img1',
+          projectId: set.projectId,
+          setId: set.id,
+          questionId: 'blank-active',
+          order: 0,
+          mimeType: 'image/png',
+          bytes: new ArrayBuffer(1),
+          source: 'upload',
+          createdAt: 1,
+        } as never)
+
+      const result = await service.retrySet(set.id)
+      expect(result?.summary).toMatchObject({ restored: 1, added: 0 })
+      const active = await service.listQuestions(set.id)
+      expect(active.map((q) => q.id)).toEqual(['retired-worked'])
+      // Kept, archived and restorable, with everything attached to it.
+      const kept = await db.homeworkQuestions.get('blank-active')
+      expect(kept).toMatchObject({ retired: true, ...fields })
+      expect((await service.listRetiredQuestions(set.id)).map((q) => q.id)).toEqual([
+        'blank-active',
+      ])
+    },
+  )
+
+  it('tells a truly blank row from one with attached records', () => {
+    const blank = { draftText: '', messages: [], revealedHints: 0, solutionRevealed: false }
+    expect(hasAttachedRecords(blank)).toBe(false)
+    expect(hasAttachedRecords({ ...blank, answerStatus: 'needs_review' })).toBe(true)
+    expect(hasAttachedRecords({ ...blank, reviewGuide: {} })).toBe(true)
+    expect(hasAttachedRecords({ ...blank, translation: {} })).toBe(true)
+    expect(hasAttachedRecords(blank, { walkthroughNotes: true })).toBe(true)
+    expect(hasAttachedRecords({ ...blank, draftText: 'x' })).toBe(true)
   })
 
   it('keeps the record when the restored question content fails to regenerate', async () => {

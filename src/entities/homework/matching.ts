@@ -60,6 +60,40 @@ export function hasStudentWork(fields: StudentWorkFields): boolean {
   )
 }
 
+/** Records kept on (or keyed to) a question row besides the student's own input. */
+export interface AttachedRecordFields extends StudentWorkFields {
+  answerText?: string
+  answerStatus?: string
+  reviewGuide?: unknown
+  answerCheck?: unknown
+  translation?: unknown
+}
+
+/**
+ * True when a question carries anything worth keeping: student input, a
+ * professor-answer link, a cached review / answer check / translation, or
+ * records stored elsewhere and keyed to it (answer images, a walkthrough
+ * section, saved walkthrough Q&A). A re-analysis only ever DELETES a superseded
+ * duplicate when this is false; otherwise the row is archived so nothing is
+ * lost and it stays restorable.
+ */
+export function hasAttachedRecords(
+  fields: AttachedRecordFields,
+  linked: { answerImages?: boolean; walkthroughSection?: boolean; walkthroughNotes?: boolean } = {},
+): boolean {
+  return (
+    hasStudentWork(fields) ||
+    (fields.answerText ?? '').trim() !== '' ||
+    fields.answerStatus !== undefined ||
+    fields.reviewGuide !== undefined ||
+    fields.answerCheck !== undefined ||
+    fields.translation !== undefined ||
+    linked.answerImages === true ||
+    linked.walkthroughSection === true ||
+    linked.walkthroughNotes === true
+  )
+}
+
 /** Content fingerprint of a question (normalised prompt + its chunk ids). */
 export function homeworkContentFingerprint(question: MatchableQuestion): string {
   return fnv1a([normalizePrompt(question.prompt), ...[...question.chunkIds].sort()].join('|'))

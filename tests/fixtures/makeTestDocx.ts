@@ -3,6 +3,10 @@ import JSZip from 'jszip'
 export interface TestDocxOptions {
   paragraphs?: string[]
   headings?: string[]
+  /** Raw WordprocessingML appended to the body (tables, list paragraphs…). */
+  bodyXml?: string
+  /** Raw `word/numbering.xml` content (needed for list paragraphs). */
+  numberingXml?: string
 }
 
 /**
@@ -32,6 +36,7 @@ export async function makeTestDocx(options: TestDocxOptions = {}): Promise<Blob>
       )
       .join('\n')}
     ${paragraphs.map((p) => `<w:p><w:r><w:t>${escape(p)}</w:t></w:r></w:p>`).join('\n')}
+    ${options.bodyXml ?? ''}
   </w:body>
 </w:document>`
 
@@ -51,6 +56,16 @@ export async function makeTestDocx(options: TestDocxOptions = {}): Promise<Blob>
   zip.file('[Content_Types].xml', contentTypes)
   zip.folder('_rels')!.file('.rels', rels)
   zip.folder('word')!.file('document.xml', documentXml)
+  if (options.numberingXml) {
+    zip.folder('word')!.file('numbering.xml', options.numberingXml)
+    zip.folder('word/_rels')!.file(
+      'document.xml.rels',
+      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rIdNum" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/numbering" Target="numbering.xml"/>
+</Relationships>`,
+    )
+  }
   return zip.generateAsync({ type: 'blob' })
 }
 

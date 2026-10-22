@@ -13,6 +13,8 @@ import * as Compare from '@/infrastructure/ai/prompts/walkthrough-compare/v1'
 import { prompts } from '@/infrastructure/ai/prompts'
 import {
   frameSectionHash,
+  mergeSectionWrite,
+  normalizeSectionSources,
   planWalkthrough,
   questionSectionHash,
   walkthroughId,
@@ -513,5 +515,91 @@ describe('HomeworkWalkthroughService with a professor answer', () => {
     expect(after.previous?.body).toBe(before.body)
     expect(after.variants).toBeUndefined()
     expect(after.professorAligned?.answerHash).toBe(professorAnswerHash(PROFESSOR_2))
+  })
+
+  it('恢复上一版 after 按教授答案修改 brings back the standard and the detailed version, and swaps back', async () => {
+    await setup()
+    const { ai } = stubAI(writer)
+    await service(ai).generate(setId)
+    const state = await service(null).state(setId)
+    const id = walkthroughId(setId, state.language)
+    await new WalkthroughRepository(db).updateSection(id, 'q:q1', (latest) => ({
+      ...latest,
+      level: 'detailed',
+      variants: {
+        detailed: { body: 'Old detailed.', inputHash: latest.inputHash, generatedAt: 1 },
+      },
+    }))
+    const section = async () =>
+      (await service(null).state(setId)).plan.find((e) => e.id === 'q:q1')!.section!
+    const before = await section()
+    await service(ai).regenerateSection(setId, 'q:q1', { suggestion: 'Follow it.', align: true })
+    const aligned = await section()
+    expect(aligned.variants).toBeUndefined()
+    expect(aligned.previous?.variants?.detailed?.body).toBe('Old detailed.')
+
+    await service(null).restorePrevious(setId, 'q:q1')
+    const restored = await section()
+    expect(restored.body).toBe(before.body)
+    expect(restored.variants?.detailed?.body).toBe('Old detailed.')
+    expect(restored.level).toBe('detailed')
+    expect(restored.professorAligned).toEqual(before.professorAligned)
+    expect(restored.previous?.body).toBe(aligned.body)
+    // The aligned version had no detailed version: it is recorded as such.
+    expect(restored.previous?.variants).toEqual({})
+
+    await service(null).restorePrevious(setId, 'q:q1')
+    const again = await section()
+    expect(again.body).toBe(aligned.body)
+    expect(again.variants).toBeUndefined()
+    expect(again.professorAligned).toEqual(aligned.professorAligned)
+    expect(again.previous?.variants?.detailed?.body).toBe('Old detailed.')
+  })
+
+  it('a previous version of the other source becomes the alternate with its detailed version', () => {
+    const imported: WalkthroughSection = {
+      id: 'q:q1',
+      kind: 'question',
+      questionId: 'q1',
+      title: 'Q1',
+      body: 'Imported.',
+      status: 'ready',
+      origin: 'imported',
+      inputHash: 'h',
+      generatedAt: 2,
+      previous: {
+        body: 'Generated.',
+        variants: { detailed: { body: 'Generated detailed.', inputHash: 'h', generatedAt: 1 } },
+        inputHash: 'h',
+        generatedAt: 1,
+      },
+    }
+    const normalized = normalizeSectionSources(imported)
+    expect(normalized.previous).toBeUndefined()
+    expect(normalized.alternate?.body).toBe('Generated.')
+    expect(normalized.alternate?.variants?.detailed?.body).toBe('Generated detailed.')
+    // A write of the generated source keeps the import as the alternate.
+    const merged = mergeSectionWrite(imported, { ...normalized.alternate!, body: 'Rewritten.' })
+    expect(merged.body).toBe('Rewritten.')
+    expect(merged.alternate?.body).toBe('Imported.')
+  })
+
+  it('a previous version stored without variants keeps the section detailed version on 恢复上一版', async () => {
+    await setup()
+    const { ai } = stubAI(writer)
+    await service(ai).generate(setId)
+    const state = await service(null).state(setId)
+    const id = walkthroughId(setId, state.language)
+    // An older row: `previous` written before versions carried `variants`.
+    await new WalkthroughRepository(db).updateSection(id, 'q:q1', (latest) => ({
+      ...latest,
+      variants: { detailed: { body: 'Kept.', inputHash: latest.inputHash, generatedAt: 1 } },
+      previous: { body: 'Older text.', inputHash: latest.inputHash, generatedAt: 1 },
+    }))
+    await service(null).restorePrevious(setId, 'q:q1')
+    const after = (await service(null).state(setId)).plan.find((e) => e.id === 'q:q1')!.section!
+    expect(after.body).toBe('Older text.')
+    expect(after.variants?.detailed?.body).toBe('Kept.')
+    expect(after.previous?.variants).toBeUndefined()
   })
 })
