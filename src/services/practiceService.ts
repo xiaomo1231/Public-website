@@ -40,6 +40,7 @@ import type { MasteryService } from './masteryService'
 import { ShortAnswerGrader, unverifiedShortAnswer } from './shortAnswerGrader'
 import { loadProjectSubjectContext } from './projectSubject'
 import { parseTrueFalse } from './answerEvaluationService'
+import { rubricSourceOf } from '@/entities/question/origin'
 
 /** Extraction confidence at or above this is imported without a review step. */
 const AUTO_VERIFY_CONFIDENCE = 0.6
@@ -540,7 +541,12 @@ export class PracticeService {
       const points = prompts.rubricExtractor.normalizeRubricPoints(data)
       if (!points) return question.rubric
       const rubric = points.map((text, index) => ({ id: `p${index + 1}`, text }))
-      await this.practice.updateQuestion(question.id, { rubric, rubricAnswerHash: hash })
+      // Split from the professor's own reference answer: the professor's standard.
+      await this.practice.updateQuestion(question.id, {
+        rubric,
+        rubricAnswerHash: hash,
+        rubricSource: 'professor',
+      })
       return rubric
     } catch (err) {
       // Stopped: nothing is stored, the submission is cancelled.
@@ -573,7 +579,9 @@ export class PracticeService {
           }
         : {}),
       correctAnswer: question.expectedAnswer ?? '',
-      ...(rubric?.length ? { rubric } : {}),
+      ...(rubric?.length
+        ? { rubric, rubricSource: rubricSourceOf(question.rubricSource, 'professor') }
+        : {}),
       ...(question.answerExplanation ? { solution: question.answerExplanation } : {}),
       hints: [],
       sourceRefs: [],

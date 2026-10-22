@@ -146,7 +146,8 @@ export class HomeOverviewService {
         d.materialType !== 'homework' &&
         d.materialType !== 'homework_answer' &&
         d.materialType !== 'syllabus' &&
-        d.materialType !== 'walkthrough_import',
+        d.materialType !== 'walkthrough_import' &&
+        d.materialType !== 'past_exam',
     )
     const materials = {
       total: learning.length,

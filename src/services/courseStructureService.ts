@@ -94,7 +94,7 @@ export class CourseStructureService {
     documentName: string
     chunks: StructureChunkInput[]
   }): Promise<PreparedStructure> {
-    const detected = detectStructure(input.chunks)
+    const detected = detectStructure(input.chunks, { fileName: input.documentName })
     const previous = await this.repo.getByDocument(input.documentId)
     const previousNodes = previous ? await this.repo.listNodes(previous.id) : []
     const structureId = previous?.id ?? crypto.randomUUID()

@@ -31,7 +31,7 @@ export default defineConfig({
           'vendor-react': ['react', 'react-dom', 'react-router-dom'],
           'vendor-db': ['dexie'],
           'vendor-math': ['mathjs'],
-          'vendor-pdf': ['pdfjs-dist'],
+          'vendor-pdf': ['pdfjs-dist/legacy/build/pdf.mjs'],
           'vendor-katex': ['katex'],
           'vendor-smiles': ['smiles-drawer'],
         },

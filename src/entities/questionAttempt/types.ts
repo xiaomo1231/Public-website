@@ -1,4 +1,7 @@
 import type { TranslationKey } from '@/i18n/types'
+import type { AnswerDimensions, SigFigRuleApplied } from '@/entities/question/answerDimensions'
+import type { VectorComparison } from '@/infrastructure/math/vectorAnswer'
+import type { ForceListResult } from '@/entities/question/forceList'
 
 export type EvaluationMethod =
   | 'exact'
@@ -16,6 +19,9 @@ export type EvaluationMethod =
   | 'blank_match'
   | 'article_gender'
   | 'paradigm_cells'
+  | 'vector'
+  | 'nomenclature'
+  | 'force_list'
   | 'option_id'
   | 'ai'
   | 'unverified'
@@ -36,6 +42,9 @@ export const EVAL_METHOD_LABEL_KEYS: Record<EvaluationMethod, TranslationKey> = 
   blank_match: 'evalMethod.blank_match',
   article_gender: 'evalMethod.article_gender',
   paradigm_cells: 'evalMethod.paradigm_cells',
+  vector: 'evalMethod.vector',
+  nomenclature: 'evalMethod.nomenclature',
+  force_list: 'evalMethod.force_list',
   option_id: 'evalMethod.option_id',
   ai: 'evalMethod.ai',
   unverified: 'evalMethod.unverified',
@@ -65,6 +74,17 @@ export interface QuestionEvaluation {
   contradictions?: string[]
   /** Fill-blank: each blank's answer, whether it was accepted, and how. */
   blanks?: BlankResult[]
+  /**
+   * Numeric answers: value, unit and significant figures judged separately,
+   * so the feedback can name exactly which one is off.
+   */
+  dimensions?: AnswerDimensions
+  /** The course's significant-figure rule as applied to this answer (shown with the result). */
+  sigFigRule?: SigFigRuleApplied
+  /** Vector answers: how the answer compares, component by component. */
+  vector?: VectorComparison
+  /** Free-body diagram answers: matched, missing and extra forces. */
+  forces?: ForceListResult
   /**
    * The student disputed this AI judgement. A disputed answer is kept for
    * reference but excluded from the score, the mistake book and mastery.

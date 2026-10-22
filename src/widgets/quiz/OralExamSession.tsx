@@ -26,7 +26,6 @@ import type { QuizService } from '@/services/quizService'
 import { loadProjectSubjectContext } from '@/services/projectSubject'
 import { appendSpeechText, useSpeechInput } from '@/features/homework/useSpeechInput'
 import { toast } from '@/features/toast/toastStore'
-import { Badge } from '@/shared/ui/Badge'
 import { Button } from '@/shared/ui/Button'
 import { Card, CardContent } from '@/shared/ui/Card'
 import { Label } from '@/shared/ui/Label'
@@ -36,6 +35,8 @@ import { highlightEvidence } from '@/shared/lib/evidenceHighlight'
 import { cn } from '@/shared/lib/utils'
 import { QuestionSource } from './QuestionSource'
 import { ShortAnswerFeedback } from './ShortAnswerFeedback'
+import { QuestionOriginBadge } from '@/shared/ui/QuestionOriginBadge'
+import { quizQuestionOrigin, rubricSourceOf } from '@/entities/question/origin'
 import { useTranslation } from '@/i18n'
 import { isAbortError } from '@/shared/lib/generationControl'
 import { friendlyAIError } from '@/shared/lib/aiErrors'
@@ -223,9 +224,7 @@ export function OralExamSession({
       </span>
       <span aria-hidden>·</span>
       <span className="break-words font-medium text-foreground">{group.topic}</span>
-      {group.main.origin === 'ai_without_source' && (
-        <Badge variant="outline">{t('oral.aiWithoutSource')}</Badge>
-      )}
+      <QuestionOriginBadge origin={quizQuestionOrigin(group.main)} />
     </div>
   )
 
@@ -304,6 +303,7 @@ export function OralExamSession({
               {evaluation && (
                 <ShortAnswerFeedback
                   evaluation={evaluation}
+                  rubricSource={rubricSourceOf(question.rubricSource)}
                   {...(attempt && evaluation.method === 'rubric_ai' && !evaluation.disputed
                     ? { onDispute: () => void dispute(attempt) }
                     : {})}

@@ -1,8 +1,27 @@
-import * as pdfjsLib from 'pdfjs-dist'
+// The legacy build, deliberately. pdf.js 6's modern build calls very recent
+// JavaScript APIs (Map/WeakMap.prototype.getOrInsertComputed, Math.sumPrecise,
+// Uint8Array.prototype.toHex / fromBase64, Promise.try, Iterator helpers,
+// Set methods) without fallbacks. Where one is missing, font loading fails and
+// glyphs such as − Δ π ° and ligatures silently disappear from the text. The
+// legacy build ships the upstream core-js polyfills for exactly those APIs in
+// both the main-thread bundle and the worker; each is installed only when the
+// browser lacks it. See AGENTS.md §5 (pdf.js runtime APIs).
+import * as pdfjsLib from 'pdfjs-dist/legacy/build/pdf.mjs'
+import type { LayoutWarning } from '@/entities/chunk/layoutWarnings'
 import { findRunningLines, looksLikeHeadingLine, runningLineKey } from './headingHeuristics'
+import { classifyFontName, type FontEncodingKind } from './fontGlyphs'
+import {
+  layoutTextItems,
+  type FontKindLookup,
+  type LaidOutLine,
+  type PdfTextItem,
+} from './pdfLayout'
 // Vite-specific worker URL injection. The `?url` suffix returns the asset URL
 // at build time so pdfjs can spawn its worker correctly.
-import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
+import pdfWorkerUrl from 'pdfjs-dist/legacy/build/pdf.worker.min.mjs?url'
+
+export { groupTextItemsIntoLines, layoutTextItems } from './pdfLayout'
+export type { PdfTextItem } from './pdfLayout'
 
 let configured = false
 
@@ -32,18 +51,6 @@ function ensureWorker(): void {
   configured = true
 }
 
-/**
- * Structural type for an item returned from `page.getTextContent().items`.
- * pdfjs-dist v6 doesn't export the type alias directly, so we declare the
- * minimum surface we need.
- */
-interface PdfTextItem {
-  str?: string
-  transform?: number[]
-  width?: number
-  height?: number
-}
-
 function isTextItem(it: unknown): it is PdfTextItem {
   return Boolean(it) && typeof (it as { str?: unknown }).str === 'string'
 }
@@ -55,12 +62,24 @@ export interface ExtractedPage {
   tables: string[][][]
   hasContent: boolean
   /**
+   * Per line of `text` (split on `
+`): the table block it belongs to and
+   * any low-confidence layout flags. Absent for pages without either.
+   */
+  lineFlags?: Array<PageLineFlag | null>
+  /**
    * Number of image-painting operators on the page. A non-zero count means the
    * page carries an embedded picture (a Venn diagram, a chart, an image-based
    * formula), which is a signal to preserve the visual rather than trust the
    * extracted text.
    */
   imageCount: number
+}
+
+export interface PageLineFlag {
+  /** Lines with the same id form one Markdown table. */
+  table?: number
+  warnings?: LayoutWarning[]
 }
 
 export interface RenderedPageImage {
@@ -303,152 +322,159 @@ export interface PdfExtractionResult {
   warnings: string[]
 }
 
-const SUPERSCRIPT_DIGITS: Record<string, string> = {
-  '0': '⁰',
-  '1': '¹',
-  '2': '²',
-  '3': '³',
-  '4': '⁴',
-  '5': '⁵',
-  '6': '⁶',
-  '7': '⁷',
-  '8': '⁸',
-  '9': '⁹',
-}
-const SUBSCRIPT_DIGITS: Record<string, string> = {
-  '0': '₀',
-  '1': '₁',
-  '2': '₂',
-  '3': '₃',
-  '4': '₄',
-  '5': '₅',
-  '6': '₆',
-  '7': '₇',
-  '8': '₈',
-  '9': '₉',
-}
-
-function itemHeight(item: PdfTextItem): number {
-  const height = item.height ?? Math.abs(item.transform?.[3] ?? 0)
-  return height > 2 ? height : 12
-}
-
-/** Some PDFs paint a combining vector arrow before the letter it sits over.
- * pdf.js follows paint order, so move only a geometrically overlapping arrow
- * after its single-letter base. The original page remains the authority. */
-function orderVectorMarks(items: PdfTextItem[]): PdfTextItem[] {
-  const ordered = [...items]
-  for (let index = 0; index < ordered.length; index++) {
-    const mark = ordered[index]
-    if (mark?.str !== '\u20d7') continue
-    let baseIndex = index + 1
-    while (ordered[baseIndex]?.str?.trim() === '') baseIndex++
-    const base = ordered[baseIndex]
-    const markX = mark.transform?.[4]
-    const baseX = base?.transform?.[4]
-    const markY = mark.transform?.[5]
-    const baseY = base?.transform?.[5]
-    if (
-      !base ||
-      !/^[A-Za-z]$/.test(base.str ?? '') ||
-      markX === undefined ||
-      baseX === undefined ||
-      base.width === undefined ||
-      markY === undefined ||
-      baseY === undefined ||
-      Math.abs(markY - baseY) > itemHeight(base) * 0.3 ||
-      markX < baseX - 1 ||
-      markX > baseX + base.width + 1
-    )
-      continue
-    ordered.splice(index, 1)
-    ordered.splice(baseIndex, 0, mark)
-    index = baseIndex
+/**
+ * Resolve each text item's real font name. pdf.js keeps the base font name
+ * (`BCDOEE+SymbolMT`, `Wingdings-Regular`) on the font object in
+ * `page.commonObjs` once the page's operator list has loaded the fonts; the
+ * text-content `styles` only carry a generic CSS family, used as a fallback.
+ * Unknown fonts resolve to `undefined`, which leaves their glyphs untouched.
+ */
+function fontKindLookup(
+  page: { commonObjs?: { has?(id: string): boolean; get?(id: string): unknown } },
+  styles: unknown,
+): FontKindLookup {
+  const cache = new Map<string, FontEncodingKind | undefined>()
+  return (fontName) => {
+    if (!fontName) return undefined
+    if (cache.has(fontName)) return cache.get(fontName)
+    let name: string | undefined
+    try {
+      if (page.commonObjs?.has?.(fontName)) {
+        const font = page.commonObjs.get?.(fontName) as { name?: unknown } | undefined
+        if (typeof font?.name === 'string') name = font.name
+      }
+    } catch {
+      /* font not resolved on this thread */
+    }
+    if (!name) {
+      const family = (styles as Record<string, { fontFamily?: unknown }> | undefined)?.[fontName]
+        ?.fontFamily
+      if (typeof family === 'string' && !/^(?:sans-serif|serif|monospace)$/i.test(family))
+        name = family
+    }
+    const kind = classifyFontName(name)
+    cache.set(fontName, kind)
+    return kind
   }
-  return ordered
 }
+
+/** A unit / chapter title or a lettered divider ("B/ Observations …"). */
+const TITLE_START =
+  /^(?:(?:unit|chapter|ch\.|lesson|lecture|module|part|topic)\s+(?:\d{1,3}|[ivxlc]{1,6})\s*[:.\-–—]|[A-Z]\s?\/\s?\S)/i
 
 /**
- * PDF text items for a raised/lowered math glyph have a different baseline.
- * A fixed two-pixel line threshold treated R² and v₁ as three separate lines.
- * Join only items whose baselines fit inside the larger glyph's own height;
- * ordinary lines keep their original breaks. Geometry is evidence for a digit
- * script, but never for inventing a missing symbol or changing a coefficient.
+ * A slide title set over several lines ("Unit 3: Chemical / Equations and /
+ * Stoichiometry") becomes one line. Only lines in the same font size that
+ * follow directly below are joined, at most three, and never another title,
+ * a parenthesised note or a sentence.
  */
-export function groupTextItemsIntoLines(items: PdfTextItem[]): string[] {
-  const lines: string[] = []
-  let current = ''
-  let baselineY: number | undefined
-  let baselineHeight = 12
-  let previous: PdfTextItem | undefined
-  for (const item of orderVectorMarks(items)) {
-    const y = item.transform ? item.transform[5] : undefined
-    const str = item.str ?? ''
-    if (!str) continue
-    const height = itemHeight(item)
-    if (
-      baselineY !== undefined &&
-      y !== undefined &&
-      Math.abs(baselineY - y) > Math.max(2, Math.max(baselineHeight, height) * 0.55)
-    ) {
-      const joined = current.replace(/\s+/g, ' ').trim()
-      if (joined) lines.push(joined)
-      current = ''
-      baselineY = undefined
-      previous = undefined
+export function joinTitleLines(lines: LaidOutLine[]): LaidOutLine[] {
+  const out: LaidOutLine[] = []
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i]!
+    if (line.table || !TITLE_START.test(line.text) || /[.!?。]$/.test(line.text)) {
+      out.push(line)
+      continue
     }
-    const x = item.transform?.[4]
-    const previousEnd =
-      previous?.transform?.[4] !== undefined && previous.width !== undefined
-        ? previous.transform[4]! + previous.width
-        : undefined
-    const closeToPrevious =
-      x !== undefined &&
-      previousEnd !== undefined &&
-      x >= previousEnd - 1 &&
-      x - previousEnd < baselineHeight * 0.45
-    const scriptOffset = Math.max(0.8, baselineHeight * 0.12)
-    const raised =
-      y !== undefined &&
-      baselineY !== undefined &&
-      y - baselineY > scriptOffset &&
-      height < baselineHeight * 0.85
-    const lowered =
-      y !== undefined &&
-      baselineY !== undefined &&
-      baselineY - y > scriptOffset &&
-      height < baselineHeight * 0.85
-    const script =
-      closeToPrevious && /^\d+$/.test(str.trim())
-        ? raised
-          ? SUPERSCRIPT_DIGITS
-          : lowered
-            ? SUBSCRIPT_DIGITS
-            : undefined
-        : undefined
-    if (script) {
-      current = current.trimEnd() + [...str.trim()].map((digit) => script[digit]).join('')
-    } else if (!current) {
-      current = str
-    } else {
-      const gap = x !== undefined && previousEnd !== undefined ? x - previousEnd : undefined
-      const separator =
-        /\s$/.test(current) ||
-        /^\s/.test(str) ||
-        (gap !== undefined && gap < Math.min(baselineHeight, height) * 0.18)
-          ? ''
-          : ' '
-      current += separator + str
+    let text = line.text
+    let previous = line
+    let j = i + 1
+    while (j < lines.length && j <= i + 3) {
+      const next = lines[j]!
+      const sameSize = Math.abs(next.height - line.height) <= line.height * 0.12
+      const gap = previous.y !== undefined && next.y !== undefined ? previous.y - next.y : undefined
+      if (
+        next.table ||
+        !sameSize ||
+        gap === undefined ||
+        gap <= 0 ||
+        gap > line.height * 1.6 ||
+        next.text.length > 60 ||
+        TITLE_START.test(next.text) ||
+        /^[(（[]/.test(next.text) ||
+        /[.!?。]$/.test(text)
+      )
+        break
+      text = `${text} ${next.text}`
+      previous = next
+      j++
     }
-    if (y !== undefined && (baselineY === undefined || height > baselineHeight)) {
-      baselineY = y
-      baselineHeight = height
-    }
-    previous = item
+    // A joined title stays a heading even when it is now longer than a usual one.
+    out.push(
+      j > i + 1
+        ? { ...line, text, ...(looksLikeHeadingLine(line.text) ? { heading: true } : {}) }
+        : line,
+    )
+    i = j - 1
   }
-  const joined = current.replace(/\s+/g, ' ').trim()
-  if (joined) lines.push(joined)
-  return lines
+  return out
+}
+
+function splitTableRow(row: string): string[] {
+  return row
+    .replace(/^\|\s?|\s?\|$/g, '')
+    .split(/\s?(?<!\\)\|\s?/)
+    .map((cell) => cell.replace(/\\\|/g, '|'))
+}
+
+function assemblePage(lines: LaidOutLine[]): {
+  text: string
+  headings: ExtractedPage['headings']
+  tables: string[][][]
+  lineFlags?: Array<PageLineFlag | null>
+} {
+  const headings: ExtractedPage['headings'] = []
+  const tables: string[][][] = []
+  const textLines: string[] = []
+  const flags: Array<PageLineFlag | null> = []
+  let flagged = false
+  for (const line of lines) {
+    const parts = line.text.split('\n')
+    const tableId = line.table ? tables.length : undefined
+    if (line.table) {
+      tables.push(parts.filter((_, index) => index !== 1).map(splitTableRow))
+    } else if (line.heading || looksLikeHeadingLine(line.text)) {
+      headings.push({ text: line.text, level: 1 })
+    }
+    for (const part of parts) {
+      textLines.push(part)
+      const flag: PageLineFlag = {
+        ...(tableId !== undefined ? { table: tableId } : {}),
+        ...(line.warnings?.length ? { warnings: line.warnings } : {}),
+      }
+      if (tableId !== undefined || line.warnings?.length) flagged = true
+      flags.push(Object.keys(flag).length > 0 ? flag : null)
+    }
+  }
+  return {
+    text: textLines.join('\n'),
+    headings,
+    tables,
+    ...(flagged ? { lineFlags: flags } : {}),
+  }
+}
+
+const LETTERED_DIVIDER = /^[A-Z]\s?\/\s?\S.{0,110}$/
+
+/**
+ * A slide deck divided into lettered parts ("A/ Elements …", "B/ …") puts each
+ * part title on its own divider slide. Such a line is marked as a heading only
+ * when it opens a page that carries almost nothing else — an outline slide
+ * listing A/–H/ together is not a divider.
+ */
+function markLetteredDividers(pages: ExtractedPage[], running: Set<string>): void {
+  for (const page of pages) {
+    const lines = page.text
+      .split('\n')
+      .map((line) => line.trim())
+      .filter((line) => line && !running.has(runningLineKey(line)))
+    if (lines.length === 0 || lines.length > 3) continue
+    if (!LETTERED_DIVIDER.test(lines[0]!)) continue
+    if (lines.filter((line) => LETTERED_DIVIDER.test(line)).length > 1) continue
+    if (!page.headings.some((heading) => heading.text === lines[0])) {
+      page.headings.push({ text: lines[0]!, level: 1 })
+    }
+  }
 }
 
 /**
@@ -462,7 +488,7 @@ export async function extractPdf(blob: Blob): Promise<PdfExtractionResult> {
     data: arrayBuffer,
     // In tests we run on the main thread because pdfjs can't spawn its
     // worker from the Vitest module resolution.
-    ...(isTestEnvironment() ? { disableWorker: true } : {}),
+    ...(isTestEnvironment() ? { disableWorker: true, verbosity: 0 } : {}),
   })
   const pdf = await loadingTask.promise
   try {
@@ -501,25 +527,22 @@ async function readPdf(
       }
       const textContent = await page.getTextContent()
       const items = (textContent.items as unknown[]).filter(isTextItem)
-      const lines = groupTextItemsIntoLines(items)
-      const headings: ExtractedPage['headings'] = []
-      let pageText = ''
-      for (const line of lines) {
-        if (looksLikeHeadingLine(line)) headings.push({ text: line, level: 1 })
-        pageText += (pageText ? '\n' : '') + line
-        for (const ch of line) {
-          if (/[\u4e00-\u9fff]/.test(ch)) zhChars++
-          else if (/[A-Za-z]/.test(ch)) enChars++
-        }
+      const fontKind = fontKindLookup(page, textContent.styles)
+      const assembled = assemblePage(joinTitleLines(layoutTextItems(items, fontKind)))
+      const pageText = assembled.text
+      for (const ch of pageText) {
+        if (/[\u4e00-\u9fff]/.test(ch)) zhChars++
+        else if (/[A-Za-z]/.test(ch)) enChars++
       }
       totalText += pageText.length
       pages.push({
         pageNumber: i,
         text: pageText,
-        headings,
-        tables: [],
+        headings: assembled.headings,
+        tables: assembled.tables,
         hasContent: pageText.trim().length > 0,
         imageCount,
+        ...(assembled.lineFlags ? { lineFlags: assembled.lineFlags } : {}),
       })
       page.cleanup()
     } catch (err) {
@@ -543,6 +566,7 @@ async function readPdf(
       page.headings = page.headings.filter((heading) => !running.has(runningLineKey(heading.text)))
     }
   }
+  markLetteredDividers(pages, running)
 
   let metadata: PdfExtractionResult['metadata'] = {}
   try {

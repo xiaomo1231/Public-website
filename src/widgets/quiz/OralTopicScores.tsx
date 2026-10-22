@@ -5,6 +5,8 @@ import { oralTopicScores } from '@/entities/question/oral'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/shared/ui/Card'
 import { Progress } from '@/shared/ui/Progress'
 import { useTranslation } from '@/i18n'
+import { RubricSourceLabel } from '@/shared/ui/RubricSourceLabel'
+import { rubricSourceOf } from '@/entities/question/origin'
 
 /**
  * Oral-exam result per drawn topic: scoring points covered over all points of
@@ -29,6 +31,9 @@ export function OralTopicScores({
           {t('oral.result.title')}
         </CardTitle>
         <CardDescription>{t('oral.result.hint')}</CardDescription>
+        <RubricSourceLabel
+          source={rubricSourceOf(questions.find((question) => question.oral)?.rubricSource)}
+        />
       </CardHeader>
       <CardContent className="space-y-2 lab:space-y-0">
         {scores.map((score) => (

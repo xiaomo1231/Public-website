@@ -56,7 +56,13 @@ export interface DetectedStructure {
 }
 
 const CHAPTER_WORD =
-  /^\s*(chapter|unit|part|module|lesson|lektion|lecke|kapitel|fejezet)\s+([0-9]{1,3}|[ivxlc]{1,6})\b\s*[:.\-–—]?\s*(.*)$/i
+  /^\s*(chapter|ch\.|unit|part|module|lesson|lektion|lecke|kapitel|fejezet)\s+([0-9]{1,3}|[ivxlc]{1,6})\b\s*[:.\-–—]?\s*(.*)$/i
+/** A lettered part divider in a slide deck: "B/ Observations that led to …". */
+const LETTERED_DIVIDER = /^\s*([A-Z])\s?\/\s?(\S.*)$/
+/** Chapter / unit number in a file name: `Ch03.pdf`, `Chapter 3`, `Unit 2 …`, `第3章`. */
+const FILE_CHAPTER =
+  /^(?:.*?[^a-z])?(chapter|ch|chp|unit|lesson|lecture|module|week)[\s._-]*0*(\d{1,3})(?!\d|\.\d)/i
+const FILE_CJK_CHAPTER = /第\s*([一二三四五六七八九十百千0-9]+)\s*(章|单元|讲|课)/
 const CJK_CHAPTER = /^\s*第\s*([一二三四五六七八九十百千0-9]+)\s*[章单元篇部分]\s*[:：]?\s*(.*)$/
 const SUBSECTION = /^\s*([0-9]{1,3}(?:\.[0-9]{1,3}){2})\s*[:.\-–—]?\s+(.+)$/
 const SECTION = /^\s*([0-9]{1,3}\.[0-9]{1,3})\s*[:.\-–—]?\s+(.+)$/
@@ -143,6 +149,11 @@ function classifyHeading(text: string, isMarkedHeading: boolean): Classified | n
   }
 
   if (isMarkedHeading) {
+    // The extractor marks a lettered divider as a heading only on its own slide.
+    const lettered = LETTERED_DIVIDER.exec(line)
+    if (lettered && !line.includes('\n')) {
+      return { type: 'section', number: lettered[1]!, title: cleanTitle(lettered[2]!) }
+    }
     const bare = BARE_NUMBERED.exec(line)
     if (bare) return { type: 'chapter', number: bare[1]!, title: cleanTitle(bare[2]!) }
   }
@@ -175,7 +186,41 @@ function runningLinesOf(chunks: StructureChunkInput[]): Set<string> {
   return findRunningLines([...byPage.values()])
 }
 
-export function detectStructure(chunks: StructureChunkInput[]): DetectedStructure {
+const FILE_KEYWORD_TITLE: Record<string, { type: CourseStructureNodeType; label: string }> = {
+  chapter: { type: 'chapter', label: 'Chapter' },
+  ch: { type: 'chapter', label: 'Chapter' },
+  chp: { type: 'chapter', label: 'Chapter' },
+  unit: { type: 'unit', label: 'Unit' },
+  lesson: { type: 'chapter', label: 'Lesson' },
+  lecture: { type: 'chapter', label: 'Lecture' },
+  module: { type: 'chapter', label: 'Module' },
+  week: { type: 'chapter', label: 'Week' },
+}
+
+/**
+ * The chapter a file name announces (`Ch03.pdf` → Chapter 3, `Unit 2 notes`
+ * → Unit 2, `第3章.pdf` → 第3章). Used only when the document itself has no
+ * heading signal at all, as one low-confidence node for the whole file.
+ */
+export function chapterFromFileName(
+  fileName: string | undefined,
+): { type: CourseStructureNodeType; number: string; title: string } | null {
+  if (!fileName) return null
+  const base = fileName.replace(/\.[a-z0-9]{1,5}$/i, '')
+  const cjk = FILE_CJK_CHAPTER.exec(base)
+  if (cjk) return { type: 'chapter', number: cjk[1]!, title: `第${cjk[1]}${cjk[2]}` }
+  const match = FILE_CHAPTER.exec(base)
+  if (!match) return null
+  const keyword = FILE_KEYWORD_TITLE[match[1]!.toLowerCase()]
+  if (!keyword) return null
+  const number = String(Number(match[2]!))
+  return { type: keyword.type, number, title: `${keyword.label} ${number}` }
+}
+
+export function detectStructure(
+  chunks: StructureChunkInput[],
+  options: { fileName?: string } = {},
+): DetectedStructure {
   const nodes: DetectedNode[] = []
   const assignments: number[] = new Array(chunks.length).fill(-1)
   let current = -1
@@ -227,6 +272,29 @@ export function detectStructure(chunks: StructureChunkInput[]): DetectedStructur
   }
 
   if (nodes.length === 0) {
+    const fromName = chapterFromFileName(options.fileName)
+    if (fromName && chunks.length > 0) {
+      const pages = chunks
+        .map((chunk) => chunk.pageNumber)
+        .filter((page): page is number => page !== undefined)
+      return {
+        nodes: [
+          {
+            type: fromName.type,
+            number: fromName.number,
+            title: fromName.title,
+            depth: DEPTH[fromName.type],
+            ...(pages.length > 0
+              ? { pageStart: Math.min(...pages), pageEnd: Math.max(...pages) }
+              : {}),
+            chunkIndexes: chunks.map((_, index) => index),
+            confidence: 'low',
+          },
+        ],
+        assignments: chunks.map(() => 0),
+        confidence: 'low',
+      }
+    }
     return {
       nodes: [
         {

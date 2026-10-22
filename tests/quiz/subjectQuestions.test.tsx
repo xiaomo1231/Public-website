@@ -46,10 +46,10 @@ describe('physics: numeric answers with units', () => {
   it('explains a missing or incompatible unit', () => {
     const missing = evaluateDeterministic(g, '9.8')
     expect(missing.isCorrect).toBe(false)
-    expect(missing.note).toMatch(/unit is required/i)
+    expect(missing.note).toMatch(/unit is missing/i)
     const wrong = evaluateDeterministic(g, '9.8 N')
     expect(wrong.isCorrect).toBe(false)
-    expect(wrong.note).toMatch(/different quantity/)
+    expect(wrong.note).toMatch(/different kind of quantity/)
   })
 
   it('shows how a wrong value converts, and the expected answer with its unit', () => {
@@ -136,7 +136,7 @@ describe('quiz generator output validation', () => {
 
   it('describes both in the generator prompt', () => {
     const system = prompts.quizGenerator.buildSystemPrompt()
-    expect(prompts.quizGenerator.VERSION).toBe('v8')
+    expect(prompts.quizGenerator.VERSION).toBe('v9')
     expect(system).toContain('`unit`')
     expect(system).toContain('`code_output`')
   })

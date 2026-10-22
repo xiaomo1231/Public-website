@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import {
   ArrowRight,
+  BarChart3,
   ClipboardCheck,
   ClipboardList,
   ListChecks,
@@ -10,6 +11,7 @@ import {
   Play,
   RefreshCw,
   RotateCcw,
+  Timer,
   Trash2,
   Upload,
 } from 'lucide-react'
@@ -22,6 +24,7 @@ import {
 import { PracticeSetRows } from '@/widgets/homework/practice/PracticeSetRows'
 import { pausedCardActions } from '@/widgets/homework/pausedCardActions'
 import {
+  isExamSet,
   isPracticeSet,
   HOMEWORK_STATUS_LABEL_KEYS,
   type HomeworkSet,
@@ -112,7 +115,11 @@ export function HomeworkLandingPage(): JSX.Element {
   const load = useCallback(async () => {
     if (!projectId) return
     const docs = await new DocumentRepository().listByProject(projectId)
-    const homeworkDocs = docs.filter((doc) => resolveMaterialType(doc.materialType) === 'homework')
+    // Past exam papers are recognised the same way (as `kind: 'exam'` sets).
+    const homeworkDocs = docs.filter((doc) => {
+      const role = resolveMaterialType(doc.materialType)
+      return role === 'homework' || role === 'past_exam'
+    })
     const nextSets = service ? await service.listSets(projectId) : []
     setDocuments(homeworkDocs)
     setSets(nextSets)
@@ -278,10 +285,20 @@ export function HomeworkLandingPage(): JSX.Element {
         description={t('homework.subtitle')}
         nav={<ProjectFlowNav projectId={projectId} active="homework" />}
         actions={
-          <Button onClick={() => setUploadOpen(true)}>
-            <Upload className="h-4 w-4" />
-            {t('homework.upload')}
-          </Button>
+          <>
+            {sets.some((set) => isExamSet(set) && set.status === 'ready') && (
+              <Button asChild variant="outline">
+                <Link to={`/projects/${projectId}/homework/exam-analysis`}>
+                  <BarChart3 className="h-4 w-4" />
+                  {t('examAnalysis.open')}
+                </Link>
+              </Button>
+            )}
+            <Button onClick={() => setUploadOpen(true)}>
+              <Upload className="h-4 w-4" />
+              {t('homework.upload')}
+            </Button>
+          </>
         }
       />
       <PageContent className="space-y-5">
@@ -368,6 +385,9 @@ export function HomeworkLandingPage(): JSX.Element {
                                 <TruncatedText text={set.title} className="min-w-0 max-w-full" />
                               </CardTitle>
                               <div className="flex shrink-0 items-center gap-1">
+                                {isExamSet(set) && (
+                                  <Badge variant="outline">{t('mockExam.paperBadge')}</Badge>
+                                )}
                                 <Badge variant={STATUS_VARIANT[set.status]}>
                                   {generating
                                     ? t('homework.status.preparing')
@@ -480,12 +500,26 @@ export function HomeworkLandingPage(): JSX.Element {
                                 onResume={() => void resume(set)}
                               />
                             ) : (
-                              <Button asChild className="w-full">
-                                <Link to={`/projects/${projectId}/homework/${set.id}`}>
-                                  {t('homework.open')}
-                                  <ArrowRight className="h-4 w-4" />
-                                </Link>
-                              </Button>
+                              <>
+                                {isExamSet(set) && (
+                                  <Button asChild className="w-full">
+                                    <Link to={`/projects/${projectId}/homework/${set.id}/exam`}>
+                                      <Timer className="h-4 w-4" />
+                                      {t('mockExam.start')}
+                                    </Link>
+                                  </Button>
+                                )}
+                                <Button
+                                  asChild
+                                  className="w-full"
+                                  variant={isExamSet(set) ? 'outline' : 'default'}
+                                >
+                                  <Link to={`/projects/${projectId}/homework/${set.id}`}>
+                                    {t(isExamSet(set) ? 'mockExam.openPractice' : 'homework.open')}
+                                    <ArrowRight className="h-4 w-4" />
+                                  </Link>
+                                </Button>
+                              </>
                             )}
                             <PracticeSetRows
                               projectId={projectId}

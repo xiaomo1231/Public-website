@@ -117,6 +117,8 @@ const PROFILES: Record<Exclude<Subject, 'other' | 'language'>, SubjectProfile> =
     ],
     answers: [
       'Numerical results carry units and sensible significant figures — unless an output field explicitly asks for a bare number, in which case give the number in the unit the question uses.',
+      'Significant figures: a result from measured data keeps as many significant figures as the least precise datum for products and quotients (the fewest decimal places for sums and differences); round only the final answer, carrying extra digits through intermediate steps; use scientific notation (1.50 × 10³ m) when trailing zeros would be ambiguous. Exact numbers (counts, defined conversions) do not limit them.',
+      'Vectors: give components with the axes used, or magnitude and direction with the convention stated (an angle from +x, or a compass bearing such as 17.7° W of N).',
     ],
     pitfalls: [
       'unit conversion errors',
@@ -149,6 +151,8 @@ const PROFILES: Record<Exclude<Subject, 'other' | 'language'>, SubjectProfile> =
     ],
     answers: [
       'Balanced equations with integer coefficients; quantities with units and significant figures that match the data; equilibrium constants without units unless the course uses them.',
+      'Significant figures follow the general-chemistry rules: products and quotients keep the fewest significant figures of the data, sums and differences the fewest decimal places; leading zeros never count, trailing zeros after a decimal point do, and a trailing zero of an integer is ambiguous (write 1.50 × 10³); exact numbers (counts, stoichiometric coefficients, defined conversions) do not limit them; round only the final answer; a logarithm (pH) has as many decimal places as the concentration has significant figures.',
+      'Nomenclature: IUPAC / Stock names (iron(III) sulfate) with accepted classical names where the course uses them; nuclides with mass number and charge (⁵⁴Cr⁶⁺, $\\ce{^{54}Cr^{6+}}$).',
     ],
     pitfalls: [
       'unbalanced equations or missing electrons in half-reactions',
@@ -487,7 +491,8 @@ const PROFILE_REVISIONS: Partial<Record<Subject, number>> = {
   // r2: formulas and equations in mhchem (`\ce{…}`); lesson figure guidance.
   // r3: university depth (organic notation, thermodynamics, kinetics, acid–base)
   //     and lesson data for kinetics / enzyme figures.
-  chemistry: 3,
+  // r4: significant-figure rules (incl. logarithms) and nomenclature / nuclides.
+  chemistry: 4,
   // r2: university depth (strand polarity, sex-linkage, χ², pedigrees,
   //     biochemistry) and lesson data for enzyme / population figures.
   biology: 2,
@@ -495,7 +500,8 @@ const PROFILE_REVISIONS: Partial<Record<Subject, number>> = {
   stats: 2,
   // r2: calculus-based university physics and lesson data for force, motion,
   //     optics, circuit and formula figures.
-  physics: 2,
+  // r3: significant-figure rules and vector answer conventions.
+  physics: 3,
   // r2: lesson data for tangent, Riemann-sum and Taylor figures.
   calculus: 2,
   // r2: university depth (recurrences, invariants) and traceable inputs.

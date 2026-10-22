@@ -22,6 +22,8 @@ import {
 } from '@/services/practiceService'
 import { buildPracticeService } from '@/services/aiServices'
 import { ShortAnswerFeedback } from '@/widgets/quiz/ShortAnswerFeedback'
+import { QuestionOriginBadge } from '@/shared/ui/QuestionOriginBadge'
+import { professorPracticeOrigin, rubricSourceOf } from '@/entities/question/origin'
 import { CourseContextService } from '@/services/courseContextService'
 import type {
   PracticeQuestion,
@@ -137,6 +139,7 @@ function QuestionCard({
           <Badge variant={question.status === 'verified' ? 'secondary' : 'outline'}>
             {question.status === 'verified' ? t('practice.verified') : t('practice.needsReview')}
           </Badge>
+          <QuestionOriginBadge origin={professorPracticeOrigin()} />
         </CardTitle>
         <RichText
           text={question.prompt}
@@ -214,6 +217,7 @@ function QuestionCard({
         {feedback?.evaluation ? (
           <ShortAnswerFeedback
             evaluation={feedback.evaluation}
+            rubricSource={rubricSourceOf(question.rubricSource, 'professor')}
             {...(feedback.evaluation.method === 'rubric_ai' && !feedback.evaluation.disputed
               ? { onDispute: () => void dispute() }
               : {})}

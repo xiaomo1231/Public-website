@@ -1,3 +1,4 @@
+import { MistakeFollowUpService } from './mistakeFollowUpService'
 import { AIService } from './aiService'
 import { SettingsService } from './settingsService'
 import { ReferenceImageService } from './referenceImageService'
@@ -16,6 +17,7 @@ import { WeaknessService } from './weaknessService'
 import { ReviewSessionService } from './reviewSessionService'
 import { ProjectService } from './projectService'
 import { HomeworkService } from './homeworkService'
+import { EvaluationService } from './evaluationService'
 import { SlideLessonService } from './slideLessonService'
 import { PracticeService } from './practiceService'
 import { getDb } from '@/infrastructure/db/database'
@@ -135,6 +137,34 @@ export async function buildHomeworkService(): Promise<HomeworkService> {
     ? new AIService({ config: settings, usageKind: 'walkthrough' })
     : null
   return new HomeworkService({ ai, db: getDb() })
+}
+
+/**
+ * 错题跟进 reads local data (lecture links, schedule, 再试一次) without an AI;
+ * variants and AI checks then fail with an actionable message.
+ */
+export async function buildMistakeFollowUpService(): Promise<MistakeFollowUpService> {
+  const settings = await new SettingsService().get()
+  const ai = settings.apiKey.trim() ? new AIService({ config: settings, usageKind: 'quiz' }) : null
+  return new MistakeFollowUpService({ ai, db: getDb() })
+}
+
+/**
+ * 检验网站: the walkthrough writer, the comparison and the answer check, all
+ * recorded as walkthrough usage. Records are readable without an AI.
+ */
+export async function buildEvaluationService(): Promise<EvaluationService> {
+  const settings = await new SettingsService().get()
+  const ai = settings.apiKey.trim()
+    ? new AIService({ config: settings, usageKind: 'walkthrough' })
+    : null
+  const homework = new HomeworkService({ ai, db: getDb() })
+  return new EvaluationService({
+    homework,
+    walkthroughs: new HomeworkWalkthroughService({ ai, db: getDb(), homework }),
+    model: settings.model,
+    db: getDb(),
+  })
 }
 
 /**

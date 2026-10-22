@@ -14,7 +14,7 @@ import * as TranslatorV2 from './translator/v2'
 import * as ContextualTutorV3 from './contextual-tutor/v3'
 import * as ProfessorProfileV1 from './professor-profile/v1'
 import * as MistakeAnalyzerV2 from './mistake-analyzer/v2'
-import * as QuizGeneratorV8 from './quiz-generator/v8'
+import * as QuizGeneratorV9 from './quiz-generator/v9'
 import * as VisualizationGeneratorV10 from './visualization-generator/v10'
 import * as HomeworkAnalyzerV2 from './homework-analyzer/v2'
 import * as HomeworkQuestionV3 from './homework-question/v3'
@@ -40,10 +40,10 @@ import * as InterviewScenarioV1 from './interview-scenario/v1'
 import * as InterviewPatientV1 from './interview-patient/v1'
 import * as InterviewSummaryCheckV1 from './interview-summary-check/v1'
 import * as OralExamV2 from './oral-exam/v2'
-import * as PracticeGenerateV2 from './practice-generate/v2'
+import * as PracticeGenerateV3 from './practice-generate/v3'
 import * as PracticeReviewV1 from './practice-review/v1'
 import * as GuidedStepsV1 from './guided-steps/v1'
-import * as QuestionStyleV1 from './question-style/v1'
+import * as QuestionStyleV2 from './question-style/v2'
 import * as QuestionTranslateV1 from './question-translate/v1'
 
 export const PROMPT_VERSIONS = {
@@ -57,7 +57,7 @@ export const PROMPT_VERSIONS = {
   contextualTutor: 'v3',
   professorProfile: 'v1',
   mistakeAnalyzer: 'v2',
-  quizGenerator: 'v8',
+  quizGenerator: 'v9',
   visualizationGenerator: 'v10',
   homeworkAnalyzer: 'v2',
   homeworkQuestion: 'v3',
@@ -83,10 +83,10 @@ export const PROMPT_VERSIONS = {
   interviewPatient: 'v1',
   interviewSummaryCheck: 'v1',
   oralExam: 'v2',
-  practiceGenerate: 'v2',
+  practiceGenerate: 'v3',
   practiceReview: 'v1',
   guidedSteps: 'v1',
-  questionStyle: 'v1',
+  questionStyle: 'v2',
   questionTranslate: 'v1',
 } as const
 
@@ -101,7 +101,7 @@ export const prompts = {
   contextualTutor: ContextualTutorV3,
   professorProfile: ProfessorProfileV1,
   mistakeAnalyzer: MistakeAnalyzerV2,
-  quizGenerator: QuizGeneratorV8,
+  quizGenerator: QuizGeneratorV9,
   visualizationGenerator: VisualizationGeneratorV10,
   homeworkAnalyzer: HomeworkAnalyzerV2,
   homeworkQuestion: HomeworkQuestionV3,
@@ -128,10 +128,10 @@ export const prompts = {
   interviewPatient: InterviewPatientV1,
   interviewSummaryCheck: InterviewSummaryCheckV1,
   oralExam: OralExamV2,
-  practiceGenerate: PracticeGenerateV2,
+  practiceGenerate: PracticeGenerateV3,
   practiceReview: PracticeReviewV1,
   guidedSteps: GuidedStepsV1,
-  questionStyle: QuestionStyleV1,
+  questionStyle: QuestionStyleV2,
   questionTranslate: QuestionTranslateV1,
 } as const
 
@@ -149,7 +149,7 @@ export type {
   QuizGenerationOutput,
   GeneratedQuizQuestion,
   QuizQuestionType,
-} from './quiz-generator/v8'
+} from './quiz-generator/v9'
 export type { VisualizationInput, VisualizationOutput } from './visualization-generator/v10'
 export type { HomeworkAnalyzerInput, HomeworkAnalyzerOutput } from './homework-analyzer/v1'
 export type { HomeworkQuestionInput, HomeworkQuestionOutput } from './homework-question/v3'

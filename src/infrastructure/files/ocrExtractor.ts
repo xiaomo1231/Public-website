@@ -18,13 +18,99 @@ export interface OcrExtractionResult {
   confidence: number
   warnings: string[]
   language: 'zh' | 'en' | 'mixed' | 'unknown'
+  /**
+   * The picture looks like a photographed, hand-written or marked page
+   * (pencil working, ticks, red ink): the recognised text may be unreliable.
+   * Text such as isotope / charge notation (`54Cr6+`) is never rewritten.
+   */
+  handwriting?: boolean
+}
+
+/** The word-level part of a tesseract.js result we read. */
+export interface OcrWord {
+  text: string
+  confidence: number
+}
+
+interface OcrBlocks {
+  paragraphs?: Array<{ lines?: Array<{ words?: OcrWord[] }> }>
 }
 
 /** Loose type for the tesseract.js worker we keep around to terminate. */
 interface TesseractWorker {
-  recognize: (blob: Blob) => Promise<{ data: { text?: string; confidence?: number } }>
+  recognize: (
+    blob: Blob,
+    options?: Record<string, unknown>,
+    output?: Record<string, boolean>,
+  ) => Promise<{ data: { text?: string; confidence?: number; blocks?: OcrBlocks[] | null } }>
   reinitialize?: (langs: string[], oem?: number) => Promise<unknown>
   terminate: () => Promise<void>
+}
+
+/** Words below this tesseract confidence are treated as unreliable. */
+const LOW_WORD_CONFIDENCE = 50
+/** Share of strongly red pixels above which the page is taken to carry red ink. */
+const RED_INK_RATIO = 0.003
+
+/**
+ * Does this OCR result look like a photographed exam with hand-writing or
+ * marking on it? Printed text is read with consistently high per-word
+ * confidence; pencil working, ticks and crosses come out as many short,
+ * low-confidence "words". Red ink (a marker's pen) lowers the bar. Needs at
+ * least eight real words to say anything.
+ */
+export function looksLikeHandwritingNoise(input: {
+  words: readonly OcrWord[]
+  confidence: number
+  redInkRatio?: number
+}): boolean {
+  const words = input.words.filter((word) => (word.text.match(/[\p{L}\p{N}]/gu)?.length ?? 0) >= 2)
+  if (words.length < 8) return false
+  const low = words.filter((word) => word.confidence < LOW_WORD_CONFIDENCE).length / words.length
+  const redInk = (input.redInkRatio ?? 0) >= RED_INK_RATIO
+  return low >= 0.3 || (redInk && (low >= 0.12 || input.confidence < 75))
+}
+
+function wordsOf(blocks: OcrBlocks[] | null | undefined): OcrWord[] {
+  const out: OcrWord[] = []
+  for (const block of blocks ?? [])
+    for (const paragraph of block.paragraphs ?? [])
+      for (const line of paragraph.lines ?? [])
+        for (const word of line.words ?? [])
+          if (typeof word.text === 'string' && typeof word.confidence === 'number') out.push(word)
+  return out
+}
+
+/**
+ * Share of strongly red pixels in the picture (a marker's red pen), sampled on
+ * a small copy. Browser-only: returns `undefined` where images cannot be
+ * decoded or drawn (tests, old browsers), which simply skips the signal.
+ */
+export async function estimateRedInkRatio(blob: Blob): Promise<number | undefined> {
+  try {
+    if (typeof createImageBitmap !== 'function' || typeof OffscreenCanvas === 'undefined')
+      return undefined
+    const bitmap = await createImageBitmap(blob)
+    const scale = Math.min(1, 400 / Math.max(bitmap.width, bitmap.height))
+    const width = Math.max(1, Math.round(bitmap.width * scale))
+    const height = Math.max(1, Math.round(bitmap.height * scale))
+    const canvas = new OffscreenCanvas(width, height)
+    const context = canvas.getContext('2d')
+    if (!context) return undefined
+    context.drawImage(bitmap, 0, 0, width, height)
+    bitmap.close?.()
+    const { data } = context.getImageData(0, 0, width, height)
+    let red = 0
+    for (let i = 0; i < data.length; i += 4) {
+      const r = data[i]!
+      const g = data[i + 1]!
+      const b = data[i + 2]!
+      if (r > 150 && r - g > 70 && r - b > 70) red++
+    }
+    return red / (width * height)
+  } catch {
+    return undefined
+  }
 }
 
 const ZH_RANGE = /[\u4e00-\u9fff]/
@@ -88,6 +174,7 @@ export function looksLikeMisreadScript(text: string, confidence: number): boolea
 interface Recognized {
   text: string
   confidence: number
+  words: OcrWord[]
 }
 
 /**
@@ -113,11 +200,13 @@ export async function extractOcr(
     }
     worker = await tesseract.createWorker(first, 1, {})
     const read = async (chinese: boolean): Promise<Recognized> => {
-      const { data } = await worker!.recognize(blob)
+      // `blocks` gives per-word confidence, used to spot hand-writing.
+      const { data } = await worker!.recognize(blob, {}, { text: true, blocks: true })
       const raw = (data.text ?? '').trim()
       return {
         text: chinese ? tidyCjkSpacing(raw) : raw,
         confidence: typeof data.confidence === 'number' ? data.confidence : 0,
+        words: wordsOf(data.blocks),
       }
     }
     let best = await read(first.includes('chi_sim'))
@@ -131,7 +220,7 @@ export async function extractOcr(
       const chinese = await read(true)
       if (chinese.text && chinese.confidence > best.confidence) best = chinese
     }
-    const { text, confidence } = best
+    const { text, confidence, words } = best
     const warnings: string[] = []
     if (confidence < 60) {
       warnings.push(`Low OCR confidence: ${confidence.toFixed(1)}%`)
@@ -139,7 +228,18 @@ export async function extractOcr(
     if (looksLikeMath(text)) {
       warnings.push('Image appears to contain math symbols. Verify before relying on OCR text.')
     }
-    return { text, confidence, warnings, language: detectLanguage(text) }
+    const handwriting = looksLikeHandwritingNoise({
+      words,
+      confidence,
+      redInkRatio: await estimateRedInkRatio(blob),
+    })
+    return {
+      text,
+      confidence,
+      warnings,
+      language: detectLanguage(text),
+      ...(handwriting ? { handwriting } : {}),
+    }
   } catch (err) {
     throw new Error(`OCR failed: ${(err as Error).message}`)
   } finally {

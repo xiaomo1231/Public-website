@@ -36,7 +36,7 @@ import type {
   QuizGenerationOutput,
   GeneratedQuizQuestion as RawGeneratedQuizQuestion,
   QuizSystemPromptOptions,
-} from '@/infrastructure/ai/prompts/quiz-generator/v8'
+} from '@/infrastructure/ai/prompts/quiz-generator/v9'
 import {
   genderAnswerText,
   paradigmAnswerText,
@@ -72,7 +72,7 @@ import {
 import { DocumentRepository } from '@/entities/document/repository'
 import { examTopicsFor, planExamScopeEntries } from '@/entities/syllabus/examPlan'
 import { CourseContextRepository } from '@/entities/courseContext/repository'
-import { buildHabitsBlock } from '@/entities/questionHabits/types'
+import { buildHabitsBlock, professorConventions } from '@/entities/questionHabits/types'
 import { PracticeService, formatQuestionStyleContext } from './practiceService'
 import type { SourceReference } from '@/entities/courseAnalysis/types'
 import { logger } from '@/infrastructure/logger/logger'
@@ -83,12 +83,28 @@ import { ShortAnswerGrader, tooShortEvaluation } from './shortAnswerGrader'
 import { OralExamService } from './oralExamService'
 import { checkBlanksWithAi } from './fillBlankChecker'
 import { projectTargetLanguage } from './projectTargetLanguage'
+import { projectSigFigPolicy } from './projectGradingRules'
+import { isSigFigOnlyError } from '@/entities/question/answerDimensions'
 import { imbalances, parseEquation } from '@/infrastructure/chemistry/equation'
 import { isValidUnit } from '@/infrastructure/math/quantityAnswer'
 import { normalizeProgramOutput } from './answerEvaluationService'
 import type { SubjectInput } from '@/entities/project/types'
 import { UserRepository } from '@/entities/user/repository'
-import { shuffled } from '@/shared/lib/shuffle'
+import { isNoneOption, shuffled, shuffledOptions } from '@/shared/lib/shuffle'
+import { asSigFigCount } from '@/infrastructure/math/significantFigures'
+import {
+  asVectorComponents,
+  formatVectorSpec,
+  type VectorSpec,
+} from '@/infrastructure/math/vectorAnswer'
+import {
+  normalizeChemicalName,
+  parseFormulaAnswer,
+  type NomenclatureSpec,
+} from '@/infrastructure/chemistry/nomenclature'
+import { formatForces, isForceType, type ForceSpec } from '@/entities/question/forceList'
+import type { SigFigBasis } from '@/entities/question/answerDimensions'
+import type { ProfessorConvention } from '@/infrastructure/ai/prompts/quiz-generator/v9'
 import { DEFAULT_QUESTION_LANGUAGE, type QuestionLanguage } from '@/entities/user/types'
 
 /** Scoring points per short answer: enough to grade, few enough to stay distinct. */
@@ -222,12 +238,32 @@ export function quizLanguage(
 }
 
 /** A generated question after validation: language drills carry their checked data. */
-export type GeneratedQuizQuestion = RawGeneratedQuizQuestion & {
+export type GeneratedQuizQuestion = Omit<RawGeneratedQuizQuestion, 'sigFigs' | 'forces'> & {
   gender?: GenderNoun
   paradigm?: ParadigmTable
+  sigFigs?: number
+  sigFigsBasis?: SigFigBasis
+  vector?: VectorSpec
+  nomenclature?: NomenclatureSpec
+  forces?: ForceSpec[]
 }
 
-const LANGUAGE_DRILLS: QuestionType[] = ['article_gender', 'paradigm_table']
+/** A formula reduced for a "does the prompt show it" check. */
+function compactFormula(text: string): string {
+  return text
+    .replace(/\\ce\{([^}]*)\}/g, '$1')
+    .replace(/[\s$^{}_]/g, '')
+    .toLowerCase()
+}
+
+/** Types only some subjects offer (see `questionTypesForSubject`). */
+const SUBJECT_TYPES: QuestionType[] = [
+  'article_gender',
+  'paradigm_table',
+  'vector',
+  'nomenclature',
+  'force_list',
+]
 
 /**
  * The requested types a course may use: a language drill only where
@@ -237,7 +273,7 @@ const LANGUAGE_DRILLS: QuestionType[] = ['article_gender', 'paradigm_table']
 export function offeredQuizTypes(types: QuestionType[], subject: SubjectInput): QuestionType[] {
   const context = typeof subject === 'string' ? { subject } : subject
   const offered = questionTypesForSubject(context?.subject, context?.targetLanguage)
-  const kept = types.filter((type) => !LANGUAGE_DRILLS.includes(type) || offered.includes(type))
+  const kept = types.filter((type) => !SUBJECT_TYPES.includes(type) || offered.includes(type))
   return kept.length > 0 ? kept : [DEFAULT_QUESTION_TYPE]
 }
 
@@ -247,6 +283,26 @@ function drillPromptOptions(subject: SubjectInput): QuizSystemPromptOptions {
   if (context?.subject !== 'language') return {}
   const targetLanguage = 'targetLanguage' in context ? context.targetLanguage : undefined
   return { languageDrills: targetLanguage ? { targetLanguage } : {} }
+}
+
+/**
+ * Significant figures are described to chemistry and physics courses, and to
+ * any course whose professor grades them (habits profile); the final "none of
+ * the options" choice only when the professor uses it.
+ */
+function conventionPromptOptions(
+  subject: SubjectInput,
+  conventions: readonly string[] | undefined,
+): Pick<QuizSystemPromptOptions, 'sigFigs' | 'noneOfTheAbove'> {
+  const context = typeof subject === 'string' ? { subject } : subject
+  const sigFigs =
+    context?.subject === 'chemistry' ||
+    context?.subject === 'physics' ||
+    Boolean(conventions?.includes('sig_figs'))
+  return {
+    ...(sigFigs ? { sigFigs: true } : {}),
+    ...(conventions?.includes('none_of_above') ? { noneOfTheAbove: true } : {}),
+  }
 }
 
 /** Used when the model omits `type` entirely. */
@@ -597,6 +653,8 @@ export class QuizService {
         : undefined
       // 教授出题习惯 (「模仿教授出题」 on and not empty); absent otherwise.
       const professorHabits = buildHabitsBlock(courseContext?.questionHabits)
+      // Conventions the generator follows explicitly (final "none" option …).
+      const conventions = professorConventions(courseContext?.questionHabits)
       const preference =
         config.questionLanguage ??
         (await new UserRepository(this.db).get().catch(() => undefined))?.questionLanguage
@@ -617,6 +675,10 @@ export class QuizService {
         language: quizLanguage(preference, analysis.language),
         ...(professorStyleContext ? { professorStyleContext } : {}),
         ...(professorHabits ? { professorHabits } : {}),
+        ...(conventions.conventions.length
+          ? { professorConventions: conventions.conventions }
+          : {}),
+        ...(conventions.noneOptionLabel ? { noneOptionLabel: conventions.noneOptionLabel } : {}),
         updatedAt: Date.now(),
       }
       const withResume: Quiz = { ...quiz, resume }
@@ -766,11 +828,25 @@ export class QuizService {
         difficulty: entry.difficulty,
         prompt: question.prompt,
         // Models put the answer first; the order the student sees is random.
-        ...(question.options ? { options: shuffled(question.options) } : {}),
+        // A final "None of the options are correct" choice stays last.
+        ...(question.options ? { options: shuffledOptions(question.options) } : {}),
         correctAnswer: question.correctAnswer,
         ...(question.unit ? { unit: question.unit } : {}),
+        ...(question.sigFigs
+          ? {
+              sigFigs: question.sigFigs,
+              ...(question.sigFigsBasis ? { sigFigsBasis: question.sigFigsBasis } : {}),
+            }
+          : {}),
+        ...(question.vector ? { vector: question.vector } : {}),
+        ...(question.nomenclature ? { nomenclature: question.nomenclature } : {}),
+        ...(question.forces ? { forces: question.forces } : {}),
         ...(question.rubric?.length
-          ? { rubric: question.rubric.map((text, index) => ({ id: `p${index + 1}`, text })) }
+          ? {
+              rubric: question.rubric.map((text, index) => ({ id: `p${index + 1}`, text })),
+              // Written by the quiz generator, not the professor.
+              rubricSource: 'platform' as const,
+            }
           : {}),
         ...(question.orderItems?.length ? { orderItems: question.orderItems } : {}),
         ...(question.matchItems?.length ? { matchItems: question.matchItems } : {}),
@@ -799,6 +875,10 @@ export class QuizService {
           ? { professorStyleContext: resume.professorStyleContext }
           : {}),
         ...(resume.professorHabits ? { professorHabits: resume.professorHabits } : {}),
+        ...(resume.professorConventions?.length
+          ? { professorConventions: resume.professorConventions as ProfessorConvention[] }
+          : {}),
+        ...(resume.noneOptionLabel ? { noneOptionLabel: resume.noneOptionLabel } : {}),
       },
       subject,
       control,
@@ -1246,7 +1326,11 @@ export class QuizService {
       {
         role: 'system',
         content: prompts.subjectProfile.withSubject(
-          prompts.quizGenerator.buildSystemPrompt({ ...drillPromptOptions(subject), types }),
+          prompts.quizGenerator.buildSystemPrompt({
+            ...drillPromptOptions(subject),
+            ...conventionPromptOptions(subject, input.professorConventions),
+            types,
+          }),
           subject,
         ),
       },
@@ -1319,7 +1403,10 @@ export class QuizService {
         type === 'matching' ||
         type === 'fill_blank' ||
         type === 'article_gender' ||
-        type === 'paradigm_table'
+        type === 'paradigm_table' ||
+        type === 'vector' ||
+        type === 'nomenclature' ||
+        type === 'force_list'
       let rawAnswer = typeof q.correctAnswer === 'string' ? q.correctAnswer.trim() : ''
       // True/false answers arrive as "正确", "×", JSON booleans…; the grader
       // compares "true"/"false", so anything unreadable is dropped.
@@ -1336,7 +1423,9 @@ export class QuizService {
         const parsed = normalizeChoiceOptions(q.options)
         if (!parsed) continue
         // A giveaway answer is dropped; the batch tops the gap up.
-        if (answerStandsOut(parsed)) {
+        // (A correct final "None of the options are correct" is long by nature.)
+        const noneIsAnswer = parsed.some((o) => o.isCorrect && isNoneOption(o.label))
+        if (!noneIsAnswer && answerStandsOut(parsed.filter((o) => !isNoneOption(o.label)))) {
           logger.debug('Dropped a choice question whose answer stands out by length')
           continue
         }
@@ -1364,6 +1453,76 @@ export class QuizService {
       if (type === 'numeric' && typeof q.unit === 'string' && q.unit.trim()) {
         const candidate = q.unit.trim()
         if (isValidUnit(candidate) && Number.isFinite(Number(correctAnswer))) unit = candidate
+      }
+      // Significant figures: an integer 1–10 on a numeric answer; the stored
+      // reference is written with exactly that many (1500 → 1.50e+3).
+      let sigFigs: number | undefined
+      let sigFigsBasis: SigFigBasis | undefined
+      if (type === 'numeric') {
+        sigFigs = asSigFigCount(q.sigFigs)
+        const value = Number(correctAnswer)
+        if (sigFigs && Number.isFinite(value) && value !== 0) {
+          correctAnswer = String(value.toPrecision(sigFigs)).replace('e+', 'e')
+          sigFigsBasis = q.sigFigsBasis === 'stated' ? 'stated' : 'data'
+        } else sigFigs = undefined
+      }
+      // Vector: 2 or 3 numeric components and an optional valid unit.
+      let vector: VectorSpec | undefined
+      if (type === 'vector') {
+        const components = asVectorComponents(q.components)
+        const unitText = typeof q.unit === 'string' ? q.unit.trim() : ''
+        if (!components || (unitText && !isValidUnit(unitText))) continue
+        if (components.every((value) => value === 0)) continue
+        vector = { components, ...(unitText ? { unit: unitText } : {}) }
+        correctAnswer = formatVectorSpec(vector)
+      }
+      // Nomenclature: the formula must parse; the asked-for side must not be
+      // printed in the prompt.
+      let nomenclature: NomenclatureSpec | undefined
+      if (type === 'nomenclature') {
+        const direction =
+          q.direction === 'formula_to_name' || q.direction === 'name_to_formula'
+            ? q.direction
+            : null
+        const formula =
+          typeof q.formula === 'string' ? q.formula.replace(/\\ce\{([^}]*)\}/g, '$1').trim() : ''
+        const names = (Array.isArray(q.names) ? q.names : [])
+          .filter((name): name is string => typeof name === 'string')
+          .map((name) => name.replace(/\s+/g, ' ').trim())
+          .filter((name) => name && name.length <= 120)
+          .slice(0, 6)
+        if (!direction || !formula || names.length === 0 || !parseFormulaAnswer(formula)) continue
+        const giveaway =
+          direction === 'formula_to_name'
+            ? normalizeChemicalName(q.prompt).includes(normalizeChemicalName(names[0]!))
+            : compactFormula(q.prompt).includes(compactFormula(formula))
+        if (giveaway) {
+          logger.debug('Dropped a nomenclature question that shows its answer')
+          continue
+        }
+        nomenclature = { direction, formula, names }
+        correctAnswer = direction === 'name_to_formula' ? formula : names[0]!
+      }
+      // Free-body diagram: 1–8 forces of known types with finite directions.
+      let forces: ForceSpec[] | undefined
+      if (type === 'force_list') {
+        const raw = Array.isArray(q.forces) ? q.forces : []
+        forces = raw.flatMap((force) => {
+          const angle = Number(force?.angle)
+          const magnitude = force?.magnitude == null ? undefined : Number(force.magnitude)
+          if (!isForceType(force?.type) || !Number.isFinite(angle)) return []
+          return [
+            {
+              type: force.type,
+              angle: ((angle % 360) + 360) % 360,
+              ...(magnitude !== undefined && Number.isFinite(magnitude) && magnitude >= 0
+                ? { magnitude }
+                : {}),
+            },
+          ]
+        })
+        if (forces.length === 0 || forces.length > 8 || forces.length !== raw.length) continue
+        correctAnswer = formatForces(forces)
       }
       // A short answer is scored by its points, so it needs 2–6 distinct
       // ones; with fewer it cannot be graded fairly and is dropped.
@@ -1494,6 +1653,10 @@ export class QuizService {
         ...(options ? { options } : {}),
         correctAnswer,
         ...(unit ? { unit } : {}),
+        ...(sigFigs ? { sigFigs, ...(sigFigsBasis ? { sigFigsBasis } : {}) } : {}),
+        ...(vector ? { vector } : {}),
+        ...(nomenclature ? { nomenclature } : {}),
+        ...(forces ? { forces } : {}),
         ...(rubric ? { rubric } : {}),
         ...(orderItems ? { orderItems } : {}),
         ...(matchItems ? { matchItems } : {}),
@@ -1614,11 +1777,19 @@ export class QuizService {
             userAnswer,
             question.type === 'fill_blank' || question.type === 'paradigm_table'
               ? { targetLanguage: await projectTargetLanguage(quiz.projectId, this.db) }
-              : {},
+              : question.type === 'numeric' && question.sigFigs
+                ? { sigFigPolicy: await projectSigFigPolicy(quiz.projectId, this.db) }
+                : {},
           )
     // Blanks that did not match locally may be exact synonyms: the AI says
-    // which (only when one is configured); the score stays local.
-    if (question.type === 'fill_blank' && opts.gradeShortAnswer && evaluation.isCorrect === false) {
+    // which (only when one is configured); the score stays local. A chemical
+    // name (nomenclature) is checked the same way.
+    if (
+      (question.type === 'fill_blank' || question.type === 'nomenclature') &&
+      opts.gradeShortAnswer &&
+      evaluation.isCorrect === false &&
+      evaluation.blanks?.length
+    ) {
       evaluation = await checkBlanksWithAi(
         this.ai,
         question,
@@ -1649,8 +1820,9 @@ export class QuizService {
     await this.attempts.add(attempt)
     await this.mastery.record(attempt)
 
-    // Wrong answers flow into the mistake book automatically.
-    if (evaluation.isCorrect === false && this.mistakes) {
+    // Wrong answers flow into the mistake book automatically — and so does a
+    // significant-figure slip the course rule did not deduct for.
+    if ((evaluation.isCorrect === false || isSigFigOnlyError(evaluation)) && this.mistakes) {
       try {
         await this.mistakes.recordFromAttempt(attempt, question)
       } catch (err) {

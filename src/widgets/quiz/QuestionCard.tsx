@@ -9,6 +9,9 @@ import { RichText } from '@/shared/ui/RichText'
 import { AnswerInput } from './AnswerInput'
 import { QuestionSource } from './QuestionSource'
 import { ShortAnswerFeedback } from './ShortAnswerFeedback'
+import { AnswerDimensionsView } from './AnswerDimensionsView'
+import { QuestionOriginBadge } from '@/shared/ui/QuestionOriginBadge'
+import { quizQuestionOrigin, rubricSourceOf } from '@/entities/question/origin'
 import { isKeyboardChoice, keyboardKeysLabel, useQuizKeyboard } from './quizKeyboard'
 import { cn } from '@/shared/lib/utils'
 import { difficultyLabelKey } from '@/infrastructure/ai/prompts/types'
@@ -71,11 +74,9 @@ export function QuestionCard({
         </span>
         <span className={META_CELL}>{t(difficultyLabelKey(difficulty))}</span>
         <span className={META_CELL}>{t(QUESTION_TYPE_LABEL_KEYS[question.type])}</span>
-        {question.origin === 'ai_without_source' && (
-          <span className={cn(META_CELL, 'text-amber-700 dark:text-amber-400')}>
-            {t('question.aiWithoutSource')}
-          </span>
-        )}
+        <span className={META_CELL}>
+          <QuestionOriginBadge origin={quizQuestionOrigin(question)} />
+        </span>
         {question.knowledgePoint && (
           <span className={cn(META_CELL, 'min-w-0 max-w-full truncate lab:ml-auto lab:border-r-0')}>
             {question.knowledgePoint}
@@ -115,6 +116,7 @@ export function QuestionCard({
         {answered && evaluation && question.type === 'short_answer' ? (
           <ShortAnswerFeedback
             evaluation={evaluation}
+            rubricSource={rubricSourceOf(question.rubricSource)}
             {...(onDispute ? { onDispute } : {})}
             {...(disputing !== undefined ? { disputing } : {})}
           />
@@ -232,7 +234,10 @@ function EvaluationBox({ evaluation }: { evaluation: QuestionEvaluation }): JSX.
         evaluation.method === 'match_items' ||
         evaluation.method === 'blank_match' ||
         evaluation.method === 'article_gender' ||
-        evaluation.method === 'paradigm_cells') &&
+        evaluation.method === 'paradigm_cells' ||
+        evaluation.method === 'force_list' ||
+        // A significant-figure deduction under the course rule.
+        evaluation.sigFigRule?.deducted === true) &&
         evaluation.score &&
         evaluation.score.total > 0 && (
           <p className="data-num text-xs font-medium">
@@ -289,6 +294,7 @@ function EvaluationBox({ evaluation }: { evaluation: QuestionEvaluation }): JSX.
         </p>
       )}
       {evaluation.note && <p className="text-xs text-muted-foreground">{evaluation.note}</p>}
+      <AnswerDimensionsView evaluation={evaluation} />
       {evaluation.explanation && <p>{evaluation.explanation}</p>}
       {isCorrect !== true &&
         evaluation.expected &&

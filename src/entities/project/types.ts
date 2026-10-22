@@ -38,6 +38,7 @@ export interface SubjectContext {
 export type SubjectInput = Subject | SubjectContext | undefined
 
 import type { TranslationKey } from '@/i18n/types'
+import type { SigFigPolicy } from '@/entities/question/answerDimensions'
 
 export const SUBJECT_LABEL_KEYS: Record<Subject, TranslationKey> = {
   calculus: 'subject.calculus',
@@ -67,6 +68,12 @@ export interface Project {
    * course materials (see `resolveExamStyle`).
    */
   examStyle?: ExamStyle
+  /**
+   * 「有效数字评分规则」: how an answer with the right value and unit but the
+   * wrong significant figures counts. Unset ⇒ hint only, no deduction, as a
+   * platform rule (`DEFAULT_SIG_FIG_POLICY`).
+   */
+  sigFigPolicy?: SigFigPolicy
   description?: string
   createdAt: number
   updatedAt: number
@@ -87,6 +94,8 @@ export interface UpdateProjectInput {
   targetLanguage?: string | null
   /** `null` clears the field (back to the inferred default). */
   examStyle?: ExamStyle | null
+  /** `null` clears the rule (back to the platform default). */
+  sigFigPolicy?: SigFigPolicy | null
   description?: string
 }
 

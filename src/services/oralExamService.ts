@@ -413,6 +413,8 @@ export class OralExamService {
           hints: [],
           sourceRefs: item.sourceRefs,
           ...(draw.aiOnly ? { origin: 'ai_without_source' as const } : {}),
+          // The examiner's scoring points are written by the platform.
+          rubricSource: 'platform' as const,
           promptVersion: ORAL_PROMPT_VERSION,
         }
         inputs.push({

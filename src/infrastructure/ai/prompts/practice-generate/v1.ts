@@ -32,6 +32,11 @@ export interface PracticeSlotInput {
   integrative?: boolean
   /** A previous attempt failed review for this reason (write a different one). */
   rejected?: string
+  /**
+   * 错题跟进: what the new question must exercise (the student's earlier error,
+   * e.g. units or significant figures). Absent: the prompt is unchanged.
+   */
+  focus?: string
 }
 
 export function buildSystemPrompt(): string {
@@ -90,6 +95,7 @@ export function buildUserPrompt(input: PracticeGenerateInput): string {
     if (slot.knowledgePoints.length)
       lines.push(`Knowledge points: ${slot.knowledgePoints.join('; ')}`)
     if (slot.rejected) lines.push(`Rejected before: ${slot.rejected}`)
+    if (slot.focus) lines.push(`Focus: ${slot.focus}`)
     return lines.join('\n')
   })
   return [

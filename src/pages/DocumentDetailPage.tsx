@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Link, useNavigate, useParams } from 'react-router-dom'
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import {
   AlertCircle,
   ArrowLeft,
@@ -19,6 +19,13 @@ import type { DocumentDeleteImpact } from '@/services/documentService'
 import { getDb } from '@/infrastructure/db/database'
 import { toast } from '@/features/toast/toastStore'
 import { Badge } from '@/shared/ui/Badge'
+import {
+  EVAL_ROLES,
+  EVAL_ROLE_HINT_KEYS,
+  EVAL_ROLE_LABEL_KEYS,
+  resolveEvalRole,
+} from '@/entities/evaluation/evalRole'
+import { HomeworkProofreadService } from '@/services/homeworkProofreadService'
 import { Button } from '@/shared/ui/Button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/shared/ui/Card'
 import { ConfirmDialog } from '@/shared/ui/ConfirmDialog'
@@ -62,6 +69,10 @@ export function DocumentDetailPage(): JSX.Element {
   const [chunksLoading, setChunksLoading] = useState(true)
   const [chunksError, setChunksError] = useState<string | null>(null)
   const [search, setSearch] = useState('')
+  // `?page=n` (from 错题跟进 / a formula sheet link) shows that page's chunks first.
+  const [searchParams, setSearchParams] = useSearchParams()
+  const pageParam = Number(searchParams.get('page'))
+  const pageFilter = Number.isInteger(pageParam) && pageParam > 0 ? pageParam : null
 
   useEffect(() => {
     if (!did) return
@@ -96,11 +107,15 @@ export function DocumentDetailPage(): JSX.Element {
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()
+    if (!q && pageFilter !== null) {
+      const onPage = chunks.filter((c) => c.pageNumber === pageFilter)
+      if (onPage.length > 0) return onPage
+    }
     if (!q) return chunks
     return chunks.filter(
       (c) => c.text.toLowerCase().includes(q) || c.sourceReference.toLowerCase().includes(q),
     )
-  }, [chunks, search])
+  }, [chunks, search, pageFilter])
 
   if (!projectId) return <div />
 
@@ -238,14 +253,41 @@ export function DocumentDetailPage(): JSX.Element {
         description={t('documentDetail.subtitle')}
         nav={<ProjectFlowNav projectId={projectId} active="home" />}
         actions={
-          <Button
-            variant="destructive"
-            onClick={() => void requestDelete()}
-            disabled={checkingDelete}
-          >
-            <Trash2 className="h-4 w-4" />
-            {t('common.delete')}
-          </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            {/* 留作检验: an independent document never reaches the AI as course context. */}
+            <label className="flex items-center gap-2 text-sm">
+              <span className="text-muted-foreground">{t('evalRole.label')}</span>
+              <select
+                value={resolveEvalRole(document.evalRole) ?? ''}
+                title={
+                  resolveEvalRole(document.evalRole)
+                    ? t(EVAL_ROLE_HINT_KEYS[resolveEvalRole(document.evalRole)!])
+                    : t('evalRole.noneHint')
+                }
+                onChange={(event) =>
+                  void new HomeworkProofreadService()
+                    .setDocumentEvalRole(document.id, resolveEvalRole(event.target.value))
+                    .then(() => refresh())
+                }
+                className="focus-ring h-11 rounded-lg border border-input bg-background px-2 text-sm lab:rounded-sm"
+              >
+                <option value="">{t('evalRole.none')}</option>
+                {EVAL_ROLES.map((role) => (
+                  <option key={role} value={role}>
+                    {t(EVAL_ROLE_LABEL_KEYS[role])}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <Button
+              variant="destructive"
+              onClick={() => void requestDelete()}
+              disabled={checkingDelete}
+            >
+              <Trash2 className="h-4 w-4" />
+              {t('common.delete')}
+            </Button>
+          </div>
         }
       />
       <PageContent>
@@ -271,6 +313,28 @@ export function DocumentDetailPage(): JSX.Element {
                 {filtered.length} / {chunks.length}
               </Badge>
             </div>
+
+            {pageFilter !== null && !search.trim() && filtered.length < chunks.length && (
+              <div className="flex flex-wrap items-center gap-2 text-sm" data-page-filter>
+                <span>{t('documentDetail.pageFilter', { page: pageFilter })}</span>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() =>
+                    setSearchParams(
+                      (prev) => {
+                        const next = new URLSearchParams(prev)
+                        next.delete('page')
+                        return next
+                      },
+                      { replace: true },
+                    )
+                  }
+                >
+                  {t('documentDetail.showAllPages')}
+                </Button>
+              </div>
+            )}
 
             {chunksError && (
               <ErrorState title={t('documentDetail.chunksFailed')} description={chunksError} />

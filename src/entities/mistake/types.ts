@@ -2,6 +2,7 @@ import type { DifficultyLevel } from '@/infrastructure/ai/prompts/types'
 import type { QuestionOption } from '@/entities/question/types'
 import type { SourceReference } from '@/entities/courseAnalysis/types'
 import type { TranslationKey } from '@/i18n/types'
+import type { ErrorDimension, MistakeFollowUp, MistakeOrigin } from './followUp'
 
 /**
  * Mistake categories. Deliberately excludes a "careless" label — the system
@@ -125,6 +126,17 @@ export interface Mistake {
   lastOccurredAt?: number
   resolvedAt?: number
   archivedAt?: number
+  /**
+   * Where the wrong answer was given. Absent on rows recorded before it
+   * existed (quiz / professor practice) and on hand-added ones.
+   */
+  origin?: MistakeOrigin
+  /** Homework-based mistakes (practice set / mock exam): the set of `questionId`. */
+  homeworkSetId?: string
+  /** What kind of error the grader saw (unit, significant figures, sign, …), when it said. */
+  errorDimension?: ErrorDimension
+  /** 错题跟进: spaced re-tests with new variants (see `followUp.ts`). */
+  followUp?: MistakeFollowUp
 }
 
 export interface AddMistakeInput {
@@ -143,6 +155,10 @@ export interface AddMistakeInput {
   sourceRefs?: SourceReference[]
   mistakeType?: MistakeType
   attemptIds?: string[]
+  origin?: MistakeOrigin
+  homeworkSetId?: string
+  errorDimension?: ErrorDimension
+  followUp?: MistakeFollowUp
 }
 
 export interface MistakeFilter {

@@ -57,7 +57,21 @@ export class QuestionRepository {
         ...(options ? { options } : {}),
         correctAnswer: input.correctAnswer,
         ...(input.type === 'numeric' && input.unit ? { unit: input.unit } : {}),
+        ...(input.type === 'numeric' && input.sigFigs
+          ? {
+              sigFigs: input.sigFigs,
+              ...(input.sigFigsBasis ? { sigFigsBasis: input.sigFigsBasis } : {}),
+            }
+          : {}),
+        ...(input.type === 'vector' && input.vector ? { vector: input.vector } : {}),
+        ...(input.type === 'nomenclature' && input.nomenclature
+          ? { nomenclature: input.nomenclature }
+          : {}),
+        ...(input.type === 'force_list' && input.forces?.length ? { forces: input.forces } : {}),
         ...(input.type === 'short_answer' && input.rubric?.length ? { rubric: input.rubric } : {}),
+        ...(input.type === 'short_answer' && input.rubric?.length && input.rubricSource
+          ? { rubricSource: input.rubricSource }
+          : {}),
         ...(input.type === 'ordering' && input.orderItems?.length
           ? { orderItems: input.orderItems }
           : {}),

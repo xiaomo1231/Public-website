@@ -10,6 +10,7 @@ import { expressionQuickItems } from '@/services/quickInputs'
 import { OrderingInput } from './OrderingInput'
 import { FillBlankInput, MatchingInput, MultipleSelectInput } from './ExamFormatInputs'
 import { ArticleGenderInput, ParadigmTableInput } from './LanguageDrillInputs'
+import { ForceListInput, NomenclatureInput, VectorInput } from './ScienceAnswerInputs'
 import {
   gradedOptionStatusKey,
   optionKeyClass,
@@ -80,6 +81,35 @@ export function AnswerInput({
         />
         <p className="text-xs text-muted-foreground">{t('answerInput.quantityHint')}</p>
       </div>
+    )
+  }
+  if (question.type === 'vector') {
+    return (
+      <VectorInput
+        question={question}
+        value={value}
+        onChange={onChange}
+        disabled={disabled}
+        {...(subject ? { subject } : {})}
+        {...(onSubmit ? { onSubmit } : {})}
+      />
+    )
+  }
+  if (question.type === 'nomenclature') {
+    return (
+      <NomenclatureInput
+        question={question}
+        value={value}
+        onChange={onChange}
+        disabled={disabled}
+        {...(subject ? { subject } : {})}
+        {...(onSubmit ? { onSubmit } : {})}
+      />
+    )
+  }
+  if (question.type === 'force_list') {
+    return (
+      <ForceListInput question={question} value={value} onChange={onChange} disabled={disabled} />
     )
   }
   if (question.type === 'code_output') {

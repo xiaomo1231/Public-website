@@ -1,4 +1,5 @@
 import type { AIService } from './aiService'
+import { hasPromptCorrection } from '@/entities/homework/proofread'
 import type { AppDatabase } from '@/infrastructure/db/database'
 import { getDb } from '@/infrastructure/db/database'
 import type { ChatMessage } from '@/infrastructure/ai/types'
@@ -16,6 +17,7 @@ import { TimeoutError as AITimeoutError } from '@/infrastructure/ai/errors'
 import { buildCandidateChunkLabel } from '@/entities/courseContent/topicDependency'
 import { resolveMaterialType, type Document } from '@/entities/document/types'
 import { renderPdfPageImage } from '@/infrastructure/files/pdfExtractor'
+import { detectExamMinutes } from '@/entities/exam/paper'
 import { splitHomeworkSubparts } from '@/entities/homework/splitQuestion'
 import type { DocumentChunk } from '@/entities/chunk/types'
 import type { SourceReference } from '@/entities/courseAnalysis/types'
@@ -96,6 +98,7 @@ import {
   isPracticeSet,
 } from '@/entities/homework/types'
 import { checkPracticeAnswer } from '@/entities/homework/practice/verify'
+import { practiceSigFigFeedback, projectSigFigPolicy } from './projectGradingRules'
 import { recordPracticeCheck } from './practiceLearning'
 import {
   ANALYZER_OUTPUT_CEILING,
@@ -356,17 +359,31 @@ export class HomeworkService {
             : null
     let check: HomeworkAnswerCheck
     if (local) {
+      // Value, unit and significant figures of parts that require them; a
+      // sig-fig slip counts as the course rule says (never decided silently).
+      const sigFig =
+        'dimensions' in local && local.dimensions.some(Boolean)
+          ? practiceSigFigFeedback(
+              local.dimensions,
+              await projectSigFigPolicy(question.projectId, this.db),
+              question.practice?.parts.map((part) => part.label) ?? [],
+            )
+          : { notes: [], deducted: false }
+      const verdict = sigFig.deducted && local.verdict === 'correct' ? 'partial' : local.verdict
       check = {
         method: 'local',
-        verdict: local.verdict,
+        verdict,
         expectedAnswer: local.expectedAnswer,
-        feedback: t(
-          local.verdict === 'correct'
-            ? 'homework.check.objectiveCorrect'
-            : local.verdict === 'partial'
-              ? 'practiceSet.check.partial'
-              : 'homework.check.objectiveIncorrect',
-        ),
+        feedback: [
+          t(
+            verdict === 'correct'
+              ? 'homework.check.objectiveCorrect'
+              : verdict === 'partial'
+                ? 'practiceSet.check.partial'
+                : 'homework.check.objectiveIncorrect',
+          ),
+          ...sigFig.notes,
+        ].join(' '),
         referenceKind: reference.kind,
         inputHash,
         language,
@@ -447,6 +464,67 @@ export class HomeworkService {
     // Practice-set answers count toward mastery and the mistake book.
     if (saved.practice) await recordPracticeCheck(this.db, saved, set.title, submittedDraft, check)
     return check
+  }
+
+  /**
+   * 检验网站 (批改学生作答): grade a sample answer against the question's
+   * confirmed reference exactly as 「检查答案」 does (local objective check
+   * first, otherwise the AI check), WITHOUT saving anything or touching the
+   * student's draft. Images are not sent.
+   */
+  async gradeSample(
+    question: HomeworkQuestion,
+    answer: string,
+    language: 'zh' | 'en',
+    options: HomeworkRequestOptions = {},
+  ): Promise<Pick<HomeworkAnswerCheck, 'verdict' | 'method' | 'similarityPercent'>> {
+    const submitted = answer.trim()
+    if (!submitted) throw new AppError(t('homework.check.empty'), 'VALIDATION_ERROR')
+    const reference = answerReference(question)
+    if (!reference) throw new AppError(t('homework.check.noReference'), 'VALIDATION_ERROR')
+    const local = question.practice
+      ? checkPracticeAnswer(question.practice, submitted)
+      : reference.kind === 'professor'
+        ? checkObjectiveAnswer(question, reference.text, submitted)
+        : null
+    if (local) return { verdict: local.verdict, method: 'local' }
+    const ai = this.requireAI()
+    const subject = await loadProjectSubjectContext(question.projectId, this.db)
+    const messages: ChatMessage[] = [
+      {
+        role: 'system',
+        content: prompts.subjectProfile.withSubject(
+          prompts.homeworkAnswerCheck.buildSystemPrompt(),
+          subject,
+        ),
+      },
+      {
+        role: 'user',
+        content: prompts.homeworkAnswerCheck.buildUserPrompt({
+          question: question.prompt,
+          studentAnswer: submitted,
+          referenceAnswer: reference.text,
+          referenceKind: reference.kind,
+          sourceText: await this.promptSource(question),
+          language,
+        }),
+      },
+    ]
+    const result = await ai.streamJSON<unknown>(messages, undefined, {
+      maxTokens: planQuestionOutputBudget(
+        messages[0]!.content.length + messages[1]!.content.length,
+        ai.maxOutputTokens,
+      ),
+      ...(options.signal ? { signal: options.signal } : {}),
+    })
+    const assessed = prompts.homeworkAnswerCheck.normalizeAssessment(result.data)
+    if (!assessed) throw new AppError(t('homework.check.invalid'), 'INVALID_RESPONSE')
+    if (assessed.status === 'insufficient') return { verdict: 'uncertain', method: 'ai' }
+    return {
+      verdict: assessed.verdict,
+      method: 'ai',
+      similarityPercent: assessed.similarityPercent,
+    }
   }
 
   /** One source-grounded, cached teaching review for the current question. */
@@ -579,7 +657,9 @@ export class HomeworkService {
     control?: GenerationControl,
   ): Promise<HomeworkSet> {
     const document = await this.loadDocument(documentId)
-    if (resolveMaterialType(document.materialType) !== 'homework') {
+    const role = resolveMaterialType(document.materialType)
+    // A past exam paper is recognised exactly like an assignment (kind 'exam').
+    if (role !== 'homework' && role !== 'past_exam') {
       throw new AppError(t('homework.notHomework'), 'NOT_HOMEWORK')
     }
     const { set, created } = await this.ensureSetForDocument(document)
@@ -599,6 +679,16 @@ export class HomeworkService {
     const now = Date.now()
     let set: HomeworkSet | undefined
     let created = false
+    const exam = resolveMaterialType(document.materialType) === 'past_exam'
+    // The paper's stated time, read locally from its first pages.
+    const detectedMinutes = exam
+      ? detectExamMinutes(
+          (await this.chunks.listByDocument(document.id))
+            .slice(0, 12)
+            .map((chunk) => chunk.text)
+            .join('\n'),
+        )
+      : undefined
     await this.db.transaction('rw', this.db.homeworkSets, async () => {
       // Practice sets share the document but are not its assignment.
       const existing = (await this.homework.listSetsByDocument(document.id)).filter(
@@ -619,6 +709,12 @@ export class HomeworkService {
         questionCount: 0,
         promptVersion: HOMEWORK_ANALYZER_PROMPT_VERSION,
         progress: { stage: 'identifying', completed: 0, updatedAt: now },
+        ...(exam
+          ? {
+              kind: 'exam' as const,
+              exam: detectedMinutes !== undefined ? { detectedMinutes } : {},
+            }
+          : {}),
         createdAt: now,
         updatedAt: now,
       }
@@ -1912,14 +2008,16 @@ export class HomeworkService {
             // Reuse the archived row's id and every student field; only the place
             // in the walkthrough and (if the wording moved) the AI content change.
             const prior = retiredRows[revived.oldIndex]!
-            const unchanged = prior.contentFingerprint === fingerprint
+            // Text the student corrected in 导入校对 outlives a re-read.
+            const kept = hasPromptCorrection(prior)
+            const unchanged = kept || prior.contentFingerprint === fingerprint
             const next: HomeworkQuestion = {
               ...prior,
               order: index,
-              number: question.number,
-              prompt: question.prompt,
+              number: kept ? prior.number : question.number,
+              prompt: kept ? prior.prompt : question.prompt,
               sourceRefs: question.sourceRefs,
-              contentFingerprint: fingerprint,
+              contentFingerprint: kept ? prior.contentFingerprint : fingerprint,
               retired: false,
               retiredAt: undefined,
               answerStatus: answerKeptForMatch(prior, question.number),
@@ -1938,14 +2036,16 @@ export class HomeworkService {
           const pair = activePairByNew.get(index)
           if (pair) {
             const prior = active[pair.oldIndex]!
-            const unchanged = prior.contentFingerprint === fingerprint
+            // Text the student corrected in 导入校对 outlives a re-read.
+            const kept = hasPromptCorrection(prior)
+            const unchanged = kept || prior.contentFingerprint === fingerprint
             const next: HomeworkQuestion = {
               ...prior,
               order: index,
-              number: question.number,
-              prompt: question.prompt,
+              number: kept ? prior.number : question.number,
+              prompt: kept ? prior.prompt : question.prompt,
               sourceRefs: question.sourceRefs,
-              contentFingerprint: fingerprint,
+              contentFingerprint: kept ? prior.contentFingerprint : fingerprint,
               answerStatus: answerKeptForMatch(prior, question.number),
               updatedAt: now,
             }
@@ -2330,6 +2430,10 @@ export class HomeworkService {
   }
 
   private async sourceText(question: HomeworkQuestion): Promise<string> {
+    // A question corrected in 导入校对: the corrected text is authoritative —
+    // the recognised source passage still holds the errors that were fixed,
+    // so it is not sent next to it.
+    if (hasPromptCorrection(question)) return question.prompt
     const ids = new Set(
       groundedChunkIds({ prompt: question.prompt, sourceRefs: question.sourceRefs }),
     )

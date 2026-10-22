@@ -1,5 +1,6 @@
 import type { TranslationKey } from '@/i18n/types'
 import type { SyllabusData } from '@/entities/syllabus/types'
+import type { EvalRole } from '@/entities/evaluation/evalRole'
 
 export type DocumentType = 'pdf' | 'docx' | 'pptx' | 'image' | 'text'
 
@@ -36,6 +37,13 @@ export type LearningMaterialType =
    * like an answer key it is reference only — never a knowledge source.
    */
   | 'walkthrough_import'
+  /**
+   * A past exam paper or mock paper (往年试卷 / 模拟卷). Its questions are
+   * recognised like an assignment (stored as a `HomeworkSet` with
+   * `kind: 'exam'`) for 模拟考试 and 题型与覆盖分析; like an answer key it is
+   * reference only — never a knowledge source.
+   */
+  | 'past_exam'
 
 export const LEARNING_MATERIAL_TYPES: readonly LearningMaterialType[] = [
   'textbook',
@@ -46,6 +54,7 @@ export const LEARNING_MATERIAL_TYPES: readonly LearningMaterialType[] = [
   'homework_answer',
   'syllabus',
   'walkthrough_import',
+  'past_exam',
 ]
 
 /**
@@ -55,7 +64,12 @@ export const LEARNING_MATERIAL_TYPES: readonly LearningMaterialType[] = [
  */
 export function isReferenceOnlyMaterial(value: unknown): boolean {
   const type = resolveMaterialType(value)
-  return type === 'homework_answer' || type === 'syllabus' || type === 'walkthrough_import'
+  return (
+    type === 'homework_answer' ||
+    type === 'syllabus' ||
+    type === 'walkthrough_import' ||
+    type === 'past_exam'
+  )
 }
 
 /**
@@ -138,6 +152,12 @@ export interface Document {
    * and restored with the document.
    */
   syllabus?: SyllabusData
+  /**
+   * 留作检验 role (see `entities/evaluation/evalRole.ts`). `independent`
+   * documents are excluded from every AI context; the role is copied onto the
+   * chunks (`DocumentChunk.evalRole`) so chunk filters need no join.
+   */
+  evalRole?: EvalRole
 }
 
 export interface DocumentBlobRow {

@@ -5,6 +5,7 @@ import type {
 } from '@/entities/document/types'
 import type { DocumentChunk, NewChunkInput } from '@/entities/chunk/types'
 import { buildSourceReference } from '@/entities/chunk/types'
+import { mergeLayoutWarnings, type LayoutWarning } from '@/entities/chunk/layoutWarnings'
 
 /**
  * Generic text chunker.
@@ -19,6 +20,7 @@ interface ChunkLine {
   text: string
   pageNumber?: number
   section?: string
+  layoutWarnings?: LayoutWarning[]
 }
 
 /** What joins a sentence to the previous one: a line break, a space, or nothing (CJK). */
@@ -187,6 +189,8 @@ function pack(lines: ChunkLine[]): ChunkLine[] {
       buffer.text.length + line.text.length + 1 <= MAX_CHUNK_CHARS
     ) {
       buffer.text += '\n' + line.text
+      const merged = mergeLayoutWarnings(buffer.layoutWarnings, line.layoutWarnings)
+      if (merged) buffer.layoutWarnings = merged
     } else {
       if (buffer) out.push(buffer)
       buffer = { ...line }
@@ -240,16 +244,45 @@ export interface ChunkerContext {
 
 export function chunksFromPdf(
   ctx: ChunkerContext,
-  pages: Array<{ pageNumber: number; text: string; headings: Array<{ text: string }> }>,
+  pages: Array<{
+    pageNumber: number
+    text: string
+    headings: Array<{ text: string }>
+    /** Per `text.split('\n')` line: table block id and layout warnings. */
+    lineFlags?: Array<{ table?: number; warnings?: LayoutWarning[] } | null>
+  }>,
 ): NewChunkInput[] {
   const lines: ChunkLine[] = []
   let section: string | undefined
   for (const page of pages) {
-    const rawLines = page.text
-      .split(/\n+/)
-      .map((s) => s.trim())
-      .filter(Boolean)
-    for (const raw of rawLines) {
+    const split = page.text.split('\n')
+    // Flags are only trusted when they line up with the text exactly.
+    const flags = page.lineFlags?.length === split.length ? page.lineFlags : undefined
+    let table: { id: number; line: ChunkLine } | undefined
+    split.forEach((line, index) => {
+      const raw = line.trim()
+      if (!raw) return
+      const flag = flags?.[index] ?? undefined
+      const warnings = flag?.warnings?.length ? [...flag.warnings] : undefined
+      if (flag?.table !== undefined) {
+        // Rows of one Markdown table stay together as a single table line.
+        if (table && table.id === flag.table) {
+          table.line.text += '\n' + raw
+          table.line.layoutWarnings = mergeLayoutWarnings(table.line.layoutWarnings, warnings)
+          return
+        }
+        const tableLine: ChunkLine = {
+          contentType: 'table',
+          text: raw,
+          pageNumber: page.pageNumber,
+          section,
+          ...(warnings ? { layoutWarnings: warnings } : {}),
+        }
+        table = { id: flag.table, line: tableLine }
+        lines.push(tableLine)
+        return
+      }
+      table = undefined
       const isHeading = page.headings.some((h) => h.text === raw)
       // A heading updates the running section *as it is encountered*, so the
       // packer never merges a section's tail with the next section's body.
@@ -259,8 +292,9 @@ export function chunksFromPdf(
         text: raw,
         pageNumber: page.pageNumber,
         section,
+        ...(warnings ? { layoutWarnings: warnings } : {}),
       })
-    }
+    })
   }
   const packed = pack(lines)
   return packed.map((line, idx) => ({
@@ -269,6 +303,7 @@ export function chunksFromPdf(
     materialType: ctx.materialType,
     ...(line.pageNumber !== undefined ? { pageNumber: line.pageNumber } : {}),
     ...(line.section !== undefined ? { section: line.section } : {}),
+    ...(line.layoutWarnings?.length ? { layoutWarnings: line.layoutWarnings } : {}),
     contentType: line.contentType,
     text: line.text,
     sourceReference: buildSourceReference({

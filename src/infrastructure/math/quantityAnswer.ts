@@ -12,6 +12,9 @@ import { superscriptsToCaret } from './superscripts'
  * Outcomes are explicit so the UI can say *why*:
  *   correct            right value, compatible unit
  *   wrong-value        compatible unit, value outside tolerance
+ *   wrong-unit         the number matches the expected value, but it is
+ *                      written in another (convertible) unit, so converted
+ *                      it is wrong — e.g. 9.8 cm/s^2 for 9.8 m/s^2
  *   missing-unit       a bare number where a unit is required
  *   wrong-dimension    a unit of another kind (e.g. N for an energy)
  *   unreadable-unit    the unit text could not be understood → unverified
@@ -20,6 +23,7 @@ import { superscriptsToCaret } from './superscripts'
 export type QuantityOutcome =
   | 'correct'
   | 'wrong-value'
+  | 'wrong-unit'
   | 'missing-unit'
   | 'wrong-dimension'
   | 'unreadable-unit'
@@ -31,6 +35,15 @@ export interface QuantityComparison {
   isCorrect: boolean | null
   /** The student's value converted into the expected unit, when possible. */
   convertedValue?: number
+  /** The unit the student wrote (normalised), when one was read. */
+  givenUnit?: string
+  /** The student wrote a different (convertible) unit than the expected one. */
+  converted?: boolean
+}
+
+export interface QuantityCompareOptions {
+  /** Relative tolerance on the converted value (default 1%). */
+  relTol?: number
 }
 
 const REL_TOL = 1e-2
@@ -105,7 +118,9 @@ export function compareQuantity(
   userAnswer: string,
   expectedValue: string,
   expectedUnit: string,
+  options: QuantityCompareOptions = {},
 ): QuantityComparison {
+  const relTol = options.relTol ?? REL_TOL
   const expectedNumber = Number(expectedValue.trim())
   let expected: Unit
   try {
@@ -125,16 +140,26 @@ export function compareQuantity(
   } catch {
     return { outcome: 'unreadable-unit', isCorrect: null }
   }
-  if (!actual.equalBase(expected)) return { outcome: 'wrong-dimension', isCorrect: false }
+  const givenUnit = given.unitText
+  if (!actual.equalBase(expected))
+    return { outcome: 'wrong-dimension', isCorrect: false, givenUnit }
 
   const target = normalizeUnitText(expectedUnit)
   const convertedValue = actual.toNumber(target)
+  const close = (value: number) =>
+    expectedNumber === 0
+      ? Math.abs(value) <= ZERO_FLOOR
+      : Math.abs(value - expectedNumber) <= relTol * Math.abs(expectedNumber)
   const ok = isTemperature(expected)
-    ? temperatureClose(actual, expectedNumber, target)
-    : expectedNumber === 0
-      ? Math.abs(convertedValue) <= ZERO_FLOOR
-      : Math.abs(convertedValue - expectedNumber) <= REL_TOL * Math.abs(expectedNumber)
-  return { outcome: ok ? 'correct' : 'wrong-value', isCorrect: ok, convertedValue }
+    ? temperatureClose(actual, expectedNumber, target, relTol)
+    : close(convertedValue)
+  // Another unit than the reference's, of the same kind (km for m).
+  const converted = Math.abs(mathUnit(1, givenUnit).toNumber(target) - 1) > 1e-12
+  if (ok) return { outcome: 'correct', isCorrect: true, convertedValue, givenUnit, converted }
+  // The bare number is the expected one: the unit, not the value, is off.
+  if (converted && !isTemperature(expected) && close(given.value))
+    return { outcome: 'wrong-unit', isCorrect: false, convertedValue, givenUnit, converted }
+  return { outcome: 'wrong-value', isCorrect: false, convertedValue, givenUnit, converted }
 }
 
 /** An expected 0 accepts float noise from unit conversion, nothing more. */
@@ -152,12 +177,17 @@ function isTemperature(unit: Unit): boolean {
  * K; the tolerance is 1% of the stated value taken as a temperature
  * difference (25 °C → ±0.25 K), but never less than 0.5 K.
  */
-function temperatureClose(actual: Unit, expectedNumber: number, target: string): boolean {
+function temperatureClose(
+  actual: Unit,
+  expectedNumber: number,
+  target: string,
+  relTol = REL_TOL,
+): boolean {
   const actualK = actual.toNumber('K')
   const expectedK = mathUnit(expectedNumber, target).toNumber('K')
   const degreeInK = mathUnit(1, target).toNumber('K') - mathUnit(0, target).toNumber('K')
   const tolerance = Math.max(
-    REL_TOL * Math.abs(expectedNumber) * Math.abs(degreeInK),
+    relTol * Math.abs(expectedNumber) * Math.abs(degreeInK),
     TEMPERATURE_FLOOR_K,
   )
   return Math.abs(actualK - expectedK) <= tolerance
@@ -179,4 +209,26 @@ export function previewQuantity(input: string): QuantityPreview {
   return isValidUnit(split.unitText)
     ? { status: 'ok', value: split.value, unit: split.unitText }
     : { status: 'bad-unit', unit: split.unitText }
+}
+
+export type UnitConversion =
+  | { ok: true; value: number; converted: boolean }
+  | { ok: false; reason: 'wrong-dimension' | 'unreadable' }
+
+/**
+ * Convert `value` from one unit to another (both in typed / mathjs notation).
+ * `converted` says whether the units actually differ (km → m).
+ */
+export function convertUnitValue(value: number, fromUnit: string, toUnit: string): UnitConversion {
+  try {
+    const from = normalizeUnitText(fromUnit)
+    const to = normalizeUnitText(toUnit)
+    const source = mathUnit(value, from)
+    const target = mathUnit(1, to)
+    if (!source.equalBase(target)) return { ok: false, reason: 'wrong-dimension' }
+    const factor = mathUnit(1, from).toNumber(to)
+    return { ok: true, value: source.toNumber(to), converted: Math.abs(factor - 1) > 1e-12 }
+  } catch {
+    return { ok: false, reason: 'unreadable' }
+  }
 }

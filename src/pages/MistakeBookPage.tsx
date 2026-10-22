@@ -13,6 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { MistakeCard } from '@/widgets/mistakes/MistakeCard'
 import { AddMistakeDialog } from '@/widgets/mistakes/AddMistakeDialog'
 import { WeaknessPanel } from '@/widgets/mistakes/WeaknessPanel'
+import { RetestBanner } from '@/widgets/mistakes/RetestSession'
 import { ProjectFlowNav } from '@/widgets/project/ProjectFlowNav'
 import { buildAIServices } from '@/services/aiServices'
 import { MistakeService } from '@/services/mistakeService'
@@ -267,6 +268,8 @@ export function MistakeBookPage(): JSX.Element {
           </Card>
         )}
 
+        <RetestBanner projectId={projectId} onChanged={() => void reloadAll()} />
+
         {/* With no mistakes at all, the empty state below says so once. */}
         {stats && stats.total > 0 && (
           <WeaknessPanel projectId={projectId} onReview={handleReviewSession} />
@@ -356,6 +359,7 @@ export function MistakeBookPage(): JSX.Element {
                 onRestore={handleRestore}
                 onRemove={handleRemove}
                 onPractice={handlePractice}
+                onFollowUpChanged={() => void reloadAll()}
               />
             )}
           />

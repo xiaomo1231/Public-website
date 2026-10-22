@@ -25,6 +25,8 @@ import { PageContainer, PageContent, PageHeader } from '@/shared/ui/Page'
 import { buildOfflineQuizService, buildAIServices } from '@/services/aiServices'
 import { scoreQuiz } from '@/services/quizService'
 import { QuestionSource } from '@/widgets/quiz/QuestionSource'
+import { AnswerDimensionsView } from '@/widgets/quiz/AnswerDimensionsView'
+import { isSigFigOnlyError } from '@/entities/question/answerDimensions'
 import { OralTopicScores } from '@/widgets/quiz/OralTopicScores'
 import { ProjectFlowNav } from '@/widgets/project/ProjectFlowNav'
 import { knowledgeStatPercent, type Quiz } from '@/entities/quiz/types'
@@ -40,6 +42,9 @@ import { friendlyAIError } from '@/shared/lib/aiErrors'
 import { cn } from '@/shared/lib/utils'
 import { useTranslation, type TranslationKey } from '@/i18n'
 import { difficultyLabelKey } from '@/infrastructure/ai/prompts/types'
+import { QuestionOriginBadge } from '@/shared/ui/QuestionOriginBadge'
+import { RubricSourceLabel } from '@/shared/ui/RubricSourceLabel'
+import { quizQuestionOrigin, rubricSourceOf } from '@/entities/question/origin'
 
 type MoreMode = 'same_topic' | 'similar' | 'harder' | 'easier' | 'weakness'
 
@@ -168,6 +173,11 @@ export function QuizResultPage(): JSX.Element {
   const mistakes = questions.filter((q) => {
     const a = attemptByQuestion.get(q.id)
     return a && a.evaluation.isCorrect === false && !a.evaluation.disputed
+  })
+  // Counted correct under the course rule, but the significant figures were off.
+  const sigFigNotes = questions.filter((q) => {
+    const a = attemptByQuestion.get(q.id)
+    return a && a.evaluation.isCorrect === true && isSigFigOnlyError(a.evaluation)
   })
   const unverified = questions.filter((q) => {
     const a = attemptByQuestion.get(q.id)
@@ -438,10 +448,11 @@ export function QuizResultPage(): JSX.Element {
                   const attempt = attemptByQuestion.get(q.id)!
                   return (
                     <div key={q.id} className="rounded-lg border p-3 text-sm">
-                      <div className="flex items-center gap-2">
+                      <div className="flex flex-wrap items-center gap-2">
                         <Badge variant="outline">{q.knowledgePoint}</Badge>
                         <Badge variant="outline">{t(QUESTION_TYPE_LABEL_KEYS[q.type])}</Badge>
                         <Badge variant="outline">{t(difficultyLabelKey(attempt.difficulty))}</Badge>
+                        <QuestionOriginBadge origin={quizQuestionOrigin(q)} />
                       </div>
                       <RichText
                         text={q.prompt}
@@ -449,6 +460,12 @@ export function QuizResultPage(): JSX.Element {
                         className="mt-2"
                         paragraphClassName="text-sm font-medium leading-[1.7]"
                       />
+                      {attempt.evaluation.score && attempt.evaluation.score.total > 0 && (
+                        <RubricSourceLabel
+                          className="mt-1"
+                          source={rubricSourceOf(q.rubricSource)}
+                        />
+                      )}
                       {attempt.evaluation.score && attempt.evaluation.score.total > 0 && (
                         <p className="data-num mt-1 text-xs font-medium">
                           {t('shortAnswer.score', {
@@ -474,6 +491,14 @@ export function QuizResultPage(): JSX.Element {
                           value: attempt.evaluation.expected ?? expectedText(q),
                         })}
                       />
+                      {attempt.evaluation.dimensions && attempt.evaluation.note && (
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          {attempt.evaluation.note}
+                        </p>
+                      )}
+                      <div className="mt-1">
+                        <AnswerDimensionsView evaluation={attempt.evaluation} />
+                      </div>
                       {q.solution && (
                         <AnswerText
                           className="mt-1"
@@ -492,6 +517,37 @@ export function QuizResultPage(): JSX.Element {
                 })}
               </CardContent>
             )}
+          </Card>
+        )}
+
+        {sigFigNotes.length > 0 && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">{t('quizResult.sigFigNotes')}</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {sigFigNotes.map((q) => {
+                const attempt = attemptByQuestion.get(q.id)!
+                return (
+                  <div key={q.id} className="space-y-1 rounded-lg border p-3 text-sm">
+                    <RichText
+                      text={q.prompt}
+                      format="markdown"
+                      paragraphClassName="text-sm font-medium leading-[1.7]"
+                    />
+                    <AnswerText
+                      text={t('quizResult.yourAnswer', {
+                        value: displayAnswer(q, attempt.userAnswer),
+                      })}
+                    />
+                    {attempt.evaluation.note && (
+                      <p className="text-xs text-muted-foreground">{attempt.evaluation.note}</p>
+                    )}
+                    <AnswerDimensionsView evaluation={attempt.evaluation} />
+                  </div>
+                )
+              })}
+            </CardContent>
           </Card>
         )}
 

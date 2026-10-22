@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 
-vi.mock('pdfjs-dist', () => {
+// pdfExtractor imports the legacy build (see its header comment).
+vi.mock('pdfjs-dist/legacy/build/pdf.mjs', () => {
   const makeTextItems = (text: string) => {
     const lines = text.split('\n')
     const items: Array<{ str: string; transform: number[] }> = []

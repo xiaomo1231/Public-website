@@ -17,7 +17,8 @@ import { computeSlideContentHash } from '@/entities/slideLesson/contentHash'
 import type { TutorVisual } from '@/entities/tutorLesson/types'
 import type { SourceReference } from '@/entities/courseAnalysis/types'
 import type { DocumentChunk } from '@/entities/chunk/types'
-import { isReferenceOnlyMaterial, type Document } from '@/entities/document/types'
+import { type Document } from '@/entities/document/types'
+import { isExcludedFromCourseContext } from '@/entities/evaluation/evalRole'
 import { prompts } from '@/infrastructure/ai/prompts'
 import { asRecord, asTrimmedString } from '@/infrastructure/ai/validation'
 import { extractSymbolsFromMarkdown } from '@/shared/lib/latexSymbols'
@@ -134,7 +135,7 @@ export class SlideLessonService {
   async listSlideDocuments(projectId: string): Promise<SlideDocumentInfo[]> {
     const documents = await this.documents.listByProject(projectId)
     const presentations = documents.filter(
-      (document) => document.type === 'pptx' && !isReferenceOnlyMaterial(document.materialType),
+      (document) => document.type === 'pptx' && !isExcludedFromCourseContext(document),
     )
     const out: SlideDocumentInfo[] = []
     for (const document of presentations) {

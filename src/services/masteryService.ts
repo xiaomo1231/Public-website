@@ -10,6 +10,15 @@ import { logger } from '@/infrastructure/logger/logger'
 const MAX_OBSERVATIONS = 40
 /** `questionType` of a review-card observation (see ReviewCardService.review). */
 export const FLASHCARD_TYPE = 'flashcard'
+/**
+ * `questionType` of a checked answer outside a quiz (practice-set question,
+ * mock exam, 错题跟进 re-test / variant; see `practiceLearning.ts`). Like a
+ * flashcard review it is stored nowhere else, so a rebuild keeps it.
+ */
+export const CHECKED_ANSWER_TYPE = 'checked_answer'
+
+/** Observations a rebuild keeps: their source rows are not attempts. */
+const KEPT_ON_REBUILD = new Set([FLASHCARD_TYPE, CHECKED_ANSWER_TYPE])
 
 /**
  * Maintains the per-knowledge-point mastery estimate.
@@ -115,8 +124,8 @@ export class MasteryService {
     for (const [kp, list] of byKp) {
       const sorted = list.slice().sort((a, b) => a.createdAt - b.createdAt)
       const existing = await this.repo.get(projectId, kp)
-      const reviews = (existing?.observations ?? []).filter(
-        (o) => o.questionType === FLASHCARD_TYPE,
+      const reviews = (existing?.observations ?? []).filter((o) =>
+        KEPT_ON_REBUILD.has(o.questionType),
       )
       const observations: MasteryObservation[] = [
         ...sorted.filter((a) => a.evaluation.disputed !== true).map(observationFromAttempt),
@@ -164,7 +173,9 @@ export class MasteryService {
 /**
  * One mastery observation per attempt. A short answer carries partial credit
  * (points covered / total) and half weight, because its grade comes from an AI
- * reading rather than a deterministic check; a disputed one is ungraded.
+ * reading rather than a deterministic check; a checked answer outside a quiz
+ * (practice set, mock exam, re-test) read by the AI counts half for the same
+ * reason, a locally checked one fully. A disputed one is ungraded.
  */
 export function observationFromAttempt(attempt: QuestionAttempt): MasteryObservation {
   const { evaluation } = attempt
@@ -176,6 +187,9 @@ export function observationFromAttempt(attempt: QuestionAttempt): MasteryObserva
     difficulty: attempt.difficulty as MasteryObservation['difficulty'],
     questionType: attempt.questionType,
     ...(!disputed && score && score.total > 0 ? { credit: score.earned / score.total } : {}),
-    ...(attempt.questionType === 'short_answer' ? { weight: 0.5 } : {}),
+    ...(attempt.questionType === 'short_answer' ||
+    (attempt.questionType === CHECKED_ANSWER_TYPE && evaluation.method === 'ai')
+      ? { weight: 0.5 }
+      : {}),
   }
 }

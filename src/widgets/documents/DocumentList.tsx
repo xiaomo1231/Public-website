@@ -94,6 +94,7 @@ const MATERIAL_LABEL_KEY: Record<LearningMaterialType, TranslationKey> = {
   homework_answer: 'materialType.homework_answer',
   syllabus: 'materialType.syllabus',
   walkthrough_import: 'materialType.walkthrough_import',
+  past_exam: 'materialType.past_exam',
 }
 
 type SortKey = 'newest' | 'oldest' | 'name' | 'size'

@@ -1,3 +1,4 @@
+import { DueRetestsLink } from '@/widgets/mistakes/RetestSession'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { ArrowLeft, GraduationCap, Pencil } from 'lucide-react'
@@ -16,6 +17,7 @@ import { ProjectFlowNav } from '@/widgets/project/ProjectFlowNav'
 import { CourseFigures } from '@/widgets/project/CourseFigures'
 import { ExamTopicsPanel } from '@/widgets/syllabus/ExamTopicsPanel'
 import { QuestionHabitsPanel } from '@/widgets/questionHabits/QuestionHabitsPanel'
+import { GradingRulesPanel } from '@/widgets/project/GradingRulesPanel'
 import { useCourseMastery } from '@/widgets/dashboard/useCourseMastery'
 import { useHomeOverview } from '@/features/home/useHomeOverview'
 import { useDocumentsStore } from '@/features/documents/documentsStore'
@@ -191,6 +193,7 @@ export function ProjectDetailPage(): JSX.Element {
       />
       <PageContent className="space-y-8 lecture:pt-2">
         {course && <CourseFigures course={course} mastery={mastery[project.id]} />}
+        <DueRetestsLink projectId={project.id} />
         <Tabs
           value={tab}
           onValueChange={(value) =>
@@ -223,8 +226,12 @@ export function ProjectDetailPage(): JSX.Element {
             <ExamTopicsPanel projectId={project.id} />
           </TabsContent>
 
-          <TabsContent value="habits">
+          <TabsContent value="habits" className="space-y-10">
             <QuestionHabitsPanel projectId={project.id} />
+            <GradingRulesPanel
+              project={project}
+              onSave={(sigFigPolicy) => update({ sigFigPolicy })}
+            />
           </TabsContent>
         </Tabs>
       </PageContent>

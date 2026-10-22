@@ -1,6 +1,6 @@
 import type { ChunkRepository } from '@/entities/chunk/repository'
 import type { DocumentRepository } from '@/entities/document/repository'
-import { isReferenceOnlyMaterial } from '@/entities/document/types'
+import { isExcludedFromCourseContext } from '@/entities/evaluation/evalRole'
 
 export interface CollectSourceOptions {
   documentIds: string[]
@@ -81,7 +81,7 @@ export async function collectSourceSnippetsDetailed(
     const list = await chunks.listByDocument(documentId)
     for (const chunk of list) {
       if (chunk.text.length > maxChunkChars || chunk.text.trim().length < 20) continue
-      if (isReferenceOnlyMaterial(chunk.materialType)) continue
+      if (isExcludedFromCourseContext(chunk)) continue
       const snippet: SourceSnippet = {
         chunkId: chunk.id,
         documentId,
@@ -141,7 +141,7 @@ export async function loadQuizCandidates(options: QuizCandidateOptions): Promise
     for (const chunk of await chunks.listByDocument(documentId)) {
       if (chunk.text.length > maxChunkChars || chunk.text.trim().length < 20) continue
       // A syllabus / answer key is never quiz material, even if listed by an old analysis.
-      if (isReferenceOnlyMaterial(chunk.materialType)) continue
+      if (isExcludedFromCourseContext(chunk)) continue
       if (options.chapterId && chunk.chapterId !== options.chapterId) continue
       if (options.sectionId && chunk.sectionId !== options.sectionId) continue
       candidates.push({

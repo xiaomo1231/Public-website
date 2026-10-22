@@ -37,6 +37,11 @@ const CATEGORY_KEYS: Record<QuestionHabitCategory, TranslationKey> = {
   traps: 'habits.category.traps',
   answer_format: 'habits.category.answer_format',
   difficulty: 'habits.category.difficulty',
+  options: 'habits.category.options',
+  marks: 'habits.category.marks',
+  data_sheet: 'habits.category.data_sheet',
+  sig_figs: 'habits.category.sig_figs',
+  context: 'habits.category.context',
 }
 
 interface EditTarget {
@@ -383,7 +388,7 @@ function HabitRow({
 }
 
 function evidenceLink(projectId: string, evidence: QuestionHabitEvidence): string {
-  if (evidence.kind === 'homework' && evidence.setId)
+  if ((evidence.kind === 'homework' || evidence.kind === 'exam') && evidence.setId)
     return `/projects/${projectId}/homework/${evidence.setId}`
   if (evidence.kind === 'practice') return `/projects/${projectId}/practice`
   return `/projects/${projectId}/documents/${evidence.documentId}`

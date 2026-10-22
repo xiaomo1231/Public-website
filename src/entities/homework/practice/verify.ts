@@ -5,7 +5,14 @@ import {
   numericEquivalent,
   parseNumeric,
 } from '@/infrastructure/math/expressionEvaluator'
-import { compareQuantity, isValidUnit } from '@/infrastructure/math/quantityAnswer'
+import { compareQuantity, isValidUnit, splitQuantity } from '@/infrastructure/math/quantityAnswer'
+import {
+  asSigFigCount,
+  judgeSigFigs,
+  readSigFigs,
+  sigFigRelativeTolerance,
+} from '@/infrastructure/math/significantFigures'
+import type { AnswerDimensions } from '@/entities/question/answerDimensions'
 import { compareEquations, imbalances, parseEquation } from '@/infrastructure/chemistry/equation'
 import { parseMatrix, rref, solutionKind, type SolutionKind } from '@/infrastructure/math/rref'
 import { walkthroughSubparts } from '../splitQuestion'
@@ -112,13 +119,21 @@ export function verifyAiPart(
     const unit = typeof check?.unit === 'string' ? check.unit.trim() : ''
     // The first number of the stated answer ("The speed is 5 m/s" → 5); the
     // letters e / E of the words around it are not part of it.
-    const stated = parseNumeric(firstNumber(raw.answer))
-    if (
-      stated === null ||
-      numericEquivalent(String(stated), String(value), NUMERIC_TOLERANCE) !== true
-    )
+    // Significant figures the answer must carry (chemistry / physics): the
+    // stated answer is rounded to them, so it may differ from the computed
+    // value by that rounding.
+    const sigFigs = asSigFigCount(check?.sigFigs)
+    const statedText = firstNumber(raw.answer)
+    const stated = parseNumeric(statedText)
+    const tolerance = sigFigs
+      ? sigFigRelativeTolerance(statedText, value, sigFigs, NUMERIC_TOLERANCE)
+      : NUMERIC_TOLERANCE
+    if (stated === null || numericEquivalent(String(stated), String(value), tolerance) !== true)
       return { ok: false, reason: 'answer-differs-from-computation' }
-    const shown = formatValue(value)
+    const shown = sigFigs
+      ? String(value.toPrecision(sigFigs)).replace('e+', 'e')
+      : formatValue(value)
+    const figures = sigFigs ? { sigFigs } : {}
     if (unit && isValidUnit(unit)) {
       return {
         ok: true,
@@ -127,7 +142,7 @@ export function verifyAiPart(
           prompt: raw.prompt,
           answer: `${shown} ${unit}`,
           solution: raw.solution,
-          grader: { kind: 'quantity', value, unit },
+          grader: { kind: 'quantity', value, unit, ...figures },
         },
       }
     }
@@ -138,7 +153,7 @@ export function verifyAiPart(
         prompt: raw.prompt,
         answer: shown,
         solution: raw.solution,
-        grader: { kind: 'numeric', expected: value, relTol: 1e-2 },
+        grader: { kind: 'numeric', expected: value, relTol: 1e-2, ...figures },
       },
     }
   }
@@ -189,7 +204,12 @@ export type PracticeVerdict = 'correct' | 'incorrect' | 'partial'
 export function checkPracticeAnswer(
   info: Pick<PracticeQuestionInfo, 'parts'>,
   draft: string,
-): { verdict: PracticeVerdict; expectedAnswer: string } | null {
+): {
+  verdict: PracticeVerdict
+  expectedAnswer: string
+  /** Per part: value / unit / significant figures, for parts that require significant figures. */
+  dimensions: Array<AnswerDimensions | undefined>
+} | null {
   const text = draft.trim()
   if (!text || info.parts.length === 0) return null
   const answers: string[] = []
@@ -203,10 +223,12 @@ export function checkPracticeAnswer(
     }
   }
   const results: boolean[] = []
+  const dimensions: Array<AnswerDimensions | undefined> = []
   for (let index = 0; index < info.parts.length; index += 1) {
     const result = gradePart(info.parts[index]!.grader, answers[index]!)
     if (result === null) return null
     results.push(result)
+    dimensions.push(partDimensions(info.parts[index]!.grader, answers[index]!) ?? undefined)
   }
   const correct = results.filter(Boolean).length
   const expectedAnswer = info.parts
@@ -215,6 +237,7 @@ export function checkPracticeAnswer(
   return {
     verdict: correct === results.length ? 'correct' : correct === 0 ? 'incorrect' : 'partial',
     expectedAnswer,
+    dimensions,
   }
 }
 
@@ -226,10 +249,17 @@ export function gradePart(grader: PracticeGrader, answer: string): boolean | nul
       return gradeLinearSystem(grader, text)
     case 'expression':
       return compareMath(text, grader.expected).equivalent
-    case 'numeric':
-      return numericEquivalent(text, String(grader.expected), grader.relTol)
-    case 'quantity':
-      return compareQuantity(text, String(grader.value), grader.unit).isCorrect
+    case 'numeric': {
+      if (!grader.sigFigs) return numericEquivalent(text, String(grader.expected), grader.relTol)
+      const dims = partDimensions(grader, text)
+      return dims ? (dims.value === 'unreadable' ? null : dims.value === 'correct') : null
+    }
+    case 'quantity': {
+      if (!grader.sigFigs) return compareQuantity(text, String(grader.value), grader.unit).isCorrect
+      const dims = partDimensions(grader, text)
+      if (!dims || dims.value === 'unreadable' || dims.unit?.status === 'unreadable') return null
+      return dims.value === 'correct' && dims.unit?.status === 'correct'
+    }
     case 'chem_equation': {
       const reference = parseEquation(grader.equation)
       if (!reference.ok) return null
@@ -369,4 +399,63 @@ function floatRank(vectors: number[][]): number {
     rank += 1
   }
   return rank
+}
+
+/**
+ * Value, unit and significant figures of one answer, judged separately, for
+ * a numeric / quantity part that requires significant figures (null for any
+ * other part). A significant-figure slip never makes the part wrong here: how
+ * it counts is the course rule, applied by the caller.
+ */
+export function partDimensions(grader: PracticeGrader, answer: string): AnswerDimensions | null {
+  const text = answer.trim().replace(/^\$+|\$+$/g, '')
+  if (grader.kind !== 'numeric' && grader.kind !== 'quantity') return null
+  if (!grader.sigFigs || !text) return null
+  const expected = grader.kind === 'numeric' ? grader.expected : grader.value
+  const tolerance = sigFigRelativeTolerance(text, expected, grader.sigFigs)
+  const reading = readSigFigs(text)
+  const judgement = judgeSigFigs(text, grader.sigFigs)
+  const sigFigs: NonNullable<AnswerDimensions['sigFigs']> = {
+    status: judgement.status,
+    required: grader.sigFigs,
+    ...(judgement.given ? { given: judgement.given } : {}),
+    ...(judgement.ambiguous ? { ambiguous: true } : {}),
+  }
+  if (grader.kind === 'numeric') {
+    const value = parseNumeric(text) ?? (reading && !reading.rest.trim() ? reading.value : null)
+    if (value === null) return { value: 'unreadable' }
+    const close =
+      expected === 0
+        ? Math.abs(value) <= 1e-9
+        : Math.abs(value - expected) <= tolerance * Math.abs(expected)
+    return {
+      value: close ? 'correct' : 'wrong',
+      sigFigs: reading && reading.rest.trim() ? { ...sigFigs, status: 'unreadable' } : sigFigs,
+    }
+  }
+  const result = compareQuantity(text, String(expected), grader.unit, { relTol: tolerance })
+  const unit = (status: NonNullable<AnswerDimensions['unit']>['status']) => ({
+    status,
+    expected: grader.unit,
+    ...(result.givenUnit ? { given: result.givenUnit } : {}),
+    ...(result.converted ? { converted: true } : {}),
+  })
+  switch (result.outcome) {
+    case 'correct':
+      return { value: 'correct', unit: unit('correct'), sigFigs }
+    case 'wrong-value':
+      return { value: 'wrong', unit: unit('correct'), sigFigs }
+    case 'wrong-unit':
+      return { value: 'correct', unit: unit('wrong-unit'), sigFigs }
+    case 'missing-unit': {
+      const bare = splitQuantity(text)
+      const close =
+        bare !== null && Math.abs(bare.value - expected) <= tolerance * Math.abs(expected || 1)
+      return { value: close ? 'correct' : 'wrong', unit: unit('missing'), sigFigs }
+    }
+    case 'wrong-dimension':
+      return { value: 'wrong', unit: unit('wrong-dimension'), sigFigs }
+    default:
+      return { value: 'unreadable', unit: unit('unreadable') }
+  }
 }

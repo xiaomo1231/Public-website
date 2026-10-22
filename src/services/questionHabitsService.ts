@@ -11,7 +11,8 @@ import { DocumentRepository } from '@/entities/document/repository'
 import { resolveMaterialType } from '@/entities/document/types'
 import { ChunkRepository } from '@/entities/chunk/repository'
 import { HomeworkRepository } from '@/entities/homework/repository'
-import { isPracticeSet } from '@/entities/homework/types'
+import { isExamSet, isPracticeSet } from '@/entities/homework/types'
+import { isHeldOut } from '@/entities/evaluation/evalRole'
 import { PracticeRepository } from '@/entities/practice/repository'
 import { UserRepository } from '@/entities/user/repository'
 import {
@@ -149,15 +150,17 @@ export class QuestionHabitsService {
 
     const homework = new HomeworkRepository(this.db)
     for (const set of await homework.listSets(projectId)) {
-      if (isPracticeSet(set)) continue
+      // Independent evaluation items never feed the habits profile.
+      if (isPracticeSet(set) || isHeldOut(set)) continue
+      const kind: QuestionHabitSourceKind = isExamSet(set) ? 'exam' : 'homework'
       const questions = (await homework.listQuestions(set.id)).filter(
-        (question) => !question.retired && question.prompt.trim(),
+        (question) => !question.retired && question.prompt.trim() && !isHeldOut(question),
       )
       questions.forEach((question, index) =>
-        add(set.documentId, set.documentName, 'homework', {
+        add(set.documentId, set.documentName, kind, {
           documentId: set.documentId,
           documentName: set.documentName,
-          kind: 'homework',
+          kind,
           questionId: question.id,
           setId: set.id,
           position: `question ${question.number ?? index + 1}`,
@@ -202,10 +205,14 @@ export class QuestionHabitsService {
       }
     }
 
-    return [...out.values()].map((doc) => ({
-      ...doc,
-      hash: habitSourceHash(doc.units.map((unit) => unit.text)),
-    }))
+    // A document held out for independent evaluation never feeds the profile.
+    const heldOut = new Set(documents.filter((document) => isHeldOut(document)).map((d) => d.id))
+    return [...out.values()]
+      .filter((doc) => !heldOut.has(doc.documentId))
+      .map((doc) => ({
+        ...doc,
+        hash: habitSourceHash(doc.units.map((unit) => unit.text)),
+      }))
   }
 
   /**

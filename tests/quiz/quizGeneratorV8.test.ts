@@ -22,7 +22,7 @@ const input = {
 
 describe('quiz-generator v8 system prompt', () => {
   it('is the registry version and v7 word for word without a type set', () => {
-    expect(prompts.quizGenerator.VERSION).toBe('v8')
+    expect(prompts.quizGenerator.VERSION).toBe('v9')
     expect(QuizV8.buildSystemPrompt()).toBe(QuizV7.buildSystemPrompt())
     expect(QuizV8.buildSystemPrompt({ languageDrills: { targetLanguage: 'de' } })).toBe(
       QuizV7.buildSystemPrompt({ languageDrills: { targetLanguage: 'de' } }),

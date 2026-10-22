@@ -100,15 +100,56 @@ export interface AnswerMatchResult {
  * over bare numbers, so numbered steps inside a labelled answer are not torn
  * out.
  */
-const ANSWER_LABEL =
-  /^\s*(?:solution|answer)\b[\s.#:：-]*(\d{1,3})\s*[)）]?\s*(?:[:：.、–—-]\s*(.*))?$/i
-const QUESTION_LABEL =
-  /^\s*(?:problem|exercise|question)\b[\s.#:：-]*(\d{1,3})\s*[)）]?\s*(?:[:：.、–—-]\s*(.*))?$/i
-const ANSWER_ABBREV =
-  /^\s*(?:sol|ans)\.?\s*[#＃]?\s*(\d{1,3})\s*[)）]?\s*(?:[\s:：.、–—-]\s*(.*))?$/i
-const QUESTION_ABBREV =
-  /^\s*(?:q|ex|prob)\.?\s*[#＃]?\s*(\d{1,3})\s*[)）]?\s*(?:[\s:：.、–—-]\s*(.*))?$/i
-const BARE_LABEL = /^\s*[#＃]?(\d{1,3})(?:\s*[)、:：]|\s*[.](?=\s|$))\s*(.*)$/
+/**
+ * A printed problem number: `3`, or a dotted chapter number `2.1` / `2.1.4`
+ * (end-of-chapter "Problem 2.1", "Advanced Problem 3.2").
+ */
+// Never a prefix of a longer number: "2.1" must not be read as "2" + ".1".
+const NUMBER = String.raw`(\d{1,3}(?:\.\d{1,3}){0,2})(?!\.?\d)`
+/** Qualifiers printed before a problem label: "Advanced Problem 2.1", "Practice Exercise 4". */
+const LABEL_QUALIFIER = String.raw`(?:(?:advanced|practice|review|sample|additional|challenge|bonus|extra|homework|supplementary|end[- ]of[- ]chapter)\s+)?`
+const ANSWER_LABEL = new RegExp(
+  String.raw`^\s*${LABEL_QUALIFIER}(?:solution|answer)\b[\s.#:：-]*${NUMBER}\s*[)）]?\s*(?:[:：.、–—-]\s*(.*))?$`,
+  'i',
+)
+const QUESTION_LABEL = new RegExp(
+  String.raw`^\s*${LABEL_QUALIFIER}(?:problem|exercise|question)\b[\s.#:：-]*${NUMBER}\s*[)）]?\s*(?:[:：.、–—-]\s*(.*))?$`,
+  'i',
+)
+const ANSWER_ABBREV = new RegExp(
+  String.raw`^\s*(?:sol|ans)\.?\s*[#＃]?\s*${NUMBER}\s*[)）]?\s*(?:[\s:：.、–—-]\s*(.*))?$`,
+  'i',
+)
+const QUESTION_ABBREV = new RegExp(
+  String.raw`^\s*(?:q|ex|prob)\.?\s*[#＃]?\s*${NUMBER}\s*[)）]?\s*(?:[\s:：.、–—-]\s*(.*))?$`,
+  'i',
+)
+const BARE_LABEL = /^\s*[#＃]?(\d{1,3}(?:\.\d{1,3}){0,2})(?:\s*[)、:：]|\s*[.](?=\s|$))\s*(.*)$/
+
+/** A label word in front of a question / answer number (`Problem 2.1`, `Q3`, `Sol. 4`). */
+const NUMBER_PREFIX = new RegExp(
+  String.raw`^${LABEL_QUALIFIER}(?:problem|exercise|question|solution|answer|prob|sol|ans|ex|q)\.?\s*[#＃]?\s*(?=\d)`,
+  'i',
+)
+
+/** The line ends inside an expression: an operator, an opening bracket or a comma. */
+const OPEN_EXPRESSION_END = /[=+\-−×*/^([{,·÷]\s*$/
+
+/**
+ * A bare number at a line start that is really the tail of the previous line's
+ * mathematics — a superscript `2` from `m/s²` pushed onto the next line
+ * (`(0.90321 m/s` / `2)(20 s) = 18.064 m/s`) — and not an answer label.
+ */
+function continuesExpression(previous: string | undefined, line: string): boolean {
+  if (previous !== undefined) {
+    if (OPEN_EXPRESSION_END.test(previous)) return true
+    const opened = (previous.match(/\(/g) ?? []).length
+    const closed = (previous.match(/\)/g) ?? []).length
+    if (opened > closed) return true
+  }
+  // `2)(20 s)`: a ")" label glued to an expression is a closing bracket.
+  return /^\s*[#＃]?\d{1,3}(?:\.\d{1,3})*\s*[)）][(（=+\-−×*/^²³]/.test(line)
+}
 
 export type AnswerLabelFamily = 'answer' | 'question'
 
@@ -148,8 +189,19 @@ export function matchBareAnswerLabel(line: string): Marker | null {
 
 /** Canonical form of a printed number: digits lose leading zeros, text is lowercased. */
 export function normalizeAnswerNumber(raw: string): string {
-  const trimmed = raw.trim().replace(/[.、)）:：\s]+$/, '')
+  let trimmed = raw
+    .trim()
+    .replace(/[.、)）:：\s]+$/, '')
+    .replace(NUMBER_PREFIX, '')
+  // 第3题 / 第 3 題 → 3
+  const cjk = /^第\s*(\d{1,3})\s*[题題]$/.exec(trimmed)
+  if (cjk) trimmed = cjk[1]!
   if (/^\d+$/.test(trimmed)) return String(Number(trimmed))
+  // Dotted numbers keep every part; only the leading part loses zeros (02.1 → 2.1).
+  if (/^\d+(?:\.\d+)+$/.test(trimmed)) {
+    const [head, ...rest] = trimmed.split('.')
+    return [String(Number(head)), ...rest].join('.')
+  }
   return trimmed.toLowerCase()
 }
 
@@ -225,11 +277,36 @@ export function parseAnswerEntries(chunks: ReadonlyArray<AnswerSourceChunk>): An
   const answerFamily: number[] = []
   const questionFamily: number[] = []
   const bare: number[] = []
+  const usedBare = new Set<string>()
+  let latestBare: string | undefined
+  const lastLabel: Record<AnswerLabelFamily, string | undefined> = {
+    answer: undefined,
+    question: undefined,
+  }
   for (let i = 0; i < lines.length; i++) {
-    const label = matchAnswerLabel(lines[i]!.text)
-    if (label?.family === 'answer') answerFamily.push(i)
-    else if (label?.family === 'question') questionFamily.push(i)
-    else if (matchBareAnswerLabel(lines[i]!.text)) bare.push(i)
+    const text = lines[i]!.text
+    const label = matchAnswerLabel(text)
+    if (label) {
+      const number = normalizeAnswerNumber(label.number)
+      // "Problem 3 … Problem 3 (cont.)": a repeat of the same label continues it.
+      if (lastLabel[label.family] === number) continue
+      lastLabel[label.family] = number
+      if (label.family === 'answer') answerFamily.push(i)
+      else questionFamily.push(i)
+      continue
+    }
+    const bareLabel = matchBareAnswerLabel(text)
+    if (!bareLabel) continue
+    // A bare number that continues the previous line's maths, or that repeats
+    // a number already used (out of sequence), is body text, not a label.
+    if (continuesExpression(lines[i - 1]?.text, text)) continue
+    const number = normalizeAnswerNumber(bareLabel.number)
+    // A repeat of the latest label is kept (a real duplicate the student must
+    // review); a repeat of an earlier one, out of sequence, is not a label.
+    if (usedBare.has(number) && number !== latestBare) continue
+    usedBare.add(number)
+    latestBare = number
+    bare.push(i)
   }
   // Answer labels win over question labels (a `Problem N` heading followed by
   // its `Solution N` must not double-count), and explicit labels win over bare

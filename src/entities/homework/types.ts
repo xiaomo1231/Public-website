@@ -6,6 +6,52 @@ import type { HomeworkReviewGuide } from './reviewGuide'
 import type { HomeworkAnswerCheck } from './answerCheck'
 import type { PracticeQuestionInfo, PracticeSetInfo } from './practice/types'
 import type { GuidedProgress } from './guided'
+import type { ExamSetInfo } from '@/entities/exam/types'
+import type { EvalRole } from '@/entities/evaluation/evalRole'
+import type { EvaluationRecord } from '@/entities/evaluation/types'
+import type { ParseErrorKind } from './proofread'
+
+/** One 导入校对 edit of a question or of its matched professor answer. */
+export interface HomeworkQuestionEdit {
+  at: number
+  /** Always the local student (kept explicit for exported histories). */
+  by: 'student'
+  field: 'prompt' | 'number' | 'answerText'
+  before: string
+  after: string
+  /** What the correction looks like (minus sign, exponent, …), for parsing accuracy. */
+  kinds: ParseErrorKind[]
+}
+
+/** Course topics and exam-scope topics a homework question touches (computed locally). */
+export interface HomeworkQuestionMeta {
+  topicIds: string[]
+  knowledgePoints: string[]
+  examTopics: Array<{
+    documentId: string
+    scopeId: string
+    scopeLabel: string
+    topicId: string
+    text: string
+  }>
+  /** Inputs the links were computed from; a change recomputes them. */
+  fingerprint: string
+  computedAt: number
+}
+
+export interface TeacherMark {
+  verdict: 'correct' | 'partial' | 'incorrect'
+  note?: string
+  at: number
+}
+
+export interface HomeworkSelfTest {
+  answer: string
+  verdict: 'correct' | 'partial' | 'incorrect' | 'uncertain'
+  /** `self` — the student marked it; `check` — the answer check decided. */
+  by: 'self' | 'check'
+  at: number
+}
 
 /**
  * A student-uploaded homework assignment that the AI has turned into questions.
@@ -65,18 +111,31 @@ export interface HomeworkSet {
    * (讲解末尾「做练习题」). It shares the parent's `documentId` (so deleting the
    * assignment deletes it too) but is never re-read from the document.
    * Absent means an ordinary assignment.
+   *
+   * `exam` — a past exam / mock paper (`materialType: 'past_exam'`). Its
+   * questions are recognised exactly like an assignment's; `exam` holds the
+   * 模拟考试 settings and attempts.
    */
-  kind?: 'assignment' | 'practice'
+  kind?: 'assignment' | 'practice' | 'exam'
   /** Practice sets: the assignment they were made from. */
   parentSetId?: string
   /** Practice sets: mode, counts and an unfinished build. */
   practice?: PracticeSetInfo
+  /** Exam papers: mock-exam duration, the attempt in progress and past attempts. */
+  exam?: ExamSetInfo
+  /** 留作检验 role of the whole set (questions may override it). */
+  evalRole?: EvalRole
+  /** 检验网站 runs on this set, newest first (at most `MAX_EVALUATION_RECORDS`). */
+  evaluations?: EvaluationRecord[]
   createdAt: number
   updatedAt: number
 }
 
 /** A practice set made from an assignment (not an uploaded assignment). */
 export const isPracticeSet = (set: Pick<HomeworkSet, 'kind'>): boolean => set.kind === 'practice'
+
+/** A past exam / mock paper (往年试卷 / 模拟卷), not an assignment. */
+export const isExamSet = (set: Pick<HomeworkSet, 'kind'>): boolean => set.kind === 'exam'
 
 /**
  * Progress of an in-flight homework run.
@@ -215,6 +274,33 @@ export interface HomeworkQuestion {
    * reference solution.
    */
   practice?: PracticeQuestionInfo
+  /**
+   * 导入校对: the student checked this question (and its matched answer)
+   * against the original page. Cleared by nothing but the student.
+   */
+  verifiedAt?: number
+  /**
+   * 导入校对 edits, oldest first (who / when / before / after). Everything
+   * derived from the text before the last edit is shown as 「需重新确认」
+   * (see `entities/homework/proofread.ts` `reconfirmItems`).
+   */
+  edits?: HomeworkQuestionEdit[]
+  /**
+   * The professor-answer link must be confirmed again: the printed number or
+   * the question text changed materially while an answer was matched. The
+   * link is downgraded to `needs_review` until then.
+   */
+  answerLinkStale?: boolean
+  /** When the current hints + solution were written (absent on old rows). */
+  contentAt?: number
+  /** Local knowledge points + exam-scope links (see `entities/homework/questionMeta.ts`). */
+  meta?: HomeworkQuestionMeta
+  /** 留作检验 / 检验网站 role (see `entities/evaluation/evalRole.ts`). */
+  evalRole?: EvalRole
+  /** A mark the teacher gave the student's answer, entered for 检验网站 (grading agreement). */
+  teacherMark?: TeacherMark
+  /** 自测 (independent items only): the last held-out self-test result. */
+  selfTest?: HomeworkSelfTest
   createdAt: number
   updatedAt: number
 }

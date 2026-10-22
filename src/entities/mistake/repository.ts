@@ -54,6 +54,10 @@ export class MistakeRepository {
       source: input.questionId ? 'auto' : 'manual',
       attemptIds: input.attemptIds ?? [],
       attemptCount: 1,
+      ...(input.origin ? { origin: input.origin } : {}),
+      ...(input.homeworkSetId ? { homeworkSetId: input.homeworkSetId } : {}),
+      ...(input.errorDimension ? { errorDimension: input.errorDimension } : {}),
+      ...(input.followUp ? { followUp: input.followUp } : {}),
       createdAt: now,
       updatedAt: now,
     }

@@ -213,6 +213,14 @@ export interface QuizResumeState {
   professorStyleContext?: string
   /** 教授出题习惯 block captured when the quiz was planned. */
   professorHabits?: string
+  /**
+   * Conventions read from the habits profile (`professorConventions`): a final
+   * "none of the options" choice, marks per part, a data sheet, context
+   * stories, strict significant figures.
+   */
+  professorConventions?: string[]
+  /** The professor's own wording of the final "none of the options" choice. */
+  noneOptionLabel?: string
   updatedAt: number
 }
 

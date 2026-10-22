@@ -10,7 +10,7 @@ export const TOC_LEADER = /(?:\.\s*){4,}|…{2,}|(?:\s\.){3,}/
 
 /** "Chapter 1", "Lesson 3", "Lektion 2", "Unit IV", "Lecture 5", "Kapitel 1", "Section 2". */
 const KEYWORD_UNIT =
-  /^(?:chapter|section|lecture|lesson|lektion|lecke|unit|kapitel|module|fejezet)\s+(?:\d{1,3}|[ivxlc]{1,6})\b/i
+  /^(?:chapter|ch\.|section|lecture|lesson|lektion|lecke|unit|kapitel|module|fejezet)\s+(?:\d{1,3}|[ivxlc]{1,6})\b/i
 
 /** Hungarian ordinal-first units: "2. lecke – BEMUTATKOZÁS", "6.lecke- TESTRÉSZEK", "3. fejezet". */
 export const ORDINAL_UNIT =

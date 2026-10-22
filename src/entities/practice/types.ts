@@ -1,4 +1,5 @@
 import type { RubricPoint } from '@/entities/question/types'
+import type { RubricSource } from '@/entities/question/origin'
 import type { QuestionEvaluation } from '@/entities/questionAttempt/types'
 /**
  * Professor Practice: questions imported from material the professor handed
@@ -60,6 +61,12 @@ export interface PracticeQuestion {
    */
   rubric?: RubricPoint[]
   rubricAnswerHash?: string
+  /**
+   * Who set `rubric`. Written as `professor` (the extractor only splits the
+   * professor's reference answer); older rows without it are read the same
+   * way by `rubricSourceOf(source, 'professor')`.
+   */
+  rubricSource?: RubricSource
   /** Preserved figure the question depends on, when there was one. */
   visualSourceId?: string
   difficulty?: string

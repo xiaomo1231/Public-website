@@ -2,6 +2,8 @@ import { CheckCircle2, Circle, Flag, Loader2, XCircle } from 'lucide-react'
 import type { QuestionEvaluation } from '@/entities/questionAttempt/types'
 import { Button } from '@/shared/ui/Button'
 import { RichText } from '@/shared/ui/RichText'
+import { RubricSourceLabel } from '@/shared/ui/RubricSourceLabel'
+import type { RubricSource } from '@/entities/question/origin'
 import { cn } from '@/shared/lib/utils'
 import { useTranslation } from '@/i18n'
 
@@ -10,6 +12,11 @@ export interface ShortAnswerFeedbackProps {
   /** Offered only for an AI judgement that has not been disputed yet. */
   onDispute?: () => void
   disputing?: boolean
+  /**
+   * Who set the scoring points (resolve with `rubricSourceOf`). Defaults to
+   * `platform`: AI-written points are never shown as the professor's.
+   */
+  rubricSource?: RubricSource
 }
 
 /**
@@ -22,6 +29,7 @@ export function ShortAnswerFeedback({
   evaluation,
   onDispute,
   disputing,
+  rubricSource = 'platform',
 }: ShortAnswerFeedbackProps): JSX.Element {
   const { t } = useTranslation()
   const graded = evaluation.method === 'rubric_ai'
@@ -53,7 +61,10 @@ export function ShortAnswerFeedback({
 
       {evaluation.rubric && evaluation.rubric.length > 0 && (
         <div className="space-y-1.5">
-          <p className="text-xs font-medium text-muted-foreground">{t('shortAnswer.points')}</p>
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+            <p className="text-xs font-medium text-muted-foreground">{t('shortAnswer.points')}</p>
+            <RubricSourceLabel source={rubricSource} />
+          </div>
           <ul className="space-y-2">
             {evaluation.rubric.map((point) => (
               <li key={point.pointId} className="flex gap-2">

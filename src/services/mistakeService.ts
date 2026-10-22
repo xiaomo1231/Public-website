@@ -1,3 +1,4 @@
+import { isHeldOut, type EvalRoleCarrier } from '@/entities/evaluation/evalRole'
 import type { AppDatabase } from '@/infrastructure/db/database'
 import { getDb } from '@/infrastructure/db/database'
 import { MistakeRepository } from '@/entities/mistake/repository'
@@ -13,6 +14,20 @@ import type { QuestionAttempt } from '@/entities/questionAttempt/types'
 import { ValidationError } from '@/infrastructure/errors/AppError'
 import { logger } from '@/infrastructure/logger/logger'
 import { t } from '@/i18n'
+import { isSigFigOnlyError } from '@/entities/question/answerDimensions'
+import type { SourceReference } from '@/entities/courseAnalysis/types'
+import { errorDimensionOf, startFollowUp, type MistakeOrigin } from '@/entities/mistake/followUp'
+
+export interface RecordMistakeOptions {
+  /** Where the answer was given (default: `quiz` with a quiz id, else `practice`). */
+  origin?: MistakeOrigin
+  /** Homework-based mistakes: the set the question belongs to. */
+  homeworkSetId?: string
+  /** Lecture citations to store instead of the question's own (e.g. a past paper's topic). */
+  sourceRefs?: SourceReference[]
+  /** Independent evaluation items: recorded, but never re-tested or varied. */
+  noFollowUp?: boolean
+}
 
 export class MistakeService {
   private repo: MistakeRepository
@@ -40,13 +55,30 @@ export class MistakeService {
    * mistake, merge into it (increment the attempt count) instead of
    * creating a duplicate.
    */
-  async recordFromAttempt(attempt: QuestionAttempt, question: Question): Promise<Mistake | null> {
-    if (attempt.evaluation.isCorrect !== false) return null
+  async recordFromAttempt(
+    attempt: QuestionAttempt,
+    question: Question,
+    options: RecordMistakeOptions = {},
+  ): Promise<Mistake | null> {
+    // A significant-figure slip on a right value and unit counts as correct
+    // under the default course rule (hint only), but is still recorded so the
+    // follow-up can practise it.
+    if (attempt.evaluation.isCorrect !== false && !isSigFigOnlyError(attempt.evaluation))
+      return null
+
+    const errorDimension = errorDimensionOf({ evaluation: attempt.evaluation })
+    // 错题跟进: a wrong answer (re)starts the re-test ladder — except for
+    // independent evaluation items, which are never practised or re-tested.
+    const followUpFor = (previous?: Mistake['followUp']) =>
+      options.noFollowUp || isHeldOut(question as EvalRoleCarrier)
+        ? undefined
+        : startFollowUp(attempt.createdAt, question.prompt, errorDimension, previous)
 
     const existing = question.id
       ? await this.repo.findByQuestion(attempt.projectId, question.id)
       : undefined
     if (existing) {
+      const followUp = followUpFor(existing.followUp)
       return this.repo.update(existing.id, {
         attemptCount: existing.attemptCount + 1,
         attemptIds: [...existing.attemptIds, attempt.id],
@@ -56,8 +88,11 @@ export class MistakeService {
         status: 'active',
         resolvedAt: undefined,
         analysisStatus: existing.analysis ? 'ready' : 'pending',
+        ...(errorDimension ? { errorDimension } : {}),
+        ...(followUp ? { followUp } : {}),
       })
     }
+    const followUp = followUpFor()
 
     return this.repo.add({
       projectId: attempt.projectId,
@@ -76,8 +111,16 @@ export class MistakeService {
         : question.correctAnswer,
       ...(question.solution ? { solution: question.solution } : {}),
       // Snapshot the citation so the mistake book can show the course excerpt.
-      ...(question.sourceRefs?.length ? { sourceRefs: question.sourceRefs } : {}),
+      ...(options.sourceRefs?.length
+        ? { sourceRefs: options.sourceRefs }
+        : question.sourceRefs?.length
+          ? { sourceRefs: question.sourceRefs }
+          : {}),
       attemptIds: [attempt.id],
+      origin: options.origin ?? (attempt.quizId ? 'quiz' : 'practice'),
+      ...(options.homeworkSetId ? { homeworkSetId: options.homeworkSetId } : {}),
+      ...(errorDimension ? { errorDimension } : {}),
+      ...(followUp ? { followUp } : {}),
     })
   }
 

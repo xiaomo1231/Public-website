@@ -10,6 +10,7 @@ import { getDb } from '@/infrastructure/db/database'
 import { NotFoundError, StorageError, ValidationError } from '@/infrastructure/errors/AppError'
 import { logger } from '@/infrastructure/logger/logger'
 import { t } from '@/i18n'
+import { normalizeSigFigPolicy } from '@/entities/question/answerDimensions'
 
 function normalizeName(name: string): string {
   return name.trim()
@@ -79,6 +80,10 @@ export class ProjectRepository {
     if (patch.examStyle !== undefined) {
       if (patch.examStyle && EXAM_STYLES.includes(patch.examStyle)) next.examStyle = patch.examStyle
       else delete next.examStyle
+    }
+    if (patch.sigFigPolicy !== undefined) {
+      if (patch.sigFigPolicy) next.sigFigPolicy = normalizeSigFigPolicy(patch.sigFigPolicy)
+      else delete next.sigFigPolicy
     }
     if (patch.description !== undefined) next.description = patch.description.trim()
 

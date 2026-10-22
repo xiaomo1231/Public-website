@@ -1,3 +1,9 @@
+import type { RubricSource } from './origin'
+import type { SigFigBasis } from './answerDimensions'
+import type { VectorSpec } from '@/infrastructure/math/vectorAnswer'
+import type { NomenclatureSpec } from '@/infrastructure/chemistry/nomenclature'
+import { formatForceAnswer, formatForces, type ForceSpec } from './forceList'
+import { formatVectorSpec } from '@/infrastructure/math/vectorAnswer'
 import type { DifficultyLevel } from '@/infrastructure/ai/prompts/types'
 import type { SourceReference } from '@/entities/courseAnalysis/types'
 import type { TranslationKey } from '@/i18n/types'
@@ -26,6 +32,9 @@ export type QuestionType =
   | 'fill_blank'
   | 'article_gender'
   | 'paradigm_table'
+  | 'vector'
+  | 'nomenclature'
+  | 'force_list'
 
 export const QUESTION_TYPES: QuestionType[] = [
   'multiple_choice',
@@ -41,6 +50,9 @@ export const QUESTION_TYPES: QuestionType[] = [
   'fill_blank',
   'article_gender',
   'paradigm_table',
+  'vector',
+  'nomenclature',
+  'force_list',
 ]
 
 export const QUESTION_TYPE_LABEL_KEYS: Record<QuestionType, TranslationKey> = {
@@ -57,6 +69,9 @@ export const QUESTION_TYPE_LABEL_KEYS: Record<QuestionType, TranslationKey> = {
   fill_blank: 'questionType.fillBlank',
   article_gender: 'questionType.articleGender',
   paradigm_table: 'questionType.paradigmTable',
+  vector: 'questionType.vector',
+  nomenclature: 'questionType.nomenclature',
+  force_list: 'questionType.forceList',
 }
 
 /** One scoring point of a short-answer question. */
@@ -113,6 +128,27 @@ export interface Question {
    */
   rubric?: RubricPoint[]
   /**
+   * Short answer only: who set `rubric` (see `rubricSourceOf`). Quiz, oral
+   * and tutor points are written by the platform; absent on older rows, which
+   * read as `platform`.
+   */
+  rubricSource?: RubricSource
+  /**
+   * Numeric (with or without a unit) only: the number of significant figures
+   * the answer must carry. Absent ⇒ significant figures are not checked. The
+   * value, the unit and the significant figures are judged separately; how a
+   * sig-fig slip counts is the course's rule (`Project.sigFigPolicy`).
+   */
+  sigFigs?: number
+  /** Why `sigFigs` is required, for the feedback. */
+  sigFigsBasis?: SigFigBasis
+  /** Vector only: the reference vector (components, unit). */
+  vector?: VectorSpec
+  /** Nomenclature only: the compound, which way it is asked, and accepted names. */
+  nomenclature?: NomenclatureSpec
+  /** Free-body diagram only: the forces acting on the body. */
+  forces?: ForceSpec[]
+  /**
    * Ordering only: the items in the CORRECT order. `correctAnswer` is the same
    * items joined by newlines; the field shows them shuffled.
    */
@@ -158,6 +194,12 @@ export interface NewQuestionInput {
   correctAnswer: string
   unit?: string
   rubric?: RubricPoint[]
+  rubricSource?: RubricSource
+  sigFigs?: number
+  sigFigsBasis?: SigFigBasis
+  vector?: VectorSpec
+  nomenclature?: NomenclatureSpec
+  forces?: ForceSpec[]
   orderItems?: string[]
   matchItems?: string[]
   blanks?: string[][]
@@ -184,7 +226,12 @@ export function normalizeQuestionOptions(
 /** The canonical answer as shown to the student, with its unit when it has one. */
 export function expectedAnswerText(
   question: Pick<Question, 'correctAnswer' | 'unit' | 'type'> &
-    Partial<Pick<Question, 'options' | 'matchItems' | 'blanks' | 'gender' | 'paradigm'>>,
+    Partial<
+      Pick<
+        Question,
+        'options' | 'matchItems' | 'blanks' | 'gender' | 'paradigm' | 'vector' | 'forces'
+      >
+    >,
 ): string {
   if (question.type === 'article_gender' && question.gender)
     return genderAnswerText(question.gender)
@@ -209,6 +256,8 @@ export function expectedAnswerText(
   if (question.type === 'fill_blank' && question.blanks) {
     return question.blanks.map((answers, i) => `(${i + 1}) ${answers[0] ?? ''}`).join('  ')
   }
+  if (question.type === 'vector' && question.vector) return formatVectorSpec(question.vector)
+  if (question.type === 'force_list' && question.forces) return formatForces(question.forces)
   return question.unit ? `${question.correctAnswer} ${question.unit}` : question.correctAnswer
 }
 
@@ -260,6 +309,7 @@ export function displayAnswer(
       )
       .join('；')
   }
+  if (question.type === 'force_list') return formatForceAnswer(userAnswer)
   if (question.type === 'fill_blank')
     return userAnswer
       .split('\n')
@@ -267,6 +317,9 @@ export function displayAnswer(
       .join('  ')
   return userAnswer
 }
+
+/** Courses where vector answers (components or magnitude + direction) are offered. */
+const VECTOR_SUBJECTS: readonly Subject[] = ['physics', 'calculus', 'linear_algebra']
 
 /**
  * Question types a course offers. "What does this program print?" only makes
@@ -282,6 +335,9 @@ export function questionTypesForSubject(
     (type) =>
       (type !== 'code_output' || subject === 'cs') &&
       (type !== 'chem_equation' || subject === 'chemistry') &&
+      (type !== 'nomenclature' || subject === 'chemistry') &&
+      (type !== 'force_list' || subject === 'physics') &&
+      (type !== 'vector' || VECTOR_SUBJECTS.includes(subject as Subject)) &&
       (type !== 'paradigm_table' || subject === 'language') &&
       (type !== 'article_gender' || (subject === 'language' && targetLanguage === 'de')),
   )

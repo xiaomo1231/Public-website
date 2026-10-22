@@ -4,6 +4,7 @@ import {
   AlertTriangle,
   ArrowLeft,
   ArrowRight,
+  CheckCircle2,
   ClipboardList,
   Loader2,
   MoreHorizontal,
@@ -39,6 +40,29 @@ import { GenerationControls } from '@/shared/ui/GenerationControls'
 import { friendlyAIError } from '@/shared/lib/aiErrors'
 import { cn } from '@/shared/lib/utils'
 import { useTranslation } from '@/i18n'
+import { effectiveEvalRole, heldOutQuestions } from '@/entities/evaluation/evalRole'
+import { HomeworkProofreadService } from '@/services/homeworkProofreadService'
+import { ProofreadView } from '@/widgets/homework/proofread/ProofreadView'
+import { SelfTestView } from '@/widgets/homework/selfTest/SelfTestView'
+import { EvaluationPanel } from '@/widgets/evaluation/EvaluationPanel'
+
+type HomeworkView = 'questions' | 'walkthrough' | 'guided' | 'proofread' | 'selftest' | 'evaluate'
+const EXTRA_VIEWS: readonly string[] = [
+  'walkthrough',
+  'guided',
+  'proofread',
+  'selftest',
+  'evaluate',
+]
+
+/** Per-viewer: the 「建议先校对」 banner was dismissed for this assignment. */
+function proofreadBannerDismissed(setId: string): boolean {
+  try {
+    return localStorage.getItem(`ai-learning:proofread-banner:${setId}`) === '1'
+  } catch {
+    return false
+  }
+}
 
 /**
  * The dedicated walkthrough for one homework assignment: a question navigator
@@ -50,9 +74,14 @@ import { useTranslation } from '@/i18n'
  * section where they can be reviewed, restored or explicitly deleted.
  */
 export function HomeworkPage(): JSX.Element {
-  const { t } = useTranslation()
+  const { t, language } = useTranslation()
+  const checkLanguage = language === 'zh-CN' ? 'zh' : 'en'
   const { id: projectId, assignmentId } = useParams<{ id: string; assignmentId: string }>()
   const service = useHomeworkService()
+  const proofread = useMemo(() => new HomeworkProofreadService(), [])
+  const [bannerHidden, setBannerHidden] = useState(() =>
+    assignmentId ? proofreadBannerDismissed(assignmentId) : false,
+  )
 
   const [set, setSet] = useState<HomeworkSet | null>(null)
   const [questions, setQuestions] = useState<HomeworkQuestion[]>([])
@@ -78,10 +107,10 @@ export function HomeworkPage(): JSX.Element {
    * One question at a time, the whole assignment's walkthrough, or 引导练习
    * (one question, step by step from its walkthrough).
    */
-  const view: 'questions' | 'walkthrough' | 'guided' =
-    viewParam === 'walkthrough' ? 'walkthrough' : viewParam === 'guided' ? 'guided' : 'questions'
+  const view: HomeworkView =
+    viewParam && EXTRA_VIEWS.includes(viewParam) ? (viewParam as HomeworkView) : 'questions'
   const showView = useCallback(
-    (next: 'practice' | 'review' | 'walkthrough' | 'guided') =>
+    (next: 'practice' | 'review' | Exclude<HomeworkView, 'questions'>) =>
       setSearchParams(
         (prev) => {
           const params = new URLSearchParams(prev)
@@ -96,6 +125,9 @@ export function HomeworkPage(): JSX.Element {
 
   const load = useCallback(async () => {
     if (!service || !assignmentId) return
+    // Knowledge points + exam-scope links are matched locally (no AI) and
+    // only rewritten when their inputs changed.
+    await proofread.refreshMeta(assignmentId).catch(() => 0)
     const [nextSet, nextQuestions, nextRetired] = await Promise.all([
       service.getSet(assignmentId),
       service.listQuestions(assignmentId),
@@ -118,7 +150,7 @@ export function HomeworkPage(): JSX.Element {
     setActiveId((prev) =>
       prev && ownedQuestions.some((q) => q.id === prev) ? prev : (ownedQuestions[0]?.id ?? null),
     )
-  }, [service, assignmentId, projectId])
+  }, [service, assignmentId, projectId, proofread])
 
   // The question view seeds its state from the list entry once, and its own
   // saves (draft, hints, chat) do not update this list — so re-read the row
@@ -159,8 +191,16 @@ export function HomeworkPage(): JSX.Element {
   const runHandle = useHomeworkRun(set?.documentId)
   const runLive = runHandle.state === 'running' || runHandle.state === 'pausing'
 
-  const index = useMemo(() => questions.findIndex((q) => q.id === activeId), [questions, activeId])
-  const active = index >= 0 ? questions[index] : (questions[0] ?? null)
+  // Questions held out for independent evaluation are only done in 自测:
+  // no hints, walkthrough, guided steps or AI chat for them.
+  const heldOut = useMemo(() => (set ? heldOutQuestions(set, questions) : []), [set, questions])
+  const shown = useMemo(
+    () => (set ? questions.filter((q) => effectiveEvalRole(q, set) !== 'independent') : questions),
+    [set, questions],
+  )
+  const unverified = questions.filter((q) => !q.verifiedAt).length
+  const index = useMemo(() => shown.findIndex((q) => q.id === activeId), [shown, activeId])
+  const active = index >= 0 ? shown[index] : (shown[0] ?? null)
 
   // Keep the current question's chip visible in the horizontal navigator.
   const navRef = useRef<HTMLDivElement>(null)
@@ -268,6 +308,26 @@ export function HomeworkPage(): JSX.Element {
                 >
                   {t('homework.mode.walkthrough')}
                 </Button>
+                {set.kind !== 'practice' && (
+                  <Button
+                    variant={view === 'proofread' ? 'default' : 'ghost'}
+                    size="sm"
+                    aria-pressed={view === 'proofread'}
+                    onClick={() => showView('proofread')}
+                  >
+                    {t('homework.mode.proofread')}
+                  </Button>
+                )}
+                {heldOut.length > 0 && (
+                  <Button
+                    variant={view === 'selftest' ? 'default' : 'ghost'}
+                    size="sm"
+                    aria-pressed={view === 'selftest'}
+                    onClick={() => showView('selftest')}
+                  >
+                    {t('homework.mode.selfTest')}
+                  </Button>
+                )}
               </div>
             )}
             {canReanalyze && (
@@ -293,6 +353,16 @@ export function HomeworkPage(): JSX.Element {
                 onPause={runHandle.requestPause}
                 onStopNow={runHandle.stopNow}
               />
+            )}
+            {set?.status === 'ready' && set.kind !== 'practice' && (
+              <Button
+                variant={view === 'evaluate' ? 'default' : 'outline'}
+                className="hidden xl:inline-flex"
+                aria-pressed={view === 'evaluate'}
+                onClick={() => showView('evaluate')}
+              >
+                {t('evaluation.menu')}
+              </Button>
             )}
             <Button asChild variant="outline" className="hidden xl:inline-flex">
               <Link to={`/projects/${projectId}/homework`}>
@@ -323,6 +393,12 @@ export function HomeworkPage(): JSX.Element {
                   <DropdownMenuItem disabled={retrying} onSelect={() => void retrySet()}>
                     <RefreshCw className="h-4 w-4" />
                     {t('homework.reanalyze')}
+                  </DropdownMenuItem>
+                )}
+                {set?.status === 'ready' && set.kind !== 'practice' && (
+                  <DropdownMenuItem onSelect={() => showView('evaluate')}>
+                    <ClipboardList className="h-4 w-4" />
+                    {t('evaluation.menu')}
                   </DropdownMenuItem>
                 )}
                 <DropdownMenuItem asChild>
@@ -429,7 +505,77 @@ export function HomeworkPage(): JSX.Element {
               </Card>
             )}
 
-            {view === 'walkthrough' && questions.length > 0 ? (
+            {set.status === 'ready' &&
+              set.kind !== 'practice' &&
+              unverified > 0 &&
+              !bannerHidden &&
+              view !== 'proofread' &&
+              questions.length > 0 && (
+                <Card className="border-amber-500/40 bg-amber-500/5" data-proofread-banner>
+                  <CardContent className="flex flex-wrap items-center gap-2 p-3 text-sm">
+                    <AlertTriangle
+                      className="h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400"
+                      aria-hidden
+                    />
+                    <span className="flex-1">{t('proofread.banner', { count: unverified })}</span>
+                    <Button size="sm" className="min-h-11" onClick={() => showView('proofread')}>
+                      {t('homework.mode.proofread')}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="min-h-11"
+                      onClick={() => {
+                        setBannerHidden(true)
+                        try {
+                          localStorage.setItem(`ai-learning:proofread-banner:${set.id}`, '1')
+                        } catch {
+                          // Per-viewer convenience only.
+                        }
+                      }}
+                    >
+                      {t('proofread.bannerDismiss')}
+                    </Button>
+                  </CardContent>
+                </Card>
+              )}
+
+            {heldOut.length > 0 && view === 'questions' && (
+              <p className="text-sm text-muted-foreground" data-held-out-note>
+                {t('selfTest.heldOutNote', { count: heldOut.length })}{' '}
+                <button
+                  type="button"
+                  className="focus-ring min-h-11 rounded px-1 text-primary underline"
+                  onClick={() => showView('selftest')}
+                >
+                  {t('homework.mode.selfTest')}
+                </button>
+              </p>
+            )}
+
+            {view === 'proofread' && questions.length > 0 ? (
+              <ProofreadView
+                setId={set.id}
+                projectId={projectId}
+                onChanged={() => void load()}
+                onOpenView={(next) => showView(next)}
+              />
+            ) : view === 'selftest' ? (
+              <SelfTestView
+                set={set}
+                questions={questions}
+                homework={service}
+                language={checkLanguage}
+                onChanged={() => void load()}
+              />
+            ) : view === 'evaluate' ? (
+              <EvaluationPanel
+                set={set}
+                questions={questions}
+                language={checkLanguage}
+                onChanged={() => void load()}
+              />
+            ) : view === 'walkthrough' && questions.length > 0 ? (
               <HomeworkWalkthroughPanel
                 set={set}
                 mode={mode}
@@ -454,7 +600,7 @@ export function HomeworkPage(): JSX.Element {
                       variant="outline"
                       size="sm"
                       className="shrink-0"
-                      onClick={() => selectQuestion(questions[Math.max(0, index - 1)]?.id ?? null)}
+                      onClick={() => selectQuestion(shown[Math.max(0, index - 1)]?.id ?? null)}
                       disabled={index <= 0}
                     >
                       <ArrowLeft className="h-4 w-4" />
@@ -469,7 +615,7 @@ export function HomeworkPage(): JSX.Element {
                         aria-label={t('homework.questionNavHint')}
                         className="flex items-center gap-1.5 py-1"
                       >
-                        {questions.map((question, position) => {
+                        {shown.map((question, position) => {
                           const isActive = question.id === active?.id
                           return (
                             <li key={question.id} className="shrink-0">
@@ -478,10 +624,11 @@ export function HomeworkPage(): JSX.Element {
                                 ref={isActive ? activeChipRef : undefined}
                                 onClick={() => selectQuestion(question.id)}
                                 aria-current={isActive ? 'true' : undefined}
-                                aria-label={`${position + 1}. ${question.number ?? question.prompt}`}
+                                aria-label={`${position + 1}. ${question.number ?? question.prompt}${question.verifiedAt ? ` · ${t('proofread.verified')}` : ''}`}
+                                data-verified={question.verifiedAt ? 'true' : 'false'}
                                 title={question.number ?? question.prompt}
                                 className={cn(
-                                  'focus-ring grid h-9 min-w-9 place-items-center rounded-full px-2.5 text-xs font-medium transition-colors duration-150 lab:h-8 lab:rounded-sm motion-safe:active:scale-[0.97]',
+                                  'focus-ring relative grid h-9 min-w-9 place-items-center rounded-full px-2.5 text-xs font-medium transition-colors duration-150 lab:h-8 lab:rounded-sm motion-safe:active:scale-[0.97]',
                                   isActive
                                     ? 'bg-theme-primary-soft text-foreground lecture:rounded-none lecture:bg-transparent lecture:text-foreground lecture:shadow-[inset_0_-2px_0_hsl(var(--primary))] lab:shadow-[inset_0_-2px_0_hsl(var(--primary))]'
                                     : 'text-muted-foreground hover:bg-muted hover:text-foreground',
@@ -490,6 +637,12 @@ export function HomeworkPage(): JSX.Element {
                                 <span className="data-num font-mono">
                                   {String(position + 1).padStart(2, '0')}
                                 </span>
+                                {question.verifiedAt && (
+                                  <CheckCircle2
+                                    className="absolute -right-0.5 -top-0.5 h-3 w-3 text-emerald-600 dark:text-emerald-400"
+                                    aria-hidden
+                                  />
+                                )}
                               </button>
                             </li>
                           )
@@ -502,7 +655,7 @@ export function HomeworkPage(): JSX.Element {
                       className="data-num hidden shrink-0 font-mono sm:inline-flex"
                       aria-live="polite"
                     >
-                      {t('homework.progress', { current: index + 1, total: questions.length })}
+                      {t('homework.progress', { current: index + 1, total: shown.length })}
                     </Badge>
 
                     <Button
@@ -510,11 +663,9 @@ export function HomeworkPage(): JSX.Element {
                       size="sm"
                       className="shrink-0"
                       onClick={() =>
-                        selectQuestion(
-                          questions[Math.min(questions.length - 1, index + 1)]?.id ?? null,
-                        )
+                        selectQuestion(shown[Math.min(shown.length - 1, index + 1)]?.id ?? null)
                       }
-                      disabled={index >= questions.length - 1}
+                      disabled={index >= shown.length - 1}
                     >
                       <span className="hidden sm:inline">{t('homework.next')}</span>
                       <ArrowRight className="h-4 w-4" />

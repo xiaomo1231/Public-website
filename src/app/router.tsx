@@ -40,6 +40,8 @@ const DocumentDetailPage = lazyPage(
   'DocumentDetailPage',
 )
 const TutorPage = lazyPage(() => import('@/pages/TutorPage'), 'TutorPage')
+const MockExamPage = lazyPage(() => import('@/pages/MockExamPage'), 'MockExamPage')
+const ExamAnalysisPage = lazyPage(() => import('@/pages/ExamAnalysisPage'), 'ExamAnalysisPage')
 const SlideStudyPage = lazyPage(() => import('@/pages/SlideStudyPage'), 'SlideStudyPage')
 const InteractiveTutorPage = lazyPage(
   () => import('@/pages/InteractiveTutorPage'),
@@ -81,7 +83,9 @@ const projectPages: RouteObject[] = [
   { path: 'projects/:id/quiz/:quizId/result', element: <QuizResultPage /> },
   { path: 'projects/:id/practice', element: <PracticePage /> },
   { path: 'projects/:id/homework', element: <HomeworkLandingPage /> },
+  { path: 'projects/:id/homework/exam-analysis', element: <ExamAnalysisPage /> },
   { path: 'projects/:id/homework/:assignmentId', element: <HomeworkPage /> },
+  { path: 'projects/:id/homework/:assignmentId/exam', element: <MockExamPage /> },
   { path: 'projects/:id/mastery', element: <MasteryPage /> },
   { path: 'projects/:id/mistakes', element: <MistakeBookPage /> },
   { path: 'projects/:id/cards', element: <ReviewCardsPage /> },

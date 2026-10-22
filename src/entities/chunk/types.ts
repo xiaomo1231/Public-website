@@ -1,4 +1,6 @@
 import type { ChunkContentType, LearningMaterialType } from '../document/types'
+import type { EvalRole } from '../evaluation/evalRole'
+import type { LayoutWarning } from './layoutWarnings'
 
 export interface DocumentChunk {
   id: string
@@ -6,6 +8,8 @@ export interface DocumentChunk {
   projectId: string
   /** Denormalised from the document so retrieval can filter without a join. */
   materialType?: LearningMaterialType
+  /** Denormalised `Document.evalRole` (held-out filtering without a join). */
+  evalRole?: EvalRole
   pageNumber?: number
   section?: string
   contentType: ChunkContentType
@@ -25,6 +29,11 @@ export interface DocumentChunk {
   sectionNumber?: string
   chapterTitle?: string
   sectionTitle?: string
+  /**
+   * Regions the extractor could not lay out reliably (a fraction, table,
+   * exponent or matrix kept as raw text). Optional; see `layoutWarnings.ts`.
+   */
+  layoutWarnings?: LayoutWarning[]
   createdAt: number
 }
 
@@ -44,6 +53,7 @@ export interface NewChunkInput {
   sectionNumber?: string
   chapterTitle?: string
   sectionTitle?: string
+  layoutWarnings?: LayoutWarning[]
 }
 
 export function buildSourceReference(input: {

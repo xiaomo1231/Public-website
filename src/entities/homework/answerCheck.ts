@@ -115,6 +115,10 @@ export function checkObjectiveAnswer(
       '',
     )
     .replace(/^(?:answer|ans\.?|答案|解)\s*[:：]\s*/i, '')
+    // Marking-scheme annotations of an exam answer key ("5 B1", "x = 2 [2 marks]")
+    // are not part of the answer.
+    .replace(/(?:\s+[MABE]\d)+\s*$/, '')
+    .replace(/\s*[([]\s*\d{1,3}\s*(?:marks?|分)?\s*[)\]]\s*$/i, '')
     .replace(/^\$([^$]+)\$$/, '$1')
     .replace(/[。.]$/, '')
     .trim()

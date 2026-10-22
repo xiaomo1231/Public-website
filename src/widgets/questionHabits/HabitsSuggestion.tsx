@@ -27,7 +27,10 @@ export function HabitsSuggestion({
     service
       .status(projectId)
       .then((status) => {
-        if (alive) setCount(status.pending.filter((doc) => doc.kind === 'homework').length)
+        if (alive)
+          setCount(
+            status.pending.filter((doc) => doc.kind === 'homework' || doc.kind === 'exam').length,
+          )
       })
       .catch(() => {
         if (alive) setCount(0)

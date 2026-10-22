@@ -35,8 +35,9 @@ export type PracticeGrader =
       free: number
     }
   | { kind: 'expression'; expected: string; constant?: boolean }
-  | { kind: 'numeric'; expected: number; relTol: number }
-  | { kind: 'quantity'; value: number; unit: string }
+  /** `sigFigs`: the significant figures the answer must carry (value, unit and figures judged separately). */
+  | { kind: 'numeric'; expected: number; relTol: number; sigFigs?: number }
+  | { kind: 'quantity'; value: number; unit: string; sigFigs?: number }
   | { kind: 'chem_equation'; equation: string }
   | { kind: 'text' }
 

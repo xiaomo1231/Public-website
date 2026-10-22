@@ -1,5 +1,6 @@
 import type { Document } from '../document/types'
-import { isReferenceOnlyMaterial, resolveMaterialType } from '../document/types'
+import { resolveMaterialType } from '../document/types'
+import { isExcludedFromCourseContext } from '../evaluation/evalRole'
 import type { DocumentChunk } from '../chunk/types'
 import { fnv1a } from '@/shared/lib/hash'
 
@@ -22,7 +23,8 @@ export function selectAnalysisDocuments(documents: Document[]): Document[] {
   // knowledge. It must never be fingerprinted or analysed as if it were a
   // textbook / notes (course vocabulary reads this selection too).
   const ready = documents.filter(
-    (doc) => doc.status === 'ready' && !isReferenceOnlyMaterial(doc.materialType),
+    // Held-out (independent evaluation) documents are excluded the same way.
+    (doc) => doc.status === 'ready' && !isExcludedFromCourseContext(doc),
   )
   const textbooks = ready.filter((doc) => resolveMaterialType(doc.materialType) === 'textbook')
   return textbooks.length > 0 ? textbooks : ready

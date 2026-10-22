@@ -17,6 +17,7 @@ import { Card, CardContent, CardHeader } from '@/shared/ui/Card'
 import { RichText } from '@/shared/ui/RichText'
 import { MistakeAnalysisView, AnalysisPlaceholder } from './MistakeAnalysisView'
 import { PracticeMoreMenu } from './PracticeMoreMenu'
+import { MistakeFollowUpPanel } from './MistakeFollowUp'
 import { QuestionSource } from '@/widgets/quiz/QuestionSource'
 import { relativeTime } from '@/shared/lib/utils'
 import { cn } from '@/shared/lib/utils'
@@ -53,6 +54,8 @@ export interface MistakeCardProps {
     id: string,
     mode: 'same_concept' | 'similar' | 'easier' | 'harder' | 'weakness',
   ) => Promise<void>
+  /** 错题跟进 changed the row (a re-test result, a retry): reload the list. */
+  onFollowUpChanged?: () => void
 }
 
 export function MistakeCard({
@@ -63,6 +66,7 @@ export function MistakeCard({
   onRestore,
   onRemove,
   onPractice,
+  onFollowUpChanged,
 }: MistakeCardProps): JSX.Element {
   const { t } = useTranslation()
   const [expanded, setExpanded] = useState(false)
@@ -210,6 +214,8 @@ export function MistakeCard({
           />
 
           <QuestionSource sourceRefs={mistake.sourceRefs} projectId={mistake.projectId} />
+
+          <MistakeFollowUpPanel mistake={mistake} onChanged={() => onFollowUpChanged?.()} />
 
           <div className="flex flex-wrap items-center gap-2 border-t pt-3">
             {mistake.status === 'active' && (

@@ -21,7 +21,7 @@ export type QuestionStyleLanguage = 'zh' | 'en'
 export interface QuestionStyleUnit {
   /** Closed label (`U1`). */
   label: string
-  kind: 'homework' | 'practice' | 'syllabus'
+  kind: 'homework' | 'practice' | 'syllabus' | 'exam'
   documentName: string
   position?: string
   text: string
@@ -67,6 +67,7 @@ const KIND_LABEL: Record<QuestionStyleUnit['kind'], string> = {
   homework: 'homework',
   practice: 'professor practice',
   syllabus: 'exam / syllabus',
+  exam: 'past exam paper',
 }
 
 export function buildUserPrompt(input: QuestionStyleInput): string {

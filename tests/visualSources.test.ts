@@ -21,7 +21,8 @@ const pdfState = vi.hoisted(() => ({
   pages: [] as Array<{ text: string; imageOps: number[] }>,
 }))
 
-vi.mock('pdfjs-dist', () => {
+// pdfExtractor imports the legacy build (see its header comment).
+vi.mock('pdfjs-dist/legacy/build/pdf.mjs', () => {
   class FakePage {
     constructor(private readonly page: { text: string; imageOps: number[] }) {}
     async getOperatorList() {

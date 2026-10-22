@@ -40,7 +40,8 @@ import { AppError } from '@/infrastructure/errors/AppError'
 import { asRecord } from '@/infrastructure/ai/validation'
 import type { DocumentChunk } from '@/entities/chunk/types'
 import { tokenize } from './classProgressService'
-import { isReferenceOnlyMaterial, resolveMaterialType } from '@/entities/document/types'
+import { resolveMaterialType } from '@/entities/document/types'
+import { isExcludedFromCourseContext } from '@/entities/evaluation/evalRole'
 import { normalizeMathNotation } from '@/infrastructure/files/mathNotation'
 import { t } from '@/i18n'
 import { fnv1a } from '@/shared/lib/hash'
@@ -198,7 +199,8 @@ export class DocumentAnalysisService {
     const readyDocs = documents.filter((d) => d.status === 'ready')
     // A professor answer key or a syllabus is reference material, never course
     // knowledge; it is excluded from the analysis (and its source hash) entirely.
-    const courseDocs = readyDocs.filter((d) => !isReferenceOnlyMaterial(d.materialType))
+    // Held-out (independent evaluation) documents likewise.
+    const courseDocs = readyDocs.filter((d) => !isExcludedFromCourseContext(d))
     if (courseDocs.length === 0) {
       throw new AppError(t('errors.noProcessedDocuments'), 'NO_DOCUMENTS')
     }

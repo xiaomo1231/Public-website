@@ -23,6 +23,7 @@ import { formatBytes } from '@/shared/lib/format'
 import { cn } from '@/shared/lib/utils'
 import { useBatchUpload } from '@/features/documents/useBatchUpload'
 import { looksLikeSyllabus } from '@/entities/syllabus/parse'
+import { looksLikePastExam } from '@/entities/exam/paper'
 import {
   MAX_BATCH_FILES,
   type FileIssue,
@@ -54,6 +55,7 @@ const MATERIAL_LABEL_KEY: Record<LearningMaterialType, TranslationKey> = {
   homework_answer: 'materialType.homework_answer',
   syllabus: 'materialType.syllabus',
   walkthrough_import: 'materialType.walkthrough_import',
+  past_exam: 'materialType.past_exam',
 }
 
 const TEXT_TAB = 'text' as const
@@ -155,6 +157,17 @@ export function DocumentUploadDialog({
       item.materialType !== 'homework' &&
       item.materialType !== 'homework_answer' &&
       looksLikeSyllabus(item.name),
+  )
+  // Files named like a past paper / mock paper: suggest 往年试卷 (confirmed by the student).
+  const pastExamLike = items.filter(
+    (item) =>
+      item.status === 'queued' &&
+      item.materialType !== 'past_exam' &&
+      item.materialType !== 'syllabus' &&
+      item.materialType !== 'homework_answer' &&
+      item.materialType !== 'walkthrough_import' &&
+      !syllabusLike.includes(item) &&
+      looksLikePastExam(item.name),
   )
 
   function statusLabel(item: UploadQueueItem): string {
@@ -428,6 +441,27 @@ export function DocumentUploadDialog({
                   }
                 >
                   {t('upload.syllabusAccept')}
+                </Button>
+              </div>
+            )}
+
+            {!started && pastExamLike.length > 0 && (
+              <div className="flex flex-wrap items-center gap-2 rounded-lg border border-amber-500/40 bg-amber-50/50 px-3 py-2 text-xs dark:bg-amber-950/20">
+                <span className="min-w-0 flex-1">
+                  {t('upload.pastExamSuggest', { count: pastExamLike.length })}
+                </span>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() =>
+                    batch.setMaterial(
+                      pastExamLike.map((item) => item.id),
+                      'past_exam',
+                    )
+                  }
+                >
+                  {t('upload.pastExamAccept')}
                 </Button>
               </div>
             )}

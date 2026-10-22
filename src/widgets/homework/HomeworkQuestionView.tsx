@@ -30,6 +30,9 @@ import {
 } from '@/entities/homework/answerCheck'
 import type { HomeworkService } from '@/services/homeworkService'
 import { Badge } from '@/shared/ui/Badge'
+import { QuestionOriginBadge } from '@/shared/ui/QuestionOriginBadge'
+import { QuestionMetaLine } from './QuestionMetaLine'
+import { homeworkQuestionOrigin } from '@/entities/question/origin'
 import { Button } from '@/shared/ui/Button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/ui/Card'
 import { RichText } from '@/shared/ui/RichText'
@@ -368,7 +371,9 @@ export function HomeworkQuestionView({
                   {question.number}
                 </Badge>
               )}
+              <QuestionOriginBadge origin={homeworkQuestionOrigin(question)} />
             </div>
+            <QuestionMetaLine question={question} />
             <QuestionText
               question={question}
               className="max-w-[74ch] [&_p]:mb-3"

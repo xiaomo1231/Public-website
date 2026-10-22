@@ -19,6 +19,15 @@
  * matched by molecular formula; when the reference gives a structure with two
  * or more carbons and the answer writes it differently, the two may be
  * isomers, so the comparison says so instead of guessing.
+ *
+ * Nuclear chemistry: a species may carry its mass number (and atomic number)
+ * as a prefix — `^{235}_{92}U`, `^235U`, `²³⁵U`, `{}^{14}_{6}C`, `^{54}Cr^{6+}` —
+ * and the particles `n`, `p`, `α`, `β-` / `β+`, `e+`, `γ` (and `ν`) are known.
+ * An equation that uses this notation is checked by conserving the mass number
+ * A and the atomic number Z instead of atoms and charge:
+ *
+ *   ^{235}_{92}U + ^1_0n -> ^{141}_{56}Ba + ^{92}_{36}Kr + 3 ^1_0n
+ *   ^{238}U -> ^{234}Th + α          ^{14}C -> ^{14}N + β-
  */
 
 export interface Species {
@@ -36,6 +45,14 @@ export interface Species {
    * molecular formula such as `C2H6O`.
    */
   structure?: string
+  /**
+   * Nuclear notation: the nucleus (or particle) with its mass number A and
+   * atomic number Z. Set for nuclides written with a mass number and for the
+   * particles n, p, α, β±, γ, ν; electrons (`e-`) carry A = 0, Z = −1 too.
+   */
+  nucleus?: { A: number; Z: number }
+  /** Written in nuclear notation (a mass-number prefix or a nuclear particle). */
+  nuclear?: boolean
 }
 
 export interface Term {
@@ -92,6 +109,28 @@ const ELEMENTS = new Set(
   ).split(' '),
 )
 
+/** Atomic number Z of each element (deuterium and tritium are hydrogen). */
+const ATOMIC_NUMBER: Record<string, number> = Object.fromEntries([
+  ...[...ELEMENTS].slice(0, 118).map((symbol, index) => [symbol, index + 1] as const),
+  ['D', 1],
+  ['T', 1],
+])
+
+export function atomicNumber(symbol: string): number | undefined {
+  return ATOMIC_NUMBER[symbol]
+}
+
+/** Nuclear particles: the key they are compared by, A and Z. */
+const PARTICLES: Record<string, { key: string; A: number; Z: number }> = {
+  n: { key: 'n', A: 1, Z: 0 },
+  p: { key: '[1]H', A: 1, Z: 1 },
+  α: { key: '[4]He', A: 4, Z: 2 },
+  'β-': { key: 'e-', A: 0, Z: -1 },
+  'β+': { key: 'e+', A: 0, Z: 1 },
+  γ: { key: 'γ', A: 0, Z: 0 },
+  ν: { key: 'ν', A: 0, Z: 0 },
+}
+
 /** Every arrow except a bare `=`, which may also be a double bond. */
 const ARROW = /\s*(?:<=>|<->|<-->|⇌|⇄|↔|-->|->|→|⟶)(?:\[[^\]]*\])?(?:\[[^\]]*\])?\s*/g
 const EQUALS_ARROW = /\s*=(?:\[[^\]]*\])?(?:\[[^\]]*\])?\s*/g
@@ -119,6 +158,12 @@ function normalize(text: string): string {
     .replace(/≡/g, '#')
     .replace(/[·•∙⋅]/g, '·')
     .replace(/\^\{([^}]*)\}/g, '^$1')
+    .replace(/_\{([^}]*)\}/g, '_$1')
+    .replace(/\{\}/g, '')
+    .replace(/\\alpha/g, 'α')
+    .replace(/\\beta/g, 'β')
+    .replace(/\\gamma/g, 'γ')
+    .replace(/\\nu/g, 'ν')
     .replace(/[↑↓]/g, '')
     .replace(/\$/g, '')
     .trim()
@@ -139,7 +184,7 @@ function splitTerms(side: string): string[] {
       const afterCaret = before.endsWith('^') || /\^\d*$/.test(before)
       const separator =
         spaced ||
-        (!afterCaret && prevChar !== '' && prevChar !== '+' && /[A-Z0-9([e]/.test(nextChar))
+        (!afterCaret && prevChar !== '' && prevChar !== '+' && /[A-Z0-9([e^_αβγνnp]/.test(nextChar))
       if (separator) {
         terms.push(current)
         current = ''
@@ -159,7 +204,7 @@ function gcd(a: number, b: number): number {
 function parseCoefficient(text: string): { coefficient: { n: number; d: number }; rest: string } {
   const match = /^(\d+)(?:\s*\/\s*(\d+))?\s*/.exec(text)
   // A leading number is a coefficient only when a formula follows it.
-  if (!match || !/^[A-Z([e]/.test(text.slice(match[0].length))) {
+  if (!match || !/^[A-Z([e^_αβγνnp]/.test(text.slice(match[0].length))) {
     return { coefficient: { n: 1, d: 1 }, rest: text }
   }
   const n = Number(match[1])
@@ -235,8 +280,66 @@ export function parseSpecies(raw: string): Species | null {
     charge = trailing[1] === '+' ? 1 : -1
     text = text.slice(0, trailing.index)
   }
+  // Nuclear prefix: ^A, ^A_Z or _Z^A before the symbol.
+  const prefix = /^(?:\^(\d+)(?:_([-+]?\d+))?|_([-+]?\d+)\^(\d+))(?=[A-Za-zαβγν])/.exec(text)
+  const massNumber = prefix ? Number(prefix[1] ?? prefix[4]) : undefined
+  const zText = prefix ? (prefix[2] ?? prefix[3]) : undefined
+  const writtenZ = zText !== undefined ? Number(zText) : undefined
+  if (prefix) text = text.slice(prefix[0].length)
+  const written = raw.replace(STATE, '').trim()
   if (text === 'e') {
-    return charge === -1 ? { text: raw.trim(), atoms: {}, charge: -1, key: 'e-' } : null
+    // ^0_-1e is an electron (β−), ^0_1e / e+ a positron.
+    if (massNumber !== undefined && massNumber !== 0) return null
+    if (charge === 1 || (charge === 0 && writtenZ === 1))
+      return {
+        text: written,
+        atoms: {},
+        charge: 1,
+        key: 'e+',
+        nucleus: { A: 0, Z: 1 },
+        nuclear: true,
+      }
+    if (charge === -1 || writtenZ === -1)
+      return {
+        text: written,
+        atoms: {},
+        charge: -1,
+        key: 'e-',
+        nucleus: { A: 0, Z: -1 },
+        ...(prefix ? { nuclear: true } : {}),
+      }
+    return null
+  }
+  const particle = PARTICLES[text === 'β' ? `β${charge > 0 ? '+' : '-'}` : text]
+  if (particle && (text !== 'p' || charge >= 0)) {
+    if (massNumber !== undefined && massNumber !== particle.A) return null
+    if (writtenZ !== undefined && writtenZ !== particle.Z) return null
+    return {
+      text: written,
+      atoms: {},
+      charge: 0,
+      key: particle.key,
+      nucleus: { A: particle.A, Z: particle.Z },
+      nuclear: true,
+    }
+  }
+  if (massNumber !== undefined) {
+    // A nuclide is one atom of one element.
+    const atoms = parseAtoms(text)
+    const symbols = atoms ? Object.keys(atoms) : []
+    if (!atoms || symbols.length !== 1 || atoms[symbols[0]!] !== 1) return null
+    const symbol = symbols[0]!
+    const Z = ATOMIC_NUMBER[symbol]!
+    if (writtenZ !== undefined && writtenZ !== Z) return null
+    if (massNumber < Z) return null
+    return {
+      text: written,
+      atoms: { [symbol]: 1 },
+      charge,
+      key: `[${massNumber}]${symbol}${charge === 0 ? '' : `${Math.abs(charge)}${charge > 0 ? '+' : '-'}`}`,
+      nucleus: { A: massNumber, Z },
+      nuclear: true,
+    }
   }
   const unbonded = text.replace(BONDS, '')
   const drawnBond = unbonded !== text
@@ -383,7 +486,7 @@ export function parseEquation(input: string): ParseResult {
   let firstFailure: ParseResult | null = null
   let firstParsed: ParseResult | null = null
   for (const split of splits) {
-    const result = parseSides(split.left, split.right, split.arrow)
+    const result = nuclearCheck(parseSides(split.left, split.right, split.arrow))
     if (!result.ok) {
       firstFailure ??= result
       continue
@@ -395,8 +498,24 @@ export function parseEquation(input: string): ParseResult {
   return firstParsed ?? firstFailure!
 }
 
+/** Whether an equation is written in nuclear notation (A and Z are conserved). */
+export function isNuclear(equation: ParsedEquation): boolean {
+  return [...equation.reactants, ...equation.products].some(({ species }) => species.nuclear)
+}
+
+/**
+ * In a nuclear equation every nucleus must show its mass number: an element
+ * written without one (`U` among `^{235}U …`) cannot be balanced by A and Z.
+ */
+function nuclearCheck(result: ParseResult): ParseResult {
+  if (!result.ok || !isNuclear(result.equation)) return result
+  const terms = [...result.equation.reactants, ...result.equation.products]
+  const missing = terms.find(({ species }) => !species.nucleus)
+  return missing ? { ok: false, reason: 'bad-species', detail: missing.species.text } : result
+}
+
 export interface Imbalance {
-  /** An element symbol, or "charge". */
+  /** An element symbol, "charge", or (nuclear equations) "mass number" / "atomic number". */
   what: string
   left: number
   right: number
@@ -417,6 +536,7 @@ function sideTotals(terms: Term[]): { atoms: Record<string, number>; charge: num
 
 /** Every element (and the charge) whose totals differ between the sides. */
 export function imbalances(equation: ParsedEquation): Imbalance[] {
+  if (isNuclear(equation)) return nuclearImbalances(equation)
   const left = sideTotals(equation.reactants)
   const right = sideTotals(equation.products)
   const elements = [...new Set([...Object.keys(left.atoms), ...Object.keys(right.atoms)])].sort()
@@ -430,6 +550,30 @@ export function imbalances(equation: ParsedEquation): Imbalance[] {
   if (round(left.charge) !== round(right.charge)) {
     out.push({ what: 'charge', left: round(left.charge), right: round(right.charge) })
   }
+  return out
+}
+
+/** Mass number A and atomic number Z, summed over each side. */
+function nuclearImbalances(equation: ParsedEquation): Imbalance[] {
+  const totals = (terms: Term[]) =>
+    terms.reduce(
+      (sum, { coefficient, species }) => {
+        const factor = coefficient.n / coefficient.d
+        return {
+          A: sum.A + (species.nucleus?.A ?? 0) * factor,
+          Z: sum.Z + (species.nucleus?.Z ?? 0) * factor,
+        }
+      },
+      { A: 0, Z: 0 },
+    )
+  const left = totals(equation.reactants)
+  const right = totals(equation.products)
+  const out: Imbalance[] = []
+  const round = (x: number) => Math.round(x * 1e6) / 1e6
+  if (round(left.A) !== round(right.A))
+    out.push({ what: 'mass number', left: round(left.A), right: round(right.A) })
+  if (round(left.Z) !== round(right.Z))
+    out.push({ what: 'atomic number', left: round(left.Z), right: round(right.Z) })
   return out
 }
 

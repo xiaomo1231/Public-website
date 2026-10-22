@@ -38,6 +38,8 @@ import {
   normalizeExtractedText,
   type SuspiciousUnicodeReport,
 } from '@/infrastructure/files/textEncoding'
+import { foldMathAlphanumerics } from '@/infrastructure/files/fontGlyphs'
+import { needsVisualProofread } from '@/entities/chunk/layoutWarnings'
 import { logger } from '@/infrastructure/logger/logger'
 import { isQuotaError } from '@/infrastructure/files/storageSpace'
 import { AppError, ValidationError } from '@/infrastructure/errors/AppError'
@@ -203,7 +205,10 @@ export class ProcessingService {
         }
       }
 
-      const storedChunks = this.chunks.prepareMany(newChunks)
+      // A held-out / evaluation role is denormalised onto the chunks.
+      const storedChunks = this.chunks
+        .prepareMany(newChunks)
+        .map((chunk) => (document.evalRole ? { ...chunk, evalRole: document.evalRole } : chunk))
 
       // A syllabus: read its exam topics from the stored chunks (local parser
       // only; the AI fallback is the student's choice). A list the student
@@ -236,6 +241,11 @@ export class ProcessingService {
       const warnings = (extraction.warnings ?? []).slice()
       if (extraction.lowConfidence)
         warnings.push(t('errors.ocrLowConfidence', { value: `${extraction.confidence}%` }))
+      if (extraction.handwriting) warnings.push(t('errors.ocrHandwriting'))
+      // Fractions / tables / exponents kept as raw text: suggest checking the page.
+      const uncertainLayout = newChunks.filter((chunk) => needsVisualProofread(chunk)).length
+      if (uncertainLayout > 0)
+        warnings.push(t('errors.layoutUncertain', { count: uncertainLayout }))
       if (report.suspicious) {
         // Characters we cannot decode are kept, never guessed at — the user is
         // told the source PDF's font encoding is the problem instead.
@@ -397,6 +407,7 @@ export class ProcessingService {
           raw: { ocr: result },
           lowConfidence: result.confidence < 60,
           confidence: result.confidence,
+          ...(result.handwriting ? { handwriting: true } : {}),
         }
       }
       default: {
@@ -431,7 +442,8 @@ export class ProcessingService {
   } {
     const normalized = chunks.map((chunk) => ({
       ...chunk,
-      text: normalizeExtractedText(chunk.text),
+      // Bold / italic maths letters (Cambria Math exports) become plain text.
+      text: normalizeExtractedText(foldMathAlphanumerics(chunk.text)),
     }))
     const report = detectSuspiciousUnicode(normalized.map((chunk) => chunk.text).join('\n'))
     return { chunks: normalized, report }
@@ -645,6 +657,8 @@ interface ExtractionOutput {
   }
   lowConfidence?: boolean
   confidence?: number
+  /** An image OCR result that looks hand-written or marked (see ocrExtractor). */
+  handwriting?: boolean
 }
 
 type NewChunk = NewChunkInput

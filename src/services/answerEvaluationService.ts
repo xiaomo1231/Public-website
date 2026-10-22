@@ -6,6 +6,22 @@ import {
   parseNumeric,
 } from '@/infrastructure/math/expressionEvaluator'
 import { compareQuantity, splitQuantity } from '@/infrastructure/math/quantityAnswer'
+import {
+  judgeSigFigs,
+  readSigFigs,
+  sigFigRelativeTolerance,
+} from '@/infrastructure/math/significantFigures'
+import { compareVector } from '@/infrastructure/math/vectorAnswer'
+import { compareFormula, nameAccepted } from '@/infrastructure/chemistry/nomenclature'
+import {
+  DEFAULT_SIG_FIG_POLICY,
+  sigFigCredit,
+  type AnswerDimensions,
+  type SigFigPolicy,
+  type UnitStatus,
+} from '@/entities/question/answerDimensions'
+import { forceListScore, gradeForceList } from '@/entities/question/forceList'
+import { dimensionsNote } from './answerDimensionsFeedback'
 import { compareEquations, parseEquation } from '@/infrastructure/chemistry/equation'
 import { orderingItems, scoreOrdering } from '@/infrastructure/math/orderingAnswer'
 import { displayAnswer, expectedAnswerText, optionLetter } from '@/entities/question/types'
@@ -13,7 +29,7 @@ import { logger } from '@/infrastructure/logger/logger'
 import { unverifiedShortAnswer } from './shortAnswerGrader'
 import { compareTargetText, isNearTarget } from '@/shared/lib/language'
 import type { BlankResult, NearSpelling } from '@/entities/questionAttempt/types'
-import { t } from '@/i18n'
+import { t, type TranslationKey } from '@/i18n'
 import {
   decodeGenderAnswer,
   paradigmBlanks,
@@ -34,6 +50,12 @@ export interface DeterministicOptions {
    * spelling variants earn half a blank, with a hint.
    */
   targetLanguage?: string | undefined
+  /**
+   * The course's significant-figure rule (`Project.sigFigPolicy`): how an
+   * answer with the right value and unit but the wrong significant figures
+   * counts. Default: hint only, no deduction (平台拟定规则).
+   */
+  sigFigPolicy?: SigFigPolicy | undefined
 }
 
 /**
@@ -51,7 +73,13 @@ export function evaluateDeterministic(
     case 'true_false':
       return evaluateOption(question, userAnswer, true)
     case 'numeric':
-      return evaluateNumeric(question, userAnswer)
+      return evaluateNumeric(question, userAnswer, options.sigFigPolicy ?? DEFAULT_SIG_FIG_POLICY)
+    case 'vector':
+      return evaluateVector(question, userAnswer)
+    case 'nomenclature':
+      return evaluateNomenclature(question, userAnswer)
+    case 'force_list':
+      return evaluateForceList(question, userAnswer)
     case 'math_expr':
       return evaluateMath(question, userAnswer)
     case 'code_output':
@@ -149,7 +177,116 @@ function evaluateOption(
   }
 }
 
-function evaluateNumeric(question: Question, userAnswer: string): QuestionEvaluation {
+/** The number of a plain numeric answer: an expression (`3/4`) or scientific notation (`6.02×10^23`). */
+function readAnswerNumber(text: string): number | null {
+  const direct = parseNumeric(text)
+  if (direct !== null) return direct
+  const split = splitQuantity(text)
+  return split && !split.unitText ? split.value : null
+}
+
+function withinTolerance(value: number, expected: number, relTol: number): boolean {
+  if (expected === 0) return Math.abs(value) <= 1e-9
+  return Math.abs(value - expected) <= relTol * Math.abs(expected)
+}
+
+/**
+ * The significant-figure dimension of an answer, read from the digits the
+ * student typed. A plain numeric answer must be a single written number
+ * (`3/4` has no significant figures to judge); a quantity may be followed by
+ * its unit.
+ */
+function sigFigDimension(
+  question: Question,
+  given: string,
+  allowUnit: boolean,
+): AnswerDimensions['sigFigs'] {
+  const required = question.sigFigs
+  if (!required) return undefined
+  const basis = question.sigFigsBasis ? { basis: question.sigFigsBasis } : {}
+  const reading = readSigFigs(given)
+  const rest = reading ? reading.rest.trim() : ''
+  if (!reading || (!allowUnit && rest)) return { status: 'unreadable', required, ...basis }
+  const judgement = judgeSigFigs(given, required)
+  return {
+    status: judgement.status,
+    required,
+    ...(judgement.given ? { given: judgement.given } : {}),
+    ...(judgement.ambiguous ? { ambiguous: true } : {}),
+    ...basis,
+  }
+}
+
+/**
+ * Value, unit and significant figures are judged separately; this turns the
+ * three into a verdict under the course rule. A wrong value or unit is wrong;
+ * a significant-figure slip on a right value and unit is a hint (full credit)
+ * or a deduction, as the course rule says — never decided silently.
+ */
+function finishNumeric(
+  base: Omit<QuestionEvaluation, 'isCorrect' | 'confidence'>,
+  dimensions: AnswerDimensions,
+  policy: SigFigPolicy,
+  extra: { convertedValue?: number; unit?: string; given: string } = { given: '' },
+): QuestionEvaluation {
+  const rule = dimensions.sigFigs
+    ? {
+        sigFigRule: {
+          mode: policy.mode,
+          ...(policy.mode === 'deduct' && policy.percent !== undefined
+            ? { percent: policy.percent }
+            : {}),
+          source: policy.source,
+          deducted: false,
+        },
+      }
+    : {}
+  const unitStatus: UnitStatus | undefined = dimensions.unit?.status
+  const note = dimensionsNote(dimensions, extra)
+  const withNote = note ? { note } : {}
+  if (dimensions.value === 'unreadable' || unitStatus === 'unreadable') {
+    return {
+      ...base,
+      ...rule,
+      dimensions,
+      isCorrect: null,
+      method: 'unverified',
+      confidence: 0,
+      ...withNote,
+    }
+  }
+  const valueAndUnitRight =
+    dimensions.value === 'correct' && (!unitStatus || unitStatus === 'correct')
+  if (!valueAndUnitRight) {
+    return { ...base, ...rule, dimensions, isCorrect: false, confidence: 0.99, ...withNote }
+  }
+  const sigFigStatus = dimensions.sigFigs?.status
+  if (sigFigStatus === 'too-many' || sigFigStatus === 'too-few') {
+    const deducted = policy.mode === 'deduct'
+    const credit = sigFigCredit(policy)
+    return {
+      ...base,
+      dimensions,
+      sigFigRule: {
+        mode: policy.mode,
+        ...(deducted && policy.percent !== undefined ? { percent: policy.percent } : {}),
+        source: policy.source,
+        deducted,
+      },
+      isCorrect: !deducted,
+      confidence: 0.99,
+      ...(deducted ? { score: { earned: credit, total: 1 } } : {}),
+      ...withNote,
+    }
+  }
+  return { ...base, ...rule, dimensions, isCorrect: true, confidence: 0.99, ...withNote }
+}
+
+function evaluateNumeric(
+  question: Question,
+  userAnswer: string,
+  policy: SigFigPolicy,
+): QuestionEvaluation {
   const given = userAnswer.trim()
   const expected = question.correctAnswer.trim()
   if (!given) {
@@ -162,7 +299,39 @@ function evaluateNumeric(question: Question, userAnswer: string): QuestionEvalua
       note: t('errors.emptyAnswer'),
     }
   }
-  if (question.unit) return evaluateQuantity(given, expected, question.unit)
+  if (question.unit) return evaluateQuantity(question, given, expected, question.unit, policy)
+  if (!question.sigFigs) return evaluatePlainNumber(given, expected)
+  const expectedNum = parseNumeric(expected)
+  const userNum = readAnswerNumber(given)
+  const base = {
+    method: 'numeric_tolerance' as const,
+    expected,
+    normalizedUser: given,
+    normalizedExpected: expected,
+  }
+  if (userNum === null || expectedNum === null) {
+    return {
+      ...base,
+      isCorrect: null,
+      method: 'unverified',
+      confidence: 0,
+      note:
+        userNum === null
+          ? t('errors.numberUnreadable', { answer: UNVERIFIED_NOTE() })
+          : UNVERIFIED_NOTE(),
+    }
+  }
+  const tolerance = sigFigRelativeTolerance(given, expectedNum, question.sigFigs)
+  const dimensions: AnswerDimensions = {
+    value: withinTolerance(userNum, expectedNum, tolerance) ? 'correct' : 'wrong',
+  }
+  const sigFigs = sigFigDimension(question, given, false)
+  if (sigFigs) dimensions.sigFigs = sigFigs
+  return finishNumeric(base, dimensions, policy, { given })
+}
+
+/** A bare number with no unit and no significant-figure requirement: 1% tolerance. */
+function evaluatePlainNumber(given: string, expected: string): QuestionEvaluation {
   const result = numericEquivalent(given, expected)
   if (result === null) {
     const userNum = parseNumeric(given)
@@ -199,69 +368,278 @@ function evaluateNumeric(question: Question, userAnswer: string): QuestionEvalua
 }
 
 /**
- * A physical quantity: the value is converted from the student's unit into the
- * expected one, and a missing or incompatible unit is reported as such.
+ * A physical quantity. Three separate checks: the VALUE (converted from the
+ * student's unit into the expected one), the UNIT (missing / another kind of
+ * quantity / a convertible but wrong unit) and, when required, the
+ * SIGNIFICANT FIGURES of the number as typed.
  */
-function evaluateQuantity(given: string, expectedValue: string, unit: string): QuestionEvaluation {
+function evaluateQuantity(
+  question: Question,
+  given: string,
+  expectedValue: string,
+  unit: string,
+  policy: SigFigPolicy,
+): QuestionEvaluation {
   const expected = `${expectedValue} ${unit}`
-  const result = compareQuantity(given, expectedValue, unit)
+  const expectedNumber = Number(expectedValue)
+  const relTol =
+    question.sigFigs && Number.isFinite(expectedNumber)
+      ? sigFigRelativeTolerance(given, expectedNumber, question.sigFigs)
+      : undefined
+  const result = compareQuantity(given, expectedValue, unit, relTol ? { relTol } : {})
   const base = {
     method: 'unit_conversion' as const,
     expected,
     normalizedUser: given,
     normalizedExpected: expected,
   }
+  const unitDimension = (status: UnitStatus): NonNullable<AnswerDimensions['unit']> => ({
+    status,
+    expected: unit,
+    ...(result.givenUnit ? { given: result.givenUnit } : {}),
+    ...(result.converted ? { converted: true } : {}),
+  })
+  let dimensions: AnswerDimensions
   switch (result.outcome) {
     case 'correct':
+      dimensions = { value: 'correct', unit: unitDimension('correct') }
+      break
     case 'wrong-value':
+      dimensions = { value: 'wrong', unit: unitDimension('correct') }
+      break
+    case 'wrong-unit':
+      // The number is right for the expected unit; the unit written is not.
+      dimensions = { value: 'correct', unit: unitDimension('wrong-unit') }
+      break
+    case 'missing-unit': {
+      const bare = splitQuantity(given)
+      dimensions = {
+        value:
+          bare &&
+          Number.isFinite(expectedNumber) &&
+          withinTolerance(bare.value, expectedNumber, relTol ?? 1e-2)
+            ? 'correct'
+            : 'wrong',
+        unit: unitDimension('missing'),
+      }
+      break
+    }
+    case 'wrong-dimension':
+      dimensions = { value: 'wrong', unit: unitDimension('wrong-dimension') }
+      break
+    case 'unreadable-unit':
+      dimensions = { value: 'unreadable', unit: unitDimension('unreadable') }
+      break
+    case 'unreadable-number':
+      dimensions = { value: 'unreadable' }
+      break
+  }
+  const sigFigs =
+    dimensions.value !== 'unreadable' ? sigFigDimension(question, given, true) : undefined
+  if (sigFigs) dimensions.sigFigs = sigFigs
+  return finishNumeric(base, dimensions, policy, {
+    given,
+    unit,
+    ...(result.convertedValue !== undefined ? { convertedValue: result.convertedValue } : {}),
+  })
+}
+
+/**
+ * A vector, as components or as magnitude + direction: converted to
+ * components and compared within 1% of the magnitude and 1° of direction.
+ */
+function evaluateVector(question: Question, userAnswer: string): QuestionEvaluation {
+  const spec = question.vector
+  const expected = expectedAnswerText(question)
+  const base = {
+    method: 'vector' as const,
+    expected,
+    normalizedUser: userAnswer.trim(),
+    normalizedExpected: expected,
+  }
+  if (!spec)
+    return {
+      ...base,
+      isCorrect: null,
+      method: 'unverified',
+      confidence: 0,
+      note: UNVERIFIED_NOTE(),
+    }
+  if (!userAnswer.trim())
+    return { ...base, isCorrect: false, confidence: 1, note: t('errors.emptyAnswer') }
+  const comparison = compareVector(userAnswer, spec)
+  const note = vectorNote(comparison.outcome, comparison.signs, spec.unit, comparison.convertedFrom)
+  if (comparison.outcome === 'unreadable' || comparison.outcome === 'unreadable-unit')
+    return {
+      ...base,
+      vector: comparison,
+      isCorrect: null,
+      method: 'unverified',
+      confidence: 0,
+      note,
+    }
+  return {
+    ...base,
+    vector: comparison,
+    isCorrect: comparison.outcome === 'correct',
+    confidence: 0.99,
+    ...(note ? { note } : {}),
+  }
+}
+
+const AXIS_NAMES = ['x', 'y', 'z']
+
+function vectorNote(
+  outcome: string,
+  signs: number[] | undefined,
+  unit: string | undefined,
+  convertedFrom: string | undefined,
+): string {
+  switch (outcome) {
+    case 'correct':
+      return convertedFrom && unit ? t('vector.converted', { from: convertedFrom, unit }) : ''
+    case 'wrong-sign':
+      return t('vector.wrongSign', {
+        axes: (signs ?? []).map((i) => AXIS_NAMES[i] ?? String(i + 1)).join(', '),
+      })
+    case 'swapped':
+      return t('vector.swapped')
+    case 'direction-wrong':
+      return t('vector.directionWrong')
+    case 'magnitude-wrong':
+      return t('vector.magnitudeWrong')
+    case 'component-count':
+      return t('vector.componentCount')
+    case 'missing-unit':
+      return t('vector.missingUnit', { unit: unit ?? '' })
+    case 'wrong-dimension':
+      return t('vector.wrongDimension', { unit: unit ?? '' })
+    case 'unreadable-unit':
+      return t('vector.unreadableUnit')
+    case 'unreadable':
+      return t('vector.unreadable')
+    default:
+      return t('vector.wrong')
+  }
+}
+
+/**
+ * Nomenclature. Name → formula: compared by composition and charge (and mass
+ * number for a nuclide). Formula → name: compared with the accepted names; a
+ * name that does not match is reported as a blank so the AI equivalence check
+ * (as for fill-blanks) can still accept an exact synonym.
+ */
+function evaluateNomenclature(question: Question, userAnswer: string): QuestionEvaluation {
+  const spec = question.nomenclature
+  const expected = question.correctAnswer
+  const given = userAnswer.trim()
+  const base = {
+    method: 'nomenclature' as const,
+    expected,
+    normalizedUser: given,
+    normalizedExpected: expected,
+  }
+  if (!spec)
+    return {
+      ...base,
+      isCorrect: null,
+      method: 'unverified',
+      confidence: 0,
+      note: UNVERIFIED_NOTE(),
+    }
+  if (!given) return { ...base, isCorrect: false, confidence: 1, note: t('errors.emptyAnswer') }
+  if (spec.direction === 'formula_to_name') {
+    const correct = nameAccepted(given, spec.names)
+    return {
+      ...base,
+      isCorrect: correct,
+      confidence: 1,
+      blanks: [{ label: t('nomenclature.name'), given, accepted: spec.names, correct }],
+      ...(correct ? {} : { note: t('nomenclature.nameMismatch') }),
+    }
+  }
+  const outcome = compareFormula(given, spec.formula)
+  switch (outcome) {
+    case 'correct':
+      return { ...base, isCorrect: true, confidence: 1 }
+    case 'isomers':
       return {
         ...base,
-        isCorrect: result.isCorrect,
-        confidence: 0.99,
-        ...(result.outcome === 'wrong-value' && result.convertedValue !== undefined
-          ? {
-              note: t('question.unitConverted', {
-                value: formatConverted(result.convertedValue),
-                unit,
-              }),
-            }
-          : {}),
+        isCorrect: null,
+        method: 'unverified',
+        confidence: 0,
+        note: t('chemEquation.isomers', { species: given }),
       }
-    case 'missing-unit':
+    case 'unreadable':
+      return {
+        ...base,
+        isCorrect: null,
+        method: 'unverified',
+        confidence: 0,
+        note: t('nomenclature.unreadable'),
+      }
+    default:
       return {
         ...base,
         isCorrect: false,
         confidence: 1,
-        note: t('question.unitMissing', { example: `${given} ${unit}` }),
-      }
-    case 'wrong-dimension':
-      return {
-        ...base,
-        isCorrect: false,
-        confidence: 0.99,
-        note: t('question.unitWrongDimension', { unit }),
-      }
-    case 'unreadable-unit':
-      return {
-        ...base,
-        isCorrect: null,
-        method: 'unverified',
-        confidence: 0,
-        note: t('question.unitUnreadable', { unit: splitQuantity(given)?.unitText || given }),
-      }
-    case 'unreadable-number':
-      return {
-        ...base,
-        isCorrect: null,
-        method: 'unverified',
-        confidence: 0,
-        note: t('errors.numberUnreadable', { answer: UNVERIFIED_NOTE() }),
+        note: t(
+          outcome === 'charge'
+            ? 'nomenclature.charge'
+            : outcome === 'mass-number'
+              ? 'nomenclature.massNumber'
+              : 'nomenclature.composition',
+        ),
       }
   }
 }
 
-function formatConverted(value: number): string {
-  return Number.parseFloat(value.toPrecision(4)).toString()
+/** Free-body diagram: forces matched by type and direction (±10°). */
+function evaluateForceList(question: Question, userAnswer: string): QuestionEvaluation {
+  const reference = question.forces ?? []
+  const expected = expectedAnswerText(question)
+  const base = {
+    method: 'force_list' as const,
+    expected,
+    normalizedUser: displayAnswer(question, userAnswer),
+    normalizedExpected: expected,
+  }
+  if (reference.length === 0)
+    return {
+      ...base,
+      isCorrect: null,
+      method: 'unverified',
+      confidence: 0,
+      note: UNVERIFIED_NOTE(),
+    }
+  const result = gradeForceList(userAnswer, reference)
+  const earned = forceListScore(result, reference.length) * reference.length
+  const isCorrect =
+    result.matched.length === reference.length &&
+    result.extra.length === 0 &&
+    result.unreadable === 0
+  const name = (type: string) => t(`forceType.${type}` as TranslationKey)
+  const parts = [
+    result.missing.length
+      ? t('forceList.missing', { forces: result.missing.map(name).join(', ') })
+      : '',
+    result.extra.length ? t('forceList.extra', { forces: result.extra.map(name).join(', ') }) : '',
+    result.wrongDirection.length
+      ? t('forceList.wrongDirection', { forces: result.wrongDirection.map(name).join(', ') })
+      : '',
+    result.wrongMagnitude.length
+      ? t('forceList.wrongMagnitude', { forces: result.wrongMagnitude.map(name).join(', ') })
+      : '',
+    result.unreadable ? t('forceList.unreadable', { count: result.unreadable }) : '',
+  ].filter(Boolean)
+  return {
+    ...base,
+    forces: result,
+    isCorrect,
+    confidence: 1,
+    score: { earned: Math.round(earned * 100) / 100, total: reference.length },
+    ...(parts.length ? { note: parts.join(' ') } : {}),
+  }
 }
 
 /** Program output: line endings and trailing spaces normalised, otherwise exact. */
@@ -347,7 +725,14 @@ function evaluateChemEquation(question: Question, userAnswer: string): QuestionE
           details: result.imbalances
             .map((item) =>
               t('chemEquation.imbalance', {
-                what: item.what === 'charge' ? t('chemEquation.charge') : item.what,
+                what:
+                  item.what === 'charge'
+                    ? t('chemEquation.charge')
+                    : item.what === 'mass number'
+                      ? t('chemEquation.massNumber')
+                      : item.what === 'atomic number'
+                        ? t('chemEquation.atomicNumber')
+                        : item.what,
                 left: item.left,
                 right: item.right,
               }),

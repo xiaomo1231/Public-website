@@ -1,4 +1,5 @@
 import type { AIService } from './aiService'
+import { isHeldOut } from '@/entities/evaluation/evalRole'
 import type { AppDatabase } from '@/infrastructure/db/database'
 import { getDb } from '@/infrastructure/db/database'
 import type { ChatMessage } from '@/infrastructure/ai/types'
@@ -49,6 +50,8 @@ import {
   planWalkthrough,
   switchSectionSource,
   professorAnswerOf,
+  questionSectionHash,
+  questionSectionId,
   walkthroughId,
   walkthroughLanguage,
   type HomeworkWalkthrough,
@@ -311,8 +314,12 @@ export class HomeworkWalkthroughService {
   async state(setId: string): Promise<WalkthroughState> {
     const set = await this.sets.getSet(setId)
     if (!set) throw new NotFoundError('HomeworkSet', setId)
-    // Retired questions (no longer in the assignment) are not part of the walkthrough.
-    const questions = (await this.sets.listQuestions(setId)).filter((question) => !question.retired)
+    // Retired questions (no longer in the assignment) are not part of the
+    // walkthrough, nor are questions held out for independent evaluation
+    // (their solutions must never be written or shown alongside the others).
+    const questions = (await this.sets.listQuestions(setId)).filter(
+      (question) => !question.retired && !isHeldOut(question, set),
+    )
     const profile = await new UserRepository(this.db).get().catch(() => undefined)
     const language = walkthroughLanguage(profile?.questionLanguage, set.language)
     const subject = await loadProjectSubjectContext(set.projectId, this.db)
@@ -1059,6 +1066,29 @@ export class HomeworkWalkthroughService {
     },
   ): Promise<ProfessorCompareReport> {
     const section = job.entry.section!
+    const report = await this.requestCompare(ai, job)
+    const stored = await this.repo.updateSection(job.id, section.id, (latest) =>
+      latest.status === 'ready' && compareSectionHash(latest) === report.sectionHash
+        ? { ...latest, professorCompare: report }
+        : null,
+    )
+    if (!stored) throw new AppError(t('homework.walkthrough.sectionChanged'), 'VALIDATION_ERROR')
+    return report
+  }
+
+  /** One comparison request, checked locally; nothing is saved. */
+  private async requestCompare(
+    ai: AIService,
+    job: {
+      entry: WalkthroughPlanEntry
+      label: string
+      language: WalkthroughLanguage
+      subject: SubjectContext | undefined
+      control: GenerationControl
+      onAttempt?: (attempt: SectionAttempt) => void
+    },
+  ): Promise<ProfessorCompareReport> {
+    const section = job.entry.section!
     const question = job.entry.question!
     const professorAnswer = professorAnswerOf(question)!
     const parts = walkthroughSubparts(question.prompt).map((part) => part.label)
@@ -1106,13 +1136,77 @@ export class HomeworkWalkthroughService {
       suggestion: validated.suggestion,
       comparedAt: Date.now(),
     }
-    const stored = await this.repo.updateSection(job.id, section.id, (latest) =>
-      latest.status === 'ready' && compareSectionHash(latest) === sectionHash
-        ? { ...latest, professorCompare: report }
-        : null,
-    )
-    if (!stored) throw new AppError(t('homework.walkthrough.sectionChanged'), 'VALIDATION_ERROR')
     return report
+  }
+
+  /**
+   * 检验网站: write one question's section WITHOUT saving it, then compare it
+   * with the professor answer (also not saved). `align: false` (独立解题)
+   * never shows the professor answer to the writer — nor a solution that was
+   * written from it; `align: true` (依据教授答案讲解) writes under the
+   * alignment rules, as the walkthrough does.
+   */
+  async evaluateQuestion(
+    question: HomeworkQuestion,
+    options: { align: boolean; label: string; control: GenerationControl },
+  ): Promise<{ section: WalkthroughSection; report?: ProfessorCompareReport }> {
+    const ai = this.requireAI()
+    const set = await this.sets.getSet(question.setId)
+    if (!set || set.projectId !== question.projectId)
+      throw new NotFoundError('HomeworkSet', question.setId)
+    if (!professorAnswerOf(question))
+      throw new AppError(t('homework.walkthrough.compareUnavailable'), 'VALIDATION_ERROR')
+    const profile = await new UserRepository(this.db).get().catch(() => undefined)
+    const language = walkthroughLanguage(profile?.questionLanguage, set.language)
+    const subject = await loadProjectSubjectContext(set.projectId, this.db)
+    const promptVersion = prompts.subjectProfile.subjectPromptVersion(
+      `homework-walkthrough/${prompts.homeworkWalkthrough.CACHE_VERSION}`,
+      subject,
+    )
+    const base = await this.questionInputs(question, subject)
+    const inputs: QuestionInputs = options.align
+      ? base
+      : {
+          sourceText: base.sourceText,
+          linearSystems: base.linearSystems,
+          // A solution written from the professor answer would leak it.
+          ...(base.previousSolution && !question.answerBased
+            ? { previousSolution: base.previousSolution }
+            : {}),
+        }
+    const entry: WalkthroughPlanEntry = {
+      id: questionSectionId(question.id),
+      kind: 'question',
+      question,
+      inputHash: questionSectionHash(question, language, promptVersion, {
+        align: options.align,
+      }),
+      needsWork: true,
+      outdated: false,
+    }
+    const section = await this.writeQuestionWith(
+      ai,
+      {
+        entry,
+        label: options.label,
+        language,
+        subject,
+        control: options.control,
+        mode: 'generate',
+        // Nothing of an evaluation run is stored.
+        saveSection: async () => undefined,
+      },
+      inputs,
+    )
+    if (section.status !== 'ready') return { section }
+    const report = await this.requestCompare(ai, {
+      entry: { ...entry, section },
+      label: options.label,
+      language,
+      subject,
+      control: options.control,
+    })
+    return { section, report }
   }
 
   /** 保持现状: keep the section as it is; the report stays, folded away. */

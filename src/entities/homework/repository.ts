@@ -7,6 +7,7 @@ import { answerCheckInputHash, type HomeworkAnswerCheck } from './answerCheck'
 import { WalkthroughRepository } from './walkthroughRepository'
 import { AnswerImageRepository } from './answerImageRepository'
 import { answerImageKey } from './answerImages'
+import { proofreadAnswerText } from './proofread'
 
 /**
  * Persistence for homework assignments and their questions.
@@ -195,6 +196,7 @@ export class HomeworkRepository {
         answerBased: false,
         previousSolution: undefined,
         revealedHints: Math.min(existing.revealedHints, hints.length),
+        contentAt: Date.now(),
         updatedAt: Date.now(),
       }
       await this.questions().put(next)
@@ -238,6 +240,7 @@ export class HomeworkRepository {
         answerBased: true,
         ...(previousSolution ? { previousSolution } : {}),
         revealedHints: Math.min(existing.revealedHints, hints.length),
+        contentAt: Date.now(),
         updatedAt: Date.now(),
       }
       await this.questions().put(next)
@@ -293,17 +296,24 @@ export class HomeworkRepository {
             'INVALID_INPUT',
           )
         }
+        // A professor answer the student corrected in 导入校对 keeps the
+        // correction while the link is to the same original text.
+        const answerText = link.answer
+          ? (proofreadAnswerText(existing, link.answer.answerText) ?? link.answer.answerText)
+          : undefined
         const next: HomeworkQuestion = link.answer
           ? {
               ...existing,
-              answerText: link.answer.answerText,
+              answerText: answerText!,
+              // Confirmed again: the 导入校对 reconfirm flag is cleared.
+              answerLinkStale: undefined,
               answerNumber: link.answer.answerNumber,
               answerChunkIds: link.answer.answerChunkIds,
               answerStatus: 'matched',
               // An edited answer must not leave old AI help labelled as based
               // on the new answer. Student work and the old help stay intact.
               answerBased:
-                existing.answerText === link.answer.answerText &&
+                existing.answerText === answerText &&
                 existing.answerNumber === link.answer.answerNumber
                   ? existing.answerBased
                   : false,
@@ -316,6 +326,7 @@ export class HomeworkRepository {
               answerChunkIds: undefined,
               answerStatus: undefined,
               answerBased: false,
+              answerLinkStale: undefined,
               updatedAt: Date.now(),
             }
         if (link.answer) matched += 1

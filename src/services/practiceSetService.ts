@@ -23,6 +23,21 @@ import {
   type PracticeLanguage,
 } from '@/entities/homework/practice/linearSystem'
 import { verifyAiPart } from '@/entities/homework/practice/verify'
+import { loadProfessorConventions } from './projectGradingRules'
+import type { ProfessorConvention } from '@/entities/questionHabits/types'
+
+/** Significant figures are asked of chemistry / physics, or when the professor grades them. */
+function practiceSigFigs(context: {
+  subject: SubjectContext | undefined
+  professorConventions?: ProfessorConvention[]
+}): boolean {
+  const subject = context.subject?.subject
+  return (
+    subject === 'chemistry' ||
+    subject === 'physics' ||
+    Boolean(context.professorConventions?.includes('sig_figs'))
+  )
+}
 import type {
   PracticeCandidate,
   PracticeDraft,
@@ -106,6 +121,8 @@ interface BuildContext {
   language: PracticeLanguage
   /** 教授出题习惯 block for the AI (absent when off or empty). */
   professorHabits?: string
+  /** Conventions from the habits profile (marks per part, data sheet, sig figs …). */
+  professorConventions?: ProfessorConvention[]
   /** Sizes / numbers / presentation for the local systems ({} without a profile). */
   linearHints: LinearStyleHints
 }
@@ -295,6 +312,7 @@ export class PracticeSetService {
         )
     }
     const professorHabits = await loadProfessorHabits(parent.projectId, this.db)
+    const { conventions } = await loadProfessorConventions(parent.projectId, this.db)
     return {
       parent,
       questions: state.questions,
@@ -305,6 +323,7 @@ export class PracticeSetService {
       subject: await loadProjectSubjectContext(parent.projectId, this.db),
       language: parent.language === 'en' ? 'en' : 'zh',
       ...(professorHabits ? { professorHabits } : {}),
+      ...(conventions.length ? { professorConventions: conventions } : {}),
       linearHints: await loadLinearStyleHints(parent.projectId, this.db),
     }
   }
@@ -477,7 +496,9 @@ export class PracticeSetService {
       {
         role: 'system',
         content: prompts.subjectProfile.withSubject(
-          prompts.practiceGenerate.buildSystemPrompt(),
+          prompts.practiceGenerate.buildSystemPrompt(
+            practiceSigFigs(context) ? { sigFigs: true } : {},
+          ),
           context.subject,
         ),
       },
@@ -487,6 +508,9 @@ export class PracticeSetService {
           language: context.language,
           keyPoints: knowledgeText(context.knowledge),
           ...(context.professorHabits ? { professorHabits: context.professorHabits } : {}),
+          ...(context.professorConventions?.length
+            ? { professorConventions: context.professorConventions }
+            : {}),
           slots: slots.map((slot) => ({
             id: slot.id,
             mode: slot.mode,

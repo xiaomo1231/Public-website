@@ -229,6 +229,7 @@ export class WalkthroughImportService {
       (document) =>
         document.status === 'ready' &&
         document.materialType !== 'homework' &&
+        document.materialType !== 'past_exam' &&
         (document.chunkCount ?? 1) > 0,
     )
     return documents

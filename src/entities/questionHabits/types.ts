@@ -21,6 +21,16 @@ export type QuestionHabitCategory =
   | 'traps'
   | 'answer_format'
   | 'difficulty'
+  /** Choice-option conventions, e.g. a final "None of the options are correct" (F). */
+  | 'options'
+  /** Marks shown per question / sub-part. */
+  | 'marks'
+  /** Students rely on a provided data / formula sheet. */
+  | 'data_sheet'
+  /** How strictly significant figures are graded. */
+  | 'sig_figs'
+  /** Context stories, including details not needed for the answer. */
+  | 'context'
 
 export const QUESTION_HABIT_CATEGORIES: readonly QuestionHabitCategory[] = [
   'types',
@@ -31,6 +41,11 @@ export const QUESTION_HABIT_CATEGORIES: readonly QuestionHabitCategory[] = [
   'traps',
   'answer_format',
   'difficulty',
+  'options',
+  'marks',
+  'data_sheet',
+  'sig_figs',
+  'context',
 ]
 
 export function isQuestionHabitCategory(value: unknown): value is QuestionHabitCategory {
@@ -40,7 +55,7 @@ export function isQuestionHabitCategory(value: unknown): value is QuestionHabitC
 }
 
 /** Where a question came from. */
-export type QuestionHabitSourceKind = 'homework' | 'practice' | 'syllabus'
+export type QuestionHabitSourceKind = 'homework' | 'practice' | 'syllabus' | 'exam'
 
 /** One verbatim example backing an item. */
 export interface QuestionHabitEvidence {
@@ -209,4 +224,91 @@ export function linearStyleHints(profile: QuestionHabitsProfile | undefined): Li
     ...(integer && !fractions ? { integerOnly: true } : {}),
     ...(matrix !== equations ? { presentation: matrix ? 'matrix' : 'equations' } : {}),
   }
+}
+
+// --- Professor conventions ------------------------------------------------------
+
+/**
+ * Conventions question generators follow explicitly (beyond the free-text
+ * habits block), read from the items of the matching categories.
+ */
+export type ProfessorConvention =
+  'none_of_above' | 'marks_per_part' | 'data_sheet' | 'context_story' | 'sig_figs'
+
+export interface ProfessorConventions {
+  conventions: ProfessorConvention[]
+  /** `none_of_above`: the professor's own wording, from an evidence quote when one shows it. */
+  noneOptionLabel?: string
+}
+
+/** "None of the options are correct", "以上都不对", "none of the above" … */
+export const NONE_OPTION_PATTERN =
+  /none of (?:the )?(?:above|options|these|answers)|no correct (?:option|answer)|以上(?:都|均|皆)?(?:不|非)|都不(?:对|正确)|均不正确|以上皆非/i
+
+/** The final option's wording from a quote such as "F. None of the options are correct". */
+function noneLabelFrom(quote: string): string | undefined {
+  const line = quote
+    .split(/\n|(?=\b[A-F][.)]\s)/)
+    .map((part) => part.trim())
+    .find((part) => NONE_OPTION_PATTERN.test(part))
+  if (!line) return undefined
+  const label = line
+    .replace(/^\(?[A-Fa-f][.)]\s*/, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+  return label.length >= 6 && label.length <= 80 ? label : undefined
+}
+
+export function professorConventions(
+  profile: QuestionHabitsProfile | undefined,
+): ProfessorConventions {
+  if (!profile || !habitsEnabled(profile)) return { conventions: [] }
+  const found = new Set<ProfessorConvention>()
+  let noneOptionLabel: string | undefined
+  for (const item of profile.items) {
+    if (!item.statement.trim()) continue
+    switch (item.category) {
+      case 'options': {
+        const quotes = item.evidence.map((evidence) => evidence.quote)
+        if (
+          NONE_OPTION_PATTERN.test(item.statement) ||
+          quotes.some((q) => NONE_OPTION_PATTERN.test(q))
+        ) {
+          found.add('none_of_above')
+          noneOptionLabel ??= quotes.map(noneLabelFrom).find(Boolean)
+        }
+        break
+      }
+      case 'marks':
+        found.add('marks_per_part')
+        break
+      case 'data_sheet':
+        found.add('data_sheet')
+        break
+      case 'context':
+        found.add('context_story')
+        break
+      case 'sig_figs':
+        found.add('sig_figs')
+        break
+      default:
+        break
+    }
+  }
+  const order: ProfessorConvention[] = [
+    'none_of_above',
+    'marks_per_part',
+    'data_sheet',
+    'context_story',
+    'sig_figs',
+  ]
+  return {
+    conventions: order.filter((convention) => found.has(convention)),
+    ...(noneOptionLabel ? { noneOptionLabel } : {}),
+  }
+}
+
+/** The habits items about significant figures (shown next to the course's grading rule). */
+export function sigFigHabitItems(profile: QuestionHabitsProfile | undefined): QuestionHabitItem[] {
+  return profile ? profile.items.filter((item) => item.category === 'sig_figs') : []
 }
