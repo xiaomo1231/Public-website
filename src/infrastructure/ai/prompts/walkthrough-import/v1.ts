@@ -80,6 +80,11 @@ export interface ImportUserInput {
   sourceText: string
   /** Set when a long walkthrough is sent in parts. */
   part?: { index: number; total: number }
+  /**
+   * The text is a piece of a part that was too long for one reply. Absent:
+   * the prompt is exactly as before.
+   */
+  fragment?: boolean
 }
 
 export function buildUserPrompt(input: ImportUserInput): string {
@@ -91,6 +96,9 @@ export function buildUserPrompt(input: ImportUserInput): string {
     untrustedContentWrapper('QUESTION LIST', list),
     input.part && input.part.total > 1
       ? `The walkthrough is long and is sent in ${input.part.total} parts. This is part ${input.part.index + 1} of ${input.part.total}: import only what this part contains (a question may continue from the previous part or into the next one; import the portion shown here). Leave "overview" empty unless this part contains the opening, and "summary" empty unless it contains the closing.`
+      : '',
+    input.fragment
+      ? 'This text is only a fragment of the walkthrough (the whole was too long for one reply): import only what this fragment contains — a question may begin before it or continue after it; import the portion shown here. Leave "overview" empty unless the fragment contains the opening, and "summary" empty unless it contains the closing.'
       : '',
     untrustedContentWrapper('WALKTHROUGH TO IMPORT', input.sourceText),
     'Return JSON only.',

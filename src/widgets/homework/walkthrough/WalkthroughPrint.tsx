@@ -10,6 +10,8 @@ export interface PrintableSection {
   conclusion?: string
   body: string
   suggestions?: string[]
+  /** Written following the professor's answer (「已按教授答案」). */
+  aligned?: boolean
 }
 
 /**
@@ -57,6 +59,11 @@ export function WalkthroughPrint({
       {sections.map((section) => (
         <section key={section.id} className="space-y-3">
           <h2 className="border-b pb-1 text-xl font-semibold">{section.title}</h2>
+          {section.aligned && (
+            <p className="text-xs" data-professor-aligned>
+              {t('homework.walkthrough.alignedBadge')}
+            </p>
+          )}
           {section.analysis && (
             <div className="space-y-1">
               <strong>{t('homework.walkthrough.analysis')}</strong>

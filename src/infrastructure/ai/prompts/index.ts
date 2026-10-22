@@ -20,9 +20,10 @@ import * as HomeworkAnalyzerV2 from './homework-analyzer/v2'
 import * as HomeworkQuestionV3 from './homework-question/v3'
 import * as HomeworkQaV1 from './homework-qa/v1'
 import * as HomeworkReviewV1 from './homework-review/v1'
-import * as HomeworkWalkthroughV5 from './homework-walkthrough/v5'
+import * as HomeworkWalkthroughV6 from './homework-walkthrough/v6'
 import * as HomeworkAnswerCheckV1 from './homework-answer-check/v1'
 import * as WalkthroughImportV1 from './walkthrough-import/v1'
+import * as WalkthroughCompareV1 from './walkthrough-compare/v1'
 import * as SlideLessonV1 from './slide-lesson/v1'
 import * as SubjectProfileV1 from './subject-profile/v1'
 import * as ShortAnswerCheckV1 from './short-answer-check/v1'
@@ -43,6 +44,7 @@ import * as PracticeGenerateV1 from './practice-generate/v1'
 import * as PracticeReviewV1 from './practice-review/v1'
 import * as GuidedStepsV1 from './guided-steps/v1'
 import * as QuestionStyleV1 from './question-style/v1'
+import * as QuestionTranslateV1 from './question-translate/v1'
 
 export const PROMPT_VERSIONS = {
   documentAnalyzer: 'v2',
@@ -61,9 +63,10 @@ export const PROMPT_VERSIONS = {
   homeworkQuestion: 'v3',
   homeworkQa: 'v1',
   homeworkReview: 'v1',
-  homeworkWalkthrough: 'v5',
+  homeworkWalkthrough: 'v6',
   homeworkAnswerCheck: 'v1',
   walkthroughImport: 'v1',
+  walkthroughCompare: 'v1',
   slideLesson: 'v1',
   subjectProfile: 'v1',
   shortAnswerCheck: 'v1',
@@ -84,6 +87,7 @@ export const PROMPT_VERSIONS = {
   practiceReview: 'v1',
   guidedSteps: 'v1',
   questionStyle: 'v1',
+  questionTranslate: 'v1',
 } as const
 
 export const prompts = {
@@ -103,9 +107,10 @@ export const prompts = {
   homeworkQuestion: HomeworkQuestionV3,
   homeworkQa: HomeworkQaV1,
   homeworkReview: HomeworkReviewV1,
-  homeworkWalkthrough: HomeworkWalkthroughV5,
+  homeworkWalkthrough: HomeworkWalkthroughV6,
   homeworkAnswerCheck: HomeworkAnswerCheckV1,
   walkthroughImport: WalkthroughImportV1,
+  walkthroughCompare: WalkthroughCompareV1,
   slideLesson: SlideLessonV1,
   /** Appended to other prompts; see `withSubject` / `subjectPromptVersion`. */
   subjectProfile: SubjectProfileV1,
@@ -127,6 +132,7 @@ export const prompts = {
   practiceReview: PracticeReviewV1,
   guidedSteps: GuidedStepsV1,
   questionStyle: QuestionStyleV1,
+  questionTranslate: QuestionTranslateV1,
 } as const
 
 export type { DocumentAnalyzerInput, DocumentAnalysisOutput } from './document-analyzer/v2'

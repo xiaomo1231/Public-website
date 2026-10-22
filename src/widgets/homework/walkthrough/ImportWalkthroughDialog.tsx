@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useState } from 'react'
-import { AlertTriangle, FileUp, Loader2, Upload } from 'lucide-react'
+import { AlertTriangle, FileUp, Loader2, RotateCcw, Upload } from 'lucide-react'
 import type { HomeworkSet } from '@/entities/homework/types'
 import {
   buildWalkthroughImportService,
+  WalkthroughImportPartError,
   type ImportableDocument,
   type WalkthroughImportPreview,
   type WalkthroughImportService,
@@ -92,7 +93,10 @@ export function ImportWalkthroughDialog({
     setError(null)
     const run = generation.start()
     try {
-      const result = await service.prepare({
+      // 继续导入 after a failure re-reads the AI settings (a raised output cap applies).
+      const svc = resume && error ? await buildWalkthroughImportService() : service
+      if (svc !== service) setService(svc)
+      const result = await svc.prepare({
         setId: set.id,
         documentId,
         checkIssues: !formatOnly,
@@ -102,6 +106,8 @@ export function ImportWalkthroughDialog({
       })
       setPreview(result)
     } catch (err) {
+      // Keep what was read: 继续导入 asks only for the failed piece and the rest.
+      if (err instanceof WalkthroughImportPartError) setPreview(err.partial)
       setError(friendlyAIError(err))
     } finally {
       run.finish()
@@ -118,7 +124,9 @@ export function ImportWalkthroughDialog({
         title: t('walkthroughImport.saved', { count: result.saved }),
         ...(result.replaced > 0
           ? { description: t('walkthroughImport.savedReplaced', { count: result.replaced }) }
-          : {}),
+          : preview.keptGenerated.length > 0
+            ? { description: t('walkthroughImport.savedKept') }
+            : {}),
       })
       onImported?.()
       reset()
@@ -131,6 +139,8 @@ export function ImportWalkthroughDialog({
   }
 
   const paused = preview && !preview.complete
+  /** Stopped by a failure (not a pause): offered as 继续导入 in the footer. */
+  const failedPart = Boolean(paused && error && !running)
   const ready = preview?.complete ? preview : null
 
   return (
@@ -212,7 +222,8 @@ export function ImportWalkthroughDialog({
                   <p className="flex items-center gap-2 text-sm">
                     {running && <Loader2 className="h-4 w-4 animate-spin" aria-hidden />}
                     {t('walkthroughImport.progress', {
-                      done: progress.done,
+                      // The part being read now (1-based) while running.
+                      done: Math.min(progress.done + (running ? 1 : 0), progress.total),
                       total: progress.total,
                     })}
                   </p>
@@ -229,7 +240,7 @@ export function ImportWalkthroughDialog({
                       stopRequested={generation.run?.stopRequested ?? false}
                       onPause={generation.requestPause}
                       onStopNow={generation.stopNow}
-                      {...(paused ? { onResume: () => void prepare(preview) } : {})}
+                      {...(paused && !failedPart ? { onResume: () => void prepare(preview) } : {})}
                     />
                   </div>
                 </div>
@@ -261,6 +272,11 @@ export function ImportWalkthroughDialog({
                     : t('walkthroughImport.save', { count: ready.sections.length })}
                 </Button>
               </>
+            ) : failedPart && preview ? (
+              <Button disabled={!service || running} onClick={() => void prepare(preview)}>
+                <RotateCcw className="h-4 w-4" aria-hidden />
+                {t('walkthroughImport.retry')}
+              </Button>
             ) : (
               <Button
                 disabled={!service || !documentId || running || Boolean(paused)}
@@ -323,6 +339,11 @@ function ImportSummary({ preview }: { preview: WalkthroughImportPreview }): JSX.
       {preview.unknownIds.length > 0 && (
         <p className="text-muted-foreground">
           {t('walkthroughImport.unknownIds', { count: preview.unknownIds.length })}
+        </p>
+      )}
+      {preview.keptGenerated.length > 0 && (
+        <p className="text-muted-foreground">
+          {t('walkthroughImport.keptGenerated', { count: preview.keptGenerated.length })}
         </p>
       )}
       {preview.conflicts.length > 0 && (

@@ -5,6 +5,7 @@ import type { HomeworkQuestion, HomeworkSet } from './types'
 import { isDeferredProfessorAnswer } from './answerMatching'
 import type { TextAnchor } from '@/shared/lib/textAnchor'
 import type { GuidedStepsCache } from './guided'
+import type { ProfessorCompareReport } from './professorCompare'
 
 /**
  * The full walkthrough of one homework assignment: a readable document that
@@ -158,8 +159,18 @@ export interface WalkthroughSectionVersion {
   origin?: WalkthroughSectionOrigin
   sourceDocumentId?: string
   issues?: WalkthroughImportIssue[]
+  professorAligned?: ProfessorAlignment
   inputHash: string
   generatedAt: number
+}
+
+/**
+ * The section was written following the professor's answer (prompt v6
+ * alignment rules); shown as 「已按教授答案」 while that answer is unchanged.
+ */
+export interface ProfessorAlignment {
+  /** `professorAnswerHash` of the answer it followed. */
+  answerHash: string
 }
 
 export interface WalkthroughSection {
@@ -208,8 +219,22 @@ export interface WalkthroughSection {
   level?: WalkthroughLevel
   /** 引导练习 steps converted from this section (non-matrix questions), reused while its text is unchanged. */
   guided?: GuidedStepsCache
+  /** Written following the professor's answer (「已按教授答案」). */
+  professorAligned?: ProfessorAlignment
+  /** 与教授答案对照: the last comparison report (stale once either side changes). */
+  professorCompare?: ProfessorCompareReport
+  /**
+   * The other source of this section (生成的讲解 / 导入的讲解), kept whole —
+   * its own previous version, detailed version, level and reports included —
+   * while the section's own fields show the active one. Swapped by
+   * `switchSectionSource`; never lost by an import or a generation.
+   */
+  alternate?: WalkthroughSourceVersion
   generatedAt: number
 }
+
+/** A whole source of a section kept next to the active one. */
+export type WalkthroughSourceVersion = Omit<WalkthroughSection, 'alternate'>
 
 /** What a question section shows at one level. */
 export interface WalkthroughContent {
@@ -242,10 +267,12 @@ export function sectionContent(
 
 /** The level a section is shown at: the student's choice, else the default. */
 export function sectionLevel(
-  section: Pick<WalkthroughSection, 'level' | 'kind'> | undefined,
+  section: Pick<WalkthroughSection, 'level' | 'kind' | 'origin'> | undefined,
   fallback: WalkthroughLevel,
 ): WalkthroughLevel {
   if (section?.kind && section.kind !== 'question') return 'standard'
+  // An imported walkthrough has one level: the author's.
+  if (section?.origin === 'imported') return 'standard'
   return section?.level ?? fallback
 }
 
@@ -253,8 +280,145 @@ export function sectionLevel(
 export function missingDetailed(sections: readonly WalkthroughSection[]): WalkthroughSection[] {
   return sections.filter(
     (section) =>
-      section.kind === 'question' && section.status === 'ready' && !detailedVariant(section),
+      section.kind === 'question' &&
+      section.status === 'ready' &&
+      section.origin !== 'imported' &&
+      !detailedVariant(section),
   )
+}
+
+// --- Sources: 生成的讲解 / 导入的讲解 ----------------------------------------
+
+export type WalkthroughSource = WalkthroughSectionOrigin
+
+/** The source a section (or a kept version) belongs to; absent origin means generated. */
+export function sourceOf(section: { origin?: WalkthroughSectionOrigin }): WalkthroughSource {
+  return section.origin ?? 'generated'
+}
+
+/** A ready section showing `version`, keeping the section's identity. */
+export function sectionFromVersion(
+  section: Pick<WalkthroughSection, 'id' | 'kind' | 'questionId' | 'title'>,
+  version: WalkthroughSectionVersion,
+): WalkthroughSection {
+  return {
+    id: section.id,
+    kind: section.kind,
+    ...(section.questionId ? { questionId: section.questionId } : {}),
+    title: section.title,
+    ...(version.analysis ? { analysis: version.analysis } : {}),
+    ...(version.conclusion ? { conclusion: version.conclusion } : {}),
+    body: version.body,
+    ...(version.suggestions ? { suggestions: version.suggestions } : {}),
+    status: 'ready',
+    inputHash: version.inputHash,
+    ...(version.checks ? { checks: version.checks } : {}),
+    ...(version.parts ? { parts: version.parts } : {}),
+    ...(version.origin ? { origin: version.origin } : {}),
+    ...(version.sourceDocumentId ? { sourceDocumentId: version.sourceDocumentId } : {}),
+    ...(version.issues ? { issues: version.issues } : {}),
+    ...(version.professorAligned ? { professorAligned: version.professorAligned } : {}),
+    generatedAt: version.generatedAt,
+  }
+}
+
+/**
+ * Sections saved before sources existed kept the other source in `previous`
+ * (an import put the generated version there, and 恢复上一版 swapped them).
+ * Read that as the alternate source, so both stay reachable by the switch.
+ */
+export function normalizeSectionSources(section: WalkthroughSection): WalkthroughSection {
+  const previous = section.previous
+  if (
+    section.alternate ||
+    !previous ||
+    previous.level === 'detailed' ||
+    sourceOf(previous) === sourceOf(section)
+  )
+    return section
+  const { previous: _moved, ...rest } = section
+  return { ...rest, alternate: sectionFromVersion(section, previous) }
+}
+
+/** The ready sources of a section, the active one first. */
+export function sectionSources(section: WalkthroughSection | undefined): WalkthroughSource[] {
+  if (!section) return []
+  const normalized = normalizeSectionSources(section)
+  const sources: WalkthroughSource[] = []
+  if (normalized.status === 'ready') sources.push(sourceOf(normalized))
+  const other = normalized.alternate
+  if (other?.status === 'ready' && !sources.includes(sourceOf(other))) sources.push(sourceOf(other))
+  return sources
+}
+
+/**
+ * The generated source of a section as a section of its own (what writing and
+ * rewriting work on): the section itself when it shows the generated one, the
+ * kept alternate when it shows an import, undefined when it was only imported.
+ */
+export function generatedSource(
+  section: WalkthroughSection | undefined,
+): WalkthroughSection | undefined {
+  if (!section) return undefined
+  const normalized = normalizeSectionSources(section)
+  if (sourceOf(normalized) === 'generated') return normalized
+  const other = normalized.alternate
+  return other && sourceOf(other) === 'generated' ? { ...other } : undefined
+}
+
+/** The section showing `source` instead, or null when it has no ready version of it. */
+export function switchSectionSource(
+  section: WalkthroughSection,
+  source: WalkthroughSource,
+): WalkthroughSection | null {
+  const normalized = normalizeSectionSources(section)
+  if (sourceOf(normalized) === source) return null
+  const other = normalized.alternate
+  if (!other || other.status !== 'ready' || sourceOf(other) !== source) return null
+  const { alternate: _swapped, ...shown } = normalized
+  return { ...other, alternate: shown }
+}
+
+/** A section has nothing unfinished: no draft of any kind. */
+function isFinished(section: WalkthroughSection): boolean {
+  return (
+    section.status === 'ready' && !section.draft && !section.frameDraft && !section.variantDraft
+  )
+}
+
+/**
+ * Write `incoming` over the stored section without losing the other source.
+ *
+ * - The same source as the one shown: it replaces it; the alternate stays.
+ * - The other source, finished (ready, no draft): it is shown from now on and
+ *   the one shown before is kept as the alternate — so an import keeps the
+ *   generated walkthrough and a generation keeps the import.
+ * - The other source, unfinished (a draft, a failure): kept as the alternate
+ *   while the ready section stays shown.
+ *
+ * A `previous` that belongs to another source is dropped: each source keeps
+ * only its own earlier version.
+ */
+export function mergeSectionWrite(
+  stored: WalkthroughSection | undefined,
+  incoming: WalkthroughSection,
+): WalkthroughSection {
+  const { alternate: _ignored, ...written } = incoming
+  const next: WalkthroughSection =
+    written.previous && sourceOf(written.previous) !== sourceOf(written)
+      ? (({ previous: _dropped, ...rest }) => rest)(written)
+      : written
+  if (!stored) return next
+  const current = normalizeSectionSources(stored)
+  if (sourceOf(next) === sourceOf(current))
+    return current.alternate ? { ...next, alternate: current.alternate } : next
+  if (isFinished(next) || current.status !== 'ready') {
+    const { alternate: older, ...shown } = current
+    if (current.status === 'ready') return { ...next, alternate: shown }
+    // Nothing shown worth keeping: only an alternate of the other source stays.
+    return older && sourceOf(older) !== sourceOf(next) ? { ...next, alternate: older } : next
+  }
+  return { ...current, alternate: next }
 }
 
 export interface HomeworkWalkthrough {
@@ -283,14 +447,35 @@ export function walkthroughLanguage(
   return 'zh_terms'
 }
 
+/**
+ * The professor's answer a question's walkthrough follows: matched, not
+ * 「留给学生」, not empty. Undefined otherwise.
+ */
+export function professorAnswerOf(question: HomeworkQuestion): string | undefined {
+  if (question.answerStatus !== 'matched') return undefined
+  const text = question.answerText ?? ''
+  if (!text.trim() || isDeferredProfessorAnswer(text)) return undefined
+  return text
+}
+
+/**
+ * Bumped with the professor-alignment rules (homework-walkthrough prompt v6).
+ * Only sections of questions WITH a professor answer carry it in their hash,
+ * so those are offered for an update and every other section keeps its hash.
+ */
+export const PROFESSOR_ALIGN_VERSION = 'align-v1'
+
 /** Inputs that change what a question's section says. */
 export function questionSectionHash(
   question: HomeworkQuestion,
   language: WalkthroughLanguage,
   promptVersion: string,
+  /** `false`: the hash without the alignment version (what the opening / summary depend on). */
+  options: { align?: boolean } = {},
 ): string {
   const matched = question.answerStatus === 'matched'
   const deferred = matched && isDeferredProfessorAnswer(question.answerText ?? '')
+  const align = options.align !== false && professorAnswerOf(question) !== undefined
   return fnv1a(
     JSON.stringify({
       promptVersion,
@@ -305,6 +490,8 @@ export function questionSectionHash(
       // the professor's answer is left to the student); undefined keys drop out
       // of the JSON, so questions without one keep their hash.
       previousSolution: !deferred && question.solution ? question.solution : undefined,
+      // Only questions with a professor answer; absent keys keep other hashes.
+      alignProfessor: align ? PROFESSOR_ALIGN_VERSION : undefined,
     }),
   )
 }
@@ -323,7 +510,10 @@ export interface WalkthroughPlanEntry {
   kind: WalkthroughSectionKind
   question?: HomeworkQuestion
   inputHash: string
+  /** The section as shown (its active source). */
   section?: WalkthroughSection
+  /** Its generated source (what writing and rewriting work on), when there is one. */
+  generated?: WalkthroughSection
   /** No section yet, a failed one, or one built from different inputs. */
   needsWork: boolean
   /** A ready section whose inputs have since changed. */
@@ -344,19 +534,25 @@ export function planWalkthrough(
     inputHash: string,
     question?: HomeworkQuestion,
   ): WalkthroughPlanEntry => {
-    const section = byId.get(id)
-    const settled = section?.status === 'ready' || section?.status === 'insufficient'
-    const outdated = Boolean(section && settled && section.inputHash !== inputHash)
+    const stored = byId.get(id)
+    const section = stored ? normalizeSectionSources(stored) : undefined
+    // Freshness follows the generated source; a section that was only
+    // imported is judged by the import (its hash is the one it was saved with).
+    const generated = generatedSource(section)
+    const basis = generated ?? section
+    const settled = basis?.status === 'ready' || basis?.status === 'insufficient'
+    const outdated = Boolean(basis && settled && basis.inputHash !== inputHash)
     return {
       id,
       kind,
       inputHash,
       // "Not enough information" for unchanged inputs is an answer, not a
       // failure: asking again would only fail the same way.
-      needsWork: !section || !settled || section.inputHash !== inputHash,
+      needsWork: !basis || !settled || basis.inputHash !== inputHash,
       outdated,
       ...(question ? { question } : {}),
       ...(section ? { section } : {}),
+      ...(generated ? { generated } : {}),
     }
   }
   const questionEntries = questions.map((question) =>
@@ -367,8 +563,12 @@ export function planWalkthrough(
       question,
     ),
   )
+  // The opening and the summary do not change with the alignment rules: they
+  // are rewritten whenever a question is, so they need not be offered again.
   const frameHash = frameSectionHash(
-    questionEntries.map((item) => item.inputHash),
+    questions.map((question) =>
+      questionSectionHash(question, language, promptVersion, { align: false }),
+    ),
     language,
     promptVersion,
   )

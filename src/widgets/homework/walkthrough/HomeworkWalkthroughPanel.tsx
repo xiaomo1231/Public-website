@@ -10,6 +10,7 @@ import {
   ListChecks,
   ListOrdered,
   Link2,
+  Scale,
   Loader2,
   MessageSquareText,
   MoreHorizontal,
@@ -26,16 +27,25 @@ import type {
   WalkthroughNote,
   WalkthroughPart,
   WalkthroughPlanEntry,
+  WalkthroughSource,
 } from '@/entities/homework/walkthrough'
 import {
   DEFAULT_WALKTHROUGH_LEVEL,
   detailedVariant,
   missingDetailed,
+  professorAnswerOf,
   sectionContent,
   sectionLevel,
+  sectionSources,
+  sourceOf,
   type WalkthroughLevel,
 } from '@/entities/homework/walkthrough'
-import { formatHomeworkQuestion } from '@/entities/homework/formatQuestion'
+import {
+  alignSuggestion,
+  awaitsCompare,
+  currentCompare,
+  isAlignedWith,
+} from '@/entities/homework/professorCompare'
 import { useAuth } from '@/features/auth/useAuth'
 import { useHomeworkService } from '@/features/homework/useHomeworkService'
 import { questionLabel, type SectionAttempt } from '@/services/homeworkWalkthroughService'
@@ -57,6 +67,7 @@ import { ConfirmDialog } from '@/shared/ui/ConfirmDialog'
 import { RegenerateSectionDialog } from './RegenerateSectionDialog'
 import { ImportWalkthroughDialog } from './ImportWalkthroughDialog'
 import { ImportedBadge, ImportIssuesView } from './ImportedSection'
+import { ProfessorAlignedBadge, ProfessorCompareView } from './ProfessorCompare'
 import { LoadingState } from '@/shared/ui/LoadingState'
 import { Math as TeX } from '@/shared/ui/Math'
 import { Progress } from '@/shared/ui/Progress'
@@ -67,6 +78,7 @@ import { prefersReducedMotion } from '@/shared/lib/motion'
 import { useTranslation, type TranslationKey } from '@/i18n'
 import { FloatingQALayer } from './FloatingQALayer'
 import { PracticeSetLauncher } from '../practice/PracticeSetLauncher'
+import { QuestionText } from '@/widgets/homework/QuestionText'
 import { WalkthroughBody, WALKTHROUGH_PARAGRAPH } from './WalkthroughBody'
 import { WalkthroughNotesDialog } from './WalkthroughNotesDialog'
 import { WalkthroughPrint, type PrintableSection } from './WalkthroughPrint'
@@ -124,9 +136,14 @@ export function HomeworkWalkthroughPanel({
     aiReady = false,
     regenerateSection,
     restorePrevious,
+    setSource,
     addAnalysis,
     setLevel,
     generateVariants,
+    compareSection,
+    compareAll,
+    alignToProfessor,
+    dismissCompare,
   } = useWalkthrough(set.id)
   const homework = useHomeworkService()
   // 普通 / 详细: the default from settings; each section may override it.
@@ -189,6 +206,13 @@ export function HomeworkWalkthroughPanel({
     .map((entry) => entry.section!)
   /** Ready question sections without a detailed version yet. */
   const missingCount = missingDetailed(readyQuestions).length
+  /** Ready sections with a professor answer not yet followed or compared (「可对照」). */
+  const compareCount = entries.filter(
+    (entry) =>
+      entry.kind === 'question' &&
+      entry.question &&
+      awaitsCompare(entry.section, professorAnswerOf(entry.question)),
+  ).length
   const allDetailed =
     readyQuestions.length > 0 &&
     readyQuestions.every((section) => sectionLevel(section, defaultLevel) === 'detailed')
@@ -422,6 +446,47 @@ export function HomeworkWalkthroughPanel({
     if (level === 'detailed' && missingCount > 0 && aiReady && !running) await writeDetailed()
   }
 
+  /** Show the outcome of a comparison run (one section or all of them). */
+  function compareDone(
+    result: Awaited<ReturnType<NonNullable<typeof compareAll>>> | undefined,
+  ): void {
+    if (!result) {
+      toast({ variant: 'error', title: t('homework.walkthrough.compareFailed') })
+      return
+    }
+    if (result.paused && !result.fatalError) return
+    if (result.fatalError)
+      toast({
+        variant: 'error',
+        title: t('homework.walkthrough.stopped'),
+        description: result.fatalError,
+      })
+    else if (result.failed > 0)
+      toast({
+        variant: 'warning',
+        title: t('homework.walkthrough.compareSomeFailed', { count: result.failed }),
+      })
+    else toast({ variant: 'success', title: t('homework.walkthrough.compareDone') })
+  }
+
+  /** 按教授答案修改: rewrite following the professor, with what the comparison found. */
+  async function align(entry: WalkthroughPlanEntry): Promise<void> {
+    const report = entry.question
+      ? currentCompare(entry.section, professorAnswerOf(entry.question))
+      : undefined
+    if (!alignToProfessor || !report) return
+    const result = await alignToProfessor(
+      entry.id,
+      alignSuggestion(report, state?.language === 'en' ? 'en' : 'zh'),
+    )
+    if (!result) {
+      toast({ variant: 'error', title: t('homework.walkthrough.regenerateFailed') })
+      return
+    }
+    if (result.paused) return
+    toast({ variant: 'success', title: t('homework.walkthrough.aligned') })
+  }
+
   async function restore(entry: WalkthroughPlanEntry): Promise<void> {
     if (!restorePrevious) return
     if (await restorePrevious(entry.id))
@@ -483,6 +548,9 @@ export function HomeworkWalkthroughPanel({
       ...(entry.section!.suggestions
         ? { suggestions: entry.section!.suggestions.map(tidyBoxedPunctuation) }
         : {}),
+      ...(entry.question && isAlignedWith(entry.section, professorAnswerOf(entry.question))
+        ? { aligned: true }
+        : {}),
     }))
 
   return (
@@ -496,6 +564,23 @@ export function HomeworkWalkthroughPanel({
           <Badge variant="outline">
             {t(`homework.walkthrough.language.${state.language}` as TranslationKey)}
           </Badge>
+          {compareCount > 0 && compareAll && (
+            <span className="inline-flex flex-wrap items-center gap-2" data-compare-prompt>
+              <span className="text-xs text-muted-foreground">
+                {t('homework.walkthrough.comparePrompt', { count: compareCount })}
+              </span>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={running || !aiReady}
+                title={aiReady ? undefined : t('homework.noProvider')}
+                onClick={() => void compareAll().then(compareDone)}
+              >
+                <Scale className="h-4 w-4" aria-hidden />
+                {t('homework.walkthrough.compareAll')}
+              </Button>
+            </span>
+          )}
           {writtenCount > 0 && needsWork > 0 && !running && (
             <Badge
               variant="outline"
@@ -622,15 +707,19 @@ export function HomeworkWalkthroughPanel({
                 ? t(
                     progress.section.analysis
                       ? 'homework.walkthrough.analyzing'
-                      : progress.section.variant
-                        ? 'homework.walkthrough.generatingDetailed'
-                        : 'homework.walkthrough.regenerating',
+                      : progress.section.compare
+                        ? 'homework.walkthrough.comparing'
+                        : progress.section.variant
+                          ? 'homework.walkthrough.generatingDetailed'
+                          : 'homework.walkthrough.regenerating',
                     { title: regeneratingTitle(progress.section.id, entries, labels, t) },
                   )
                 : t(
                     progress.variant
                       ? 'homework.walkthrough.variantProgress'
-                      : 'homework.walkthrough.progress',
+                      : progress.compare
+                        ? 'homework.walkthrough.compareProgress'
+                        : 'homework.walkthrough.progress',
                     {
                       done: progress.done,
                       total: progress.total,
@@ -862,12 +951,24 @@ export function HomeworkWalkthroughPanel({
                         })}
                     level={sectionLevel(entry.section, defaultLevel)}
                     onLevel={(level: WalkthroughLevel) => void changeLevel(entry, level)}
+                    sources={sectionSources(entry.section)}
+                    {...(running ? {} : { onSource: (source) => void setSource(entry.id, source) })}
                     {...(running
                       ? {}
                       : { onGenerateDetailed: () => void writeDetailed([entry.id]) })}
                     writingDetailed={
                       progress?.section?.id === entry.id && progress.section.variant === true
                     }
+                    comparing={
+                      progress?.section?.id === entry.id && progress.section.compare === true
+                    }
+                    {...(running || !compareSection
+                      ? {}
+                      : {
+                          onCompare: () => void compareSection(entry.id).then(compareDone),
+                          onAlign: () => void align(entry),
+                          onDismissCompare: () => void dismissCompare?.(entry.id),
+                        })}
                     aiReady={aiReady}
                   />
                 ))}
@@ -1026,6 +1127,10 @@ interface SectionViewProps {
   onRestore?: () => void
   /** 补充题目分析 for a section written before the analysis existed. */
   onAddAnalysis?: () => void
+  /** 生成的讲解 / 导入的讲解 available for this section, the shown one first. */
+  sources: WalkthroughSource[]
+  /** Show another source; absent while a run is in progress. */
+  onSource?: (source: WalkthroughSource) => void
   /** 普通 / 详细: the version this section shows. */
   level: WalkthroughLevel
   onLevel: (level: WalkthroughLevel) => void
@@ -1033,6 +1138,14 @@ interface SectionViewProps {
   onGenerateDetailed?: () => void
   /** The detailed version of this section is being written. */
   writingDetailed: boolean
+  /** It is being compared with the professor's answer. */
+  comparing?: boolean
+  /** 与教授答案对照; absent while a run is in progress. */
+  onCompare?: () => void
+  /** 按教授答案修改. */
+  onAlign?: () => void
+  /** 保持现状. */
+  onDismissCompare?: () => void
   aiReady: boolean
 }
 
@@ -1053,14 +1166,28 @@ function WalkthroughSectionView({
   onContinueRegenerate,
   onRestore,
   onAddAnalysis,
+  sources,
+  onSource,
   level,
   onLevel,
   onGenerateDetailed,
   writingDetailed,
+  comparing = false,
+  onCompare,
+  onAlign,
+  onDismissCompare,
   aiReady,
 }: SectionViewProps): JSX.Element {
   const { t } = useTranslation()
   const section = entry.section
+  const professorAnswer = entry.question ? professorAnswerOf(entry.question) : undefined
+  const aligned = isAlignedWith(section, professorAnswer)
+  const report = currentCompare(section, professorAnswer)
+  const canCompare =
+    Boolean(onCompare) &&
+    entry.kind === 'question' &&
+    section?.status === 'ready' &&
+    !!professorAnswer
   const draft = section?.draft
   // The version shown: the detailed one when chosen and written, else the standard one.
   const detailed = section ? detailedVariant(section) : undefined
@@ -1068,7 +1195,10 @@ function WalkthroughSectionView({
     section && level === 'detailed' && detailed
       ? (sectionContent(section, 'detailed') ?? section)
       : section
-  const showsLevels = entry.kind === 'question' && section?.status === 'ready'
+  // An imported walkthrough has one level: the author's.
+  const showsLevels =
+    entry.kind === 'question' && section?.status === 'ready' && section.origin !== 'imported'
+  const shownSource = section ? sourceOf(section) : undefined
   const detailMissing = showsLevels && level === 'detailed' && !detailed
   const canRegenerate =
     Boolean(onRegenerate) &&
@@ -1099,9 +1229,11 @@ function WalkthroughSectionView({
             <Loader2 className="h-3 w-3 animate-spin" aria-hidden />
             {analyzing
               ? t('homework.walkthrough.writingAnalysis')
-              : runningPart
-                ? t('homework.walkthrough.writingPart', { part: runningPart })
-                : t('homework.walkthrough.writing')}
+              : comparing
+                ? t('homework.walkthrough.comparingBadge')
+                : runningPart
+                  ? t('homework.walkthrough.writingPart', { part: runningPart })
+                  : t('homework.walkthrough.writing')}
           </Badge>
         )}
         {running && attempt && (
@@ -1115,12 +1247,28 @@ function WalkthroughSectionView({
         {!running && entry.outdated && (
           <Badge variant="outline">{t('homework.walkthrough.outdated')}</Badge>
         )}
+        {sources.length > 1 && shownSource && (
+          <SourceToggle source={shownSource} sources={sources} onChange={onSource} />
+        )}
         {showsLevels && <LevelToggle level={level} onChange={onLevel} busy={writingDetailed} />}
         {section?.status === 'ready' && section.origin === 'imported' && (
           <ImportedBadge projectId={projectId} documentId={section.sourceDocumentId} />
         )}
-        {(canRegenerate || (onRestore && section?.previous)) && (
+        {section?.status === 'ready' && aligned && <ProfessorAlignedBadge />}
+        {(canRegenerate || canCompare || (onRestore && section?.previous)) && (
           <div className="ml-auto flex flex-wrap items-center gap-1" data-print-hidden>
+            {canCompare && (
+              <Button
+                variant="ghost"
+                size="sm"
+                disabled={!aiReady}
+                title={aiReady ? undefined : t('homework.noProvider')}
+                onClick={onCompare}
+              >
+                <Scale className="h-4 w-4" aria-hidden />
+                {t('homework.walkthrough.compare')}
+              </Button>
+            )}
             {onRestore && section?.previous && (
               <Button variant="ghost" size="sm" onClick={onRestore}>
                 <Undo2 className="h-4 w-4" aria-hidden />
@@ -1132,7 +1280,12 @@ function WalkthroughSectionView({
                 variant="ghost"
                 size="sm"
                 disabled={!aiReady}
-                title={noProvider}
+                title={
+                  noProvider ??
+                  (shownSource === 'imported'
+                    ? t('homework.walkthrough.regenerateImportedHint')
+                    : undefined)
+                }
                 onClick={onRegenerate}
               >
                 <RotateCcw className="h-4 w-4" aria-hidden />
@@ -1288,6 +1441,14 @@ function WalkthroughSectionView({
           {section.issues && section.issues.length > 0 && (
             <ImportIssuesView issues={section.issues} />
           )}
+          {report && (
+            <ProfessorCompareView
+              report={report}
+              onAlign={onAlign}
+              onDismiss={onDismissCompare}
+              aiReady={aiReady}
+            />
+          )}
           {draft?.mode === 'regenerate' && !running && (
             <div
               className="flex flex-wrap items-center gap-3 border-t pt-3 text-sm text-muted-foreground"
@@ -1397,6 +1558,50 @@ function LevelToggle({
   )
 }
 
+/** 生成的讲解 / 导入的讲解: which source a section shows (only with both). */
+function SourceToggle({
+  source,
+  sources,
+  onChange,
+}: {
+  source: WalkthroughSource
+  sources: WalkthroughSource[]
+  /** Absent while a run is in progress (the toggle is shown, disabled). */
+  onChange?: ((source: WalkthroughSource) => void) | undefined
+}): JSX.Element {
+  const { t } = useTranslation()
+  const order: WalkthroughSource[] = ['generated', 'imported']
+  return (
+    <div
+      role="group"
+      aria-label={t('homework.walkthrough.sourceGroup')}
+      data-walkthrough-source={source}
+      data-print-hidden
+      className="inline-flex items-center overflow-hidden rounded-md border text-xs lecture:rounded-none lab:rounded-none lab:font-mono"
+    >
+      {order
+        .filter((option) => sources.includes(option))
+        .map((option) => (
+          <button
+            key={option}
+            type="button"
+            aria-pressed={source === option}
+            disabled={!onChange}
+            onClick={() => source !== option && onChange?.(option)}
+            className={cn(
+              'focus-ring px-2.5 py-1 transition-colors duration-150 disabled:cursor-not-allowed',
+              source === option
+                ? 'bg-primary-strong text-primary-foreground'
+                : 'text-muted-foreground hover:bg-muted',
+            )}
+          >
+            {t(`homework.walkthrough.source.${option}` as TranslationKey)}
+          </button>
+        ))}
+    </div>
+  )
+}
+
 /** The sub-parts of a split question finished so far. */
 function PartialParts({ parts, total }: { parts: WalkthroughPart[]; total: number }): JSX.Element {
   const { t } = useTranslation()
@@ -1430,9 +1635,8 @@ function QuestionPrompt({ question }: { question: HomeworkQuestion }): JSX.Eleme
       <summary className="cursor-pointer select-none text-muted-foreground">
         {t('homework.walkthrough.showQuestion')}
       </summary>
-      <RichText
-        text={formatHomeworkQuestion(question.prompt)}
-        format="markdown"
+      <QuestionText
+        question={question}
         className="mt-2"
         paragraphClassName="text-sm leading-relaxed"
       />

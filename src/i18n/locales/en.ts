@@ -840,6 +840,16 @@ export const en = {
   'homework.walkthrough.overviewTitle': 'Tools you need',
   'homework.walkthrough.summaryTitle': 'Summary and review',
   'homework.walkthrough.questionTitle': 'Question {label}',
+  'homework.translation.group': 'Question language',
+  'homework.translation.original': 'Original',
+  'homework.translation.zh': 'Chinese translation',
+  'homework.translation.loading': 'Translating this question…',
+  'homework.translation.stop': 'Stop',
+  'homework.translation.retry': 'Translate again',
+  'homework.translation.invalid':
+    'The AI returned no translation. Press “Translate again”, or choose another model in Settings.',
+  'homework.translation.changed':
+    'The translation changed a formula, sub-part label or number of the question ({items}), so it was discarded. Press “Translate again”; if it keeps happening, choose another model in Settings.',
   'homework.walkthrough.showQuestion': 'Show the question',
   'homework.walkthrough.conclusion': 'Result: ',
   'homework.walkthrough.suggestions': 'Review suggestions',
@@ -888,6 +898,40 @@ export const en = {
     'This section could not be regenerated; it is unchanged.',
   'homework.walkthrough.restorePrevious': 'Restore previous version',
   'homework.walkthrough.restored': 'Switched to the other version',
+  'homework.walkthrough.compare': 'Compare with professor',
+  'homework.walkthrough.compareAll': 'Compare all with professor answers',
+  'homework.walkthrough.comparePrompt': '{count} questions have professor answers to compare',
+  'homework.walkthrough.compareTitle': 'Compared with the professor’s answer',
+  'homework.walkthrough.compareWhole': 'Whole question',
+  'homework.walkthrough.compareRecommendation.keep': 'Suggestion: keep as is',
+  'homework.walkthrough.compareRecommendation.align':
+    'Suggestion: rewrite with the professor’s method',
+  'homework.walkthrough.compareRecommendation.fix': 'Suggestion: fix to match the professor',
+  'homework.walkthrough.compareStatus.same': 'Same',
+  'homework.walkthrough.compareStatus.method_differs': 'Method differs',
+  'homework.walkthrough.compareStatus.result_differs': 'Result differs',
+  'homework.walkthrough.compareStatus.missing_in_walkthrough': 'Missing here',
+  'homework.walkthrough.compareStatus.not_in_professor': 'Not solved by professor',
+  'homework.walkthrough.compareLocalVerified':
+    'Local check: the walkthrough’s row reduction is correct',
+  'homework.walkthrough.compareLocalMismatch':
+    'Local check: the walkthrough’s row reduction has an error',
+  'homework.walkthrough.alignToProfessor': 'Rewrite to match professor',
+  'homework.walkthrough.keepAsIs': 'Keep as is',
+  'homework.walkthrough.keptAsIs': 'You chose to keep this section as it is.',
+  'homework.walkthrough.alignedBadge': 'Follows professor’s answer',
+  'homework.walkthrough.aligned':
+    'Rewritten to follow the professor’s answer (previous version can be restored)',
+  'homework.walkthrough.comparing': 'Comparing with the professor’s answer: {title}',
+  'homework.walkthrough.comparingBadge': 'Comparing',
+  'homework.walkthrough.compareProgress': 'Comparing with professor answers: {done} / {total}',
+  'homework.walkthrough.compareDone': 'Comparison finished',
+  'homework.walkthrough.compareFailed': 'Comparison failed',
+  'homework.walkthrough.compareSomeFailed': '{count} comparisons failed; you can try again later',
+  'homework.walkthrough.compareUnavailable':
+    'This section has no professor answer to compare with, or it has not been written yet.',
+  'homework.walkthrough.compareInvalid':
+    'The AI’s comparison could not be used (its sub-part labels did not match). Try again or switch models.',
   'homework.walkthrough.frameGroupsDone':
     'Too long for one reply: {done} of {total} question groups done',
   'homework.walkthrough.partialDone': '{done} / {total} sub-questions written',
@@ -903,6 +947,11 @@ export const en = {
   'homework.walkthrough.analysisAdded': 'Question analysis added',
   'homework.walkthrough.sectionChanged':
     'This section changed while it was being written. Try again.',
+  'homework.walkthrough.sourceGroup': 'Walkthrough source',
+  'homework.walkthrough.source.generated': 'Generated',
+  'homework.walkthrough.source.imported': 'Imported',
+  'homework.walkthrough.regenerateImportedHint':
+    'Rewrites the generated walkthrough; the new version is shown when it is done. The imported one is kept and you can switch back any time.',
   'homework.walkthrough.levelGroup': 'Level of detail',
   'homework.walkthrough.level.standard': 'Standard',
   'homework.walkthrough.level.detailed': 'Detailed',
@@ -3250,7 +3299,7 @@ export const en = {
   'walkthroughImport.replaceAndSave': 'Replace {count} and import',
   'walkthroughImport.saved': 'Imported {count} sections',
   'walkthroughImport.savedReplaced':
-    '{count} existing sections were replaced; “Restore previous version” brings them back.',
+    '{count} earlier imports were replaced; “Restore previous version” brings them back.',
   'walkthroughImport.found': 'Found walkthroughs for {count} questions.',
   'walkthroughImport.issuesFound':
     '{count} places that may be wrong are marked (the text itself is unchanged).',
@@ -3261,7 +3310,7 @@ export const en = {
   'walkthroughImport.unknownIds':
     '{count} parts named a question that is not in this assignment and were dropped.',
   'walkthroughImport.confirmReplace':
-    '{count} sections already have a walkthrough. Importing replaces them; the current version is kept as “previous version”.',
+    '{count} sections were imported before. The new import replaces them; the earlier import is kept as “previous version”.',
   'walkthroughImport.badge': 'Imported',
   'walkthroughImport.openOriginal': 'Open original',
   'walkthroughImport.issueTitle': 'This may be wrong',
@@ -3277,6 +3326,19 @@ export const en = {
   'walkthroughImport.errors.incomplete': 'The import was paused. Continue it before saving.',
   'walkthroughImport.errors.nothing':
     'Nothing in this file could be matched to the assignment’s questions.',
+  'walkthroughImport.keptGenerated':
+    '{count} sections already have a generated walkthrough. It is kept: switch between “Generated” and “Imported” next to the section title.',
+  'walkthroughImport.savedKept':
+    'The generated walkthroughs are kept; switch next to each section title.',
+  'walkthroughImport.retry': 'Continue import',
+  'walkthroughImport.errors.partTooLongModel':
+    'Part {part} of {total} of the imported walkthrough is too long: this model writes at most about {limit} tokens per reply, even in smaller pieces. Choose a model with longer output, then press “Continue import” (parts already read are kept).',
+  'walkthroughImport.errors.partTooLongSetting':
+    'Part {part} of {total} of the imported walkthrough is too long for the output limit in Settings (about {limit} tokens). Raise “Max tokens” or choose “Use the model’s maximum”, then press “Continue import” (parts already read are kept).',
+  'walkthroughImport.errors.partTruncated':
+    'The model stopped before finishing part {part} of {total} of the imported walkthrough. Press “Continue import” to read it again (parts already read are kept); if it keeps happening, choose “Use the model’s maximum” in Settings.',
+  'walkthroughImport.errors.partFailed':
+    'Reading part {part} of {total} of the imported walkthrough failed: {reason} Press “Continue import” to carry on from this part; parts already read are kept.',
   'walkthroughImport.errors.confirm': 'Confirm replacing the existing sections first.',
   'usage.readout.toggle': 'Show usage and balance in the sidebar / header',
   'usage.readout.toggleHint':

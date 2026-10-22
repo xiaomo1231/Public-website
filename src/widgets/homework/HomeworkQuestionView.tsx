@@ -1,4 +1,5 @@
 import { targetLanguageOf } from '@/shared/lib/language'
+import { QuestionText } from './QuestionText'
 import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
@@ -353,10 +354,9 @@ export function HomeworkQuestionView({
                 </Badge>
               )}
             </div>
-            <RichText
-              text={formatHomeworkQuestion(question.prompt)}
-              format="markdown"
-              className="max-w-[74ch] [&>p]:mb-3"
+            <QuestionText
+              question={question}
+              className="max-w-[74ch] [&_p]:mb-3"
               paragraphClassName="text-[16px] leading-[1.75] sm:text-[17px]"
             />
           </CardHeader>

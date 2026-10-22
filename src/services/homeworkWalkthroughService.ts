@@ -17,6 +17,13 @@ import { AppError, NotFoundError } from '@/infrastructure/errors/AppError'
 import { HomeworkRepository } from '@/entities/homework/repository'
 import { UserRepository } from '@/entities/user/repository'
 import { isDeferredProfessorAnswer } from '@/entities/homework/answerMatching'
+import {
+  awaitsCompare,
+  compareSectionHash,
+  professorAnswerHash,
+  validateCompare,
+  type ProfessorCompareReport,
+} from '@/entities/homework/professorCompare'
 import { formatHomeworkReviewText } from '@/entities/homework/reviewFormatting'
 import {
   classifyHomeworkError,
@@ -37,7 +44,10 @@ import {
 } from '@/entities/homework/splitQuestion'
 import {
   detailedVariant,
+  normalizeSectionSources,
   planWalkthrough,
+  switchSectionSource,
+  professorAnswerOf,
   walkthroughId,
   walkthroughLanguage,
   type HomeworkWalkthrough,
@@ -51,6 +61,7 @@ import {
   type WalkthroughPlanEntry,
   type WalkthroughSection,
   type WalkthroughSectionVersion,
+  type WalkthroughSource,
 } from '@/entities/homework/walkthrough'
 import { WalkthroughRepository } from '@/entities/homework/walkthroughRepository'
 import {
@@ -134,9 +145,13 @@ export interface WalkthroughProgress {
     analysis?: boolean
     /** The detailed version (详细版) is being written or rewritten. */
     variant?: boolean
+    /** It is being compared with the professor's answer (与教授答案对照). */
+    compare?: boolean
   }
   /** Detailed versions (详细版) of several sections are being written. */
   variant?: boolean
+  /** Several sections are being compared with the professor's answers. */
+  compare?: boolean
   /** Sections on a second or later attempt, with why the last one failed. */
   attempts?: Record<string, SectionAttempt>
 }
@@ -180,6 +195,8 @@ export interface WalkthroughPausedRun {
   forceSince?: number
   /** A paused run writing detailed versions (全部切到详细版); resume continues it. */
   variant?: { sectionIds?: string[] }
+  /** A paused 对照全部有教授答案的题; resume compares the rest. */
+  compare?: boolean
 }
 
 /** Module scope: services are rebuilt per page, a run must outlive that. */
@@ -286,7 +303,11 @@ export class HomeworkWalkthroughService {
       `homework-walkthrough/${prompts.homeworkWalkthrough.CACHE_VERSION}`,
       subject,
     )
-    const walkthrough = await this.repo.get(walkthroughId(setId, language))
+    const stored = await this.repo.get(walkthroughId(setId, language))
+    // Older rows kept the other source in `previous`: read it as the alternate.
+    const walkthrough = stored
+      ? { ...stored, sections: stored.sections.map(normalizeSectionSources) }
+      : undefined
     return {
       set,
       questions,
@@ -353,6 +374,8 @@ export class HomeworkWalkthroughService {
     options: { control?: GenerationControl } = {},
   ): Promise<WalkthroughRunResult> {
     const paused = pausedRuns.get(setId)
+    if (paused?.compare)
+      return this.compareAll(setId, options.control ? { control: options.control } : {})
     if (paused?.variant)
       return this.generateVariants(setId, {
         ...(paused.variant.sectionIds ? { sectionIds: paused.variant.sectionIds } : {}),
@@ -371,7 +394,8 @@ export class HomeworkWalkthroughService {
     control: GenerationControl,
   ): Promise<WalkthroughRunResult> {
     const ai = this.requireAI()
-    const state = await this.state(setId)
+    // Writing works on the generated source; an import shown instead is kept.
+    const state = writingState(await this.state(setId))
     if (state.questions.length === 0)
       throw new AppError(t('homework.walkthrough.noQuestions'), 'VALIDATION_ERROR')
     const subject = await loadProjectSubjectContext(state.set.projectId, this.db)
@@ -580,6 +604,12 @@ export class HomeworkWalkthroughService {
       control?: GenerationControl
       /** The version shown: `detailed` rewrites only the detailed version. */
       level?: WalkthroughLevel
+      /**
+       * 按教授答案修改: the standard version is rewritten following the
+       * professor's answer (the suggestion carries the comparison) and the
+       * detailed version, written for the old route, is dropped.
+       */
+      align?: boolean
     } = {},
   ): Promise<WalkthroughRunResult> {
     if (runs.has(setId))
@@ -598,9 +628,9 @@ export class HomeworkWalkthroughService {
     }
     const suggestion = options.suggestion?.trim().slice(0, MAX_REVISION_SUGGESTION) || undefined
     const run =
-      options.level === 'detailed'
+      options.level === 'detailed' && !options.align
         ? this.regenerateDetailed(setId, sectionId, suggestion, progress, control)
-        : this.regenerate(setId, sectionId, suggestion, progress, control)
+        : this.regenerate(setId, sectionId, suggestion, progress, control, options.align === true)
     const promise = run.finally(() => {
       runs.delete(setId)
       emit()
@@ -616,9 +646,12 @@ export class HomeworkWalkthroughService {
     suggestion: string | undefined,
     progress: WalkthroughProgress,
     control: GenerationControl,
+    align = false,
   ): Promise<WalkthroughRunResult> {
     const ai = this.requireAI()
-    const state = await this.state(setId)
+    // The generated source is rewritten (an import shown instead is kept as
+    // the other source, and the new version is shown once it is written).
+    const state = writingState(await this.state(setId))
     const entry = state.plan.find((item) => item.id === sectionId)
     // Imported 「其它内容」 matches no question: there is nothing to rewrite it from.
     if (!entry || entry.kind === 'other') throw new NotFoundError('WalkthroughSection', sectionId)
@@ -663,8 +696,9 @@ export class HomeworkWalkthroughService {
             t('homework.walkthrough.insufficient', { reason: section.error ?? '' }),
             'INVALID_RESPONSE',
           )
-        // Only the standard version is rewritten; the detailed one stays.
-        await save(withLevel(withPrevious(section, current), current, true))
+        // Only the standard version is rewritten; the detailed one stays —
+        // unless it was rewritten onto the professor's route (按教授答案修改).
+        await save(withLevel(withPrevious(section, current), current, !align))
       } else {
         // Only the requested part is asked for and rewritten.
         const next = await this.writeFramePart(
@@ -723,6 +757,20 @@ export class HomeworkWalkthroughService {
             true,
           ),
     )
+  }
+
+  /**
+   * Show another source of a section (生成的讲解 / 导入的讲解). The one shown
+   * before is kept whole as the alternate, so switching back is free.
+   */
+  async setSource(setId: string, sectionId: string, source: WalkthroughSource): Promise<void> {
+    if (runs.has(setId)) throw new AppError(t('homework.walkthrough.busy'), 'VALIDATION_ERROR')
+    const state = await this.state(setId)
+    if (!state.walkthrough) throw new NotFoundError('WalkthroughSection', sectionId)
+    await this.repo.updateSection(state.walkthrough.id, sectionId, (latest) =>
+      switchSectionSource(latest, source),
+    )
+    emit()
   }
 
   /**
@@ -816,6 +864,235 @@ export class HomeworkWalkthroughService {
     }
   }
 
+  /**
+   * 与教授答案对照 for one ready question section with a professor answer
+   * (one request; 立即停止 aborts it). The report is saved on the section;
+   * nothing in the walkthrough itself changes.
+   */
+  compareSection(
+    setId: string,
+    sectionId: string,
+    options: { control?: GenerationControl } = {},
+  ): Promise<WalkthroughRunResult> {
+    return this.startCompare(setId, [sectionId], options.control)
+  }
+
+  /**
+   * 对照全部有教授答案的题: every ready question section with a professor
+   * answer that is neither written following it nor compared with it yet,
+   * two at a time; pausable between sections, each report saved as it comes.
+   */
+  compareAll(
+    setId: string,
+    options: { control?: GenerationControl } = {},
+  ): Promise<WalkthroughRunResult> {
+    return this.startCompare(setId, undefined, options.control)
+  }
+
+  private startCompare(
+    setId: string,
+    sectionIds: string[] | undefined,
+    control: GenerationControl = createGenerationRun(),
+  ): Promise<WalkthroughRunResult> {
+    if (runs.has(setId))
+      return Promise.reject(new AppError(t('homework.walkthrough.busy'), 'VALIDATION_ERROR'))
+    pausedRuns.delete(setId)
+    const single = sectionIds?.length === 1 ? sectionIds[0] : undefined
+    const progress: WalkthroughProgress = {
+      total: 0,
+      done: 0,
+      failed: 0,
+      running: [],
+      ...(single ? { section: { id: single, split: false, compare: true } } : { compare: true }),
+    }
+    const promise = this.runCompare(setId, sectionIds, progress, control)
+      .then((result) => {
+        if (result.paused && !single)
+          pausedRuns.set(setId, {
+            stopped: result.stopped === true,
+            done: progress.done,
+            total: progress.total,
+            compare: true,
+          })
+        return result
+      })
+      .finally(() => {
+        runs.delete(setId)
+        emit()
+      })
+    runs.set(setId, { promise, progress, control })
+    emit()
+    return promise
+  }
+
+  private async runCompare(
+    setId: string,
+    sectionIds: readonly string[] | undefined,
+    progress: WalkthroughProgress,
+    control: GenerationControl,
+  ): Promise<WalkthroughRunResult> {
+    const ai = this.requireAI()
+    const state = await this.state(setId)
+    const subject = await loadProjectSubjectContext(state.set.projectId, this.db)
+    const wanted = sectionIds ? new Set(sectionIds) : null
+    const todo = state.plan.filter((entry) => {
+      if (entry.kind !== 'question' || entry.section?.status !== 'ready') return false
+      const answer = professorAnswerOf(entry.question!)
+      if (!answer) return false
+      return wanted ? wanted.has(entry.id) : awaitsCompare(entry.section, answer)
+    })
+    if (wanted && todo.length === 0)
+      throw new AppError(t('homework.walkthrough.compareUnavailable'), 'VALIDATION_ERROR')
+    progress.total = todo.length
+    emit()
+    const labels = new Map(
+      state.questions.map((question, index) => [question.id, questionLabel(question, index)]),
+    )
+    const id = walkthroughId(setId, state.language)
+    const result: WalkthroughRunResult = { generated: 0, failed: 0 }
+    let fatal: string | undefined
+    let interrupted = false
+    const queue = [...todo]
+    const worker = async (): Promise<void> => {
+      while (queue.length > 0) {
+        if (fatal) return
+        if (!control.shouldContinue()) {
+          interrupted = true
+          return
+        }
+        const entry = queue.shift()!
+        progress.running.push(entry.id)
+        emit()
+        let aborted = false
+        try {
+          await this.writeCompare(ai, {
+            id,
+            entry,
+            label: labels.get(entry.question!.id) ?? '?',
+            language: state.language,
+            subject,
+            control,
+            onAttempt: (attempt) => setAttempt(progress, [entry.id], attempt),
+          })
+          result.generated += 1
+        } catch (err) {
+          if (isAbortError(err, control.signal)) {
+            aborted = true
+            interrupted = true
+            continue
+          }
+          if (isAccountFatalError(classifyHomeworkError(err))) fatal = friendlyAIError(err)
+          // A failed comparison changes nothing on the section.
+          result.failed += 1
+          progress.failed += 1
+          // One section on its own: the caller shows why.
+          if (progress.section) throw err
+        } finally {
+          progress.running = progress.running.filter((item) => item !== entry.id)
+          if (!aborted) progress.done += 1
+          setAttempt(progress, [entry.id], null)
+        }
+      }
+    }
+    await Promise.all(
+      Array.from({ length: Math.min(SECTION_CONCURRENCY, queue.length) }, () => worker()),
+    )
+    if (interrupted)
+      return {
+        ...result,
+        paused: true,
+        ...(control.signal.aborted ? { stopped: true } : {}),
+        ...(fatal ? { fatalError: fatal } : {}),
+      }
+    return fatal ? { ...result, fatalError: fatal } : result
+  }
+
+  /**
+   * One comparison: only this question, its professor answer and its
+   * standard text are sent. The report is checked locally and saved onto the
+   * section only if its text is still the one compared.
+   */
+  private async writeCompare(
+    ai: AIService,
+    job: {
+      id: string
+      entry: WalkthroughPlanEntry
+      label: string
+      language: WalkthroughLanguage
+      subject: SubjectContext | undefined
+      control: GenerationControl
+      onAttempt?: (attempt: SectionAttempt) => void
+    },
+  ): Promise<ProfessorCompareReport> {
+    const section = job.entry.section!
+    const question = job.entry.question!
+    const professorAnswer = professorAnswerOf(question)!
+    const parts = walkthroughSubparts(question.prompt).map((part) => part.label)
+    const messages: ChatMessage[] = [
+      {
+        role: 'system',
+        content: prompts.subjectProfile.withSubject(
+          prompts.walkthroughCompare.buildSystemPrompt(),
+          job.subject,
+        ),
+      },
+      {
+        role: 'user',
+        content: prompts.walkthroughCompare.buildUserPrompt({
+          label: job.label,
+          question: question.prompt,
+          parts,
+          professorAnswer,
+          ...(section.conclusion ? { conclusion: section.conclusion } : {}),
+          body: section.body,
+          language: job.language,
+        }),
+      },
+    ]
+    const reply = prompts.walkthroughCompare.normalizeCompare(
+      await requestSectionJSON(ai, messages, job.control.signal, job.onAttempt),
+    )
+    const validated = reply
+      ? validateCompare(reply, {
+          questionParts: parts,
+          professorAnswer,
+          ...(section.checks ? { checks: section.checks } : {}),
+        })
+      : null
+    if (!validated) throw new AppError(t('homework.walkthrough.compareInvalid'), 'INVALID_RESPONSE')
+    const sectionHash = compareSectionHash(section)
+    const report: ProfessorCompareReport = {
+      answerHash: professorAnswerHash(professorAnswer),
+      sectionHash,
+      items: validated.items.map((item) => ({
+        ...item,
+        note: formatHomeworkReviewText(item.note),
+      })),
+      recommendation: validated.recommendation,
+      suggestion: validated.suggestion,
+      comparedAt: Date.now(),
+    }
+    const stored = await this.repo.updateSection(job.id, section.id, (latest) =>
+      latest.status === 'ready' && compareSectionHash(latest) === sectionHash
+        ? { ...latest, professorCompare: report }
+        : null,
+    )
+    if (!stored) throw new AppError(t('homework.walkthrough.sectionChanged'), 'VALIDATION_ERROR')
+    return report
+  }
+
+  /** 保持现状: keep the section as it is; the report stays, folded away. */
+  async dismissCompare(setId: string, sectionId: string): Promise<void> {
+    const state = await this.state(setId)
+    if (!state.walkthrough) return
+    await this.repo.updateSection(state.walkthrough.id, sectionId, (latest) =>
+      latest.professorCompare
+        ? { ...latest, professorCompare: { ...latest.professorCompare, dismissed: true } }
+        : null,
+    )
+    emit()
+  }
+
   /** What a question's prompt needs besides the question text. */
   private async questionInputs(
     question: HomeworkQuestion,
@@ -823,10 +1100,7 @@ export class HomeworkWalkthroughService {
   ): Promise<QuestionInputs> {
     const deferred =
       question.answerStatus === 'matched' && isDeferredProfessorAnswer(question.answerText ?? '')
-    const professorAnswer =
-      question.answerStatus === 'matched' && !deferred && (question.answerText ?? '').trim()
-        ? question.answerText
-        : undefined
+    const professorAnswer = professorAnswerOf(question)
     return {
       sourceText: await this.homework.questionSourceText(question),
       ...(professorAnswer ? { professorAnswer } : {}),
@@ -841,8 +1115,23 @@ export class HomeworkWalkthroughService {
    * sub-part, saved as it goes so an interruption continues where it stopped.
    */
   private async writeQuestion(ai: AIService, job: QuestionJob): Promise<WalkthroughSection> {
+    const inputs = await this.questionInputs(job.entry.question!, job.subject)
+    const section = await this.writeQuestionWith(ai, job, inputs)
+    // Written under the professor-alignment rules: 「已按教授答案」.
+    return inputs.professorAnswer && section.status === 'ready'
+      ? {
+          ...section,
+          professorAligned: { answerHash: professorAnswerHash(inputs.professorAnswer) },
+        }
+      : section
+  }
+
+  private async writeQuestionWith(
+    ai: AIService,
+    job: QuestionJob,
+    inputs: QuestionInputs,
+  ): Promise<WalkthroughSection> {
     const question = job.entry.question!
-    const inputs = await this.questionInputs(question, job.subject)
     const subparts = walkthroughSubparts(question.prompt)
     const draft = usableDraft(job, subparts)
     if (subparts.length >= 2 && (draft || shouldSplitWalkthrough(question.prompt, subparts)))
@@ -876,6 +1165,7 @@ export class HomeworkWalkthroughService {
             linearSystems: inputs.linearSystems,
             analysis: true,
             steps: true,
+            ...(inputs.professorAnswer ? { alignProfessor: true } : {}),
           }),
           job.subject,
         ),
@@ -959,6 +1249,7 @@ export class HomeworkWalkthroughService {
         linearSystems: inputs.linearSystems,
         punctuation: true,
         steps: true,
+        ...(inputs.professorAnswer ? { alignProfessor: true } : {}),
       }),
       job.subject,
     )
@@ -1266,6 +1557,8 @@ export class HomeworkWalkthroughService {
       (entry) =>
         entry.kind === 'question' &&
         entry.section?.status === 'ready' &&
+        // An imported walkthrough has no detailed version.
+        entry.section.origin !== 'imported' &&
         (!wanted || wanted.has(entry.id)) &&
         !detailedVariant(entry.section),
     )
@@ -1451,6 +1744,7 @@ export class HomeworkWalkthroughService {
           linearSystems: inputs.linearSystems,
           level: 'detailed',
           part: true,
+          ...(inputs.professorAnswer ? { alignProfessor: true } : {}),
         }),
         job.subject,
       )
@@ -1535,6 +1829,7 @@ export class HomeworkWalkthroughService {
               prompts.homeworkWalkthrough.buildVariantSystemPrompt({
                 linearSystems: inputs.linearSystems,
                 level: 'detailed',
+                ...(inputs.professorAnswer ? { alignProfessor: true } : {}),
               }),
               job.subject,
             ),
@@ -1740,6 +2035,17 @@ function insufficientSection(
   }
 }
 
+/** The state as writing sees it: each plan entry's generated source. */
+function writingState(state: WalkthroughState): WalkthroughState {
+  return {
+    ...state,
+    plan: state.plan.map(({ section: _shown, generated, ...entry }) => ({
+      ...entry,
+      ...(generated ? { section: generated } : {}),
+    })),
+  }
+}
+
 /** The replaceable content of a ready section. */
 export function versionOf(section: WalkthroughSection): WalkthroughSectionVersion {
   return {
@@ -1752,6 +2058,7 @@ export function versionOf(section: WalkthroughSection): WalkthroughSectionVersio
     ...(section.origin ? { origin: section.origin } : {}),
     ...(section.sourceDocumentId ? { sourceDocumentId: section.sourceDocumentId } : {}),
     ...(section.issues ? { issues: section.issues } : {}),
+    ...(section.professorAligned ? { professorAligned: section.professorAligned } : {}),
     inputHash: section.inputHash,
     generatedAt: section.generatedAt,
   }
@@ -1778,6 +2085,7 @@ function applyVersion(
     ...(version.origin ? { origin: version.origin } : {}),
     ...(version.sourceDocumentId ? { sourceDocumentId: version.sourceDocumentId } : {}),
     ...(version.issues ? { issues: version.issues } : {}),
+    ...(version.professorAligned ? { professorAligned: version.professorAligned } : {}),
     generatedAt: version.generatedAt,
   }
 }

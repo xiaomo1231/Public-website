@@ -7,9 +7,16 @@ import { ProjectService } from '@/services/projectService'
 import { HomeworkWalkthroughService } from '@/services/homeworkWalkthroughService'
 import {
   IMPORT_SEGMENT_CHARS,
+  WalkthroughImportPartError,
   WalkthroughImportService,
+  importOutputBudget,
+  importPartMessage,
+  importSegmentChars,
   mergeImportParts,
+  splitImportPieces,
 } from '@/services/walkthroughImportService'
+import { AuthFailedError, OutputTruncatedError } from '@/infrastructure/ai/errors'
+import { friendlyAIError } from '@/shared/lib/aiErrors'
 import { DocumentRepository } from '@/entities/document/repository'
 import { ChunkRepository } from '@/entities/chunk/repository'
 import { HomeworkRepository } from '@/entities/homework/repository'
@@ -27,7 +34,13 @@ import {
   issueQuoteFound,
 } from '@/entities/homework/walkthroughImport'
 import { formatHomeworkReviewText } from '@/entities/homework/reviewFormatting'
-import { walkthroughId, type WalkthroughSection } from '@/entities/homework/walkthrough'
+import {
+  normalizeSectionSources,
+  sectionLevel,
+  sectionSources,
+  walkthroughId,
+  type WalkthroughSection,
+} from '@/entities/homework/walkthrough'
 import { prompts } from '@/infrastructure/ai/prompts'
 import { createGenerationRun } from '@/shared/lib/generationControl'
 import {
@@ -439,7 +452,7 @@ describe('importing a walkthrough', () => {
     ])
   })
 
-  it('asks before replacing ready sections and keeps them as 上一版', async () => {
+  it('keeps the generated walkthrough as the other source, switchable both ways', async () => {
     await setup()
     const state = await walkthroughs().state(setId)
     const entry = state.plan.find((item) => item.id === 'q:q1')!
@@ -452,46 +465,121 @@ describe('importing a walkthrough', () => {
       body: 'Generated body.',
       status: 'ready',
       inputHash: entry.inputHash,
+      level: 'detailed',
+      variants: {
+        detailed: { body: 'Generated detailed.', inputHash: entry.inputHash, generatedAt: 4 },
+      },
+      previous: { body: 'Older generated body.', inputHash: entry.inputHash, generatedAt: 2 },
       generatedAt: 5,
     }
-    await new WalkthroughRepository(db).putSection(
+    const repo = new WalkthroughRepository(db)
+    await repo.putSection(
       { id: walkthroughId(setId, state.language), projectId, setId, language: state.language },
       generated,
     )
     const { ai } = stubAI(() => faithfulReply())
     const service = importer(ai)
     const preview = await service.prepare({ setId, documentId: importDocId, checkIssues: true })
-    expect(preview.conflicts).toEqual(['q:q1'])
-    await expect(service.commit(preview)).rejects.toMatchObject({
+    // Nothing imported before: nothing is replaced, the generated one is kept.
+    expect(preview.conflicts).toEqual([])
+    expect(preview.keptGenerated).toEqual(['q:q1'])
+    expect(await service.commit(preview)).toEqual({ saved: 2, replaced: 0 })
+
+    const read = async () =>
+      (await walkthroughs().state(setId)).plan.find((item) => item.id === 'q:q1')!
+    let shown = await read()
+    expect(shown.section!.origin).toBe('imported')
+    expect(sectionSources(shown.section)).toEqual(['imported', 'generated'])
+    // The generated source is kept whole: its level, detailed version and own 上一版.
+    expect(shown.section!.alternate).toMatchObject({
+      body: 'Generated body.',
+      level: 'detailed',
+      variants: { detailed: { body: 'Generated detailed.' } },
+      previous: { body: 'Older generated body.' },
+    })
+    expect(shown.section!.previous).toBeUndefined()
+    expect(shown.generated?.body).toBe('Generated body.')
+    // An imported section shows one level, whatever the setting.
+    expect(sectionLevel(shown.section, 'detailed')).toBe('standard')
+
+    await walkthroughs().setSource(setId, 'q:q1', 'generated')
+    shown = await read()
+    expect(shown.section).toMatchObject({ body: 'Generated body.', level: 'detailed' })
+    expect(shown.section!.origin).toBeUndefined()
+    expect(shown.section!.previous).toMatchObject({ body: 'Older generated body.' })
+    expect(shown.section!.alternate).toMatchObject({ origin: 'imported', body: PROBLEM_1_BODY })
+    // 恢复上一版 still works within the generated source and keeps the import.
+    await walkthroughs().restorePrevious(setId, 'q:q1')
+    shown = await read()
+    expect(shown.section!.body).toBe('Older generated body.')
+    expect(shown.section!.alternate?.origin).toBe('imported')
+    await walkthroughs().setSource(setId, 'q:q1', 'imported')
+    shown = await read()
+    expect(shown.section!.origin).toBe('imported')
+    expect(shown.section!.alternate?.body).toBe('Older generated body.')
+  })
+
+  it('asks before replacing an earlier import and keeps it as 上一版', async () => {
+    await setup()
+    const { ai } = stubAI(() => faithfulReply())
+    const service = importer(ai)
+    await service.commit(
+      await service.prepare({ setId, documentId: importDocId, checkIssues: true }),
+    )
+    const again = await service.prepare({ setId, documentId: importDocId, checkIssues: false })
+    expect(again.conflicts).toEqual(['q:q1', 'q:q2'])
+    await expect(service.commit(again)).rejects.toMatchObject({
       code: 'IMPORT_NEEDS_CONFIRMATION',
     })
-    // Nothing was written by the refused commit.
-    let section = (await walkthroughs().state(setId)).walkthrough!.sections.find(
-      (item) => item.id === 'q:q1',
-    )!
-    expect(section.body).toBe('Generated body.')
-
-    expect(await service.commit(preview, { confirmReplace: true })).toEqual({
-      saved: 2,
-      replaced: 1,
-    })
-    section = (await walkthroughs().state(setId)).walkthrough!.sections.find(
+    expect(await service.commit(again, { confirmReplace: true })).toMatchObject({ replaced: 2 })
+    const section = (await walkthroughs().state(setId)).walkthrough!.sections.find(
       (item) => item.id === 'q:q1',
     )!
     expect(section.origin).toBe('imported')
-    expect(section.previous).toMatchObject({ body: 'Generated body.' })
-    expect(section.previous?.origin).toBeUndefined()
-
-    // 恢复上一版 brings the generated one back; the imported one becomes 上一版.
-    await walkthroughs().restorePrevious(setId, 'q:q1')
-    section = (await walkthroughs().state(setId)).walkthrough!.sections.find(
-      (item) => item.id === 'q:q1',
-    )!
-    expect(section.body).toBe('Generated body.')
-    expect(section.origin).toBeUndefined()
-    expect(section.previous).toMatchObject({ origin: 'imported', sourceDocumentId: importDocId })
+    expect(section.previous).toMatchObject({ origin: 'imported', body: PROBLEM_1_BODY })
   })
 
+  it('reads sections saved before sources existed: the other source in 上一版 becomes switchable', async () => {
+    await setup()
+    const state = await walkthroughs().state(setId)
+    const entry = state.plan.find((item) => item.id === 'q:q1')!
+    const legacy: WalkthroughSection = {
+      id: 'q:q1',
+      kind: 'question',
+      questionId: 'q1',
+      title: '1',
+      body: 'Imported body.',
+      status: 'ready',
+      origin: 'imported',
+      sourceDocumentId: importDocId,
+      inputHash: entry.inputHash,
+      previous: { body: 'Generated body.', inputHash: entry.inputHash, generatedAt: 1 },
+      generatedAt: 2,
+    }
+    // Written raw, as an older version stored it.
+    await db.table('homeworkWalkthroughs').put({
+      id: walkthroughId(setId, state.language),
+      projectId,
+      setId,
+      language: state.language,
+      sections: [legacy],
+      createdAt: 1,
+      updatedAt: 1,
+    })
+    const shown = (await walkthroughs().state(setId)).plan.find((item) => item.id === 'q:q1')!
+    expect(sectionSources(shown.section)).toEqual(['imported', 'generated'])
+    expect(shown.section!.previous).toBeUndefined()
+    await walkthroughs().setSource(setId, 'q:q1', 'generated')
+    const after = (await walkthroughs().state(setId)).walkthrough!.sections[0]!
+    expect(after.body).toBe('Generated body.')
+    expect(after.alternate).toMatchObject({ origin: 'imported', body: 'Imported body.' })
+    // A section that never had an import is untouched by the reading.
+    const plain: WalkthroughSection = { ...legacy, origin: undefined, previous: undefined }
+    delete plain.origin
+    delete plain.previous
+    expect(normalizeSectionSources(plain)).toBe(plain)
+    expect(sectionSources(plain)).toEqual(['generated'])
+  })
   it('reads a long file in parts, pausable between parts, and joins a question split across them', async () => {
     const big = 'x'.repeat(IMPORT_SEGMENT_CHARS)
     await setup({ chunks: [`${PROBLEM_1_BODY}\n${big}`, `${PROBLEM_2_BODY}\n${big}`] })
@@ -564,6 +652,149 @@ describe('importing a walkthrough', () => {
       other: 'extra',
       unknownIds: ['x'],
     })
+  })
+})
+
+describe('long imports and the output cap', () => {
+  /** A model with an output cap: records each request's budget. */
+  function cappedAI(
+    handler: (user: string, maxTokens: number) => unknown,
+    caps: { maxOutputTokens?: number; modelMaxOutputTokens?: number } = {},
+  ) {
+    const budgets: number[] = []
+    const users: string[] = []
+    const streamJSON = vi.fn(
+      async (
+        messages: Array<{ content: string }>,
+        _delta: unknown,
+        options: { maxTokens: number },
+      ) => {
+        budgets.push(options.maxTokens)
+        users.push(messages[1]!.content)
+        return { data: await handler(messages[1]!.content, options.maxTokens), raw: {} }
+      },
+    )
+    return {
+      budgets,
+      users,
+      ai: {
+        streamJSON,
+        chatJSON: streamJSON,
+        maxOutputTokens: caps.maxOutputTokens ?? 8192,
+        modelMaxOutputTokens: caps.modelMaxOutputTokens,
+      } as unknown as AIService,
+    }
+  }
+  const replyFor = (user: string) => ({
+    questions: [
+      ...(user.includes('增广矩阵')
+        ? [{ questionId: 'q1', conclusion: 'c1', body: PROBLEM_1_BODY }]
+        : []),
+      ...(user.includes('(a) 3 个变量')
+        ? [{ questionId: 'q2', conclusion: 'c2', body: PROBLEM_2_BODY }]
+        : []),
+    ],
+  })
+
+  it('plans parts from the output cap and never asks for more than the cap', () => {
+    expect(importSegmentChars(8192)).toBe(IMPORT_SEGMENT_CHARS)
+    expect(IMPORT_SEGMENT_CHARS).toBeLessThan(4_000)
+    // Estimated reply of a planned part fits the cap.
+    expect(importOutputBudget(IMPORT_SEGMENT_CHARS, 8192)).toBeLessThanOrEqual(8192)
+    expect(importSegmentChars(384_000)).toBe(12_000)
+    expect(importSegmentChars(1_024)).toBe(2_000)
+    expect(importOutputBudget(100_000, 8192)).toBe(8192)
+  })
+
+  it('doubles the budget up to the cap, then reads the part in halves and merges them', async () => {
+    await setup({ chunks: [PROBLEM_1_BODY, PROBLEM_2_BODY] })
+    const { ai, budgets, users } = cappedAI((user) => {
+      // The whole part never fits; each half does.
+      if (user.includes('增广矩阵') && user.includes('(a) 3 个变量'))
+        throw new OutputTruncatedError()
+      return replyFor(user)
+    })
+    const preview = await importer(ai).prepare({
+      setId,
+      documentId: importDocId,
+      checkIssues: true,
+    })
+    expect(budgets[0]).toBe(
+      importOutputBudget(`${PROBLEM_1_BODY}\n\n${PROBLEM_2_BODY}`.length, 8192),
+    )
+    expect(budgets.slice(0, 3)).toEqual([budgets[0], budgets[0]! * 2, 8192])
+    expect(users).toHaveLength(5)
+    expect(users[3]).toContain('only a fragment')
+    expect(users[0]).not.toContain('only a fragment')
+    expect(preview.complete).toBe(true)
+    expect(preview.partsTotal).toBe(1)
+    expect(preview.pieces).toBeUndefined()
+    expect(preview.sections.map((section) => section.id).sort()).toEqual(['q:q1', 'q:q2'])
+  })
+
+  it('a failed piece keeps what was read; continuing asks only for the rest', async () => {
+    await setup({ chunks: [PROBLEM_1_BODY, PROBLEM_2_BODY] })
+    const failing = cappedAI((user) => {
+      if (user.includes('增广矩阵') && user.includes('(a) 3 个变量'))
+        throw new OutputTruncatedError()
+      if (user.includes('(a) 3 个变量')) throw new AuthFailedError('Key rejected by provider.')
+      return replyFor(user)
+    })
+    const error = await importer(failing.ai)
+      .prepare({ setId, documentId: importDocId, checkIssues: true })
+      .catch((err: unknown) => err)
+    expect(error).toBeInstanceOf(WalkthroughImportPartError)
+    const partial = (error as WalkthroughImportPartError).partial
+    expect(partial.complete).toBe(false)
+    expect(Object.values(partial.pieces ?? {})).toContain('split')
+    expect((error as Error).message).not.toContain('请重试本题')
+
+    const working = cappedAI((user) => replyFor(user))
+    const done = await importer(working.ai).prepare({
+      setId,
+      documentId: importDocId,
+      checkIssues: true,
+      resume: partial,
+    })
+    // Only the failed half: the whole part is not asked for again.
+    expect(working.users).toHaveLength(1)
+    expect(working.users[0]).toContain('(a) 3 个变量')
+    expect(working.users[0]).not.toContain('增广矩阵')
+    expect(done.complete).toBe(true)
+    expect(done.sections.map((section) => section.id).sort()).toEqual(['q:q1', 'q:q2'])
+  })
+
+  it('says which part was too long and whose limit it was', () => {
+    const atModel = importPartMessage(
+      2,
+      3,
+      new OutputTruncatedError(8192, { limit: 8192, by: 'model' }),
+    )
+    expect(atModel).toContain('8192')
+    expect(atModel).toMatch(/2/)
+    expect(atModel).not.toBe(friendlyAIError(new OutputTruncatedError()))
+    const atSetting = importPartMessage(
+      1,
+      1,
+      new OutputTruncatedError(4096, { limit: 4096, by: 'setting' }),
+    )
+    expect(atSetting).toContain('4096')
+    expect(atSetting).not.toBe(atModel.replace('8192', '4096'))
+    const other = importPartMessage(1, 2, new AuthFailedError('Key rejected by provider.'))
+    expect(other).toContain(friendlyAIError(new AuthFailedError('Key rejected by provider.')))
+  })
+
+  it('never splits a piece inside a display formula', () => {
+    const matrix = `$$\\begin{bmatrix}\n${Array.from({ length: 40 }, (_, i) => `${i} & ${i + 1} \\\\`).join('\n')}\n\\end{bmatrix}$$`
+    const text = `${'Intro line. '.repeat(30)}\n\n${matrix}\n\n${'Closing words. '.repeat(30)}`
+    const halves = splitImportPieces([text])!
+    expect(halves).not.toBeNull()
+    for (const half of halves) {
+      const joined = half.join('')
+      expect((joined.match(/\$\$/g) ?? []).length % 2).toBe(0)
+    }
+    expect(splitImportPieces(['short'])).toBeNull()
+    expect(splitImportPieces(['a', 'b', 'c'])).toEqual([['a'], ['b', 'c']])
   })
 })
 

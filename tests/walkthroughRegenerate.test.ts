@@ -14,6 +14,12 @@ import { shouldSplitWalkthrough, walkthroughSubparts } from '@/entities/homework
 import { createGenerationRun, type GenerationRun } from '@/shared/lib/generationControl'
 import type { AIService } from '@/services/aiService'
 import type { HomeworkQuestion } from '@/entities/homework/types'
+import { WalkthroughRepository } from '@/entities/homework/walkthroughRepository'
+import {
+  sectionSources,
+  walkthroughId,
+  type WalkthroughSection,
+} from '@/entities/homework/walkthrough'
 
 interface Call {
   kind: 'frame' | 'question' | 'part'
@@ -174,7 +180,7 @@ describe('homework-walkthrough/v2 prompts', () => {
     }
     expect(V2.buildFrameUserPrompt(frame)).toBe(V1.buildFrameUserPrompt(frame))
     expect(V2.buildFrameSystemPrompt()).toBe(V1.buildFrameSystemPrompt())
-    expect(prompts.homeworkWalkthrough.VERSION).toBe('v5')
+    expect(prompts.homeworkWalkthrough.VERSION).toBe('v6')
     expect(prompts.homeworkWalkthrough.CACHE_VERSION).toBe('v1')
 
     await setup('calculus', ['Differentiate x^2.'])
@@ -435,5 +441,97 @@ describe('regenerating one section', () => {
     expect(done.body).not.toBe(old.body)
     expect(done.previous?.body).toBe(old.body)
     expect((await section('overview')).outdated).toBe(false)
+  })
+})
+
+describe('generated and imported sources', () => {
+  /** Save an imported version of a section, as 导入讲解 would. */
+  async function importSection(id: string, body: string): Promise<void> {
+    const state = await service(null).state(setId)
+    const entry = state.plan.find((item) => item.id === id)!
+    await new WalkthroughRepository(db).putSection(
+      { id: walkthroughId(setId, state.language), projectId, setId, language: state.language },
+      {
+        id,
+        kind: entry.kind,
+        ...(entry.question ? { questionId: entry.question.id } : {}),
+        title: id,
+        body,
+        status: 'ready',
+        origin: 'imported',
+        inputHash: entry.inputHash,
+        generatedAt: Date.now(),
+      },
+    )
+  }
+
+  it('regenerating keeps the import, shows the new generated version, and keeps the old one as 上一版', async () => {
+    await setup('calculus', ['Differentiate x^2.', 'Differentiate x^3.'])
+    const { ai, calls } = stubAI(model)
+    await service(ai).generate(setId)
+    const generated = (await section('q:q1')).section!
+    await importSection('q:q1', 'Imported working.')
+    let entry = await section('q:q1')
+    expect(entry.section!.origin).toBe('imported')
+    expect(entry.generated!.body).toBe(generated.body)
+    // 可更新 follows the generated source, which is current.
+    expect(entry.needsWork).toBe(false)
+
+    calls.length = 0
+    await service(ai).regenerateSection(setId, 'q:q1', { suggestion: 'Shorter.' })
+    // The generated version is what gets rewritten, not the import shown.
+    expect(calls[0]!.user).toContain(generated.body)
+    expect(calls[0]!.user).not.toContain('Imported working.')
+    entry = await section('q:q1')
+    expect(entry.section!.origin).toBeUndefined()
+    expect(entry.section!.body).not.toBe(generated.body)
+    expect(entry.section!.previous?.body).toBe(generated.body)
+    expect(entry.section!.alternate).toMatchObject({
+      origin: 'imported',
+      body: 'Imported working.',
+    })
+  })
+
+  it('a forced full run and a section only imported both keep the import', async () => {
+    await setup('calculus', ['Differentiate x^2.'])
+    const { ai } = stubAI(model)
+    await importSection('q:q1', 'Imported only.')
+    let entry = await section('q:q1')
+    expect(entry.generated).toBeUndefined()
+    // Judged by the import alone: nothing to do.
+    expect(entry.needsWork).toBe(false)
+    await service(ai).generate(setId, { force: true })
+    entry = await section('q:q1')
+    expect(entry.section!.origin).toBeUndefined()
+    expect(entry.section!.previous).toBeUndefined()
+    expect(entry.section!.alternate).toMatchObject({ origin: 'imported', body: 'Imported only.' })
+    await service(null).setSource(setId, 'q:q1', 'imported')
+    expect((await section('q:q1')).section!.body).toBe('Imported only.')
+  })
+
+  it('an unfinished or failed generation waits behind the import shown', async () => {
+    await setup('calculus', ['Differentiate x^2.'])
+    await importSection('q:q1', 'Imported only.')
+    const state = await service(null).state(setId)
+    const failed: WalkthroughSection = {
+      id: 'q:q1',
+      kind: 'question',
+      questionId: 'q1',
+      title: '1',
+      body: '',
+      status: 'failed',
+      error: 'timeout',
+      inputHash: 'x',
+      generatedAt: 1,
+    }
+    await new WalkthroughRepository(db).putSection(
+      { id: walkthroughId(setId, state.language), projectId, setId, language: state.language },
+      failed,
+    )
+    const entry = await section('q:q1')
+    expect(entry.section!.body).toBe('Imported only.')
+    expect(entry.generated?.status).toBe('failed')
+    expect(entry.needsWork).toBe(true)
+    expect(sectionSources(entry.section)).toEqual(['imported'])
   })
 })

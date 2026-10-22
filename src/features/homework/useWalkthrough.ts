@@ -12,7 +12,11 @@ import {
   type WalkthroughState,
 } from '@/services/homeworkWalkthroughService'
 import { WalkthroughNoteService } from '@/services/walkthroughNoteService'
-import type { WalkthroughLevel, WalkthroughNote } from '@/entities/homework/walkthrough'
+import type {
+  WalkthroughLevel,
+  WalkthroughNote,
+  WalkthroughSource,
+} from '@/entities/homework/walkthrough'
 import { friendlyAIError } from '@/shared/lib/aiErrors'
 import type { GenerationRun, GenerationRunState } from '@/shared/lib/generationControl'
 import { useGenerationRun } from '@/shared/lib/useGenerationRun'
@@ -50,8 +54,18 @@ export interface UseWalkthrough {
   generateVariants: (sectionIds?: string[]) => Promise<WalkthroughRunResult | null>
   /** Swap a section with the version its last regeneration replaced. */
   restorePrevious: (sectionId: string) => Promise<boolean>
+  /** 生成的讲解 / 导入的讲解: which source a section shows. */
+  setSource: (sectionId: string, source: WalkthroughSource) => Promise<void>
   /** 补充题目分析: write only the analysis of an older question section. */
   addAnalysis: (sectionId: string) => Promise<WalkthroughRunResult | null>
+  /** 与教授答案对照 for one section. */
+  compareSection?: (sectionId: string) => Promise<WalkthroughRunResult | null>
+  /** 对照全部有教授答案的题. */
+  compareAll?: () => Promise<WalkthroughRunResult | null>
+  /** 按教授答案修改: rewrite the standard version following the professor's answer. */
+  alignToProfessor?: (sectionId: string, suggestion: string) => Promise<WalkthroughRunResult | null>
+  /** 保持现状: fold the comparison away. */
+  dismissCompare?: (sectionId: string) => Promise<void>
 }
 
 /**
@@ -192,6 +206,35 @@ export function useWalkthrough(setId: string): UseWalkthrough {
     (sectionId: string) => start((svc, run) => svc.addAnalysis(setId, sectionId, { control: run })),
     [start, setId],
   )
+  const compareSection = useCallback(
+    (sectionId: string) =>
+      start((svc, run) => svc.compareSection(setId, sectionId, { control: run })),
+    [start, setId],
+  )
+  const compareAll = useCallback(
+    () => start((svc, run) => svc.compareAll(setId, { control: run })),
+    [start, setId],
+  )
+  const alignToProfessor = useCallback(
+    (sectionId: string, suggestion: string) =>
+      start((svc, run) =>
+        svc.regenerateSection(setId, sectionId, { suggestion, align: true, control: run }),
+      ),
+    [start, setId],
+  )
+  const dismissCompare = useCallback(
+    async (sectionId: string) => {
+      if (!service) return
+      try {
+        await service.dismissCompare(setId, sectionId)
+      } catch (err) {
+        setError(friendlyAIError(err))
+      } finally {
+        await reload()
+      }
+    },
+    [service, setId, reload],
+  )
   const restorePrevious = useCallback(
     async (sectionId: string) => {
       if (!service) return false
@@ -202,6 +245,21 @@ export function useWalkthrough(setId: string): UseWalkthrough {
       } catch (err) {
         setError(friendlyAIError(err))
         return false
+      } finally {
+        await reload()
+      }
+    },
+    [service, setId, reload],
+  )
+
+  const setSource = useCallback(
+    async (sectionId: string, source: WalkthroughSource) => {
+      if (!service) return
+      setError(null)
+      try {
+        await service.setSource(setId, sectionId, source)
+      } catch (err) {
+        setError(friendlyAIError(err))
       } finally {
         await reload()
       }
@@ -237,8 +295,13 @@ export function useWalkthrough(setId: string): UseWalkthrough {
     aiReady: service?.hasAI() ?? false,
     regenerateSection,
     restorePrevious,
+    setSource,
     addAnalysis,
     setLevel,
     generateVariants,
+    compareSection,
+    compareAll,
+    alignToProfessor,
+    dismissCompare,
   }
 }

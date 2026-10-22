@@ -1,6 +1,11 @@
 import type { AppDatabase } from '@/infrastructure/db/database'
 import { getDb } from '@/infrastructure/db/database'
-import type { HomeworkWalkthrough, WalkthroughNote, WalkthroughSection } from './walkthrough'
+import {
+  mergeSectionWrite,
+  type HomeworkWalkthrough,
+  type WalkthroughNote,
+  type WalkthroughSection,
+} from './walkthrough'
 
 /**
  * Persistence for assignment walkthroughs and the questions saved about them.
@@ -31,6 +36,9 @@ export class WalkthroughRepository {
    * same moment cannot overwrite each other. Returns `null` (and writes
    * nothing) when the assignment was deleted meanwhile, so a run that outlives
    * its assignment cannot bring its data back.
+   *
+   * The other source of the section (生成的讲解 / 导入的讲解) is never lost:
+   * see `mergeSectionWrite`.
    */
   async putSection(
     base: Pick<HomeworkWalkthrough, 'id' | 'projectId' | 'setId' | 'language'>,
@@ -40,10 +48,11 @@ export class WalkthroughRepository {
     return this.db.transaction('rw', [this.walkthroughs(), this.db.homeworkSets], async () => {
       if (!(await this.db.homeworkSets.get(base.setId))) return null
       const existing = await this.walkthroughs().get(base.id)
+      const stored = existing?.sections.find((item) => item.id === section.id)
       const sections = (existing?.sections ?? []).filter((item) => item.id !== section.id)
       const next: HomeworkWalkthrough = {
         ...base,
-        sections: [...sections, section],
+        sections: [...sections, mergeSectionWrite(stored, section)],
         createdAt: existing?.createdAt ?? now,
         updatedAt: now,
       }

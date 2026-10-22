@@ -1,3 +1,4 @@
+import type { QuestionTranslation } from './questionTranslation'
 import type { SourceReference } from '@/entities/courseAnalysis/types'
 import type { AnswerEntry } from './answerMatching'
 import type { TranslationKey } from '@/i18n/types'
@@ -199,6 +200,8 @@ export interface HomeworkQuestion {
   answerCheck?: HomeworkAnswerCheck
   /** 引导练习 progress (see `entities/homework/guided.ts`); counts as student work. */
   guidedProgress?: GuidedProgress
+  /** 中文翻译 of `prompt` (see `entities/homework/questionTranslation.ts`), made on request. */
+  translation?: QuestionTranslation
   /** Student's saved working. Restored on reload. */
   draftText: string
   /** How many hints the student has revealed (0..hints.length). */
