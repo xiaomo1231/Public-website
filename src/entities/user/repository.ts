@@ -50,10 +50,17 @@ export class UserRepository {
           ...(patch.questionLanguage !== undefined
             ? { questionLanguage: patch.questionLanguage }
             : {}),
+          ...(patch.noteMarkStyle !== undefined ? { noteMarkStyle: patch.noteMarkStyle } : {}),
+          ...(patch.showUsageReadout !== undefined
+            ? { showUsageReadout: patch.showUsageReadout }
+            : {}),
           ...(patch.vocabBookId !== undefined ? { vocabBookId: patch.vocabBookId } : {}),
           ...(patch.vocabDailyNew !== undefined ? { vocabDailyNew: patch.vocabDailyNew } : {}),
           ...(patch.vocabReviewMode !== undefined
             ? { vocabReviewMode: patch.vocabReviewMode }
+            : {}),
+          ...(patch.walkthroughLevel !== undefined
+            ? { walkthroughLevel: patch.walkthroughLevel }
             : {}),
         }
         await this.db.user.put(merged)

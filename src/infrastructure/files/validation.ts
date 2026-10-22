@@ -28,6 +28,8 @@ export const ACCEPTED_TYPES: ReadonlyArray<{ type: DocumentType; mime: string[];
       mime: ['image/png', 'image/jpeg', 'image/webp', 'image/gif', 'image/bmp'],
       ext: ['png', 'jpg', 'jpeg', 'webp', 'gif', 'bmp'],
     },
+    // Plain text and Markdown (e.g. an imported walkthrough), read as UTF-8 text.
+    { type: 'text', mime: ['text/plain', 'text/markdown'], ext: ['txt', 'md', 'markdown'] },
   ]
 
 export function detectDocumentType(file: File): DocumentType | null {

@@ -18,7 +18,28 @@ import type { TextAnchor } from '@/shared/lib/textAnchor'
 
 export type WalkthroughLanguage = 'zh_terms' | 'zh' | 'en'
 
-export type WalkthroughSectionKind = 'overview' | 'question' | 'summary'
+/**
+ * `other` — content of an imported walkthrough that matched no question
+ * (「其它内容」); it exists only when an import produced it.
+ */
+export type WalkthroughSectionKind = 'overview' | 'question' | 'summary' | 'other'
+
+/** Where a section's text came from: written here, or imported from the student's file. */
+export type WalkthroughSectionOrigin = 'generated' | 'imported'
+
+/** The id of the 「其它内容」 section of an imported walkthrough. */
+export const IMPORTED_OTHER_SECTION_ID = 'other'
+
+/**
+ * A place in an imported walkthrough the model suspects is wrong. Only
+ * reported, never applied: the author's calculation stays as written.
+ */
+export interface WalkthroughImportIssue {
+  /** The passage as it appears in the section (or the source). */
+  quote: string
+  /** Why it may be wrong and what to check. */
+  note: string
+}
 
 /**
  * `partial` — a long multipart question written one sub-part per request has
@@ -70,14 +91,54 @@ export interface WalkthroughDraft {
   startedAt: number
 }
 
+/**
+ * 普通版 / 详细版. The standard version is the section's own fields; the
+ * detailed one is stored next to it (`variants.detailed`). Both share the
+ * section's input hash: a variant written for other inputs is not shown.
+ */
+export type WalkthroughLevel = 'standard' | 'detailed'
+
+export const DEFAULT_WALKTHROUGH_LEVEL: WalkthroughLevel = 'standard'
+
+/** One level of a question section other than the standard one. */
+export interface WalkthroughVariant {
+  conclusion?: string
+  body: string
+  checks?: LinearSystemCheck[]
+  /** Split question: the sub-parts at this level. */
+  parts?: WalkthroughPart[]
+  /** The section inputs it was written for (the section's `inputHash`). */
+  inputHash: string
+  generatedAt: number
+}
+
+/**
+ * Sub-parts of a split question finished so far at another level, so a pause
+ * continues with the next sub-part.
+ */
+export interface WalkthroughVariantDraft {
+  level: Exclude<WalkthroughLevel, 'standard'>
+  mode: 'generate' | 'regenerate'
+  suggestion?: string
+  inputHash: string
+  labels: string[]
+  parts: WalkthroughPart[]
+  startedAt: number
+}
+
 /** The version a regeneration replaced (one level, for 恢复上一版). */
 export interface WalkthroughSectionVersion {
+  /** Set when the replaced version was the detailed one. */
+  level?: Exclude<WalkthroughLevel, 'standard'>
   analysis?: string
   conclusion?: string
   body: string
   checks?: LinearSystemCheck[]
   suggestions?: string[]
   parts?: WalkthroughPart[]
+  origin?: WalkthroughSectionOrigin
+  sourceDocumentId?: string
+  issues?: WalkthroughImportIssue[]
   inputHash: string
   generatedAt: number
 }
@@ -112,7 +173,65 @@ export interface WalkthroughSection {
   draft?: WalkthroughDraft
   /** The ready version a section regeneration replaced. */
   previous?: WalkthroughSectionVersion
+  /** Absent means generated here; `imported` shows 「来自导入」. */
+  origin?: WalkthroughSectionOrigin
+  /** Imported sections: the uploaded file the text came from. */
+  sourceDocumentId?: string
+  /** Imported sections: suspected mistakes, shown as 「这里可能有误」 (never applied). */
+  issues?: WalkthroughImportIssue[]
+  /** Question sections: the other levels of detail (详细版). */
+  variants?: { detailed?: WalkthroughVariant }
+  /** A detailed version of a split question in progress. */
+  variantDraft?: WalkthroughVariantDraft
+  /** The level the student chose for this section (else the default setting). */
+  level?: WalkthroughLevel
   generatedAt: number
+}
+
+/** What a question section shows at one level. */
+export interface WalkthroughContent {
+  conclusion?: string
+  body: string
+  checks?: LinearSystemCheck[]
+  parts?: WalkthroughPart[]
+}
+
+/** The detailed version of a section, when one exists for its current inputs. */
+export function detailedVariant(section: WalkthroughSection): WalkthroughVariant | undefined {
+  const variant = section.variants?.detailed
+  return variant && variant.inputHash === section.inputHash ? variant : undefined
+}
+
+/** The section's content at `level`; undefined when that level is not written yet. */
+export function sectionContent(
+  section: WalkthroughSection,
+  level: WalkthroughLevel,
+): WalkthroughContent | undefined {
+  if (level === 'standard')
+    return {
+      ...(section.conclusion ? { conclusion: section.conclusion } : {}),
+      body: section.body,
+      ...(section.checks ? { checks: section.checks } : {}),
+      ...(section.parts ? { parts: section.parts } : {}),
+    }
+  return detailedVariant(section)
+}
+
+/** The level a section is shown at: the student's choice, else the default. */
+export function sectionLevel(
+  section: Pick<WalkthroughSection, 'level' | 'kind'> | undefined,
+  fallback: WalkthroughLevel,
+): WalkthroughLevel {
+  if (section?.kind && section.kind !== 'question') return 'standard'
+  return section?.level ?? fallback
+}
+
+/** Ready question sections without a detailed version (what 全部切到详细版 writes). */
+export function missingDetailed(sections: readonly WalkthroughSection[]): WalkthroughSection[] {
+  return sections.filter(
+    (section) =>
+      section.kind === 'question' && section.status === 'ready' && !detailedVariant(section),
+  )
 }
 
 export interface HomeworkWalkthrough {
@@ -230,10 +349,24 @@ export function planWalkthrough(
     language,
     promptVersion,
   )
+  const other = byId.get(IMPORTED_OTHER_SECTION_ID)
   return [
     entry('overview', 'overview', frameHash),
     ...questionEntries,
     entry('summary', 'summary', frameHash),
+    // Unmatched imported content: kept as imported, never written or redone here.
+    ...(other?.status === 'ready'
+      ? [
+          {
+            id: IMPORTED_OTHER_SECTION_ID,
+            kind: 'other' as const,
+            inputHash: other.inputHash,
+            section: other,
+            needsWork: false,
+            outdated: false,
+          },
+        ]
+      : []),
   ]
 }
 

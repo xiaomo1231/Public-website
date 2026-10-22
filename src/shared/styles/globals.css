@@ -669,12 +669,48 @@
   }
 }
 
-/* Homework walkthrough: saved passages and the passage a window jumps back to. */
-::highlight(walkthrough-note) {
-  background-color: hsl(var(--primary) / 0.12);
+/*
+ * Homework walkthrough: passages with questions (问答标记样式, `<html data-note-mark>`).
+ * `walkthrough-note` = a saved question (stronger), `walkthrough-link` = an
+ * unsaved conversation tucked into the text (lighter). Colours come from the
+ * theme tokens, so they follow the palette and the mode.
+ *
+ * Link style (the default): accent-coloured text with an underline. The text
+ * uses `--primary-strong`, the text-safe accent (≥3.5:1 on the page in every
+ * style × mode × palette, see tests/themeContrast.test.ts); the underline means
+ * the mark never relies on colour alone.
+ */
+:root:not([data-note-mark='highlighter']) ::highlight(walkthrough-note) {
+  color: hsl(var(--primary-strong));
+  background-color: hsl(var(--primary) / 0.08);
   text-decoration: underline;
-  text-decoration-color: hsl(var(--primary) / 0.55);
+  text-decoration-color: hsl(var(--primary-strong));
   text-decoration-thickness: 2px;
+}
+
+:root:not([data-note-mark='highlighter']) ::highlight(walkthrough-link) {
+  color: hsl(var(--primary-strong));
+  text-decoration: underline dashed;
+  text-decoration-color: hsl(var(--primary) / 0.6);
+  text-decoration-thickness: 1.5px;
+}
+
+/* Highlighter style: a translucent background, the text keeps its colour. */
+:root[data-note-mark='highlighter'] ::highlight(walkthrough-note) {
+  background-color: hsl(var(--primary) / 0.28);
+}
+
+:root[data-note-mark='highlighter'] ::highlight(walkthrough-link) {
+  background-color: hsl(var(--primary) / 0.13);
+}
+
+/* On dark pages a translucent accent needs a little more weight to show. */
+:root.dark[data-note-mark='highlighter'] ::highlight(walkthrough-note) {
+  background-color: hsl(var(--primary) / 0.36);
+}
+
+:root.dark[data-note-mark='highlighter'] ::highlight(walkthrough-link) {
+  background-color: hsl(var(--primary) / 0.18);
 }
 
 ::highlight(walkthrough-flash) {
@@ -747,5 +783,33 @@
       40px 40px,
       8px 8px,
       8px 8px;
+  }
+}
+
+/*
+ * Homework walkthrough prose (both interface styles): display formulas sit
+ * under their sentence, left-aligned and indented, instead of centred far
+ * from the text; a key result in bold takes the accent colour; past the
+ * second bold phrase of a paragraph weight is dropped, so emphasis stays rare.
+ */
+@layer components {
+  [data-walkthrough-body] .katex-host.block {
+    margin-top: 0.25rem;
+    margin-bottom: 0.5rem;
+    padding-left: 1.5rem;
+    text-align: left;
+  }
+
+  [data-walkthrough-body] .katex-display > .katex {
+    text-align: left;
+  }
+
+  [data-walkthrough-body] p > strong:has(.katex-host) {
+    color: hsl(var(--primary));
+  }
+
+  [data-walkthrough-body] p > strong:nth-of-type(n + 3) {
+    color: inherit;
+    font-weight: inherit;
   }
 }

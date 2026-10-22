@@ -52,6 +52,71 @@ export class WalkthroughRepository {
     })
   }
 
+  /**
+   * Write several sections at once (an imported walkthrough), in one
+   * transaction. `build` sees the stored sections so a replaced one can be
+   * kept as `previous`. Returns `null` when the assignment was deleted.
+   */
+  async putSections(
+    base: Pick<HomeworkWalkthrough, 'id' | 'projectId' | 'setId' | 'language'>,
+    build: (existing: readonly WalkthroughSection[]) => WalkthroughSection[],
+    now = Date.now(),
+  ): Promise<HomeworkWalkthrough | null> {
+    return this.db.transaction('rw', [this.walkthroughs(), this.db.homeworkSets], async () => {
+      if (!(await this.db.homeworkSets.get(base.setId))) return null
+      const existing = await this.walkthroughs().get(base.id)
+      const current = existing?.sections ?? []
+      const written = build(current)
+      const ids = new Set(written.map((section) => section.id))
+      const next: HomeworkWalkthrough = {
+        ...base,
+        sections: [...current.filter((section) => !ids.has(section.id)), ...written],
+        createdAt: existing?.createdAt ?? now,
+        updatedAt: now,
+      }
+      await this.walkthroughs().put(next)
+      return next
+    })
+  }
+
+  /**
+   * Change one stored section in place (read-modify-write in a transaction):
+   * `update` sees the section as it is now and returns the new one, or `null`
+   * to leave it. Returns what was written, or `null` when nothing was.
+   */
+  async updateSection(
+    id: string,
+    sectionId: string,
+    update: (section: WalkthroughSection) => WalkthroughSection | null,
+    now = Date.now(),
+  ): Promise<WalkthroughSection | null> {
+    return this.db.transaction('rw', [this.walkthroughs(), this.db.homeworkSets], async () => {
+      const existing = await this.walkthroughs().get(id)
+      if (!existing || !(await this.db.homeworkSets.get(existing.setId))) return null
+      const current = existing.sections.find((section) => section.id === sectionId)
+      const next = current ? update(current) : null
+      if (!next) return null
+      await this.walkthroughs().put({
+        ...existing,
+        sections: existing.sections.map((section) => (section.id === sectionId ? next : section)),
+        updatedAt: now,
+      })
+      return next
+    })
+  }
+
+  /** Change every stored section of a walkthrough in one transaction. */
+  async updateSections(
+    id: string,
+    update: (section: WalkthroughSection) => WalkthroughSection,
+  ): Promise<void> {
+    await this.db.transaction('rw', this.walkthroughs(), async () => {
+      const existing = await this.walkthroughs().get(id)
+      if (!existing) return
+      await this.walkthroughs().put({ ...existing, sections: existing.sections.map(update) })
+    })
+  }
+
   /** Drop sections that no longer belong (e.g. a retired question). */
   async keepSections(id: string, keep: ReadonlySet<string>): Promise<void> {
     await this.db.transaction('rw', this.walkthroughs(), async () => {

@@ -53,6 +53,7 @@ const MATERIAL_LABEL_KEY: Record<LearningMaterialType, TranslationKey> = {
   homework: 'materialType.homework',
   homework_answer: 'materialType.homework_answer',
   syllabus: 'materialType.syllabus',
+  walkthrough_import: 'materialType.walkthrough_import',
 }
 
 const TEXT_TAB = 'text' as const

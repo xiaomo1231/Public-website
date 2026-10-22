@@ -4,3 +4,4 @@ coverage
 *.min.js
 public/vocab
 .claude
+tools/cost-bench

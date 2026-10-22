@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import type { QuestionLanguage, UserProfile, UserTheme } from '@/entities/user/types'
 import type { ColorThemeId } from '@/features/theme/colorThemes'
-import type { UserUiStyle } from '@/entities/user/types'
+import type { NoteMarkStyle, UserUiStyle } from '@/entities/user/types'
 import type { UILanguage } from '@/i18n/types'
 import { t } from '@/i18n'
 import { UserService } from '@/services/userService'
@@ -26,6 +26,9 @@ interface AuthActions {
   setLanguage: (language: UserProfile['language']) => Promise<void>
   setUILanguage: (language: UILanguage) => Promise<void>
   setQuestionLanguage: (language: QuestionLanguage) => Promise<void>
+  setWalkthroughLevel: (level: 'standard' | 'detailed') => Promise<void>
+  setNoteMarkStyle: (style: NoteMarkStyle) => Promise<void>
+  setShowUsageReadout: (show: boolean) => Promise<void>
 }
 
 export type AuthStore = AuthState & AuthActions
@@ -102,6 +105,21 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
 
   async setQuestionLanguage(questionLanguage) {
     const next = await users.update({ questionLanguage })
+    set({ profile: next })
+  },
+
+  async setWalkthroughLevel(walkthroughLevel) {
+    const next = await users.update({ walkthroughLevel })
+    set({ profile: next })
+  },
+
+  async setNoteMarkStyle(noteMarkStyle) {
+    const next = await users.update({ noteMarkStyle })
+    set({ profile: next })
+  },
+
+  async setShowUsageReadout(showUsageReadout) {
+    const next = await users.update({ showUsageReadout })
     set({ profile: next })
   },
 }))

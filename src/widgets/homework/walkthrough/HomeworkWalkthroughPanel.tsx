@@ -1,7 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from 'react'
 import {
   AlertTriangle,
+  AlignJustify,
+  AlignLeft,
   BookOpenText,
+  FileUp,
   ListChecks,
   Link2,
   Loader2,
@@ -20,10 +23,19 @@ import type {
   WalkthroughPart,
   WalkthroughPlanEntry,
 } from '@/entities/homework/walkthrough'
+import {
+  DEFAULT_WALKTHROUGH_LEVEL,
+  detailedVariant,
+  missingDetailed,
+  sectionContent,
+  sectionLevel,
+  type WalkthroughLevel,
+} from '@/entities/homework/walkthrough'
 import { formatHomeworkQuestion } from '@/entities/homework/formatQuestion'
+import { useAuth } from '@/features/auth/useAuth'
 import { useHomeworkService } from '@/features/homework/useHomeworkService'
 import { questionLabel, type SectionAttempt } from '@/services/homeworkWalkthroughService'
-import { tidyBoxedPunctuation } from '@/entities/homework/walkthroughFormat'
+import { formatWalkthroughText, tidyBoxedPunctuation } from '@/entities/homework/walkthroughFormat'
 import { useWalkthrough } from '@/features/homework/useWalkthrough'
 import { openNote, windowTitle } from '@/features/homework/floatingQA'
 import { useFloatingQA, type FloatingQAWindow } from '@/features/homework/floatingQAStore'
@@ -33,6 +45,8 @@ import { Button } from '@/shared/ui/Button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/shared/ui/Card'
 import { ConfirmDialog } from '@/shared/ui/ConfirmDialog'
 import { RegenerateSectionDialog } from './RegenerateSectionDialog'
+import { ImportWalkthroughDialog } from './ImportWalkthroughDialog'
+import { ImportedBadge, ImportIssuesView } from './ImportedSection'
 import { LoadingState } from '@/shared/ui/LoadingState'
 import { Math as TeX } from '@/shared/ui/Math'
 import { Progress } from '@/shared/ui/Progress'
@@ -42,6 +56,7 @@ import { cn } from '@/shared/lib/utils'
 import { prefersReducedMotion } from '@/shared/lib/motion'
 import { useTranslation, type TranslationKey } from '@/i18n'
 import { FloatingQALayer } from './FloatingQALayer'
+import { WalkthroughBody, WALKTHROUGH_PARAGRAPH } from './WalkthroughBody'
 import { WalkthroughNotesDialog } from './WalkthroughNotesDialog'
 import { WalkthroughPrint, type PrintableSection } from './WalkthroughPrint'
 import { PassageHoverCard, type PassageHoverSubject } from './PassageHoverCard'
@@ -94,8 +109,20 @@ export function HomeworkWalkthroughPanel({
     regenerateSection,
     restorePrevious,
     addAnalysis,
+    setLevel,
+    generateVariants,
   } = useWalkthrough(set.id)
   const homework = useHomeworkService()
+  // 普通 / 详细: the default from settings; each section may override it.
+  const { profile } = useAuth()
+  const defaultLevel: WalkthroughLevel = profile?.walkthroughLevel ?? DEFAULT_WALKTHROUGH_LEVEL
+  /** The version a section shows, when it exists (else the standard one). */
+  const shownLevel = (entry: WalkthroughPlanEntry): WalkthroughLevel =>
+    entry.section &&
+    sectionLevel(entry.section, defaultLevel) === 'detailed' &&
+    detailedVariant(entry.section)
+      ? 'detailed'
+      : 'standard'
   // The spoiler notice appears once per assignment; dismissing it is stored on
   // the assignment, so a reload or another visit opens the walkthrough directly.
   const [revealed, setRevealed] = useState(
@@ -103,6 +130,8 @@ export function HomeworkWalkthroughPanel({
   )
   const [notesOpen, setNotesOpen] = useState(false)
   const [confirmRedo, setConfirmRedo] = useState(false)
+  /** 导入讲解 dialog. */
+  const [importOpen, setImportOpen] = useState(false)
   /** The section whose 重新生成 dialog is open. */
   const [regenTarget, setRegenTarget] = useState<WalkthroughPlanEntry | null>(null)
   const [printing, setPrinting] = useState(false)
@@ -139,13 +168,21 @@ export function HomeworkWalkthroughPanel({
     (entry) => entry.section && entry.section.status !== 'failed',
   ).length
   const needsWork = entries.filter((entry) => entry.needsWork).length
+  const readyQuestions = entries
+    .filter((entry) => entry.kind === 'question' && entry.section?.status === 'ready')
+    .map((entry) => entry.section!)
+  /** Ready question sections without a detailed version yet. */
+  const missingCount = missingDetailed(readyQuestions).length
+  const allDetailed =
+    readyQuestions.length > 0 &&
+    readyQuestions.every((section) => sectionLevel(section, defaultLevel) === 'detailed')
 
   // Changes only when some section's rendered text may have changed — not on
   // progress ticks or other walkthrough state updates.
   const textKey = entries
     .map(
       (entry) =>
-        `${entry.id}:${entry.section?.status ?? ''}:${entry.section?.generatedAt ?? 0}:${entry.section?.analysis ? 1 : 0}`,
+        `${entry.id}:${entry.section?.status ?? ''}:${entry.section?.generatedAt ?? 0}:${entry.section?.analysis ? 1 : 0}:${shownLevel(entry)}:${entry.section ? (detailedVariant(entry.section)?.generatedAt ?? 0) : 0}`,
     )
     .join('|')
     .concat(`|${uiLanguage}`)
@@ -263,7 +300,10 @@ export function HomeworkWalkthroughPanel({
 
   async function regenerate(entry: WalkthroughPlanEntry, suggestion?: string): Promise<void> {
     if (!regenerateSection) return
-    const result = await regenerateSection(entry.id, suggestion)
+    // Only the version shown is rewritten (the detailed one, when that is shown).
+    const result = await (shownLevel(entry) === 'detailed'
+      ? regenerateSection(entry.id, suggestion, 'detailed')
+      : regenerateSection(entry.id, suggestion))
     if (!result) {
       toast({ variant: 'error', title: t('homework.walkthrough.regenerateFailed') })
       return
@@ -282,6 +322,55 @@ export function HomeworkWalkthroughPanel({
     }
     if (result.paused) return
     toast({ variant: 'success', title: t('homework.walkthrough.analysisAdded') })
+  }
+
+  /** Write detailed versions (the given sections, or every missing one). */
+  async function writeDetailed(sectionIds?: string[]): Promise<void> {
+    const result = await generateVariants(sectionIds)
+    if (!result) {
+      toast({ variant: 'error', title: t('homework.walkthrough.variantFailed') })
+      return
+    }
+    if (result.paused && !result.fatalError) return
+    if (result.fatalError)
+      toast({
+        variant: 'error',
+        title: t('homework.walkthrough.stopped'),
+        description: result.fatalError,
+      })
+    else if (result.failed > 0)
+      toast({
+        variant: 'warning',
+        title: t('homework.walkthrough.variantsFailed', { count: result.failed }),
+      })
+    else if (result.generated > 0)
+      toast({
+        variant: 'success',
+        title: t(
+          sectionIds?.length === 1
+            ? 'homework.walkthrough.variantDone'
+            : 'homework.walkthrough.variantsDone',
+        ),
+      })
+  }
+
+  /** 普通 / 详细 for one section: instant when that version exists, written once otherwise. */
+  async function changeLevel(entry: WalkthroughPlanEntry, level: WalkthroughLevel): Promise<void> {
+    await setLevel([entry.id], level)
+    if (
+      level === 'detailed' &&
+      entry.section?.status === 'ready' &&
+      !detailedVariant(entry.section) &&
+      aiReady &&
+      !running
+    )
+      await writeDetailed([entry.id])
+  }
+
+  /** 全部切到详细版 / 普通版: only the missing detailed versions are written. */
+  async function switchAll(level: WalkthroughLevel): Promise<void> {
+    await setLevel('all', level)
+    if (level === 'detailed' && missingCount > 0 && aiReady && !running) await writeDetailed()
   }
 
   async function restore(entry: WalkthroughPlanEntry): Promise<void> {
@@ -332,10 +421,16 @@ export function HomeworkWalkthroughPanel({
       ...(entry.section!.analysis
         ? { analysis: tidyBoxedPunctuation(entry.section!.analysis) }
         : {}),
-      ...(entry.section!.conclusion
-        ? { conclusion: tidyBoxedPunctuation(entry.section!.conclusion) }
+      ...((sectionContent(entry.section!, shownLevel(entry)) ?? entry.section!).conclusion
+        ? {
+            conclusion: formatWalkthroughText(
+              (sectionContent(entry.section!, shownLevel(entry)) ?? entry.section!).conclusion!,
+            ),
+          }
         : {}),
-      body: tidyBoxedPunctuation(entry.section!.body),
+      body: formatWalkthroughText(
+        (sectionContent(entry.section!, shownLevel(entry)) ?? entry.section!).body,
+      ),
       ...(entry.section!.suggestions
         ? { suggestions: entry.section!.suggestions.map(tidyBoxedPunctuation) }
         : {}),
@@ -361,6 +456,15 @@ export function HomeworkWalkthroughPanel({
             </Badge>
           )}
           <div className="ml-auto flex flex-wrap items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={running}
+              onClick={() => setImportOpen(true)}
+            >
+              <FileUp className="h-4 w-4" />
+              {t('walkthroughImport.open')}
+            </Button>
             <Button variant="outline" size="sm" onClick={() => setNotesOpen(true)}>
               <MessageSquareText className="h-4 w-4" />
               {t('walkthroughQA.myQuestions', { count: notes.length })}
@@ -374,6 +478,28 @@ export function HomeworkWalkthroughPanel({
               <Printer className="h-4 w-4" />
               {t('homework.walkthrough.print')}
             </Button>
+            {readyQuestions.length > 0 &&
+              (allDetailed ? (
+                <Button variant="outline" size="sm" onClick={() => void switchAll('standard')}>
+                  <AlignLeft className="h-4 w-4" />
+                  {t('homework.walkthrough.allStandard')}
+                </Button>
+              ) : (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={missingCount > 0 && running}
+                  title={
+                    missingCount > 0
+                      ? t('homework.walkthrough.allDetailedHint', { count: missingCount })
+                      : undefined
+                  }
+                  onClick={() => void switchAll('detailed')}
+                >
+                  <AlignJustify className="h-4 w-4" />
+                  {t('homework.walkthrough.allDetailed')}
+                </Button>
+              ))}
             {writtenCount > 0 && needsWork > 0 && (
               <Button size="sm" disabled={running} onClick={() => void run(false)}>
                 {running ? (
@@ -414,13 +540,20 @@ export function HomeworkWalkthroughPanel({
                 ? t(
                     progress.section.analysis
                       ? 'homework.walkthrough.analyzing'
-                      : 'homework.walkthrough.regenerating',
+                      : progress.section.variant
+                        ? 'homework.walkthrough.generatingDetailed'
+                        : 'homework.walkthrough.regenerating',
                     { title: regeneratingTitle(progress.section.id, entries, labels, t) },
                   )
-                : t('homework.walkthrough.progress', {
-                    done: progress.done,
-                    total: progress.total,
-                  })}
+                : t(
+                    progress.variant
+                      ? 'homework.walkthrough.variantProgress'
+                      : 'homework.walkthrough.progress',
+                    {
+                      done: progress.done,
+                      total: progress.total,
+                    },
+                  )}
             </p>
             {Object.entries(progress.parts ?? {}).map(([sectionId, part]) => (
               <p key={sectionId} className="text-xs text-muted-foreground">
@@ -497,6 +630,10 @@ export function HomeworkWalkthroughPanel({
               <Sparkles className="h-4 w-4" />
               {t('homework.walkthrough.generate')}
             </Button>
+            <Button variant="outline" className="ml-2" onClick={() => setImportOpen(true)}>
+              <FileUp className="h-4 w-4" />
+              {t('walkthroughImport.open')}
+            </Button>
           </CardContent>
         </Card>
       ) : (
@@ -562,6 +699,7 @@ export function HomeworkWalkthroughPanel({
                   <WalkthroughSectionView
                     key={entry.id}
                     entry={entry}
+                    projectId={set.projectId}
                     title={sectionTitle(entry, labels, t)}
                     marker={sectionMarker(entry, labels)}
                     running={progress?.running.includes(entry.id) ?? false}
@@ -586,6 +724,14 @@ export function HomeworkWalkthroughPanel({
                           onRestore: () => void restore(entry),
                           onAddAnalysis: () => void analyze(entry),
                         })}
+                    level={sectionLevel(entry.section, defaultLevel)}
+                    onLevel={(level: WalkthroughLevel) => void changeLevel(entry, level)}
+                    {...(running
+                      ? {}
+                      : { onGenerateDetailed: () => void writeDetailed([entry.id]) })}
+                    writingDetailed={
+                      progress?.section?.id === entry.id && progress.section.variant === true
+                    }
                     aiReady={aiReady}
                   />
                 ))}
@@ -624,6 +770,8 @@ export function HomeworkWalkthroughPanel({
         located={located}
         onOpenNote={openFromList}
       />
+
+      <ImportWalkthroughDialog set={set} open={importOpen} onOpenChange={setImportOpen} />
 
       <RegenerateSectionDialog
         open={regenTarget !== null}
@@ -670,6 +818,7 @@ function sectionTitle(
 ): string {
   if (entry.kind === 'overview') return t('homework.walkthrough.overviewTitle')
   if (entry.kind === 'summary') return t('homework.walkthrough.summaryTitle')
+  if (entry.kind === 'other') return t('walkthroughImport.otherTitle')
   const label = labels.get(entry.question!.id) ?? '?'
   return /^[\d(（]/.test(label) ? t('homework.walkthrough.questionTitle', { label }) : label
 }
@@ -714,6 +863,7 @@ function sectionMarker(entry: WalkthroughPlanEntry, labels: ReadonlyMap<string, 
 
 interface SectionViewProps {
   entry: WalkthroughPlanEntry
+  projectId: string
   title: string
   marker: string
   running: boolean
@@ -737,11 +887,19 @@ interface SectionViewProps {
   onRestore?: () => void
   /** 补充题目分析 for a section written before the analysis existed. */
   onAddAnalysis?: () => void
+  /** 普通 / 详细: the version this section shows. */
+  level: WalkthroughLevel
+  onLevel: (level: WalkthroughLevel) => void
+  /** Write the missing detailed version; absent while a run is in progress. */
+  onGenerateDetailed?: () => void
+  /** The detailed version of this section is being written. */
+  writingDetailed: boolean
   aiReady: boolean
 }
 
 function WalkthroughSectionView({
   entry,
+  projectId,
   title,
   marker,
   running,
@@ -756,13 +914,27 @@ function WalkthroughSectionView({
   onContinueRegenerate,
   onRestore,
   onAddAnalysis,
+  level,
+  onLevel,
+  onGenerateDetailed,
+  writingDetailed,
   aiReady,
 }: SectionViewProps): JSX.Element {
   const { t } = useTranslation()
   const section = entry.section
   const draft = section?.draft
+  // The version shown: the detailed one when chosen and written, else the standard one.
+  const detailed = section ? detailedVariant(section) : undefined
+  const content =
+    section && level === 'detailed' && detailed
+      ? (sectionContent(section, 'detailed') ?? section)
+      : section
+  const showsLevels = entry.kind === 'question' && section?.status === 'ready'
+  const detailMissing = showsLevels && level === 'detailed' && !detailed
   const canRegenerate =
-    Boolean(onRegenerate) && (section?.status === 'ready' || section?.status === 'insufficient')
+    Boolean(onRegenerate) &&
+    entry.kind !== 'other' &&
+    (section?.status === 'ready' || section?.status === 'insufficient')
   const noProvider = aiReady ? undefined : t('homework.noProvider')
   return (
     <section
@@ -803,6 +975,10 @@ function WalkthroughSectionView({
         )}
         {!running && entry.outdated && (
           <Badge variant="outline">{t('homework.walkthrough.outdated')}</Badge>
+        )}
+        {showsLevels && <LevelToggle level={level} onChange={onLevel} busy={writingDetailed} />}
+        {section?.status === 'ready' && section.origin === 'imported' && (
+          <ImportedBadge projectId={projectId} documentId={section.sourceDocumentId} />
         )}
         {(canRegenerate || (onRestore && section?.previous)) && (
           <div className="ml-auto flex flex-wrap items-center gap-1" data-print-hidden>
@@ -902,23 +1078,43 @@ function WalkthroughSectionView({
                 </div>
               )
             ))}
-          {section.conclusion && (
-            <div className="rounded-lg border-l-4 border-primary bg-theme-primary-soft/40 px-4 py-3 lecture:rounded-none lecture:border-l-[3px] lecture:bg-transparent lecture:py-1 lab:rounded-none lab:border lab:border-l-2 lab:border-border lab:border-l-primary">
+          {detailMissing && !writingDetailed && (
+            <div
+              className="flex max-w-[70ch] flex-wrap items-center gap-3 rounded-lg border border-dashed border-border/80 px-4 py-2 text-sm text-muted-foreground lecture:rounded-none lecture:border-x-0 lecture:px-0 lab:rounded-none"
+              data-print-hidden
+              data-detail-missing
+            >
+              <span>{t('homework.walkthrough.detailedMissing')}</span>
+              {onGenerateDetailed && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={!aiReady}
+                  title={noProvider}
+                  onClick={onGenerateDetailed}
+                >
+                  <AlignJustify className="h-4 w-4" aria-hidden />
+                  {t('homework.walkthrough.generateDetailed')}
+                </Button>
+              )}
+            </div>
+          )}
+          {content?.conclusion && (
+            <div className="max-w-[70ch] rounded-lg border-l-4 border-primary bg-theme-primary-soft/40 px-4 py-3 lecture:rounded-none lecture:border-l-[3px] lecture:bg-transparent lecture:py-1 lab:rounded-none lab:border lab:border-l-2 lab:border-border lab:border-l-primary">
               <span className="text-sm font-semibold lecture:block lecture:text-xs lecture:font-normal lecture:tracking-[0.14em] lecture:text-muted-foreground lab:font-mono lab:text-[11px] lab:uppercase lab:tracking-wider">
                 {t('homework.walkthrough.conclusion')}
               </span>
               <RichText
-                text={tidyBoxedPunctuation(section.conclusion)}
+                text={formatWalkthroughText(content.conclusion)}
                 format="markdown"
-                paragraphClassName="text-[15px] leading-relaxed lecture:text-[17px] lecture:text-foreground"
+                paragraphClassName="text-[15px] font-semibold leading-relaxed lecture:text-[17px] lecture:text-foreground"
               />
             </div>
           )}
-          <RichText
-            text={tidyBoxedPunctuation(section.body)}
-            format="markdown"
-            className="min-w-0 space-y-3"
-            paragraphClassName="text-[15px] leading-[1.8] lecture:text-[17px] lecture:leading-[1.9]"
+          <WalkthroughBody
+            text={content?.body ?? section.body}
+            {...(content?.conclusion ? { conclusion: content.conclusion } : {})}
+            {...(content?.parts ? { parts: content.parts } : {})}
           />
           {section.suggestions && section.suggestions.length > 0 && (
             <div className="space-y-2">
@@ -929,16 +1125,19 @@ function WalkthroughSectionView({
                 {section.suggestions.map((item, index) => (
                   <li key={index}>
                     <RichText
-                      text={tidyBoxedPunctuation(item)}
+                      text={formatWalkthroughText(item)}
                       format="markdown"
-                      paragraphClassName="text-[15px] leading-relaxed"
+                      paragraphClassName={WALKTHROUGH_PARAGRAPH}
                     />
                   </li>
                 ))}
               </ul>
             </div>
           )}
-          {section.checks && section.checks.length > 0 && <ChecksView checks={section.checks} />}
+          {content?.checks && content.checks.length > 0 && <ChecksView checks={content.checks} />}
+          {section.issues && section.issues.length > 0 && (
+            <ImportIssuesView issues={section.issues} />
+          )}
           {draft?.mode === 'regenerate' && !running && (
             <div
               className="flex flex-wrap items-center gap-3 border-t pt-3 text-sm text-muted-foreground"
@@ -1003,6 +1202,48 @@ function WalkthroughSectionView({
   )
 }
 
+/** 普通 / 详细: a two-way switch in the section heading. */
+function LevelToggle({
+  level,
+  onChange,
+  busy,
+}: {
+  level: WalkthroughLevel
+  onChange: (level: WalkthroughLevel) => void
+  busy: boolean
+}): JSX.Element {
+  const { t } = useTranslation()
+  return (
+    <div
+      role="group"
+      aria-label={t('homework.walkthrough.levelGroup')}
+      data-walkthrough-level={level}
+      data-print-hidden
+      className="inline-flex items-center overflow-hidden rounded-md border text-xs lecture:rounded-none lab:rounded-none lab:font-mono"
+    >
+      {(['standard', 'detailed'] as const).map((option) => (
+        <button
+          key={option}
+          type="button"
+          aria-pressed={level === option}
+          onClick={() => level !== option && onChange(option)}
+          className={cn(
+            'focus-ring px-2.5 py-1 transition-colors duration-150',
+            level === option
+              ? 'bg-primary-strong text-primary-foreground'
+              : 'text-muted-foreground hover:bg-muted',
+          )}
+        >
+          {busy && option === 'detailed' ? (
+            <Loader2 className="mr-1 inline h-3 w-3 animate-spin" aria-hidden />
+          ) : null}
+          {t(`homework.walkthrough.level.${option}` as TranslationKey)}
+        </button>
+      ))}
+    </div>
+  )
+}
+
 /** The sub-parts of a split question finished so far. */
 function PartialParts({ parts, total }: { parts: WalkthroughPart[]; total: number }): JSX.Element {
   const { t } = useTranslation()
@@ -1021,12 +1262,7 @@ function PartialParts({ parts, total }: { parts: WalkthroughPart[]; total: numbe
             format="markdown"
             paragraphClassName="text-[15px] font-medium leading-relaxed"
           />
-          <RichText
-            text={tidyBoxedPunctuation(part.body)}
-            format="markdown"
-            className="min-w-0 space-y-3"
-            paragraphClassName="text-[15px] leading-[1.8] lecture:text-[17px] lecture:leading-[1.9]"
-          />
+          <WalkthroughBody text={part.body} />
           {part.checks && part.checks.length > 0 && <ChecksView checks={part.checks} />}
         </div>
       ))}

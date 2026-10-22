@@ -40,6 +40,15 @@ export type UserUiStyle = 'lecture' | 'lab'
 export const UI_STYLES: readonly UserUiStyle[] = ['lecture', 'lab']
 export const DEFAULT_UI_STYLE: UserUiStyle = 'lecture'
 
+/**
+ * How passages with questions are marked in a homework walkthrough (saved
+ * notes and conversations tucked into the text): `link` — accent text +
+ * underline; `highlighter` — a translucent background.
+ */
+export type NoteMarkStyle = 'link' | 'highlighter'
+export const NOTE_MARK_STYLES: readonly NoteMarkStyle[] = ['link', 'highlighter']
+export const DEFAULT_NOTE_MARK_STYLE: NoteMarkStyle = 'link'
+
 export interface UserProfile {
   id: 'singleton'
   name: string
@@ -65,10 +74,19 @@ export interface UserProfile {
   uiLanguage?: UILanguage
   /** Language of generated questions; absent means `DEFAULT_QUESTION_LANGUAGE`. */
   questionLanguage?: QuestionLanguage
+  /** Walkthrough question marks; absent means `DEFAULT_NOTE_MARK_STYLE`. */
+  noteMarkStyle?: NoteMarkStyle
+  /**
+   * Show the AI usage / balance readout in the lab side rail and the lecture
+   * account menu. Absent means off (the settings breakdown is always shown).
+   */
+  showUsageReadout?: boolean
   /** Vocabulary: current book, new words per day, how reviews are practised. */
   vocabBookId?: string
   vocabDailyNew?: number
   vocabReviewMode?: 'auto' | 'recognize' | 'spell' | 'dictation'
+  /** Homework walkthrough: the version sections show by default (普通 / 详细). */
+  walkthroughLevel?: 'standard' | 'detailed'
   unlockedAt?: number
   inviteCode?: string
 }
@@ -81,7 +99,10 @@ export interface UpdateUserInput {
   uiStyle?: UserUiStyle
   uiLanguage?: UILanguage
   questionLanguage?: QuestionLanguage
+  noteMarkStyle?: NoteMarkStyle
+  showUsageReadout?: boolean
   vocabBookId?: string
   vocabDailyNew?: number
   vocabReviewMode?: 'auto' | 'recognize' | 'spell' | 'dictation'
+  walkthroughLevel?: 'standard' | 'detailed'
 }

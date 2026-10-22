@@ -30,6 +30,12 @@ export type LearningMaterialType =
    * and course vocabulary, exactly like a professor answer key.
    */
   | 'syllabus'
+  /**
+   * A walkthrough the student imported into one assignment's 完整讲解 (their
+   * own or a classmate's write-up). Kept so the original can be opened again;
+   * like an answer key it is reference only — never a knowledge source.
+   */
+  | 'walkthrough_import'
 
 export const LEARNING_MATERIAL_TYPES: readonly LearningMaterialType[] = [
   'textbook',
@@ -39,6 +45,7 @@ export const LEARNING_MATERIAL_TYPES: readonly LearningMaterialType[] = [
   'homework',
   'homework_answer',
   'syllabus',
+  'walkthrough_import',
 ]
 
 /**
@@ -48,7 +55,7 @@ export const LEARNING_MATERIAL_TYPES: readonly LearningMaterialType[] = [
  */
 export function isReferenceOnlyMaterial(value: unknown): boolean {
   const type = resolveMaterialType(value)
-  return type === 'homework_answer' || type === 'syllabus'
+  return type === 'homework_answer' || type === 'syllabus' || type === 'walkthrough_import'
 }
 
 /**

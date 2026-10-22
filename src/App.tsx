@@ -8,6 +8,7 @@ import { useSettingsStore } from '@/features/settings/settingsStore'
 import { useThemeStore, initThemeListener } from '@/features/theme/themeStore'
 import { DEFAULT_UI_STYLE } from '@/entities/user/types'
 import { isUiStyleSavePending } from '@/features/theme/useAppearance'
+import { applyNoteMarkStyle } from '@/features/theme/noteMarkStyle'
 import { useI18nStore, initUILanguage } from '@/i18n'
 import { Toaster } from '@/shared/ui/Toast'
 import { SelectionTranslator } from '@/widgets/translation/SelectionTranslator'
@@ -53,6 +54,12 @@ export function App(): JSX.Element {
     if (!hasProfile || isUiStyleSavePending()) return
     setUiStyle(profileUiStyle ?? DEFAULT_UI_STYLE)
   }, [hasProfile, profileUiStyle, setUiStyle])
+
+  // Walkthrough question marks (link / highlighter) follow the profile too
+  const profileNoteMark = profile?.noteMarkStyle
+  useEffect(() => {
+    applyNoteMarkStyle(profileNoteMark)
+  }, [profileNoteMark])
 
   // The persisted profile is authoritative once it has loaded
   useEffect(() => {

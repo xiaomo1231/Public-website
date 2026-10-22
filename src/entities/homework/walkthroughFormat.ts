@@ -143,3 +143,81 @@ function inlineClose(text: string, from: number): number {
   }
   return -1
 }
+
+// --- Display-time layout helpers (2k) ----------------------------------------
+
+const MATRIX_BLOCK =
+  /\\begin\{(bmatrix|pmatrix|Bmatrix|vmatrix|Vmatrix|matrix|smallmatrix|array)\}[\s\S]*?\\end\{\1\}/g
+
+/** Fractions inside matrices are typeset full size (`\dfrac`), so they stay readable. */
+export function dfracInMatrices(text: string): string {
+  if (!text.includes('\\begin{')) return text
+  return text.replace(MATRIX_BLOCK, (block) => block.replace(/\\t?frac(?=\s*[{\d])/g, '\\dfrac'))
+}
+
+/**
+ * A term is bold only where it first appears: a later `**term**` of the same
+ * text (no maths, no numbers) is shown in normal weight.
+ */
+export function dedupeBoldTerms(text: string): string {
+  if (!text.includes('**')) return text
+  const seen = new Set<string>()
+  return text.replace(/\*\*([^*\n]{1,60}?)\*\*/g, (whole, inner: string) => {
+    if (/[$\\=\d]/.test(inner)) return whole
+    const key = inner.trim().toLowerCase()
+    if (!key) return whole
+    if (seen.has(key)) return inner
+    seen.add(key)
+    return whole
+  })
+}
+
+/** Everything the walkthrough applies to its text before rendering it. */
+export function formatWalkthroughText(text: string): string {
+  return dedupeBoldTerms(dfracInMatrices(tidyBoxedPunctuation(text)))
+}
+
+/** A body cut at its `### (a) …` sub-part headings (the text before has no label). */
+export function splitSubparts(body: string): Array<{ label?: string; text: string }> {
+  const lines = body.split('\n')
+  const segments: Array<{ label?: string; text: string[] }> = [{ text: [] }]
+  for (const line of lines) {
+    const heading = /^\s{0,3}#{2,3}\s*[(（]([a-z])[)）]/i.exec(line)
+    if (heading) segments.push({ label: heading[1]!.toLowerCase(), text: [line] })
+    else segments[segments.length - 1]!.text.push(line)
+  }
+  return segments
+    .map((segment) => ({
+      ...(segment.label ? { label: segment.label } : {}),
+      text: segment.text.join('\n'),
+    }))
+    .filter((segment) => segment.label || segment.text.trim())
+}
+
+/**
+ * The answer of each sub-part from a conclusion such as
+ * "(a)(b) no solution; (c) infinitely many solutions" — only labels that can
+ * be read unambiguously.
+ */
+export function conclusionByPart(conclusion: string): Map<string, string> {
+  const result = new Map<string, string>()
+  const marks = [
+    ...conclusion.matchAll(/(?:^|[\n;；。,，]|\s)\s*((?:[(（][a-z][)）]\s*[、,，]?\s*)+)/gi),
+  ]
+  for (const [index, mark] of marks.entries()) {
+    const labels = [...mark[1]!.matchAll(/[(（]([a-z])[)）]/gi)].map((item) =>
+      item[1]!.toLowerCase(),
+    )
+    const start = mark.index! + mark[0].length
+    const end = index + 1 < marks.length ? marks[index + 1]!.index! : conclusion.length
+    const answer = conclusion
+      .slice(start, end)
+      .trim()
+      .replace(/^[:：]\s*/, '')
+      .replace(/[;；,，]\s*$/, '')
+      .trim()
+    if (!answer) continue
+    for (const label of labels) if (!result.has(label)) result.set(label, answer)
+  }
+  return result
+}

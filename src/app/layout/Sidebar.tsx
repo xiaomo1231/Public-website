@@ -4,6 +4,7 @@ import { Button } from '@/shared/ui/Button'
 import { useTranslation } from '@/i18n'
 import { cn } from '@/shared/lib/utils'
 import { UsageReadout } from '@/widgets/settings/UsageReadout'
+import { useUsageReadoutVisible } from '@/features/settings/usageReadoutPreference'
 import { NAV_ITEMS, isNavItemActive } from './navItems'
 
 export interface SidebarProps {
@@ -23,6 +24,7 @@ export interface SidebarProps {
 export function Sidebar({ onNavigate, onCollapse }: SidebarProps): JSX.Element {
   const { t } = useTranslation()
   const location = useLocation()
+  const showUsage = useUsageReadoutVisible()
 
   return (
     <aside className="flex h-full w-56 flex-col border-r bg-card">
@@ -79,9 +81,12 @@ export function Sidebar({ onNavigate, onCollapse }: SidebarProps): JSX.Element {
         })}
       </nav>
 
-      <div className="border-t px-4 py-3 font-mono text-[11px]">
-        <UsageReadout onNavigate={onNavigate} />
-      </div>
+      {/* Off by default (设置 → AI 用量与余额); hidden means no balance requests. */}
+      {showUsage && (
+        <div className="border-t px-4 py-3 font-mono text-[11px]" data-usage-readout>
+          <UsageReadout onNavigate={onNavigate} />
+        </div>
+      )}
     </aside>
   )
 }

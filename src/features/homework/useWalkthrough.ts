@@ -12,7 +12,7 @@ import {
   type WalkthroughState,
 } from '@/services/homeworkWalkthroughService'
 import { WalkthroughNoteService } from '@/services/walkthroughNoteService'
-import type { WalkthroughNote } from '@/entities/homework/walkthrough'
+import type { WalkthroughLevel, WalkthroughNote } from '@/entities/homework/walkthrough'
 import { friendlyAIError } from '@/shared/lib/aiErrors'
 import type { GenerationRun, GenerationRunState } from '@/shared/lib/generationControl'
 import { useGenerationRun } from '@/shared/lib/useGenerationRun'
@@ -41,7 +41,13 @@ export interface UseWalkthrough {
   regenerateSection: (
     sectionId: string,
     suggestion?: string,
+    /** The version shown; `detailed` rewrites only the detailed version. */
+    level?: WalkthroughLevel,
   ) => Promise<WalkthroughRunResult | null>
+  /** 普通 / 详细: which version sections show (`'all'` = every question section). */
+  setLevel: (sectionIds: string[] | 'all', level: WalkthroughLevel) => Promise<void>
+  /** Write the missing detailed versions (all, or the given sections). */
+  generateVariants: (sectionIds?: string[]) => Promise<WalkthroughRunResult | null>
   /** Swap a section with the version its last regeneration replaced. */
   restorePrevious: (sectionId: string) => Promise<boolean>
   /** 补充题目分析: write only the analysis of an older question section. */
@@ -152,14 +158,35 @@ export function useWalkthrough(setId: string): UseWalkthrough {
     [start, setId],
   )
   const regenerateSection = useCallback(
-    (sectionId: string, suggestion?: string) =>
+    (sectionId: string, suggestion?: string, level?: WalkthroughLevel) =>
       start((svc, run) =>
         svc.regenerateSection(setId, sectionId, {
           ...(suggestion?.trim() ? { suggestion } : {}),
+          ...(level ? { level } : {}),
           control: run,
         }),
       ),
     [start, setId],
+  )
+  const generateVariants = useCallback(
+    (sectionIds?: string[]) =>
+      start((svc, run) =>
+        svc.generateVariants(setId, { ...(sectionIds ? { sectionIds } : {}), control: run }),
+      ),
+    [start, setId],
+  )
+  const setLevel = useCallback(
+    async (sectionIds: string[] | 'all', level: WalkthroughLevel) => {
+      if (!service) return
+      try {
+        await service.setLevel(setId, sectionIds, level)
+      } catch (err) {
+        setError(friendlyAIError(err))
+      } finally {
+        await reload()
+      }
+    },
+    [service, setId, reload],
   )
   const addAnalysis = useCallback(
     (sectionId: string) => start((svc, run) => svc.addAnalysis(setId, sectionId, { control: run })),
@@ -211,5 +238,7 @@ export function useWalkthrough(setId: string): UseWalkthrough {
     regenerateSection,
     restorePrevious,
     addAnalysis,
+    setLevel,
+    generateVariants,
   }
 }

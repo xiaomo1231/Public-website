@@ -35,6 +35,17 @@ const div = (a: Rational, b: Rational) => make(a.n * b.d, a.d * b.n)
 const isZero = (a: Rational) => a.n === 0n
 const equal = (a: Rational, b: Rational) => a.n === b.n && a.d === b.d
 
+/** Exact arithmetic for callers that replay row operations (walkthrough steps). */
+export const rational = {
+  of: (n: bigint, d = 1n): Rational => make(n, d),
+  add: (a: Rational, b: Rational): Rational => make(a.n * b.d + b.n * a.d, a.d * b.d),
+  sub,
+  mul,
+  div,
+  isZero,
+  equal,
+}
+
 const MAX_DIGITS = 30
 
 /**

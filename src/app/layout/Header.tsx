@@ -15,6 +15,7 @@ import {
 } from '@/shared/ui/DropdownMenu'
 import { cn } from '@/shared/lib/utils'
 import { UsageReadout } from '@/widgets/settings/UsageReadout'
+import { useUsageReadoutVisible } from '@/features/settings/usageReadoutPreference'
 
 const THEME_OPTIONS: { value: UserTheme; labelKey: TranslationKey; icon: typeof Sun }[] = [
   { value: 'light', labelKey: 'header.theme.light', icon: Sun },
@@ -73,6 +74,7 @@ export function HeaderControls(): JSX.Element {
   const { language, setLanguage } = useUILanguage()
   const { preference, setPreference } = useThemePreference()
   const { uiStyle } = useUiStyle()
+  const showUsage = useUsageReadoutVisible()
 
   const ThemeIcon = preference === 'light' ? Sun : preference === 'dark' ? Moon : Monitor
 
@@ -144,7 +146,7 @@ export function HeaderControls(): JSX.Element {
           </DropdownMenuLabel>
           <DropdownMenuSeparator />
           {/* Lecture has no side rail, so the AI balance / usage lives here. */}
-          {uiStyle === 'lecture' && (
+          {uiStyle === 'lecture' && showUsage && (
             <>
               <DropdownMenuItem asChild>
                 <UsageReadout className="text-xs" />

@@ -12,6 +12,7 @@ import {
 } from '@/entities/aiUsage/types'
 import type { AISettings } from '@/entities/settings/types'
 import { useAIUsage } from '@/features/settings/useAIUsage'
+import { useUsageReadoutPreference } from '@/features/settings/usageReadoutPreference'
 import { toast } from '@/features/toast/toastStore'
 import { formatNumber, useTranslation, type TranslationKey } from '@/i18n'
 import { Button } from '@/shared/ui/Button'
@@ -118,6 +119,7 @@ export interface UsagePanelProps {
 export function UsagePanel({ draft, patch }: UsagePanelProps): JSX.Element {
   const { t } = useTranslation()
   const { snapshot, balance, balanceLoading, refresh, reset } = useAIUsage()
+  const readout = useUsageReadoutPreference()
   const [month, setMonth] = useState<'this' | 'last'>('this')
   const [confirmReset, setConfirmReset] = useState(false)
   const [showAdminKey, setShowAdminKey] = useState(false)
@@ -143,6 +145,22 @@ export function UsagePanel({ draft, patch }: UsagePanelProps): JSX.Element {
 
   return (
     <div className="space-y-4">
+      {/* Applies at once; not part of the settings Save button. */}
+      <label className="flex cursor-pointer items-start gap-3 text-sm">
+        <input
+          type="checkbox"
+          className="focus-ring mt-0.5 h-4 w-4 shrink-0 accent-primary"
+          data-usage-readout-toggle
+          checked={readout.visible}
+          onChange={(event) => readout.setVisible(event.target.checked)}
+        />
+        <span>
+          <span className="font-medium">{t('usage.readout.toggle')}</span>
+          <span className="block text-xs text-muted-foreground">
+            {t('usage.readout.toggleHint')}
+          </span>
+        </span>
+      </label>
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div className="min-w-0 space-y-0.5 text-sm" aria-live="polite">
           {balanceLoading && !message ? (

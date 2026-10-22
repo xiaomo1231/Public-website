@@ -23,6 +23,8 @@ import { Label } from '@/shared/ui/Label'
 import { LoadingState } from '@/shared/ui/LoadingState'
 import { PageContainer, PageContent, PageHeader } from '@/shared/ui/Page'
 import { ThemePicker } from '@/widgets/theme/ThemePicker'
+import { NoteMarkStyleSetting } from '@/widgets/settings/NoteMarkStyleSetting'
+import { WalkthroughLevelSetting } from '@/widgets/settings/WalkthroughLevelSetting'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/shared/ui/Select2'
 import { Slider } from '@/shared/ui/Slider'
 import { cn } from '@/shared/lib/utils'
@@ -271,6 +273,20 @@ export function SettingsPage(): JSX.Element {
 
           {/* Appearance applies instantly; it is not part of the Save button. */}
           <ThemePicker />
+
+          <NoteMarkStyleSetting
+            className={SECTION}
+            headerClassName={SECTION_HEAD}
+            titleClassName={SECTION_TITLE}
+            bodyClassName={SECTION_BODY}
+          />
+
+          <WalkthroughLevelSetting
+            className={SECTION}
+            headerClassName={SECTION_HEAD}
+            titleClassName={SECTION_TITLE}
+            bodyClassName={SECTION_BODY}
+          />
 
           <Card className={SECTION}>
             <CardHeader className={SECTION_HEAD}>

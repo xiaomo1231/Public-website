@@ -283,6 +283,19 @@ describe('WCAG contrast', () => {
     expect(readSource('src/shared/ui/buttonVariants.ts')).toContain("link: 'text-primary ")
   })
 
+  it('keeps link-style walkthrough question marks readable (≥3:1) everywhere', () => {
+    // 问答标记样式「链接」: accent text from --primary-strong, plus an underline.
+    expect(css).toMatch(
+      /::highlight\(walkthrough-note\) \{\s*color: hsl\(var\(--primary-strong\)\)/,
+    )
+    for (const style of STYLES)
+      for (const mode of MODES)
+        for (const theme of THEMES)
+          expect(
+            ratio(mode, theme, '--primary-strong', '--background', style),
+          ).toBeGreaterThanOrEqual(3)
+  })
+
   it('never uses the invalid palette entry as a CSS colour', () => {
     expect(css).not.toContain('4C1A2')
   })

@@ -832,6 +832,48 @@ export const en = {
   'homework.walkthrough.addAnalysis': 'Add question analysis',
   'homework.walkthrough.analyzing': 'Writing the question analysis of “{title}”…',
   'homework.walkthrough.analysisAdded': 'Question analysis added',
+  'homework.walkthrough.sectionChanged':
+    'This section changed while it was being written. Try again.',
+  'homework.walkthrough.levelGroup': 'Level of detail',
+  'homework.walkthrough.level.standard': 'Standard',
+  'homework.walkthrough.level.detailed': 'Detailed',
+  'homework.walkthrough.detailedMissing':
+    'The detailed version is not written yet; the standard version is shown.',
+  'homework.walkthrough.generateDetailed': 'Write the detailed version',
+  'homework.walkthrough.writingDetailed': 'Writing the detailed version…',
+  'homework.walkthrough.generatingDetailed': 'Writing the detailed version: {title}',
+  'homework.walkthrough.variantProgress': 'Writing detailed versions: {done} / {total}',
+  'homework.walkthrough.allDetailed': 'Switch all to detailed',
+  'homework.walkthrough.allDetailedHint':
+    'Shows every question in detail; writes only the {count} detailed versions that are missing.',
+  'homework.walkthrough.allStandard': 'Switch all to standard',
+  'homework.walkthrough.variantDone': 'Detailed version ready',
+  'homework.walkthrough.variantsDone': 'Detailed versions ready',
+  'homework.walkthrough.variantFailed': 'The detailed version could not be written',
+  'homework.walkthrough.variantsFailed':
+    '{count} detailed versions could not be written; try again later',
+  'homework.walkthrough.finalAnswer': 'Answer',
+  'homework.walkthrough.step.title': 'Step {number}',
+  'homework.walkthrough.step.before': 'Before',
+  'homework.walkthrough.step.after': 'After',
+  'homework.walkthrough.step.matrix': 'Matrix after step {number}',
+  'homework.walkthrough.step.beforeMatrix': 'Matrix before step {number}',
+  'homework.walkthrough.step.row': 'Row {row}',
+  'homework.walkthrough.step.cell': 'Row {row}, column {col}: {value}',
+  'homework.walkthrough.step.changed': 'changed',
+  'homework.walkthrough.step.hint':
+    'Hover or focus a highlighted row or entry to see how it is computed.',
+  'homework.walkthrough.step.swap': 'swapped with row {row}',
+  'homework.walkthrough.step.mismatch':
+    'Row {row}, column {col}: the walkthrough writes {written}; the operation gives {expected}.',
+  'homework.walkthrough.step.expected': 'should be {value}',
+  'homework.walkthrough.step.checked': 'Checked locally: this step’s arithmetic is right.',
+  'settings.walkthrough.title': 'Homework walkthrough',
+  'settings.walkthrough.description':
+    'Which version a walkthrough section shows by default. You can still switch each section, and a version you have not written yet is written only when you ask.',
+  'settings.walkthrough.level': 'Default version',
+  'settings.walkthrough.standardHint': 'Each step as its operation and result.',
+  'settings.walkthrough.detailedHint': 'Every calculation written out, entry by entry.',
   'homework.walkthrough.analysisFailed': 'The question analysis could not be written',
   'homework.walkthrough.attempt': 'Attempt {attempt}: the last one {reason}',
   'homework.walkthrough.titleSeparator': ' · ',
@@ -3042,6 +3084,68 @@ export const en = {
   'materialType.homework': 'Homework',
   'materialType.homework_answer': 'Professor answer',
   'materialType.syllabus': 'Syllabus / exam topics',
+  'materialType.walkthrough_import': 'Imported walkthrough',
+  'walkthroughImport.open': 'Import walkthrough',
+  'walkthroughImport.title': 'Import a walkthrough',
+  'walkthroughImport.description':
+    'Bring in a walkthrough you already have (PDF, Word, photo, Markdown or text). The AI only re-typesets it and splits it by this assignment’s questions; the author’s working is kept as written.',
+  'walkthroughImport.file': 'File',
+  'walkthroughImport.pickFile': 'Choose a processed file…',
+  'walkthroughImport.otherFile': 'other course file',
+  'walkthroughImport.upload': 'Upload a file',
+  'walkthroughImport.fileHint':
+    'Uploaded files are kept as reference material you can open again; they are not used for course analysis, quizzes or the tutor.',
+  'walkthroughImport.formatOnly': 'Typeset only, do not check',
+  'walkthroughImport.formatOnlyHint':
+    'Skips looking for possible mistakes (uses fewer tokens). Row reductions are still re-checked locally.',
+  'walkthroughImport.start': 'Start import',
+  'walkthroughImport.progress': 'Reading part {done} of {total}…',
+  'walkthroughImport.back': 'Back',
+  'walkthroughImport.save': 'Import {count} sections',
+  'walkthroughImport.replaceAndSave': 'Replace {count} and import',
+  'walkthroughImport.saved': 'Imported {count} sections',
+  'walkthroughImport.savedReplaced':
+    '{count} existing sections were replaced; “Restore previous version” brings them back.',
+  'walkthroughImport.found': 'Found walkthroughs for {count} questions.',
+  'walkthroughImport.issuesFound':
+    '{count} places that may be wrong are marked (the text itself is unchanged).',
+  'walkthroughImport.uncovered':
+    '{count} questions are not covered by this file and stay as they are.',
+  'walkthroughImport.rejected':
+    '{count} sections were left out: their text could not be found in the file (the AI may have written it itself or changed values).',
+  'walkthroughImport.unknownIds':
+    '{count} parts named a question that is not in this assignment and were dropped.',
+  'walkthroughImport.confirmReplace':
+    '{count} sections already have a walkthrough. Importing replaces them; the current version is kept as “previous version”.',
+  'walkthroughImport.badge': 'Imported',
+  'walkthroughImport.openOriginal': 'Open original',
+  'walkthroughImport.issueTitle': 'This may be wrong',
+  'walkthroughImport.issueScope':
+    'Suggested by the AI while importing. The author’s working above was not changed — check it yourself.',
+  'walkthroughImport.otherTitle': 'Other content',
+  'walkthroughImport.errors.notReady':
+    'This file is still being processed. Try again when it is ready.',
+  'walkthroughImport.errors.noText':
+    'No text could be read from this file. For a photo, try a clearer image; or upload the text instead.',
+  'walkthroughImport.errors.invalid':
+    'The AI reply could not be read as an import. Try again, or choose another model in Settings.',
+  'walkthroughImport.errors.incomplete': 'The import was paused. Continue it before saving.',
+  'walkthroughImport.errors.nothing':
+    'Nothing in this file could be matched to the assignment’s questions.',
+  'walkthroughImport.errors.confirm': 'Confirm replacing the existing sections first.',
+  'usage.readout.toggle': 'Show usage and balance in the sidebar / header',
+  'usage.readout.toggleHint':
+    'Off by default. When off, no balance is requested for it; usage is still counted and shown here.',
+  'settings.noteMark.title': 'Question marks in walkthroughs',
+  'settings.noteMark.description':
+    'How passages you asked about are marked in a homework walkthrough. Saved questions are marked more strongly than unsaved ones.',
+  'settings.noteMark.label': 'Mark style',
+  'settings.noteMark.link': 'Link',
+  'settings.noteMark.linkHint': 'Accent-coloured text with an underline',
+  'settings.noteMark.highlighter': 'Highlighter',
+  'settings.noteMark.highlighterHint': 'A translucent background, like a highlighter pen',
+  'settings.noteMark.previewSaved': 'a saved question',
+  'settings.noteMark.previewUnsaved': 'an unsaved one',
   'materialType.syllabusHint':
     'The course handbook, syllabus or list of exam topics. Its exam topics are read into the exam-topic list; it is not used as course content (upload the textbook, atlas or lecture slides for that).',
   'projectDetail.tab.exams': 'Exam topics',
