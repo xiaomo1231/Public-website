@@ -1,7 +1,7 @@
 {
   "name": "ai-learning-platform",
   "private": true,
-  "version": "0.9.2",
+  "version": "0.9.4",
   "type": "module",
   "engines": {
     "node": ">=20"
