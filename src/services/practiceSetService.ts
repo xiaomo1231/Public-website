@@ -16,6 +16,7 @@ import {
 } from '@/entities/homework/practice/plan'
 import { createRng } from '@/entities/homework/practice/random'
 import {
+  applyLinearHints,
   buildLinearSystem,
   linearSystemPart,
   linearSystemStem,
@@ -39,6 +40,8 @@ import { friendlyAIError } from '@/shared/lib/aiErrors'
 import { t } from '@/i18n'
 import { HomeworkWalkthroughService, questionLabel } from './homeworkWalkthroughService'
 import { loadProjectSubjectContext } from './projectSubject'
+import { loadLinearStyleHints, loadProfessorHabits } from './questionHabitsService'
+import type { LinearStyleHints } from '@/entities/questionHabits/types'
 import type { SubjectContext } from '@/entities/project/types'
 
 /**
@@ -101,6 +104,10 @@ interface BuildContext {
   knowledge: SummaryKnowledge
   subject: SubjectContext | undefined
   language: PracticeLanguage
+  /** 教授出题习惯 block for the AI (absent when off or empty). */
+  professorHabits?: string
+  /** Sizes / numbers / presentation for the local systems ({} without a profile). */
+  linearHints: LinearStyleHints
 }
 
 /** One build per practice set at a time (this tab). */
@@ -167,7 +174,9 @@ export class PracticeSetService {
       nextId: 1,
     }
     for (const slot of slots) {
-      const candidate = slot.local ? this.buildLocal(id, slot, 0, draft, context.language) : null
+      const candidate = slot.local
+        ? this.buildLocal(id, slot, 0, draft, context.language, context.linearHints)
+        : null
       if (candidate) draft.candidates.push(candidate)
       else draft.pendingSlots.push(slot.id)
     }
@@ -268,6 +277,7 @@ export class PracticeSetService {
           '\n',
         )
     }
+    const professorHabits = await loadProfessorHabits(parent.projectId, this.db)
     return {
       parent,
       questions: state.questions,
@@ -277,6 +287,8 @@ export class PracticeSetService {
       knowledge: summaryKnowledge(summary),
       subject: await loadProjectSubjectContext(parent.projectId, this.db),
       language: parent.language === 'en' ? 'en' : 'zh',
+      ...(professorHabits ? { professorHabits } : {}),
+      linearHints: await loadLinearStyleHints(parent.projectId, this.db),
     }
   }
 
@@ -299,15 +311,22 @@ export class PracticeSetService {
     attempt: number,
     draft: PracticeDraft,
     language: PracticeLanguage,
+    hints: LinearStyleHints = {},
   ): PracticeCandidate | null {
     const rng = createRng(`${seed}:${slot.id}:${attempt}`)
-    const asMatrix =
-      slot.mode === 'compact' ||
-      /(增广|augmented|matrix|矩阵|\\begin\{)/i.test(slot.sourceText ?? '')
+    // A full-version question mirrors its original; a compact one follows the
+    // professor's usual presentation and sizes (教授出题习惯) when known.
+    const compact = slot.mode === 'compact'
+    const asMatrix = compact
+      ? hints.presentation !== 'equations'
+      : /(增广|augmented|matrix|矩阵|\\begin\{)/i.test(slot.sourceText ?? '')
     const parts: PracticePart[] = []
     for (const part of slot.parts) {
       if (!part.system) return null
-      const built = buildLinearSystem(part.system, rng)
+      const spec = compact ? applyLinearHints(part.system, hints) : part.system
+      const built =
+        (hints.integerOnly ? buildLinearSystem(spec, rng, { maxFractions: 0 }) : null) ??
+        buildLinearSystem(spec, rng)
       if (!built) return null
       parts.push(
         linearSystemPart(built, {
@@ -377,7 +396,14 @@ export class PracticeSetService {
             draft.candidates = draft.candidates.filter((item) => item !== candidate)
             const rebuilt =
               candidate.origin === 'local'
-                ? this.buildLocal(setId, slot, candidate.rebuilds + 1, draft, context.language)
+                ? this.buildLocal(
+                    setId,
+                    slot,
+                    candidate.rebuilds + 1,
+                    draft,
+                    context.language,
+                    context.linearHints,
+                  )
                 : null
             if (rebuilt) draft.candidates.push(rebuilt)
             else {
@@ -443,6 +469,7 @@ export class PracticeSetService {
         content: prompts.practiceGenerate.buildUserPrompt({
           language: context.language,
           keyPoints: knowledgeText(context.knowledge),
+          ...(context.professorHabits ? { professorHabits: context.professorHabits } : {}),
           slots: slots.map((slot) => ({
             id: slot.id,
             mode: slot.mode,

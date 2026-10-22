@@ -15,6 +15,7 @@ import { RenameProjectDialog } from '@/widgets/project/RenameProjectDialog'
 import { ProjectFlowNav } from '@/widgets/project/ProjectFlowNav'
 import { CourseFigures } from '@/widgets/project/CourseFigures'
 import { ExamTopicsPanel } from '@/widgets/syllabus/ExamTopicsPanel'
+import { QuestionHabitsPanel } from '@/widgets/questionHabits/QuestionHabitsPanel'
 import { useCourseMastery } from '@/widgets/dashboard/useCourseMastery'
 import { useHomeOverview } from '@/features/home/useHomeOverview'
 import { useDocumentsStore } from '@/features/documents/documentsStore'
@@ -33,7 +34,10 @@ export function ProjectDetailPage(): JSX.Element {
   // and a reload or Back keeps the student where they were.
   const [searchParams, setSearchParams] = useSearchParams()
   const tabParam = searchParams.get('tab')
-  const tab = tabParam === 'analysis' || tabParam === 'exams' ? tabParam : 'documents'
+  const tab =
+    tabParam === 'analysis' || tabParam === 'exams' || tabParam === 'habits'
+      ? tabParam
+      : 'documents'
   // Read-only course summary (same counts as the homepage) and the mastery
   // estimate; neither triggers analysis or AI.
   const projectList = useMemo(() => (project ? [project] : []), [project])
@@ -197,6 +201,7 @@ export function ProjectDetailPage(): JSX.Element {
             <TabsTrigger value="documents">{t('projectDetail.tab.documents')}</TabsTrigger>
             <TabsTrigger value="analysis">{t('projectDetail.tab.analysis')}</TabsTrigger>
             <TabsTrigger value="exams">{t('projectDetail.tab.exams')}</TabsTrigger>
+            <TabsTrigger value="habits">{t('projectDetail.tab.habits')}</TabsTrigger>
           </TabsList>
 
           <TabsContent value="documents">
@@ -216,6 +221,10 @@ export function ProjectDetailPage(): JSX.Element {
 
           <TabsContent value="exams">
             <ExamTopicsPanel projectId={project.id} />
+          </TabsContent>
+
+          <TabsContent value="habits">
+            <QuestionHabitsPanel projectId={project.id} />
           </TabsContent>
         </Tabs>
       </PageContent>

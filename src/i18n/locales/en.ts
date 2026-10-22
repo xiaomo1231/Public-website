@@ -3530,6 +3530,67 @@ export const en = {
   'generation.stoppedKept': 'Stopped. Nothing was changed.',
   'generation.analysisPartsHint':
     'Parts already read are kept while this page stays open; after a reload they need to be read again.',
+  'projectDetail.tab.habits': 'Question habits',
+  'habits.title': "Professor's question habits",
+  'habits.description':
+    'How your professor writes questions, read from the homework, Professor Practice and past exams / syllabi of this course. Every habit comes with real examples. Used for practice sets, quizzes and oral exam practice while “Imitate the professor” is on.',
+  'habits.loading': 'Loading question habits…',
+  'habits.loadFailed': 'Could not load the question habits',
+  'habits.analyze': "Analyse the professor's question habits",
+  'habits.update': 'Update with new material',
+  'habits.add': 'Add a habit',
+  'habits.imitate': 'Imitate the professor',
+  'habits.imitateHint':
+    'Practice sets, quizzes and oral exam practice follow these habits (structure, wording, notation, numbers, typical traps, answer format). Turn off to write questions as before.',
+  'habits.progress': 'Reading material {done} / {total}',
+  'habits.firstTitle': '{count} document(s) with professor questions can be analysed',
+  'habits.pendingTitle': '{count} new or changed document(s) are not in the profile yet',
+  'habits.kind.homework': 'homework',
+  'habits.kind.practice': 'professor practice',
+  'habits.kind.syllabus': 'exam / syllabus',
+  'habits.changed': 'changed',
+  'habits.more': 'and {count} more',
+  'habits.costHint':
+    'Updating sends only these documents (sampled) and the current profile to your AI provider. Nothing is sent until you click.',
+  'habits.emptyTitle': 'No professor questions yet',
+  'habits.emptyBody':
+    'Upload a homework assignment, Professor Practice questions or a past exam / syllabus. Their questions are what the profile is built from.',
+  'habits.noItems': 'No habits yet. Analyse the material or add one yourself.',
+  'habits.rebuild': 'Analyse everything again',
+  'habits.rebuildTitle': 'Analyse all material again?',
+  'habits.rebuildBody':
+    'The AI-written habits are replaced by a fresh analysis of every document. Habits you wrote or edited are kept.',
+  'habits.yours': 'Yours',
+  'habits.edit': 'Edit',
+  'habits.evidence': '{count} example(s)',
+  'habits.openSource': 'Open the source',
+  'habits.noEvidence': 'Written by you (no example attached).',
+  'habits.addTitle': 'Add a habit',
+  'habits.editTitle': 'Edit the habit',
+  'habits.categoryLabel': 'Category',
+  'habits.statementLabel': 'Habit',
+  'habits.editHint': 'Habits you write or edit are never changed by an update.',
+  'habits.deleteTitle': 'Delete this habit?',
+  'habits.saveFailed': 'Could not save the habit',
+  'habits.analyzeFailed': 'Could not analyse the question habits',
+  'habits.upToDate': 'The profile is up to date',
+  'habits.updated': 'Profile updated: {added} new, {updated} refined',
+  'habits.droppedNoEvidence':
+    '{count} suggested habit(s) were dropped because their examples could not be found in the questions.',
+  'habits.suggestion':
+    '{count} recognised assignment(s) are not in the professor question-habit profile yet.',
+  'habits.suggestionAction': 'Update the profile',
+  'habits.category.types': 'Question types',
+  'habits.category.structure': 'Structure',
+  'habits.category.wording': 'Wording',
+  'habits.category.notation': 'Notation',
+  'habits.category.numbers': 'Numbers',
+  'habits.category.traps': 'Typical traps',
+  'habits.category.answer_format': 'Answer format',
+  'habits.category.difficulty': 'Difficulty',
+  'habits.errors.noSources':
+    'This course has no professor questions yet: upload homework, Professor Practice or a past exam / syllabus first.',
+  'habits.errors.emptyStatement': 'Write the habit first.',
 } as const
 
 export type TranslationKey = keyof typeof en

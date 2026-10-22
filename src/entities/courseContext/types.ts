@@ -1,4 +1,5 @@
 import type { ProfessorQuestionStyleProfile } from '@/entities/practice/types'
+import type { QuestionHabitsProfile } from '@/entities/questionHabits/types'
 
 /**
  * The relationship between the three kinds of learning material, derived once
@@ -95,6 +96,14 @@ export interface CourseContext {
   professorProfile?: ProfessorTeachingProfile
   /** How the professor *writes questions* (from Professor Practice). */
   questionStyleProfile?: ProfessorQuestionStyleProfile
+  /**
+   * 教授出题习惯档案 (AI-summarised from homework, Professor Practice and
+   * past exams, every item with verbatim evidence; see
+   * `entities/questionHabits`). Owned by `QuestionHabitsService`: only
+   * `CourseContextRepository.updateQuestionHabits` writes it; every other
+   * write of the row keeps the stored value.
+   */
+  questionHabits?: QuestionHabitsProfile
   classProgress?: ClassProgress
   noteLinks: NoteLink[]
   lectureLinks: LectureChunkLink[]
@@ -115,4 +124,19 @@ export interface CourseContext {
 
 export function courseContextId(projectId: string): string {
   return projectId
+}
+
+/**
+ * `next` with the question-habit profile that is stored now. Writers of the
+ * derived context (links, class progress, teaching profile) build their row
+ * from an earlier read; this keeps them from undoing a profile update that
+ * happened in between.
+ */
+export function keepStoredQuestionHabits(
+  next: CourseContext,
+  stored: CourseContext | undefined,
+): CourseContext {
+  const { questionHabits: _ignored, ...rest } = next
+  void _ignored
+  return stored?.questionHabits ? { ...rest, questionHabits: stored.questionHabits } : rest
 }

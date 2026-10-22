@@ -11,6 +11,7 @@
 import { asArray, asRecord, asTrimmedString } from '../../validation'
 import { securityFooter, untrustedContentWrapper } from '../security'
 import { NOTATION_RULES } from '../homework-walkthrough/v1'
+import { professorStyleSection } from '../question-style/v1'
 
 export const VERSION = 'v1' as const
 
@@ -60,6 +61,11 @@ export interface PracticeGenerateInput {
   /** The walkthrough summary's categories and key points (clipped). */
   keyPoints: string
   slots: PracticeSlotInput[]
+  /**
+   * 教授出题习惯 (`buildHabitsBlock`), when the profile is on and not empty.
+   * Absent: the prompt is byte-identical to before (no version change).
+   */
+  professorHabits?: string
 }
 
 export function buildUserPrompt(input: PracticeGenerateInput): string {
@@ -94,6 +100,7 @@ export function buildUserPrompt(input: PracticeGenerateInput): string {
       ? untrustedContentWrapper('KNOWLEDGE POINTS OF THE ASSIGNMENT', input.keyPoints)
       : '',
     ...slots,
+    input.professorHabits ? professorStyleSection(input.professorHabits) : '',
   ]
     .filter(Boolean)
     .join('\n\n')

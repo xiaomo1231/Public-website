@@ -70,6 +70,7 @@ import {
 import { DocumentRepository } from '@/entities/document/repository'
 import { examTopicsFor, planExamScopeEntries } from '@/entities/syllabus/examPlan'
 import { CourseContextRepository } from '@/entities/courseContext/repository'
+import { buildHabitsBlock } from '@/entities/questionHabits/types'
 import { PracticeService, formatQuestionStyleContext } from './practiceService'
 import type { SourceReference } from '@/entities/courseAnalysis/types'
 import { logger } from '@/infrastructure/logger/logger'
@@ -577,6 +578,8 @@ export class QuizService {
       const professorStyleContext = courseContext?.questionStyleProfile
         ? formatQuestionStyleContext(courseContext.questionStyleProfile)
         : undefined
+      // 教授出题习惯 (「模仿教授出题」 on and not empty); absent otherwise.
+      const professorHabits = buildHabitsBlock(courseContext?.questionHabits)
       const preference =
         config.questionLanguage ??
         (await new UserRepository(this.db).get().catch(() => undefined))?.questionLanguage
@@ -596,6 +599,7 @@ export class QuizService {
         topicDescription,
         language: quizLanguage(preference, analysis.language),
         ...(professorStyleContext ? { professorStyleContext } : {}),
+        ...(professorHabits ? { professorHabits } : {}),
         updatedAt: Date.now(),
       }
       const withResume: Quiz = { ...quiz, resume }
@@ -777,6 +781,7 @@ export class QuizService {
         ...(resume.professorStyleContext
           ? { professorStyleContext: resume.professorStyleContext }
           : {}),
+        ...(resume.professorHabits ? { professorHabits: resume.professorHabits } : {}),
       },
       subject,
       control,

@@ -15,6 +15,7 @@
  */
 
 import { securityFooter, untrustedContentWrapper } from '../security'
+import { professorStyleSection } from '../question-style/v1'
 
 export const VERSION = 'v1' as const
 export const PROMPT_KIND = 'oral-exam' as const
@@ -28,6 +29,11 @@ export interface OralExamInput {
   /** Formatted source passages (`[chunk:<id> · …]\n<text>`); empty = no course material. */
   sourceSnippets: string[]
   language: 'zh' | 'en' | 'mixed' | 'zh_terms'
+  /**
+   * 教授出题习惯 (`buildHabitsBlock`), when the profile is on and not empty.
+   * Absent: the prompt is byte-identical to before (no version change).
+   */
+  professorHabits?: string
 }
 
 export interface OralExamOutput {
@@ -85,6 +91,7 @@ export function buildUserPrompt(input: OralExamInput): string {
       ? [untrustedContentWrapper('KNOWLEDGE POINTS', input.knowledgePoints.join('\n'))]
       : []),
     sources,
+    ...(input.professorHabits ? [professorStyleSection(input.professorHabits)] : []),
     'Respond with the JSON object only.',
   ].join('\n')
 }

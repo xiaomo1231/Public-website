@@ -47,6 +47,7 @@ import { EmptyState } from '@/shared/ui/EmptyState'
 import { ErrorState } from '@/shared/ui/ErrorState'
 import { LoadingState } from '@/shared/ui/LoadingState'
 import { PageContainer, PageContent, PageHeader } from '@/shared/ui/Page'
+import { HabitsSuggestion } from '@/widgets/questionHabits/HabitsSuggestion'
 import { TruncatedText } from '@/shared/ui/TruncatedText'
 import { DocumentUploadDialog } from '@/widgets/documents/DocumentUploadDialog'
 import { HomeworkAnswerDialog } from '@/widgets/homework/HomeworkAnswerDialog'
@@ -281,6 +282,14 @@ export function HomeworkLandingPage(): JSX.Element {
           <LoadingState label={t('common.loading')} />
         ) : (
           <>
+            {projectId && (
+              <HabitsSuggestion
+                projectId={projectId}
+                version={sets
+                  .map((set) => `${set.id}:${set.status}:${set.questionCount}`)
+                  .join('|')}
+              />
+            )}
             {summary && (
               <Card className="border-border/70">
                 <CardHeader>

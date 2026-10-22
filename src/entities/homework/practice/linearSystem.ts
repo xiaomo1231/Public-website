@@ -11,6 +11,7 @@ import {
   type SolutionKind,
 } from '@/infrastructure/math/rref'
 import type { Rng } from './random'
+import type { LinearStyleHints } from '@/entities/questionHabits/types'
 import type { PracticePart } from './types'
 
 /**
@@ -71,13 +72,36 @@ export function normalizeSpec(raw: Partial<SystemSpec> & { solution: SolutionKin
   return { rows, vars, solution: 'none', free: 0 }
 }
 
-/** Build one friendly system for `spec`; null when no candidate passed (practically never). */
-export function buildLinearSystem(raw: SystemSpec, rng: Rng): BuiltSystem | null {
+/**
+ * `spec` moved into the professor's usual sizes (教授出题习惯, read locally
+ * from the profile): rows and unknowns are clamped into the hinted ranges,
+ * then made feasible again. Without hints the spec is unchanged.
+ */
+export function applyLinearHints(spec: SystemSpec, hints: LinearStyleHints): SystemSpec {
+  if (!hints.rows && !hints.vars) return spec
+  return normalizeSpec({
+    ...spec,
+    rows: hints.rows ? clamp(spec.rows, hints.rows.min, hints.rows.max) : spec.rows,
+    vars: hints.vars ? clamp(spec.vars, hints.vars.min, hints.vars.max) : spec.vars,
+  })
+}
+
+/**
+ * Build one friendly system for `spec`; null when no candidate passed
+ * (practically never). `maxFractions: 0` asks for a fraction-free hand
+ * elimination (the professor keeps to integers).
+ */
+export function buildLinearSystem(
+  raw: SystemSpec,
+  rng: Rng,
+  options: { maxFractions?: number } = {},
+): BuiltSystem | null {
   const spec = normalizeSpec(raw)
+  const maxFractions = options.maxFractions ?? MAX_FRACTIONS
   for (let attempt = 0; attempt < MAX_TRIES; attempt += 1) {
     const target = targetRref(spec, rng)
     const augmented = scramble(target.matrix, rng)
-    if (!friendly(augmented)) continue
+    if (!friendly(augmented, maxFractions)) continue
     const reduced = rref(augmented)
     if (!sameReducedMatrix(reduced, target.matrix)) continue
     if (solutionKind(reduced) !== spec.solution) continue
@@ -138,7 +162,7 @@ function scramble(target: readonly Rational[][], rng: Rng): Rational[][] {
 const isInteger = (value: Rational): boolean => value.d === 1n
 const magnitude = (value: Rational): number => Math.abs(Number(value.n) / Number(value.d))
 
-function friendly(matrix: readonly Rational[][]): boolean {
+function friendly(matrix: readonly Rational[][], maxFractions: number): boolean {
   const vars = matrix[0]!.length - 1
   for (const row of matrix) {
     if (row.every((entry) => entry.n === 0n)) return false
@@ -151,7 +175,7 @@ function friendly(matrix: readonly Rational[][]): boolean {
   }
   // An easy first pivot: some equation starts with ±1 or ±2.
   if (!matrix.some((row) => row[0]!.n !== 0n && magnitude(row[0]!) <= 2)) return false
-  return eliminationFractions(matrix) <= MAX_FRACTIONS
+  return eliminationFractions(matrix) <= maxFractions
 }
 
 /**

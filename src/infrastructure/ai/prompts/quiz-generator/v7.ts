@@ -13,6 +13,7 @@
  */
 
 import * as V6 from './v6'
+import { professorStyleSection } from '../question-style/v1'
 
 export const VERSION = 'v7' as const
 export const PROMPT_KIND = 'quiz-generator' as const
@@ -24,6 +25,11 @@ export interface QuizGenerationInput extends Omit<V6.QuizGenerationInput, 'plan'
     difficulty: V6.QuizGenerationInput['plan'][number]['difficulty']
     type: QuizQuestionType
   }>
+  /**
+   * 教授出题习惯 (`buildHabitsBlock`), when the profile is on and not empty.
+   * Added before the closing line; absent, the prompt is v6's word for word.
+   */
+  professorHabits?: string
 }
 
 /** A table as the model writes it: each cell a given form or a blank's accepted forms. */
@@ -115,6 +121,17 @@ export function buildSystemPrompt(options: QuizSystemPromptOptions = {}): string
   return at >= 0 ? `${withTypes.slice(0, at)}${addition}\n${withTypes.slice(at)}` : withTypes
 }
 
+const CLOSING = 'Respond with the JSON object only.'
+
 export function buildUserPrompt(input: QuizGenerationInput): string {
-  return V6.buildUserPrompt(input as V6.QuizGenerationInput)
+  const { professorHabits, ...rest } = input
+  const base = V6.buildUserPrompt(rest as V6.QuizGenerationInput)
+  if (!professorHabits) return base
+  const section = professorStyleSection(professorHabits)
+  return base.endsWith(`
+${CLOSING}`)
+    ? `${base.slice(0, -CLOSING.length)}${section}
+${CLOSING}`
+    : `${base}
+${section}`
 }

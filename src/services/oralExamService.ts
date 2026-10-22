@@ -25,6 +25,7 @@ import {
 } from '@/shared/lib/generationControl'
 import { t } from '@/i18n'
 import type { AIService } from './aiService'
+import { loadProfessorHabits } from './questionHabitsService'
 import { loadProjectSubjectContext } from './projectSubject'
 import {
   formatSnippetForPrompt,
@@ -355,6 +356,8 @@ export class OralExamService {
       (await this.analyses.listTopics(quiz.projectId)).map((each) => [each.id, each]),
     )
     const concepts = await this.analyses.listConcepts(quiz.projectId)
+    // 教授出题习惯 (「模仿教授出题」 on and not empty); absent otherwise.
+    const professorHabits = await loadProfessorHabits(quiz.projectId, this.db)
 
     let current = quiz
     const remaining = [...state.remaining]
@@ -393,6 +396,7 @@ export class OralExamService {
             knowledgePoints: points,
             sourceSnippets: snippets.map(formatSnippetForPrompt),
             language: state.language,
+            ...(professorHabits ? { professorHabits } : {}),
           },
           new Map(snippets.map((snippet) => [snippet.chunkId, snippet])),
           { aiOnly: draw.aiOnly, fallbackPoint: knowledgePoint },

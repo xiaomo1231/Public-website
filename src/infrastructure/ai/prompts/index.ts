@@ -42,6 +42,7 @@ import * as OralExamV1 from './oral-exam/v1'
 import * as PracticeGenerateV1 from './practice-generate/v1'
 import * as PracticeReviewV1 from './practice-review/v1'
 import * as GuidedStepsV1 from './guided-steps/v1'
+import * as QuestionStyleV1 from './question-style/v1'
 
 export const PROMPT_VERSIONS = {
   documentAnalyzer: 'v2',
@@ -82,6 +83,7 @@ export const PROMPT_VERSIONS = {
   practiceGenerate: 'v1',
   practiceReview: 'v1',
   guidedSteps: 'v1',
+  questionStyle: 'v1',
 } as const
 
 export const prompts = {
@@ -124,6 +126,7 @@ export const prompts = {
   practiceGenerate: PracticeGenerateV1,
   practiceReview: PracticeReviewV1,
   guidedSteps: GuidedStepsV1,
+  questionStyle: QuestionStyleV1,
 } as const
 
 export type { DocumentAnalyzerInput, DocumentAnalysisOutput } from './document-analyzer/v2'

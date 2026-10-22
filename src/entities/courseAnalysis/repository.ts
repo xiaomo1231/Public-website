@@ -16,7 +16,7 @@ import { COURSE_ANALYSIS_SCHEMA_VERSION } from './types'
 import type { DifficultyLevel } from '@/infrastructure/ai/prompts/types'
 import { prompts } from '@/infrastructure/ai/prompts'
 import type { PracticeQuestion } from '../practice/types'
-import type { CourseContext } from '../courseContext/types'
+import { keepStoredQuestionHabits, type CourseContext } from '../courseContext/types'
 import { logger } from '@/infrastructure/logger/logger'
 import { NotFoundError, StorageError } from '@/infrastructure/errors/AppError'
 import { t } from '@/i18n'
@@ -640,7 +640,12 @@ export class CourseAnalysisRepository {
       })
     }
     if (sideWrites.courseContext) {
-      await this.db.table('courseContexts').put(sideWrites.courseContext)
+      // The staged row was built before this transaction: keep the stored
+      // question-habit profile instead of undoing a later update.
+      const stored = await this.db.table('courseContexts').get(sideWrites.courseContext.id)
+      await this.db
+        .table('courseContexts')
+        .put(keepStoredQuestionHabits(sideWrites.courseContext, stored))
     }
   }
 

@@ -192,6 +192,8 @@ export interface QuizResumeState {
   topicDescription: string
   language: 'zh' | 'en' | 'mixed' | 'zh_terms'
   professorStyleContext?: string
+  /** 教授出题习惯 block captured when the quiz was planned. */
+  professorHabits?: string
   updatedAt: number
 }
 
