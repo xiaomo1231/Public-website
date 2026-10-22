@@ -14,6 +14,7 @@ import { MasteryService } from '@/services/masteryService'
 import type { KnowledgeMastery } from '@/entities/knowledgeMastery/types'
 import { cn, relativeTime } from '@/shared/lib/utils'
 import { useTranslation, type TranslationKey } from '@/i18n'
+import { practicedMasteryAverage, toPercent } from '@/shared/lib/percent'
 
 function toneFor(mastery: number): { bandKey: TranslationKey; className: string } {
   if (mastery >= 0.8) return { bandKey: 'mastery.band.strong', className: 'text-emerald-600' }
@@ -60,8 +61,7 @@ export function MasteryPage(): JSX.Element {
   if (!projectId) return <div />
 
   const practiced = rows.filter((r) => r.attempts > 0)
-  const average =
-    practiced.length > 0 ? practiced.reduce((acc, r) => acc + r.mastery, 0) / practiced.length : 0
+  const average = practicedMasteryAverage(rows) ?? 0
 
   return (
     <PageContainer>
@@ -114,7 +114,7 @@ export function MasteryPage(): JSX.Element {
             <Card className="lecture:rounded-none lecture:border-x-0 lecture:border-b lecture:border-t-[1.5px] lecture:border-b-border lecture:border-t-foreground lecture:bg-transparent lecture:shadow-none">
               <CardContent className="grid gap-6 p-6 lecture:px-0 lecture:py-4 lab:gap-0 lab:p-0 sm:grid-cols-3 sm:lab:divide-x">
                 <div className="lab:px-3.5 lab:py-3">
-                  <div className={FIGURE_VALUE}>{Math.round(average * 100)}%</div>
+                  <div className={FIGURE_VALUE}>{toPercent(average)}%</div>
                   <div className={FIGURE_LABEL}>{t('mastery.average')}</div>
                 </div>
                 <div className="lab:px-3.5 lab:py-3 sm:lecture:border-l sm:lecture:pl-6">
@@ -152,7 +152,7 @@ export function MasteryPage(): JSX.Element {
               <CardContent className="space-y-4 lecture:space-y-0 lecture:divide-y lecture:border-t lecture:px-0 lab:space-y-0 lab:divide-y lab:p-0">
                 {rows.map((row) => {
                   const tone = toneFor(row.mastery)
-                  const pct = Math.round(row.mastery * 100)
+                  const pct = toPercent(row.mastery)
                   return (
                     <div
                       key={row.id}

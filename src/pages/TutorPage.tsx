@@ -29,6 +29,8 @@ import { ProjectFlowNav } from '@/widgets/project/ProjectFlowNav'
 import { StudyModeTabs } from '@/widgets/slides/StudyModeTabs'
 import { useProjectTopics } from '@/features/tutor/useProjectTopics'
 import { useTutorLesson } from '@/features/tutor/useTutorLesson'
+import { isUnknownTopic } from '@/features/tutor/isUnknownTopic'
+import { TopicNotFound } from '@/widgets/tutor/TopicNotFound'
 import { useCourseContext } from '@/features/tutor/useCourseContext'
 import { useSlideDocuments } from '@/features/slides/useSlideDocuments'
 import type { CourseStructureNode } from '@/entities/courseStructure/types'
@@ -79,7 +81,11 @@ export function TutorPage(): JSX.Element {
           : topic.chapterId === structureFilter.id,
       )
     : topics
-  const activeTopic = visibleTopics.find((topic) => topic.id === activeTopicId) ?? visibleTopics[0]
+  /** The address names a topic this course does not have: never fall back to another one. */
+  const unknownTopic = !loading && isUnknownTopic(topicId, topics)
+  const activeTopic = unknownTopic
+    ? undefined
+    : (visibleTopics.find((topic) => topic.id === activeTopicId) ?? visibleTopics[0])
 
   const lessonState = useTutorLesson({
     projectId: projectId ?? '',
@@ -99,6 +105,10 @@ export function TutorPage(): JSX.Element {
         </PageContent>
       </PageContainer>
     )
+  }
+
+  if (analysis && unknownTopic && topics.length > 0) {
+    return <TopicNotFound projectId={projectId} />
   }
 
   if (!analysis || topics.length === 0) {
@@ -200,8 +210,8 @@ export function TutorPage(): JSX.Element {
           contents sit above the lesson and the symbols drop into the
           <details> under it, so neither can squeeze the reading measure.
         */}
-        <div className="grid gap-8 lab:gap-0 lab:border lab:bg-card lg:lab:grid-cols-[200px_minmax(0,1fr)] min-[1200px]:lecture:grid-cols-[minmax(150px,1fr)_minmax(0,680px)_minmax(200px,1fr)] min-[1200px]:lecture:gap-12 xl:lab:grid-cols-[200px_minmax(0,1fr)_248px]">
-          <aside className="min-w-0 space-y-3 lecture:mx-auto lecture:w-full lecture:max-w-[680px] lab:space-y-0 lab:border-b lab:py-3.5 lg:lab:border-b-0 lg:lab:border-r min-[1200px]:lecture:sticky min-[1200px]:lecture:top-8 min-[1200px]:lecture:mx-0 min-[1200px]:lecture:max-h-[calc(100vh-4rem)] min-[1200px]:lecture:w-full min-[1200px]:lecture:max-w-[180px] min-[1200px]:lecture:self-start min-[1200px]:lecture:justify-self-end min-[1200px]:lecture:overflow-y-auto">
+        <div className="grid gap-8 lab:gap-0 lab:border lab:bg-card lg:lab:grid-cols-[232px_minmax(0,1fr)] min-[1200px]:lecture:grid-cols-[minmax(210px,1fr)_minmax(0,680px)_minmax(200px,1fr)] min-[1200px]:lecture:gap-10 xl:lab:grid-cols-[232px_minmax(0,1fr)_248px] min-[1400px]:lecture:gap-12">
+          <aside className="min-w-0 space-y-3 lecture:mx-auto lecture:w-full lecture:max-w-[680px] lab:space-y-0 lab:border-b lab:py-3.5 lg:lab:border-b-0 lg:lab:border-r min-[1200px]:lecture:sticky min-[1200px]:lecture:top-8 min-[1200px]:lecture:mx-0 min-[1200px]:lecture:max-h-[calc(100vh-4rem)] min-[1200px]:lecture:w-full min-[1200px]:lecture:max-w-[248px] min-[1200px]:lecture:self-start min-[1200px]:lecture:justify-self-end min-[1200px]:lecture:overflow-y-auto">
             <div className="empty:hidden lab:px-3 lab:pb-3">
               <CourseStructurePanel
                 projectId={projectId}
@@ -249,7 +259,11 @@ export function TutorPage(): JSX.Element {
                         >
                           {topicNumber(topic, topics.indexOf(topic))}
                         </span>
-                        <TruncatedText text={topic.name} className="min-w-0 flex-1" />
+                        {/* Two lines before clipping: a topic name is rarely readable in one. */}
+                        <TruncatedText
+                          text={topic.name}
+                          className="min-w-0 flex-1 lecture:line-clamp-2 lecture:whitespace-normal lecture:break-words lab:line-clamp-2 lab:whitespace-normal lab:break-words"
+                        />
                         {/* Lab tick: filled once the professor's class has reached the topic. */}
                         <span
                           aria-hidden

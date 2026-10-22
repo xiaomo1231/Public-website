@@ -23,20 +23,34 @@ export function formatTokens(value: number, language: UILanguage = getUILanguage
   }).format(value)
 }
 
-/** A money amount in the given ISO currency (CNY → ¥, USD → $). */
+/**
+ * Decimals for a set of amounts shown together (a table column): 4 when any
+ * non-zero amount is below one cent, so small costs do not read as 0.00;
+ * otherwise 2. Every amount of the set then uses the same count.
+ */
+export function moneyDigits(amounts: readonly number[]): number {
+  return amounts.some((amount) => amount !== 0 && Math.abs(amount) < 0.01) ? 4 : 2
+}
+
+/**
+ * A money amount in the given ISO currency (CNY → ¥, USD → $). `digits` fixes
+ * the decimals (from `moneyDigits`) so amounts shown together line up.
+ */
 export function formatMoney(
   amount: number,
   currency: string,
   language: UILanguage = getUILanguage(),
+  digits: number = moneyDigits([amount]),
 ): string {
   try {
     return new Intl.NumberFormat(LOCALE_TAGS[language], {
       style: 'currency',
       currency: currency.toUpperCase(),
-      maximumFractionDigits: amount !== 0 && Math.abs(amount) < 1 ? 4 : 2,
+      minimumFractionDigits: digits,
+      maximumFractionDigits: digits,
     }).format(amount)
   } catch {
-    return `${amount.toFixed(2)} ${currency}`
+    return `${amount.toFixed(digits)} ${currency}`
   }
 }
 

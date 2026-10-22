@@ -4,6 +4,7 @@ import katex from 'katex'
 import 'katex/contrib/mhchem'
 import 'katex/dist/katex.min.css'
 import { cn } from '@/shared/lib/utils'
+import { prepareLatexForDisplay } from '@/shared/lib/mathDisplay'
 
 /**
  * The single place LaTeX is rendered in the app.
@@ -16,7 +17,7 @@ import { cn } from '@/shared/lib/utils'
 
 function typeset(latex: string, display: boolean): string | null {
   try {
-    return katex.renderToString(latex, {
+    return katex.renderToString(prepareLatexForDisplay(latex), {
       displayMode: display,
       throwOnError: true,
       trust: false,
@@ -55,6 +56,11 @@ export function Math({ latex, display = false, className }: MathProps): JSX.Elem
       className={cn(
         'katex-host',
         display && 'my-3 block max-w-full overflow-x-auto text-center',
+        // An inline matrix / array cannot wrap: it scrolls inside its own box
+        // instead of being clipped by a narrow card.
+        !display &&
+          latex.includes('\\begin{') &&
+          'inline-block max-w-full overflow-x-auto overflow-y-hidden align-middle',
         className,
       )}
       dangerouslySetInnerHTML={{ __html: html }}

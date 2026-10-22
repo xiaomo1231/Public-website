@@ -233,6 +233,23 @@ describe('vocabulary service with other languages', () => {
     expect((await repo.getCard('Arzt'))!.mistakes).toBe(0)
   })
 
+  it("reviews only the current book's due words; other books are counted apart", async () => {
+    const { book } = await service.importList('Deutsch', 'Arzt – physician', NOW, 'de')
+    await service.grade('Arzt', 3, 'learn', { bookId: book.id, language: 'de', now: NOW })
+    await service.updateSettings({ bookId: 'exam:cet4', dailyNew: 1 })
+    const later = NOW + 5 * 86400000
+    const english = await service.session(later)
+    expect(english.some((item) => item.view.word === 'Arzt')).toBe(false)
+    expect(english.every((item) => item.kind === 'new')).toBe(true)
+    expect(await service.stats(later)).toMatchObject({ due: 0, dueAllBooks: 1 })
+
+    await service.updateSettings({ bookId: book.id })
+    const german = await service.session(later)
+    expect(german[0]).toMatchObject({ kind: 'review', language: 'de' })
+    expect(german[0]!.view.word).toBe('Arzt')
+    expect(await service.stats(later)).toMatchObject({ due: 1, dueAllBooks: 1 })
+  })
+
   it('keeps English progress lower-cased as before', async () => {
     await service.grade('Tendon', 3, 'learn', { now: NOW })
     expect(await new VocabRepository(db).getCard('tendon')).toBeDefined()

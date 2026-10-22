@@ -814,6 +814,12 @@ export const en = {
   'homework.walkthrough.spoilerBody':
     'Try the questions in Practice first, then read the walkthrough.',
   'homework.walkthrough.spoilerOpen': 'Got it, open the walkthrough',
+  'homework.walkthrough.spoilerPractice': 'Practice first',
+  'homework.walkthrough.moreActions': 'More walkthrough actions',
+  'homework.practiceSource.from': 'From',
+  'homework.practiceSource.question': '(question {label})',
+  'homework.practiceSource.hint':
+    "Made from that assignment's walkthrough, so it has no course passage of its own.",
   'homework.walkthrough.emptyTitle': 'No walkthrough yet',
   'homework.walkthrough.emptyBody':
     'The whole assignment explained like a handout: the tools it needs, then each question with its result, every step and a check, and finally a summary with review suggestions. {count} questions, about {requests} AI requests.',
@@ -1191,6 +1197,7 @@ export const en = {
   'analysis.analyze': 'Analyze Course',
   'analysis.reanalyze': 'Re-analyze',
   'analysis.bilingual': 'Bilingual',
+  'analysis.technicalDetails': 'Technical details',
   'analysis.prompt': 'prompt {version}',
   'analysis.saved': 'Using saved course content',
   'analysis.stale': 'The source material changed — this analysis may be out of date.',
@@ -1297,6 +1304,16 @@ export const en = {
   'tutor.toc': 'Contents',
   'tutor.nextTopic': 'Next topic',
   'tutor.coveredInClass': 'Covered in class',
+  'tutor.openSettings': 'Open settings',
+  'tutor.noProviderSavedLesson':
+    'No AI provider is set up: this is the saved lesson (it may be out of date). Generating or refreshing a lesson needs a provider in Settings.',
+  'tutor.noProviderSession':
+    'No AI provider is set up: you can read the earlier conversation; practising further needs a provider in Settings.',
+  'tutor.topicNotFound': 'Topic not found',
+  'tutor.topicNotFoundHint':
+    'It may have been removed or renamed when the course was re-analysed. Pick a topic from the contents.',
+  'tutor.viewAllTopics': 'View all topics',
+  'tutor.earlierTurns': 'Earlier in this conversation ({count})',
 
   // Teaching-block labels. The lesson body keeps the tutor language; only the
   // block's own label is UI chrome.
@@ -1334,6 +1351,10 @@ export const en = {
   'quiz.subtitle': 'Practice with AI-generated questions. Difficulty adapts to your performance.',
   'quiz.mastery': 'Knowledge Mastery',
   'quiz.loading': 'Loading quizzes',
+  'quiz.inProgress': 'Quizzes in progress',
+  'quiz.inProgressHint': 'Carry on answering, or finish generating a paused quiz.',
+  'quiz.practiceSetCount': '{count} questions',
+  'quiz.practiceSetCount.one': '{count} question',
   'quiz.empty': 'No quizzes yet',
   'quiz.emptyHint': 'Generate your first quiz above.',
   'quiz.setup': 'Set up a quiz',
@@ -1347,6 +1368,7 @@ export const en = {
   'quiz.backToQuizzes': 'Back to quizzes',
   'quiz.instructions': 'Answer each question, then submit to see feedback.',
   'quiz.progress': '{answered} of {total} answered',
+  'quiz.timedOutBlank': 'Timed out — no answer',
   'quiz.unverifiedNote':
     'This answer could not be graded automatically. It will be excluded from your score rather than counted as wrong.',
 
@@ -1355,6 +1377,7 @@ export const en = {
   'quizConfig.needAnalysis': 'Analyze the course first',
   'quizConfig.needAnalysisHint':
     "Quizzes are generated from your analysed course material. Run Analyze Course on the project's Analysis tab.",
+  'quizConfig.openAnalysis': 'Analyze the course',
   'quizConfig.title': 'Generate Quiz',
   'quizConfig.description':
     'The AI writes questions grounded in your uploaded documents. Difficulty adapts as you answer.',
@@ -1586,6 +1609,11 @@ export const en = {
   'interview.autoRead': 'Read answers aloud',
   'interview.noVoice':
     'No voice for this language is installed on this device, so answers cannot be read aloud.',
+  'interview.waitingReply': 'The patient is answering…',
+  'interview.noReply': 'This question has no reply yet.',
+  'interview.resend': 'Resend',
+  'interview.editQuestion': 'Edit question',
+  'interview.nothingToResend': 'The last question already has a reply.',
   'interview.askFailed': 'The patient could not answer',
   'interview.saveFailed': 'Could not save the interview',
   'interview.end': 'End interview and write the summary',
@@ -1611,8 +1639,10 @@ export const en = {
   'interview.communication': 'Communication',
   'interview.estimate': 'Estimate',
   'interview.noEstimate': 'No estimate',
+  'interview.questionsDetail': 'Checklist questions found in your turns',
+  'interview.factsDetail': 'Scenario facts quoted in your summary',
   'interview.courseScale':
-    "On the course's 20-point scale (approx.): questions {questions}/7 + facts {facts}/10 + communication {communication}/3 = {total}/20",
+    'Course 20-point scale (approx.): questions {questions} pts (1 per question, max 7) + facts {facts} pts ({understood}/{factsTotal} understood, scaled to 10) + communication {communication} pts (max 3) = {total}/20',
   'interview.understoodFacts': 'Understood',
   'interview.noneUnderstood': 'No fact could be matched to your summary.',
   'interview.evidence': 'Your words: “{quote}”',
@@ -1754,7 +1784,8 @@ export const en = {
   'quizResult.unverifiedNote':
     'Unverified answers could not be graded automatically and are excluded from the score.',
   'quizResult.weakPoints': 'Weak knowledge points',
-  'quizResult.weakPointsHint': 'Below 60% accuracy in this quiz — good candidates for review.',
+  'quizResult.weakPointsHint':
+    'These knowledge points scored below 60% in this quiz — good candidates for review.',
   'quizResult.byKnowledgePoint': 'By knowledge point',
   'quizResult.byDifficulty': 'By difficulty',
   'quizResult.noData': 'No data.',
@@ -1772,7 +1803,6 @@ export const en = {
   'quizResult.unverifiedAnswers': 'Unverified answers ({count})',
   'quizResult.unverifiedAnswersHint':
     'The system could not grade these automatically. Compare your answer with the expected one.',
-  'quizResult.answerExpected': 'Your answer: {yours} · Expected: {expected}',
   'quizResult.moreQuestions': 'More questions',
   'quizResult.moreQuestionsHint': 'Keep practising with a follow-up quiz.',
   'quizResult.noQuestions': 'No questions',
@@ -1828,6 +1858,7 @@ export const en = {
   'mistakes.allCategories': 'All categories',
   'mistakes.loading': 'Loading mistake book',
   'mistakes.empty': 'No mistakes yet',
+  'mistakes.showAll': 'Clear filters and show all',
   'mistakes.emptyFiltered': 'No mistakes match these filters',
   'mistakes.emptyHint':
     'Wrong answers from quizzes appear here automatically, or you can add one manually.',
@@ -1839,7 +1870,8 @@ export const en = {
   'mistakeCard.addedByYou': 'Added by you',
   'mistakeCard.attempts': '{count} attempts',
   'mistakeCard.attempts.one': '{count} attempt',
-  'mistakeCard.answerLine': 'Your answer: {yours} · Correct: {correct}',
+  'mistakeCard.yourAnswer': 'Your answer:',
+  'mistakeCard.correctAnswer': 'Correct:',
   'mistakeCard.analysing': 'Analysing your answer…',
   'mistakeCard.analysisFailed': 'Analysis failed. You can try again.',
   'mistakeCard.retry': 'Retry analysis',
@@ -1904,6 +1936,9 @@ export const en = {
   'weakness.count.one': '{count} mistake',
   'weakness.recent': '{count} of them in the last 30 days',
   'weakness.mastery': 'mastery {value}',
+  'weakness.priority': 'Review priority {value}',
+  'weakness.priorityHint':
+    'Combines the share of mistakes, recent mistakes and the mastery estimate; higher means review it sooner.',
 
   'settings.loading': 'Loading settings',
   'settings.saved': 'Settings saved',
@@ -1924,6 +1959,17 @@ export const en = {
   'settings.testing': 'Testing…',
   'settings.testConnection': 'Test connection',
   'settings.saving': 'Saving…',
+  'settings.unsaved': 'You have unsaved changes',
+  'settings.discard': 'Discard',
+  'settings.group.instant': 'Applies instantly',
+  'settings.group.instantNote':
+    'These settings apply as soon as you change them; no saving needed.',
+  'settings.group.saved': 'AI service',
+  'settings.group.savedNote':
+    'Changes here take effect after you press Save at the bottom of the page.',
+  'settings.group.data': 'Data',
+  'settings.group.dataNote':
+    'Export, restore and delete run right away; some ask for confirmation first.',
   'settings.saveChanges': 'Save changes',
   'settings.provider.title': 'Provider',
   'settings.provider.description':
@@ -2786,6 +2832,9 @@ export const en = {
   'cards.empty': 'No flashcards yet',
   'cards.emptyHint':
     'Generate cards from the course concepts (term → definition), add them from an anatomy table in a lesson, or write your own.',
+  'cards.emptyNoConceptsHint':
+    'The course analysis has no concepts with a definition yet, so nothing can be generated. Write a card yourself, or add one from an anatomy table in a lesson.',
+  'cards.noConcepts': 'The course analysis has no concepts with a definition yet',
   'cards.generate': 'Generate from concepts',
   'cards.generated': 'Added {count} cards from the course concepts.',
   'cards.generatedNone': 'No new cards — every concept with a definition already has one.',
@@ -2867,6 +2916,8 @@ export const en = {
   'vocab.reviewMode.spell': 'Spelling only',
   'vocab.reviewMode.dictation': 'Dictation only',
   'vocab.start': 'Start (review {review} · new {fresh})',
+  'vocab.dueOtherBooks': '{count} more words are due in other books — switch book to review them.',
+  'vocab.dueOtherBooks.one': '{count} more word is due in another book — switch book to review it.',
   'vocab.allDone': 'All done for today',
   'vocab.todaySentence': 'Today: {parts}',
   'vocab.todayReview': '{count} to review',
@@ -2949,9 +3000,12 @@ export const en = {
   'vocab.mistakeCount': '{count}× wrong',
   'vocab.practiceMistakes': 'Practise these',
   'vocab.clearMistake': 'Remove from this list',
+  'vocab.booksHint':
+    'Pick one as the current book; today’s reviews only include words from the current book.',
+  'vocab.course.sourceLanguage': 'Material language: {language}',
   'vocab.course.title': 'Course words',
   'vocab.course.hint':
-    'Finds the words of a course’s English material you may not know (skipping very common and CET-4-level words), with the sentence and page they appear on. Technical words missing from the dictionary get a Chinese meaning from your AI.',
+    'Finds the words of a course’s material you may not know, with the sentence and page they appear on: English material skips very common and CET-4-level words; a language course (its target language in the course settings) is read in that language. Words missing from the dictionary get a Chinese meaning from your AI.',
   'vocab.course.extract': 'Find course words',
   'vocab.course.update': 'Find again',
   'vocab.course.done': '{total} course words, {added} new',
@@ -2963,7 +3017,8 @@ export const en = {
   'vocab.course.glossProgress': 'Meanings: {done} of {total} batches',
   'vocab.course.failed': 'Could not find course words',
   'vocab.course.noProjects': 'No courses yet',
-  'vocab.course.noProjectsHint': 'Create a course and upload English material first.',
+  'vocab.course.noProjectsHint':
+    'Create a course and upload its material (English, or the textbook of a language course) first.',
   'vocab.importTitle': 'Import a word list',
   'vocab.importHint':
     'One word per line, optionally followed by its meaning after a tab, comma or colon; words without a meaning are looked up in the dictionary. .txt and .csv files work.',
@@ -3137,6 +3192,9 @@ export const en = {
   'materials.fileCount': '{count} file(s)',
   'materials.analyzed': 'Analyzed',
   'materials.processing': 'Processing…',
+  'materials.failed': 'Processing failed',
+  'materials.partFailed': '{count} files failed',
+  'materials.partFailed.one': '{count} file failed',
 
   'materialType.textbook': 'Textbook',
   'materialType.user_notes': 'My notes',

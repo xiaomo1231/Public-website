@@ -115,6 +115,8 @@ export interface QuestionAttempt {
   userAnswer: string
   evaluation: QuestionEvaluation
   durationMs?: number
+  /** A blank answer submitted after the countdown ran out (oral exam). */
+  timedOut?: boolean
   hintsUsed: number
   createdAt: number
 }

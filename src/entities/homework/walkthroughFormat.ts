@@ -9,6 +9,8 @@
  * a line, in code, or inside ordinary formulas stays as written.
  */
 
+import { dfracInMatrices } from '@/shared/lib/mathDisplay'
+
 /** LaTeX spacing that may sit between a box and its stray punctuation. */
 const SPACING = String.raw`(?:\s|\\[,;:! ]|\\quad|\\qquad|~)*`
 /** The rest of a display formula after its box: only spacing and one stop. */
@@ -146,14 +148,9 @@ function inlineClose(text: string, from: number): number {
 
 // --- Display-time layout helpers (2k) ----------------------------------------
 
-const MATRIX_BLOCK =
-  /\\begin\{(bmatrix|pmatrix|Bmatrix|vmatrix|Vmatrix|matrix|smallmatrix|array)\}[\s\S]*?\\end\{\1\}/g
-
-/** Fractions inside matrices are typeset full size (`\dfrac`), so they stay readable. */
-export function dfracInMatrices(text: string): string {
-  if (!text.includes('\\begin{')) return text
-  return text.replace(MATRIX_BLOCK, (block) => block.replace(/\\t?frac(?=\s*[{\d])/g, '\\dfrac'))
-}
+// Fractions inside matrices are typeset full size (`\dfrac`); the transform is
+// shared with the `Math` renderer so every page shows matrices the same way.
+export { dfracInMatrices }
 
 /**
  * A term is bold only where it first appears: a later `**term**` of the same

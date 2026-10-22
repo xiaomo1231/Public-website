@@ -1,6 +1,6 @@
-import { useEffect, useState, type ReactNode } from 'react'
-import { useSearchParams } from 'react-router-dom'
-import { Loader2, Mic, Sparkles } from 'lucide-react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { Link, useSearchParams } from 'react-router-dom'
+import { BarChart3, Loader2, Mic, Sparkles } from 'lucide-react'
 import type { CourseAnalysis, Topic } from '@/entities/courseAnalysis/types'
 import {
   ORAL_DEFAULT_TIMER_SECONDS,
@@ -41,6 +41,8 @@ export interface QuizConfigDialogProps {
   progress?: { stage: string; progress: number } | null
   /** Pause / stop controls, shown to the right of the progress bar while generating. */
   controls?: ReactNode
+  /** Told once the options load: whether a quiz can be generated (the course is analysed). */
+  onAvailability?: (ready: boolean) => void
 }
 
 const DIFFICULTIES: Array<{ value: QuizDifficulty; labelKey: TranslationKey }> = [
@@ -72,6 +74,7 @@ export function QuizConfigDialog({
   busy,
   progress,
   controls,
+  onAvailability,
 }: QuizConfigDialogProps): JSX.Element {
   const { t } = useTranslation()
   const { project } = useProject(projectId)
@@ -111,6 +114,8 @@ export function QuizConfigDialog({
   }, [projectId])
   const oralOffered = subject === 'medicine' || hasSyllabus || oral
   const [loading, setLoading] = useState(true)
+  const availability = useRef(onAvailability)
+  availability.current = onAvailability
   // The saved preference; changing it here saves it for every later quiz.
   const { profile, setQuestionLanguage } = useAuth()
   const questionLanguage = profile?.questionLanguage ?? DEFAULT_QUESTION_LANGUAGE
@@ -127,6 +132,7 @@ export function QuizConfigDialog({
         if (cancelled) return
         setAnalysis(a ?? null)
         setTopics(ts)
+        availability.current?.(a?.status === 'ready')
       } finally {
         if (!cancelled) setLoading(false)
       }
@@ -202,6 +208,14 @@ export function QuizConfigDialog({
           <CardTitle>{t('quizConfig.needAnalysis')}</CardTitle>
           <CardDescription>{t('quizConfig.needAnalysisHint')}</CardDescription>
         </CardHeader>
+        <CardContent>
+          <Button asChild>
+            <Link to={`/projects/${projectId}?tab=analysis`}>
+              <BarChart3 className="h-4 w-4" aria-hidden />
+              {t('quizConfig.openAnalysis')}
+            </Link>
+          </Button>
+        </CardContent>
       </Card>
     )
   }

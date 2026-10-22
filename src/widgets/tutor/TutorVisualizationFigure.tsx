@@ -35,7 +35,7 @@ import {
 import { computeEigenViewport, type EigenPair } from '@/entities/tutorVisualization/eigen'
 import { useTranslation, type UseTranslationResult, type TranslationKey } from '@/i18n'
 import { Math as MathView } from '@/shared/ui/Math'
-import { layoutForWidth } from './plotLayout'
+import { layoutForWidth, legendLabelFor } from './plotLayout'
 import { TutorGraphSvg } from './TutorGraphFigure'
 import { TutorVennSvg } from './TutorVennFigure'
 import { TutorHasseSvg } from './TutorHasseFigure'
@@ -576,16 +576,24 @@ export function TutorVisualizationFigure({
     ...geometry.curves.map((curve) => curve.index),
   ])
   const legendEntries = lineExpressions
-    .map((expression, index) => ({ expression, index }))
+    .map((expression, index) => ({ expression, index, label: legendLabelFor(expression) }))
     .filter((entry) => renderedIndices.has(entry.index))
+  // A label that only repeats its equation is dropped, so a lone equation
+  // whose label says the same thing needs no legend at all.
   const showLegend =
-    legendEntries.length > 1 || legendEntries.some((entry) => entry.expression.label !== undefined)
+    legendEntries.length > 1 || legendEntries.some((entry) => entry.label !== undefined)
 
   const vectorEntries = geometry.vectors
   const showVectorLegend = vectorEntries.length > 1
 
   return (
-    <figure data-tutor-visualization={visualization.id} className="my-5 min-w-0 space-y-2">
+    // A coordinate plane reads best at about 37rem (just above the
+    // narrow-layout threshold): wider only makes the grid and its labels
+    // sparse, and pushes the legend far from the lines.
+    <figure
+      data-tutor-visualization={visualization.id}
+      className="mx-auto my-5 w-full min-w-0 max-w-[37rem] space-y-2"
+    >
       <div
         ref={cardRef}
         className="w-full max-w-full overflow-hidden rounded-lg border border-border/70 bg-card p-2"
@@ -1154,7 +1162,7 @@ export function TutorVisualizationFigure({
           aria-label={t('viz.legend')}
           className="flex flex-wrap justify-center gap-x-4 gap-y-1.5 text-[13px] text-muted-foreground"
         >
-          {legendEntries.map(({ expression, index }) => (
+          {legendEntries.map(({ expression, index, label: legendLabel }) => (
             <li key={`legend-${index}`} className="flex items-center gap-1.5">
               <span
                 aria-hidden="true"
@@ -1162,7 +1170,7 @@ export function TutorVisualizationFigure({
                 style={{ backgroundColor: seriesStroke(index) }}
               />
               <MathView latex={expression.latex} />
-              {expression.label ? <span>{expression.label}</span> : null}
+              {legendLabel ? <span>{legendLabel}</span> : null}
             </li>
           ))}
         </ul>

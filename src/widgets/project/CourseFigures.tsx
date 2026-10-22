@@ -3,6 +3,7 @@ import type { CourseOverview } from '@/services/homeOverviewService'
 import { FigureStrip, type FigureItem } from '@/widgets/dashboard/Figures'
 import type { CourseMasteryEstimate } from '@/widgets/dashboard/useCourseMastery'
 import { useTranslation, type TranslationKey } from '@/i18n'
+import { formatPercent, toPercent } from '@/shared/lib/percent'
 
 const ANALYSIS_STATE_KEY: Record<CourseOverview['analysis'], TranslationKey> = {
   ready: 'projectDetail.analysisState.ready',
@@ -61,7 +62,7 @@ export function CourseFigures({
           },
           {
             label: t('projectDetail.fig.mastery'),
-            value: mastery ? `${Math.round(mastery.average * 100)}%` : null,
+            value: mastery ? formatPercent(mastery.average) : null,
             sub: masterySub,
             ratio: mastery?.average,
           },
@@ -78,7 +79,7 @@ export function CourseFigures({
       : [
           {
             label: t('projectDetail.fig.mastery'),
-            value: mastery ? Math.round(mastery.average * 100) : null,
+            value: mastery ? toPercent(mastery.average) : null,
             unit: mastery ? '%' : undefined,
             sub: masterySub,
           },

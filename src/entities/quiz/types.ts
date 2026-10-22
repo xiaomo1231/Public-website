@@ -89,6 +89,19 @@ export interface QuizKnowledgeStat {
   wrong: number
   unverified: number
   total: number
+  /**
+   * Graded credit on the same basis as the overall percentage (1 per correct
+   * answer, earned / total for a partly covered short answer). Missing on
+   * scores saved before it existed; `correct` is the fallback.
+   */
+  points?: number
+}
+
+/** A knowledge point's score as a percentage, on the overall score's basis. */
+export function knowledgeStatPercent(stat: QuizKnowledgeStat): number | null {
+  const gradable = stat.correct + stat.wrong
+  if (gradable <= 0) return null
+  return Math.round(((stat.points ?? stat.correct) / gradable) * 100)
 }
 
 export interface QuizScore {
@@ -221,4 +234,17 @@ export function quizGenerationProgress(quiz: Quiz): { done: number; total: numbe
   // A bank quiz generates several levels per slot before it can be taken.
   if (quiz.bank) return { done: quiz.questionIds.length, total: quiz.bank.plan.length }
   return { done: quiz.questionIds.length, total: quiz.config.count }
+}
+
+/**
+ * Unfinished quizzes (being taken, ready, or paused while generating) apart
+ * from finished ones, each newest first.
+ */
+export function splitQuizzes(quizzes: readonly Quiz[]): { active: Quiz[]; finished: Quiz[] } {
+  const newest = (a: Quiz, b: Quiz) => b.startedAt - a.startedAt
+  const done = (quiz: Quiz) => quiz.status === 'completed' || quiz.status === 'failed'
+  return {
+    active: quizzes.filter((quiz) => !done(quiz)).sort(newest),
+    finished: quizzes.filter(done).sort(newest),
+  }
 }

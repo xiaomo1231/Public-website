@@ -8,6 +8,7 @@ import {
   Loader2,
   Mic,
   MicOff,
+  RotateCw,
   Send,
   Square,
   Volume2,
@@ -253,31 +254,49 @@ function TurnComposer({
     return onVoicesChanged(() => setVoice(hasVoiceFor(targetLanguage)))
   }, [targetLanguage])
 
-  const send = async () => {
-    const text = draft.trim()
-    if (!text || sending) return
+  // The question being answered: shown as a bubble while the patient replies,
+  // and kept with a resend button when no reply arrived.
+  const [pending, setPending] = useState<{ text: string; failed: boolean } | null>(null)
+  // A stored question without a reply (the last turn is the student's).
+  const lastTurn = session.turns[session.turns.length - 1]
+  const unanswered = !pending && lastTurn?.role === 'student' ? lastTurn : null
+
+  const send = async (override?: { text: string } | 'stored') => {
+    const text = override === 'stored' ? '' : (override?.text ?? draft).trim()
+    if ((override !== 'stored' && !text) || sending) return
     speech.cancel()
     setSending(true)
+    if (override !== 'stored') {
+      setPending({ text, failed: false })
+      if (!override) setDraft('')
+    }
     const run = turnRun.start()
     try {
-      const next = await (
-        await aiService()
-      ).ask(projectId, session.id, text, {
-        signal: run.signal,
-      })
+      const service = await aiService()
+      const next =
+        override === 'stored'
+          ? await service.resendLast(projectId, session.id, { signal: run.signal })
+          : await service.ask(projectId, session.id, text, { signal: run.signal })
       onChange(next)
-      setDraft('')
+      setPending(null)
       turnRun.reset()
       const last = next.turns[next.turns.length - 1]
       if (autoRead && last?.role === 'patient') speak(last.text, targetLanguage)
     } catch (err) {
-      // A stopped turn stores nothing; the question stays in the box to send again.
-      if (!isGenerationInterruption(err, run))
+      if (isGenerationInterruption(err, run)) {
+        // A stopped turn stores nothing; the question goes back in the box.
+        if (override !== 'stored') {
+          setDraft((current) => current || text)
+          setPending(null)
+        }
+      } else {
+        if (override !== 'stored') setPending({ text, failed: true })
         toast({
           variant: 'error',
           title: t('interview.askFailed'),
           description: friendlyAIError(err),
         })
+      }
     } finally {
       run.finish()
       setSending(false)
@@ -303,6 +322,59 @@ function TurnComposer({
 
   return (
     <div className="space-y-2">
+      {pending && (
+        <div className="flex justify-end">
+          <div
+            className={cn(
+              'max-w-[85%] rounded-2xl bg-theme-primary-soft px-3.5 py-2 text-sm text-foreground lecture:rounded-none lab:rounded-sm',
+              !pending.failed && 'opacity-80',
+            )}
+          >
+            <p className="sr-only">{t('interview.you')}</p>
+            <p lang={targetLanguage} className="whitespace-pre-wrap break-words">
+              {pending.text}
+            </p>
+          </div>
+        </div>
+      )}
+      {sending && (
+        <p
+          role="status"
+          aria-live="polite"
+          className="flex items-center gap-2 text-sm text-muted-foreground"
+        >
+          <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+          {t('interview.waitingReply')}
+        </p>
+      )}
+      {!sending && (pending?.failed || unanswered) && (
+        <div className="flex flex-wrap items-center justify-end gap-2 text-sm text-muted-foreground">
+          <span>{t('interview.noReply')}</span>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            onClick={() => void send(pending ? { text: pending.text } : 'stored')}
+          >
+            <RotateCw aria-hidden />
+            {t('interview.resend')}
+          </Button>
+          {pending && (
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              onClick={() => {
+                setDraft(pending.text)
+                setPending(null)
+                field.current?.focus()
+              }}
+            >
+              {t('interview.editQuestion')}
+            </Button>
+          )}
+        </div>
+      )}
       <Label htmlFor="interview-turn">{t('interview.yourQuestion')}</Label>
       <Textarea
         id="interview-turn"
@@ -577,36 +649,52 @@ function InterviewResultsCard({
         <CardDescription>{t('interview.resultsNote')}</CardDescription>
       </CardHeader>
       <CardContent className="space-y-5 lecture:px-0">
-        <dl className="grid gap-4 sm:grid-cols-3">
-          <div>
-            <dt className="text-xs text-muted-foreground">{t('interview.questionsAsked')}</dt>
-            <dd className="font-mono text-2xl font-semibold tabular-nums">
-              {results.questions.asked}/{results.questions.total}
-            </dd>
-          </div>
-          <div>
-            <dt className="text-xs text-muted-foreground">{t('interview.factsUnderstood')}</dt>
-            <dd className="font-mono text-2xl font-semibold tabular-nums">
-              {results.facts.understood}/{results.facts.total}
-            </dd>
-          </div>
-          <div>
-            <dt className="text-xs text-muted-foreground">{t('interview.communication')}</dt>
-            <dd className="font-mono text-2xl font-semibold tabular-nums">
-              {results.communication ? `${results.communication.score}/3` : '—'}
-            </dd>
-            <dd className="text-xs text-muted-foreground">
-              {results.communication
+        {/* Three even columns: label, value, one line of detail each. */}
+        <dl className="grid gap-4 sm:grid-cols-3 sm:gap-6">
+          {[
+            {
+              key: 'questions',
+              label: t('interview.questionsAsked'),
+              value: `${results.questions.asked}/${results.questions.total}`,
+              detail: t('interview.questionsDetail'),
+            },
+            {
+              key: 'facts',
+              label: t('interview.factsUnderstood'),
+              value: `${results.facts.understood}/${results.facts.total}`,
+              detail: t('interview.factsDetail'),
+            },
+            {
+              key: 'communication',
+              label: t('interview.communication'),
+              value: results.communication ? `${results.communication.score}/3` : '—',
+              detail: results.communication
                 ? `${t('interview.estimate')} · ${results.communication.note}`
-                : t('interview.noEstimate')}
-            </dd>
-          </div>
+                : t('interview.noEstimate'),
+            },
+          ].map((stat) => (
+            <div
+              key={stat.key}
+              className="flex min-w-0 flex-col gap-1 lecture:border-l lecture:pl-4 lecture:first:border-l-0 lecture:first:pl-0"
+            >
+              <dt className="text-xs text-muted-foreground">{stat.label}</dt>
+              <dd className="font-mono text-2xl font-semibold tabular-nums">{stat.value}</dd>
+              <dd
+                className="line-clamp-2 break-words text-xs text-muted-foreground"
+                title={stat.detail}
+              >
+                {stat.detail}
+              </dd>
+            </div>
+          ))}
         </dl>
         {scale && (
           <p className="text-sm">
             {t('interview.courseScale', {
               questions: scale.questions,
               facts: scale.facts,
+              understood: results.facts.understood,
+              factsTotal: results.facts.total,
               communication: scale.communication,
               total: scale.total,
             })}

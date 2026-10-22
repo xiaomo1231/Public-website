@@ -7,6 +7,7 @@ import {
   ListChecks,
   Loader2,
   MoreHorizontal,
+  Play,
   RefreshCw,
   RotateCcw,
   Trash2,
@@ -19,6 +20,7 @@ import {
   type Document,
 } from '@/entities/document/types'
 import { PracticeSetRows } from '@/widgets/homework/practice/PracticeSetRows'
+import { pausedCardActions } from '@/widgets/homework/pausedCardActions'
 import {
   isPracticeSet,
   HOMEWORK_STATUS_LABEL_KEYS,
@@ -466,17 +468,12 @@ export function HomeworkLandingPage(): JSX.Element {
                                 </div>
                               )
                             ) : set.status === 'paused' ? (
-                              <div className="space-y-2">
-                                <SetRunControls set={set} onResume={() => void resume(set)} />
-                                {set.questionCount > 0 && (
-                                  <Button asChild variant="outline" className="w-full">
-                                    <Link to={`/projects/${projectId}/homework/${set.id}`}>
-                                      {t('homework.open')}
-                                      <ArrowRight className="h-4 w-4" />
-                                    </Link>
-                                  </Button>
-                                )}
-                              </div>
+                              <PausedSetActions
+                                set={set}
+                                href={`/projects/${projectId}/homework/${set.id}`}
+                                disabled={running}
+                                onResume={() => void resume(set)}
+                              />
                             ) : (
                               <Button asChild className="w-full">
                                 <Link to={`/projects/${projectId}/homework/${set.id}`}>
@@ -631,6 +628,55 @@ export function HomeworkLandingPage(): JSX.Element {
  * Pause / stop while an assignment is read or prepared, 继续 once paused. A
  * paused set read from storage (after a reload) offers 继续 without a run.
  */
+/** A paused card: the status line, 继续 as the primary action, then 打开讲解. */
+function PausedSetActions({
+  set,
+  href,
+  disabled,
+  onResume,
+}: {
+  set: HomeworkSet
+  href: string
+  disabled: boolean
+  onResume: () => void
+}): JSX.Element {
+  const { t } = useTranslation()
+  const { state } = useHomeworkRun(set.documentId)
+  const actions = pausedCardActions({
+    live: state === 'running' || state === 'pausing',
+    questionCount: set.questionCount,
+  })
+  return (
+    <div className="space-y-2">
+      {/* Status (paused x / y) and hint; 继续 is the button below. */}
+      <SetRunControls set={set} />
+      {actions.resume && (
+        <Button
+          className="w-full"
+          onClick={onResume}
+          disabled={disabled}
+          title={t('generation.resumeHint')}
+        >
+          <Play className="h-4 w-4" aria-hidden />
+          {t('generation.resume')}
+        </Button>
+      )}
+      {actions.open && (
+        <Button
+          asChild
+          variant={actions.open === 'primary' ? 'default' : 'outline'}
+          className="w-full"
+        >
+          <Link to={href}>
+            {t('homework.open')}
+            <ArrowRight className="h-4 w-4" />
+          </Link>
+        </Button>
+      )}
+    </div>
+  )
+}
+
 function SetRunControls({
   set,
   onResume,

@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { TutorLesson } from '@/entities/tutorLesson/types'
 import { buildAIServices } from '@/services/aiServices'
-import { friendlyTutorError } from '@/shared/lib/aiErrors'
-import { useTranslation } from '@/i18n'
+import { loadStoredLesson } from '@/services/tutorLessonService'
 import { isAbortError, type GenerationRunState } from '@/shared/lib/generationControl'
 import { useGenerationRun } from '@/shared/lib/useGenerationRun'
+import { noProviderInfo, tutorErrorInfo, type TutorErrorInfo } from './tutorErrors'
 
 export interface UseTutorLessonInput {
   projectId: string
@@ -24,8 +24,17 @@ export interface UseTutorLessonState {
   streaming: boolean
   /** Set when generation failed outright (no previous lesson to fall back on). */
   error?: string
+  /** The fix for `error` lives in Settings (no provider, bad key, quota…). */
+  errorNeedsSettings?: boolean
   /** Set when a refresh failed but a stored lesson is still on screen. */
   refreshError?: string
+  /** The fix for `refreshError` lives in Settings. */
+  refreshNeedsSettings?: boolean
+  /**
+   * No AI provider is configured: the stored lesson is shown as-is (it may be
+   * out of date) and generating / refreshing needs Settings first.
+   */
+  noProvider?: boolean
   /** True while an explicit regenerate is running. */
   regenerating: boolean
   regenerate: () => Promise<void>
@@ -46,13 +55,13 @@ export interface UseTutorLessonState {
  * `regenerate()` — spends tokens.
  */
 export function useTutorLesson(input: UseTutorLessonInput): UseTutorLessonState {
-  const { t } = useTranslation()
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading')
   const [lesson, setLesson] = useState<TutorLesson | undefined>()
   const [fromCache, setFromCache] = useState(false)
   const [streaming, setStreaming] = useState(false)
-  const [error, setError] = useState<string | undefined>()
-  const [refreshError, setRefreshError] = useState<string | undefined>()
+  const [error, setErrorInfo] = useState<TutorErrorInfo | undefined>()
+  const [refreshError, setRefreshInfo] = useState<TutorErrorInfo | undefined>()
+  const [noProvider, setNoProvider] = useState(false)
   const [regenerating, setRegenerating] = useState(false)
   const [stopped, setStopped] = useState(false)
   // Not aborted on unmount: a lesson the student navigated away from still
@@ -78,8 +87,9 @@ export function useTutorLesson(input: UseTutorLessonInput): UseTutorLessonState 
     setLesson(undefined)
     setFromCache(false)
     setStreaming(false)
-    setError(undefined)
-    setRefreshError(undefined)
+    setErrorInfo(undefined)
+    setRefreshInfo(undefined)
+    setNoProvider(false)
     setStopped(false)
     // A regenerate for the previous topic may still be running; its result is
     // discarded by the request id, so its spinner must not stick either.
@@ -91,8 +101,19 @@ export function useTutorLesson(input: UseTutorLessonInput): UseTutorLessonState 
         const services = await buildAIServices()
         if (cancelled || id !== requestId.current) return
         if (!services) {
-          setError(t('tutor.noProvider'))
-          setStatus('error')
+          // Reading a stored lesson needs no AI: show it, and say that only
+          // generating or refreshing requires a provider.
+          setNoProvider(true)
+          const stored = await loadStoredLesson({ projectId, topicId, language })
+          if (cancelled || id !== requestId.current) return
+          if (stored) {
+            setLesson(stored)
+            setFromCache(true)
+            setStatus('ready')
+          } else {
+            setErrorInfo(noProviderInfo())
+            setStatus('error')
+          }
           return
         }
 
@@ -113,14 +134,14 @@ export function useTutorLesson(input: UseTutorLessonInput): UseTutorLessonState 
 
         setLesson(result.lesson)
         setFromCache(result.fromCache)
-        if (result.refreshError) setRefreshError(friendlyTutorError(result.refreshError))
+        if (result.refreshError) setRefreshInfo(tutorErrorInfo(result.refreshError))
         setStatus('ready')
       } catch (err) {
         if (cancelled || id !== requestId.current) return
         if (isAbortError(err, run.signal)) {
           setStopped(true)
         } else {
-          setError(friendlyTutorError(err))
+          setErrorInfo(tutorErrorInfo(err))
         }
         setStatus('error')
       } finally {
@@ -132,8 +153,6 @@ export function useTutorLesson(input: UseTutorLessonInput): UseTutorLessonState 
     return () => {
       cancelled = true
     }
-    // `t` is intentionally excluded: it is stable per language and including it
-    // would re-run the effect on unrelated re-renders.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectId, topicId, language, topicName, topicDescription])
 
@@ -143,17 +162,23 @@ export function useTutorLesson(input: UseTutorLessonInput): UseTutorLessonState 
     const id = ++requestId.current
     const isCurrent = () => id === requestId.current
     setRegenerating(true)
-    setRefreshError(undefined)
+    setRefreshInfo(undefined)
     setStopped(false)
     const run = startRun()
     try {
       const services = await buildAIServices()
       if (!isCurrent()) return
       if (!services) {
-        setError(t('tutor.noProvider'))
-        setStatus('error')
+        setNoProvider(true)
+        // A lesson on screen stays readable; only the refresh is reported.
+        if (lesson) setRefreshInfo(noProviderInfo())
+        else {
+          setErrorInfo(noProviderInfo())
+          setStatus('error')
+        }
         return
       }
+      setNoProvider(false)
       const result = await services.tutorLesson.regenerate({
         projectId,
         topicId,
@@ -166,7 +191,7 @@ export function useTutorLesson(input: UseTutorLessonInput): UseTutorLessonState 
       setLesson(result.lesson)
       setFromCache(false)
       setStreaming(false)
-      setError(undefined)
+      setErrorInfo(undefined)
       setStatus('ready')
     } catch (err) {
       if (!isCurrent()) return
@@ -179,20 +204,27 @@ export function useTutorLesson(input: UseTutorLessonInput): UseTutorLessonState 
         return
       }
       // Keep whatever is on screen; only report that the refresh failed.
-      setRefreshError(friendlyTutorError(err))
+      if (lesson) setRefreshInfo(tutorErrorInfo(err))
+      else {
+        setErrorInfo(tutorErrorInfo(err))
+        setStatus('error')
+      }
     } finally {
       run.finish()
       if (isCurrent()) setRegenerating(false)
     }
-  }, [projectId, topicId, topicName, topicDescription, language, t, startRun, lesson])
+  }, [projectId, topicId, topicName, topicDescription, language, startRun, lesson])
 
   return {
     status,
     ...(lesson ? { lesson } : {}),
     fromCache,
     streaming,
-    ...(error ? { error } : {}),
-    ...(refreshError ? { refreshError } : {}),
+    ...(error ? { error: error.message } : {}),
+    errorNeedsSettings: error?.needsSettings ?? false,
+    ...(refreshError ? { refreshError: refreshError.message } : {}),
+    refreshNeedsSettings: refreshError?.needsSettings ?? false,
+    noProvider,
     regenerating,
     regenerate,
     generation: generation.state,

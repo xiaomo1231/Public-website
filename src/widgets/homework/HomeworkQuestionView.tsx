@@ -45,6 +45,7 @@ import { appendSpeechText, useSpeechInput } from '@/features/homework/useSpeechI
 import { AnswerImages } from '@/widgets/handwriting/AnswerImages'
 import { answerImageKey, type HomeworkAnswerImage } from '@/entities/homework/answerImages'
 import { HomeworkReviewPanel } from './HomeworkReviewPanel'
+import type { PracticeSource } from './practice/practiceSource'
 
 export interface HomeworkQuestionViewProps {
   question: HomeworkQuestion
@@ -55,6 +56,11 @@ export interface HomeworkQuestionViewProps {
   answerDocumentId?: string
   /** Switch to 引导练习 for this question (the step-by-step guide). */
   onStartGuided?: () => void
+  /**
+   * Practice-set questions: the assignment they were made from, shown in place
+   * of the course source (they have none of their own).
+   */
+  practiceSource?: PracticeSource | null
 }
 
 /**
@@ -69,6 +75,7 @@ export function HomeworkQuestionView({
   mode = 'practice',
   answerDocumentId,
   onStartGuided,
+  practiceSource,
 }: HomeworkQuestionViewProps): JSX.Element {
   const { t, language } = useTranslation()
   const deferredAnswer =
@@ -354,13 +361,17 @@ export function HomeworkQuestionView({
             />
           </CardHeader>
           <CardContent className="space-y-3">
-            <QuestionSource
-              sourceRefs={displaySourceRefs.map((ref) => ({
-                ...ref,
-                ...(ref.quote ? { quote: formatHomeworkQuestion(ref.quote) } : {}),
-              }))}
-              projectId={question.projectId}
-            />
+            {practiceSource ? (
+              <PracticeSourceLine source={practiceSource} />
+            ) : (
+              <QuestionSource
+                sourceRefs={displaySourceRefs.map((ref) => ({
+                  ...ref,
+                  ...(ref.quote ? { quote: formatHomeworkQuestion(ref.quote) } : {}),
+                }))}
+                projectId={question.projectId}
+              />
+            )}
             {sourcePages.length > 0 && (
               <details
                 open={
@@ -798,7 +809,12 @@ export function HomeworkQuestionView({
                       </>
                     ) : (
                       <>
-                        {message.content}
+                        {/* Plain text with LaTeX: what the student typed, `$x_4$` typeset. */}
+                        <RichText
+                          text={message.content}
+                          className="space-y-2"
+                          paragraphClassName="whitespace-pre-wrap break-words text-sm leading-relaxed text-primary-foreground"
+                        />
                         {message.imageCount ? (
                           <span className="mt-1 block text-xs opacity-80">
                             {t('homework.images.sentWith', { count: message.imageCount })}
@@ -954,6 +970,32 @@ export function HomeworkQuestionView({
           </Card>
         )}
       </div>
+    </div>
+  )
+}
+
+/** 「来自 …」: the assignment a practice question was made from, linked. */
+function PracticeSourceLine({ source }: { source: PracticeSource }): JSX.Element {
+  const { t } = useTranslation()
+  return (
+    <div data-practice-source className="space-y-1 text-sm">
+      {source.parent ? (
+        <p className="flex flex-wrap items-center gap-x-1.5">
+          <span className="text-muted-foreground">{t('homework.practiceSource.from')}</span>
+          <Link
+            to={source.parent.href}
+            className="focus-ring min-w-0 break-words rounded-sm font-medium text-primary underline decoration-primary/40 underline-offset-4 hover:decoration-primary"
+          >
+            {source.parent.title}
+          </Link>
+          {source.questionLabel && (
+            <span className="text-muted-foreground">
+              {t('homework.practiceSource.question', { label: source.questionLabel })}
+            </span>
+          )}
+        </p>
+      ) : null}
+      <p className="text-xs text-muted-foreground">{t('homework.practiceSource.hint')}</p>
     </div>
   )
 }

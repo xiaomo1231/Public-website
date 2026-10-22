@@ -136,6 +136,44 @@ function clampMastery(value: number): number {
   return Math.max(0, Math.min(1, value))
 }
 
+/**
+ * Sessions opened but not yet saved, by id.
+ *
+ * A session row is written only once its first turn (the introduction)
+ * exists, so a visit whose AI request fails leaves nothing behind in the
+ * history. Module-level because the panel builds a fresh service per action.
+ */
+const draftSessions = new Map<string, TutorSession>()
+const MAX_DRAFTS = 20
+
+function rememberDraft(session: TutorSession): void {
+  draftSessions.delete(session.id)
+  draftSessions.set(session.id, session)
+  while (draftSessions.size > MAX_DRAFTS) {
+    const oldest = draftSessions.keys().next().value
+    if (oldest === undefined) break
+    draftSessions.delete(oldest)
+  }
+}
+
+/**
+ * The conversation to resume for a topic: the most recent non-abandoned
+ * session in this language that has at least one turn. Reads only — no AI —
+ * so the panel can show an earlier conversation even without a provider.
+ */
+export async function findResumableSession(
+  input: { projectId: string; topicId: string; language: TutorSession['language'] },
+  repo: TutorSessionRepository = new TutorSessionRepository(),
+): Promise<TutorSession | undefined> {
+  const sessions = await repo.listByTopic(input.projectId, input.topicId)
+  return sessions.find(
+    (session) =>
+      session.status !== 'abandoned' &&
+      session.language === input.language &&
+      session.turns.length > 0,
+  )
+}
+
 export class TutorService {
   private db: AppDatabase
   private sessions: TutorSessionRepository
@@ -170,7 +208,14 @@ export class TutorService {
     this.ai = deps.ai
   }
 
-  async startSession(input: TutorStartInput): Promise<TutorSession> {
+  /**
+   * Create a session. `persist: false` keeps it as an in-memory draft that is
+   * saved by `beginTopic` once the introduction arrives.
+   */
+  async startSession(
+    input: TutorStartInput,
+    options: { persist?: boolean } = {},
+  ): Promise<TutorSession> {
     await this.projects.get(input.projectId)
     const now = Date.now()
     const session: TutorSession = {
@@ -191,7 +236,8 @@ export class TutorService {
       startedAt: now,
       updatedAt: now,
     }
-    await this.sessions.upsert(session)
+    if (options.persist === false) rememberDraft(session)
+    else await this.sessions.upsert(session)
     return session
   }
 
@@ -205,22 +251,30 @@ export class TutorService {
   async findOrStartSession(
     input: TutorStartInput,
   ): Promise<{ session: TutorSession; resumed: boolean }> {
-    const existing = await this.sessions.findLatest(input.projectId, input.topicId)
-    if (existing && existing.language === input.language && existing.turns.length > 0) {
-      return { session: existing, resumed: true }
-    }
-    // A session that never received its introduction (e.g. the page was left
-    // or the request was cancelled) is reused instead of leaving an orphan.
-    if (existing && existing.language === input.language && existing.turns.length === 0) {
-      return { session: existing, resumed: false }
-    }
-    return { session: await this.startSession(input), resumed: false }
+    // Empty rows left by older versions (a visit whose introduction failed)
+    // are never resumed; clear them so the history does not list them.
+    await this.sessions.deleteEmpty(input.projectId, input.topicId)
+    const existing = await findResumableSession(input, this.sessions)
+    if (existing) return { session: existing, resumed: true }
+    // Not saved until the introduction exists: a failed first request leaves
+    // no empty conversation behind.
+    return { session: await this.startSession(input, { persist: false }), resumed: false }
   }
 
   async getSession(id: string): Promise<TutorSession> {
     const session = await this.sessions.get(id)
     if (!session) throw new AppError(t('errors.sessionNotFound'), 'NOT_FOUND')
     return session
+  }
+
+  /** A saved session, or a draft from `findOrStartSession` that is not saved yet. */
+  private async sessionOrDraft(id: string): Promise<TutorSession> {
+    const stored = await this.sessions.get(id)
+    if (stored) return stored
+    const draft = draftSessions.get(id)
+    if (!draft) throw new AppError(t('errors.sessionNotFound'), 'NOT_FOUND')
+    // A copy: the caller's state object must not change if the request fails.
+    return { ...draft, turns: [...draft.turns], messages: [...draft.messages] }
   }
 
   /**
@@ -239,7 +293,7 @@ export class TutorService {
     sessionId: string,
     opts: { onDelta?: (delta: string) => void; signal?: AbortSignal } = {},
   ): Promise<TutorActionResult> {
-    const session = await this.getSession(sessionId)
+    const session = await this.sessionOrDraft(sessionId)
     const sources = await this.collectSources(session)
     const introMessages: ChatMessage[] = [
       {
@@ -289,6 +343,7 @@ export class TutorService {
     )
     session.updatedAt = Date.now()
     await this.sessions.upsert(session)
+    draftSessions.delete(session.id)
 
     // Best-effort: a question is a follow-up, never a precondition.
     try {

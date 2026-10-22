@@ -8,6 +8,7 @@ import { EmptyState } from '@/shared/ui/EmptyState'
 import { ErrorState } from '@/shared/ui/ErrorState'
 import { LoadingState } from '@/shared/ui/LoadingState'
 import { PageContainer, PageContent, PageHeader } from '@/shared/ui/Page'
+import { RichText } from '@/shared/ui/RichText'
 import { TruncatedText } from '@/shared/ui/TruncatedText'
 import { ProjectFlowNav } from '@/widgets/project/ProjectFlowNav'
 import { TutorSessionRepository } from '@/entities/tutorSession/repository'
@@ -21,6 +22,7 @@ import { cn, formatDateTime } from '@/shared/lib/utils'
 import { difficultyLabelKey } from '@/infrastructure/ai/prompts/types'
 import { logger } from '@/infrastructure/logger/logger'
 import { useTranslation } from '@/i18n'
+import { formatPercent } from '@/shared/lib/percent'
 
 export function ChatHistoryPage(): JSX.Element {
   const { t } = useTranslation()
@@ -43,7 +45,7 @@ export function ChatHistoryPage(): JSX.Element {
     void (async () => {
       try {
         const repo = new TutorSessionRepository()
-        const rows = await repo.listByProject(projectId)
+        const rows = await repo.listConversations(projectId)
         if (cancelled) return
         setSessions(rows)
         setActiveId(rows[0]?.id ?? null)
@@ -174,7 +176,7 @@ export function ChatHistoryPage(): JSX.Element {
                           className="shrink-0 tabular-nums lecture:font-sans lab:font-mono lab:text-[11px]"
                         >
                           {t('chatHistory.mastery', {
-                            value: `${Math.round(active.mastery * 100)}%`,
+                            value: formatPercent(active.mastery),
                           })}
                         </Badge>
                         <Badge
@@ -245,7 +247,12 @@ function TurnCard({ turn }: { turn: TutorTurn }) {
             </span>
           )}
         </div>
-        <p className="whitespace-pre-wrap">{turn.content}</p>
+        <RichText
+          text={turn.content}
+          format="markdown"
+          className="min-w-0 max-w-[70ch] space-y-3"
+          paragraphClassName="text-sm leading-relaxed lecture:text-[15.5px] lecture:leading-[1.8]"
+        />
         {turn.question?.sourceRefs && turn.question.sourceRefs.length > 0 && (
           <div className="min-w-0 truncate rounded-lg bg-muted/40 px-2 py-1 text-[11px] text-muted-foreground">
             {t('chatHistory.source', {

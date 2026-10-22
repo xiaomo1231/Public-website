@@ -18,6 +18,7 @@ import { Math as TeX } from '@/shared/ui/Math'
 import { RichText } from '@/shared/ui/RichText'
 import { cn } from '@/shared/lib/utils'
 import { useTranslation } from '@/i18n'
+import { sharedColumnWidths } from './stepLayout'
 
 /**
  * Reading width and type scale of walkthrough prose, in both interface
@@ -130,11 +131,11 @@ export function StepCard({ step }: { step: WalkthroughStep }): JSX.Element {
   const { t } = useTranslation()
   const [active, setActive] = useState<Active>(null)
   const id = useId()
-  const arrow = `\\xrightarrow{${
-    step.ops.length > 1
-      ? `\\substack{${step.ops.map((op) => op.latex).join('\\\\')}}`
-      : (step.ops[0]?.latex ?? '')
-  }}`
+  // Both matrices share column widths, so their entries line up identically.
+  const columnWidths = useMemo(
+    () => sharedColumnWidths(step.before, step.after),
+    [step.before, step.after],
+  )
   const mismatchAt = (row: number, col: number) =>
     step.mismatches.find((item) => item.row === row && item.col === col)
   const arithmetic = (row: number, col: number) => {
@@ -179,10 +180,21 @@ export function StepCard({ step }: { step: WalkthroughStep }): JSX.Element {
         <MatrixView
           matrix={step.before}
           label={t('homework.walkthrough.step.beforeMatrix', { number: step.number })}
+          columnWidths={columnWidths}
         />
-        <TeX latex={arrow} className="text-[14px]" />
+        {/* The operations over the arrow, at a readable size (the heading
+            above already names them for assistive technology). */}
+        <div aria-hidden className="flex shrink-0 flex-col items-center gap-1 px-1">
+          {step.ops.map((op, index) => (
+            <TeX key={index} latex={op.latex} className="whitespace-nowrap text-[13px]" />
+          ))}
+          <span className="relative block h-px w-full min-w-12 bg-foreground/70">
+            <span className="absolute -right-px -top-[4px] h-0 w-0 border-y-[4.5px] border-l-[8px] border-y-transparent border-l-foreground/70" />
+          </span>
+        </div>
         <MatrixView
           matrix={step.after}
+          columnWidths={columnWidths}
           label={t('homework.walkthrough.step.matrix', { number: step.number })}
           changedRows={step.changedRows}
           active={active}
@@ -274,6 +286,8 @@ interface MatrixViewProps {
   describe?: (row: number, col: number) => string
   wrongCell?: (row: number, col: number) => boolean
   idPrefix?: string
+  /** Minimum width of each column, in em (shared by the matrices of one step). */
+  columnWidths?: number[]
 }
 
 /** A bracketed matrix whose changed entries can be hovered or focused. */
@@ -286,8 +300,8 @@ function MatrixView({
   describe,
   wrongCell,
   idPrefix,
+  columnWidths,
 }: MatrixViewProps): JSX.Element {
-  const width = matrix.rows[0]!.length
   return (
     <div className="relative inline-block shrink-0 px-2 py-0.5 before:absolute before:inset-y-0 before:left-0 before:w-1.5 before:border-y before:border-l before:border-foreground/70 after:absolute after:inset-y-0 after:right-0 after:w-1.5 after:border-y after:border-r after:border-foreground/70">
       <table
@@ -328,10 +342,18 @@ function MatrixView({
                         focusable && 'cursor-default focus-visible:ring-2 focus-visible:ring-ring',
                         isActive && changed && 'bg-primary/20',
                         wrong && 'bg-destructive/10 ring-1 ring-inset ring-destructive',
-                        c === width - 1 && 'pr-1',
                       )}
                     >
-                      <TeX latex={cellLatex(value)} />
+                      <span
+                        className="inline-block"
+                        style={
+                          columnWidths?.[c] !== undefined
+                            ? { minWidth: `${columnWidths[c]}em` }
+                            : undefined
+                        }
+                      >
+                        <TeX latex={cellLatex(value)} />
+                      </span>
                       {focusable && descId && (
                         // Hidden from browsing; read as the cell's description on focus.
                         <span id={descId} hidden>

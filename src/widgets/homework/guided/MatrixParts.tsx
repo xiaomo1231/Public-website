@@ -29,7 +29,14 @@ export function MatrixDisplay({
   className?: string
 }): JSX.Element {
   return (
-    <div role="img" aria-label={label} className={cn('max-w-full overflow-x-auto', className)}>
+    // Scrolls sideways only when the matrix is really wider than the column;
+    // vertical overflow is padding, never a scrollbar (KaTeX brackets reach
+    // past the line box by a pixel or two).
+    <div
+      role="img"
+      aria-label={label}
+      className={cn('max-w-full overflow-x-auto overflow-y-hidden py-1.5', className)}
+    >
       <TeX latex={matrixLatex(matrix, bar)} />
     </div>
   )
@@ -72,7 +79,7 @@ export function MatrixInputGrid({
     }
   }
   return (
-    <div className="max-w-full overflow-x-auto pb-1">
+    <div className="max-w-full overflow-x-auto overflow-y-hidden py-1">
       <div
         role="group"
         aria-label={label}

@@ -303,7 +303,7 @@ describe('HomeworkQuestionView formula rendering', () => {
     expect(screen.getByLabelText('Your working')).toHaveValue('my partial working')
   })
 
-  it('typesets the tutor reply but shows the student text verbatim', async () => {
+  it('typesets formulas in both the tutor reply and the student message', async () => {
     const { container } = render(
       <HomeworkQuestionView question={FORMULA_QUESTION} service={formulaService()} />,
     )
@@ -313,9 +313,10 @@ describe('HomeworkQuestionView formula rendering', () => {
     // The assistant reply's formula is typeset, not shown as `$…$`.
     expect(container.querySelectorAll('.katex').length).toBeGreaterThanOrEqual(3)
     expect(container.textContent).not.toContain('$a,b,c$')
-    // The student's own words are shown exactly as written: a complete `$a$`
-    // span stays literally `$a$` (it is never typeset).
-    expect(container.textContent).toContain('Why $a$?')
+    // The student's message is plain text with LaTeX: `$a$` is typeset too
+    // (no Markdown is parsed), so no raw delimiters remain.
+    expect(container.textContent).not.toContain('Why $a$?')
+    expect(container.textContent).toContain('Why ')
   })
 
   it('falls back to readable source when a hint formula cannot be parsed', async () => {

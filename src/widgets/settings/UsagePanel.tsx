@@ -20,7 +20,7 @@ import { ConfirmDialog } from '@/shared/ui/ConfirmDialog'
 import { Input } from '@/shared/ui/Input'
 import { Label } from '@/shared/ui/Label'
 import { cn } from '@/shared/lib/utils'
-import { balanceMessage, formatMoney } from './usageFormat'
+import { balanceMessage, formatMoney, moneyDigits } from './usageFormat'
 
 function UsageTable({
   buckets,
@@ -35,12 +35,21 @@ function UsageTable({
   if (rows.length === 0) {
     return <p className="text-sm text-muted-foreground">{t('usage.empty')}</p>
   }
-  const cell = 'px-2 py-1.5 text-right tabular-nums lab:font-mono'
+  const cell = 'whitespace-nowrap px-2 py-1.5 text-right tabular-nums lab:font-mono'
+  // One decimal count for the whole column (and its total), so ¥0.0031 and
+  // ¥1.20 are not mixed with ¥1.2.
+  const digits = prices
+    ? moneyDigits([
+        ...rows.map((kind) => estimateCost(buckets[kind], prices)),
+        estimateCost(total, prices),
+      ])
+    : 2
   const cost = (b: AIUsageBucket): string =>
-    prices ? formatMoney(estimateCost(b, prices), prices.currency) : ''
+    prices ? formatMoney(estimateCost(b, prices), prices.currency, undefined, digits) : ''
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full min-w-[30rem] border-collapse text-sm">
+    <div>
+      {/* Fits its column: no scroll box inside the page. */}
+      <table className="w-full border-collapse text-sm">
         <thead>
           <tr className="border-b text-xs text-muted-foreground">
             <th scope="col" className="px-2 py-1.5 text-left font-medium">
@@ -70,7 +79,7 @@ function UsageTable({
             const b = buckets[kind]
             return (
               <tr key={kind} className="border-b border-border/60">
-                <th scope="row" className="px-2 py-1.5 text-left font-normal">
+                <th scope="row" className="break-words px-2 py-1.5 text-left font-normal">
                   {t(`usage.kind.${kind}` as TranslationKey)}
                 </th>
                 <td className={cell}>{formatNumber(b.requests)}</td>

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { MasteryService } from '@/services/masteryService'
+import { practicedMasteryAverage } from '@/shared/lib/percent'
 
 export interface CourseMasteryEstimate {
   /** Mean mastery estimate (0..1) over the practised knowledge points. */
@@ -30,10 +31,11 @@ export function useCourseMastery(
     void Promise.all(
       ids.map(async (id) => {
         try {
-          const rows = (await service.listByProject(id)).filter((row) => row.attempts > 0)
-          if (rows.length === 0) return null
-          const average = rows.reduce((sum, row) => sum + row.mastery, 0) / rows.length
-          return [id, { average, points: rows.length }] as const
+          const rows = await service.listByProject(id)
+          const average = practicedMasteryAverage(rows)
+          if (average === null) return null
+          const points = rows.filter((row) => row.attempts > 0).length
+          return [id, { average, points }] as const
         } catch {
           return null
         }

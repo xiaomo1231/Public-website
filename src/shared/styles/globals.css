@@ -393,6 +393,30 @@
     max-width: 100%;
   }
 
+  /*
+   * Lesson reading: a formula wider than the column shows a soft edge shadow
+   * on the side that has more to scroll to (pure CSS "scroll shadows": the
+   * covers move with the content, the shadows stay with the box), so a cut-off
+   * formula never looks complete.
+   */
+  .lesson-prose {
+    --formula-cover: var(--background);
+  }
+  [data-ui-style='lab'] .lesson-prose {
+    --formula-cover: var(--card);
+  }
+  .lesson-prose .katex-host .katex-display {
+    background:
+      linear-gradient(to right, hsl(var(--formula-cover)) 40%, hsl(var(--formula-cover) / 0)) left
+        center / 2rem 100% no-repeat local,
+      linear-gradient(to left, hsl(var(--formula-cover)) 40%, hsl(var(--formula-cover) / 0)) right
+        center / 2rem 100% no-repeat local,
+      radial-gradient(farthest-side at 0 50%, hsl(var(--foreground) / 0.22), transparent) left
+        center / 0.75rem 100% no-repeat scroll,
+      radial-gradient(farthest-side at 100% 50%, hsl(var(--foreground) / 0.22), transparent) right
+        center / 0.75rem 100% no-repeat scroll;
+  }
+
   ::-webkit-scrollbar {
     width: 10px;
     height: 10px;
@@ -409,6 +433,11 @@
 
   ::-webkit-scrollbar-thumb:hover {
     background: hsl(var(--muted-foreground));
+  }
+
+  /* Where two scrollbars meet: no white square on dark pages. */
+  ::-webkit-scrollbar-corner {
+    background: transparent;
   }
 }
 
@@ -689,9 +718,10 @@
 }
 
 :root:not([data-note-mark='highlighter']) ::highlight(walkthrough-link) {
-  color: hsl(var(--primary-strong));
+  /* Tucked (unsaved) conversations keep the text colour and get a dashed rule,
+     so they never look like a saved note's solid accent mark. */
   text-decoration: underline dashed;
-  text-decoration-color: hsl(var(--primary) / 0.6);
+  text-decoration-color: hsl(var(--muted-foreground));
   text-decoration-thickness: 1.5px;
 }
 
@@ -700,8 +730,12 @@
   background-color: hsl(var(--primary) / 0.28);
 }
 
+/* A faint fill plus a dashed rule: a tucked conversation never looks like a saved note. */
 :root[data-note-mark='highlighter'] ::highlight(walkthrough-link) {
-  background-color: hsl(var(--primary) / 0.13);
+  background-color: hsl(var(--primary) / 0.06);
+  text-decoration: underline dashed;
+  text-decoration-color: hsl(var(--primary));
+  text-decoration-thickness: 1.5px;
 }
 
 /* On dark pages a translucent accent needs a little more weight to show. */
@@ -710,7 +744,7 @@
 }
 
 :root.dark[data-note-mark='highlighter'] ::highlight(walkthrough-link) {
-  background-color: hsl(var(--primary) / 0.18);
+  background-color: hsl(var(--primary) / 0.1);
 }
 
 ::highlight(walkthrough-flash) {

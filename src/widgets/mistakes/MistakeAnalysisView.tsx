@@ -5,12 +5,17 @@ import { MISTAKE_TYPE_LABEL_KEYS } from '@/entities/mistake/types'
 import { Badge } from '@/shared/ui/Badge'
 import { Button } from '@/shared/ui/Button'
 import { cn } from '@/shared/lib/utils'
+import { RichText } from '@/shared/ui/RichText'
 import { useTranslation, type TranslationKey } from '@/i18n'
 
 export interface MistakeAnalysisViewProps {
   analysis: MistakeAnalysis
   onPractice?: () => void
 }
+
+/** AI text is Markdown + LaTeX; it is rendered at the card's reading size. */
+const STEP_TEXT = 'text-sm leading-relaxed'
+const SMALL_TEXT = 'text-xs leading-relaxed text-muted-foreground'
 
 interface Step {
   key: string
@@ -83,7 +88,7 @@ export function MistakeAnalysisView({
               </span>
               {t(step.labelKey)}
             </div>
-            <p className="whitespace-pre-wrap">{step.content}</p>
+            <RichText text={step.content} format="markdown" paragraphClassName={STEP_TEXT} />
           </li>
         ))}
       </ol>
@@ -101,12 +106,26 @@ export function MistakeAnalysisView({
                 <Lightbulb className="h-4 w-4" />
                 {t('mistakeAnalysis.trySimilar')}
               </div>
-              <p>{analysis.similarExample.prompt}</p>
+              <RichText
+                text={analysis.similarExample.prompt}
+                format="markdown"
+                paragraphClassName={STEP_TEXT}
+              />
               <details className="mt-1 text-xs text-muted-foreground">
                 <summary className="cursor-pointer">{t('mistakeAnalysis.showAnswer')}</summary>
-                <p className="mt-1 font-mono">{analysis.similarExample.answer}</p>
+                <RichText
+                  text={analysis.similarExample.answer}
+                  format="markdown"
+                  className="mt-1"
+                  paragraphClassName={SMALL_TEXT}
+                />
                 {analysis.similarExample.explanation && (
-                  <p className="mt-1">{analysis.similarExample.explanation}</p>
+                  <RichText
+                    text={analysis.similarExample.explanation}
+                    format="markdown"
+                    className="mt-1"
+                    paragraphClassName={SMALL_TEXT}
+                  />
                 )}
               </details>
             </div>
@@ -114,7 +133,12 @@ export function MistakeAnalysisView({
 
           <div className="flex flex-wrap items-center gap-2 rounded-lg border bg-muted/30 p-3 text-sm">
             <Target className="h-4 w-4 text-muted-foreground" />
-            <span>{analysis.continuePrompt}</span>
+            <RichText
+              text={analysis.continuePrompt}
+              format="markdown"
+              className="min-w-0 flex-1"
+              paragraphClassName={STEP_TEXT}
+            />
             {onPractice && (
               <Button size="sm" className="ml-auto" onClick={onPractice}>
                 {t('mistakeAnalysis.practiceNow')}

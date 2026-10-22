@@ -124,7 +124,7 @@ export function AnswerImages({
           type="button"
           variant="outline"
           size="sm"
-          className="h-10"
+          className="h-11"
           disabled={disabled || busy || full}
           onClick={() => inputRef.current?.click()}
         >
@@ -135,7 +135,7 @@ export function AnswerImages({
           type="button"
           variant="outline"
           size="sm"
-          className="h-10"
+          className="h-11"
           disabled={disabled || busy || full}
           onClick={() => setPenOpen(true)}
         >
@@ -160,7 +160,8 @@ export function AnswerImages({
           {images.map((image, index) => (
             <li
               key={image.id}
-              className="w-28 space-y-1 rounded-lg border border-border bg-card p-1.5 lab:rounded-none"
+              // Wide enough for three 44 px touch targets under the thumbnail.
+              className="relative w-[9.5rem] space-y-1 rounded-lg border border-border bg-card p-1.5 lab:rounded-none"
             >
               <button
                 type="button"
@@ -174,46 +175,49 @@ export function AnswerImages({
                   className="h-24 w-full object-contain"
                 />
               </button>
+              <span
+                aria-hidden
+                className="pointer-events-none absolute left-2.5 top-2.5 rounded bg-background/90 px-1.5 text-xs tabular-nums text-muted-foreground"
+              >
+                {index + 1}
+              </span>
               <div className="flex items-center justify-between">
-                <span className="pl-1 text-xs tabular-nums text-muted-foreground">{index + 1}</span>
-                <span className="flex">
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    className="h-8 w-8"
-                    disabled={disabled || busy || index === 0}
-                    aria-label={t('homework.images.moveEarlier', { n: index + 1 })}
-                    title={t('homework.images.moveEarlier', { n: index + 1 })}
-                    onClick={() => void run(() => service.move(questionId, image.id, -1))}
-                  >
-                    <ArrowLeft aria-hidden />
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    className="h-8 w-8"
-                    disabled={disabled || busy || index === images.length - 1}
-                    aria-label={t('homework.images.moveLater', { n: index + 1 })}
-                    title={t('homework.images.moveLater', { n: index + 1 })}
-                    onClick={() => void run(() => service.move(questionId, image.id, 1))}
-                  >
-                    <ArrowRight aria-hidden />
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    className="h-8 w-8 text-destructive"
-                    disabled={disabled || busy}
-                    aria-label={t('homework.images.remove', { n: index + 1 })}
-                    title={t('homework.images.remove', { n: index + 1 })}
-                    onClick={() => void run(() => service.remove(questionId, image.id))}
-                  >
-                    <X aria-hidden />
-                  </Button>
-                </span>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="h-11 w-11"
+                  disabled={disabled || busy || index === 0}
+                  aria-label={t('homework.images.moveEarlier', { n: index + 1 })}
+                  title={t('homework.images.moveEarlier', { n: index + 1 })}
+                  onClick={() => void run(() => service.move(questionId, image.id, -1))}
+                >
+                  <ArrowLeft aria-hidden />
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="h-11 w-11"
+                  disabled={disabled || busy || index === images.length - 1}
+                  aria-label={t('homework.images.moveLater', { n: index + 1 })}
+                  title={t('homework.images.moveLater', { n: index + 1 })}
+                  onClick={() => void run(() => service.move(questionId, image.id, 1))}
+                >
+                  <ArrowRight aria-hidden />
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="h-11 w-11 text-destructive"
+                  disabled={disabled || busy}
+                  aria-label={t('homework.images.remove', { n: index + 1 })}
+                  title={t('homework.images.remove', { n: index + 1 })}
+                  onClick={() => void run(() => service.remove(questionId, image.id))}
+                >
+                  <X aria-hidden />
+                </Button>
               </div>
             </li>
           ))}
@@ -273,7 +277,7 @@ export function AnswerImages({
                   <Button
                     type="button"
                     variant="outline"
-                    size="sm"
+                    className="h-11"
                     disabled={viewing === 0}
                     onClick={() => setViewing(viewing - 1)}
                   >
@@ -283,7 +287,7 @@ export function AnswerImages({
                   <Button
                     type="button"
                     variant="outline"
-                    size="sm"
+                    className="h-11"
                     disabled={viewing === images.length - 1}
                     onClick={() => setViewing(viewing + 1)}
                   >

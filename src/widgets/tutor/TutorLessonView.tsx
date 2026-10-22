@@ -1,5 +1,5 @@
 import { useState, type CSSProperties, type ReactNode } from 'react'
-import { AlertCircle, HardDrive, Loader2, RefreshCw } from 'lucide-react'
+import { HardDrive, Loader2, RefreshCw } from 'lucide-react'
 import { Button } from '@/shared/ui/Button'
 import { Card, CardContent } from '@/shared/ui/Card'
 import { ConfirmDialog } from '@/shared/ui/ConfirmDialog'
@@ -9,6 +9,7 @@ import { RichText } from '@/shared/ui/RichText'
 import { VisualSourceFigure } from '@/widgets/source/VisualSourceFigure'
 import { TutorVisualizationFigure } from '@/widgets/tutor/TutorVisualizationFigure'
 import { ReferenceImageGallery } from '@/widgets/tutor/ReferenceImageGallery'
+import { TutorErrorNotice } from '@/widgets/tutor/TutorErrorNotice'
 import { useReferenceImages } from '@/features/tutor/useReferenceImages'
 import { LessonFigureContext } from '@/features/tutor/lessonFigureContext'
 import { stripDuplicateTitle, parseLessonSections } from '@/shared/lib/lessonDocument'
@@ -110,20 +111,13 @@ export function TutorLessonView({
   if (state.status === 'error' || !state.lesson) {
     return (
       <div className={COLUMN_CLASS}>
-        <Card>
-          <CardContent className="space-y-4 p-5">
-            <div className="flex items-start gap-2">
-              <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" aria-hidden />
-              <p className="min-w-0 break-words text-sm text-destructive">
-                {state.error ?? t('tutor.lessonFailed')}
-              </p>
-            </div>
-            <Button variant="outline" size="sm" onClick={() => void state.regenerate()}>
-              <RefreshCw />
-              {t('common.retry')}
-            </Button>
-          </CardContent>
-        </Card>
+        <TutorErrorNotice
+          title={t('tutor.lessonFailed')}
+          message={state.error ?? t('friendlyError.generic')}
+          needsSettings={state.errorNeedsSettings}
+          onRetry={() => void state.regenerate()}
+          retrying={state.regenerating}
+        />
       </div>
     )
   }
@@ -178,16 +172,23 @@ export function TutorLessonView({
             </p>
           </header>
 
-          {state.refreshError && (
-            <div className="rounded-lg border border-amber-500/40 bg-amber-50/50 px-3 py-2.5 text-xs dark:bg-amber-950/20">
-              <p className="font-medium text-amber-900 dark:text-amber-200">
-                {t('tutor.lessonRefreshFailed')}
-              </p>
-              <p className="mt-0.5 text-amber-800 dark:text-amber-300/90">
-                {t('tutor.showingSaved')}
-              </p>
-            </div>
-          )}
+          {state.refreshError ? (
+            <TutorErrorNotice
+              tone="warning"
+              title={t('tutor.lessonRefreshFailed')}
+              message={state.refreshError}
+              note={t('tutor.showingSaved')}
+              needsSettings={state.refreshNeedsSettings}
+              onRetry={() => setConfirmOpen(true)}
+              retrying={state.regenerating}
+            />
+          ) : state.noProvider ? (
+            <TutorErrorNotice
+              tone="warning"
+              message={t('tutor.noProviderSavedLesson')}
+              needsSettings
+            />
+          ) : null}
 
           {/* The lesson is the visual subject: constrained measure, generous leading. */}
           <RichText

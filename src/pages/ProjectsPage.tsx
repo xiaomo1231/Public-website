@@ -131,7 +131,10 @@ export function ProjectsPage(): JSX.Element {
 
   return (
     <PageContainer>
+      {/* Same centred column as the dashboard (content-box keeps the header's
+          padding outside the column, so its text lines up with the list). */}
       <PageHeader
+        className="mx-auto box-content max-w-6xl lecture:max-w-[980px]"
         title={t('projects.title')}
         description={t('projects.subtitle')}
         actions={
@@ -142,39 +145,41 @@ export function ProjectsPage(): JSX.Element {
         }
       />
       <PageContent>
-        {!loaded && loading ? (
-          <LoadingState label={t('projects.loading')} />
-        ) : projects.length === 0 ? (
-          <EmptyState
-            icon={<FolderKanban className="h-10 w-10" />}
-            title={t('projects.empty')}
-            description={t('projects.emptyHint')}
-            action={
-              <Button onClick={openCreate}>
-                <Plus className="h-4 w-4" />
-                {t('projects.createFirst')}
-              </Button>
-            }
-          />
-        ) : uiStyle === 'lab' ? (
-          <ProjectTable
-            projects={sorted}
-            onRename={(p) => openRename(p.id, p.name)}
-            onDelete={(p) => setDeleteCandidate({ id: p.id, name: p.name })}
-          />
-        ) : (
-          <ul className="stagger-in max-w-4xl border-t-[1.5px] border-foreground">
-            {sorted.map((p) => (
-              <li key={p.id} className="border-b border-border">
-                <ProjectRow
-                  project={p}
-                  onRename={() => openRename(p.id, p.name)}
-                  onDelete={() => setDeleteCandidate({ id: p.id, name: p.name })}
-                />
-              </li>
-            ))}
-          </ul>
-        )}
+        <div className="mx-auto w-full max-w-6xl lecture:max-w-[980px]">
+          {!loaded && loading ? (
+            <LoadingState label={t('projects.loading')} />
+          ) : projects.length === 0 ? (
+            <EmptyState
+              icon={<FolderKanban className="h-10 w-10" />}
+              title={t('projects.empty')}
+              description={t('projects.emptyHint')}
+              action={
+                <Button onClick={openCreate}>
+                  <Plus className="h-4 w-4" />
+                  {t('projects.createFirst')}
+                </Button>
+              }
+            />
+          ) : uiStyle === 'lab' ? (
+            <ProjectTable
+              projects={sorted}
+              onRename={(p) => openRename(p.id, p.name)}
+              onDelete={(p) => setDeleteCandidate({ id: p.id, name: p.name })}
+            />
+          ) : (
+            <ul className="stagger-in border-t-[1.5px] border-foreground">
+              {sorted.map((p) => (
+                <li key={p.id} className="border-b border-border">
+                  <ProjectRow
+                    project={p}
+                    onRename={() => openRename(p.id, p.name)}
+                    onDelete={() => setDeleteCandidate({ id: p.id, name: p.name })}
+                  />
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
       </PageContent>
 
       {/* Create / rename dialog */}
@@ -397,7 +402,7 @@ function ProjectTable({
   const head = 'px-3.5 py-2 text-left font-medium'
   const cell = 'border-t border-border px-3.5 py-2.5 align-middle'
   return (
-    <div className="max-w-5xl overflow-x-auto border border-border bg-card">
+    <div className="overflow-x-auto border border-border bg-card">
       <table className="data-num w-full min-w-[520px] table-fixed border-collapse text-[13.5px]">
         <thead className={LAB_TABLE_HEAD_CLASS}>
           <tr>

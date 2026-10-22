@@ -44,9 +44,14 @@ export function TutorSymbolsPanel({ symbols, className }: TutorSymbolsPanelProps
           {symbols.map((symbol) => (
             <li
               key={symbol.latex}
-              className="space-y-1 py-2.5 first:pt-0 last:pb-0 lecture:flex lecture:items-baseline lecture:gap-3 lecture:space-y-0 lecture:py-1 lab:grid lab:grid-cols-[4.5rem_minmax(0,1fr)] lab:gap-x-2 lab:gap-y-0.5 lab:space-y-0 lab:px-3.5 lab:py-2 lab:first:pt-2 lab:last:pb-2"
+              className="space-y-1 py-2.5 first:pt-0 last:pb-0 lecture:flex lecture:items-baseline lecture:gap-3 lecture:space-y-0 lecture:py-1 lab:grid lab:grid-cols-[minmax(4.5rem,auto)_minmax(0,1fr)] lab:gap-x-2 lab:gap-y-0.5 lab:space-y-0 lab:px-3.5 lab:py-2 lab:first:pt-2 lab:last:pb-2"
             >
-              <div className="min-w-0 text-foreground lecture:shrink-0 lab:row-span-2">
+              {/* A symbol is one expression: it never wraps mid-way (KaTeX may
+                  break between atoms otherwise); a long one scrolls in its cell. */}
+              <div
+                data-symbol-glyph
+                className="min-w-0 max-w-full overflow-x-auto overflow-y-hidden whitespace-nowrap text-foreground lecture:max-w-[45%] lecture:shrink-0 lab:row-span-2 lab:max-w-[9.5rem]"
+              >
                 <Math
                   latex={symbol.displayLatex}
                   className="text-[15px] lecture:text-[14px] lab:text-[14px]"

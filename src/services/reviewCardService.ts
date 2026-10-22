@@ -105,6 +105,12 @@ export class ReviewCardService {
   }
 
   /** One card per course concept with a definition ("名词解释"). */
+  /** How many course concepts have a definition, i.e. could become cards. */
+  async conceptCount(projectId: string): Promise<number> {
+    const concepts = await this.analyses.listConcepts(projectId)
+    return concepts.filter((concept) => concept.definition.trim()).length
+  }
+
   async generateFromConcepts(projectId: string): Promise<number> {
     const concepts = await this.analyses.listConcepts(projectId)
     return this.addMany(

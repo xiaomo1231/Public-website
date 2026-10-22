@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { BookOpen, FolderOpen, Mic, NotebookPen, type LucideIcon } from 'lucide-react'
 import { DocumentList } from '@/widgets/documents/DocumentList'
 import { DocumentUploadDialog } from '@/widgets/documents/DocumentUploadDialog'
+import { materialGroupStatus } from '@/widgets/documents/materialGroupStatus'
 import { Button } from '@/shared/ui/Button'
 import { cn } from '@/shared/lib/utils'
 import { useUiStyle } from '@/features/theme/useAppearance'
@@ -114,8 +115,7 @@ export function ProjectDocumentsTab({ projectId }: { projectId: string }): JSX.E
         {GROUPS.map((group) => {
           const docs = docsOf(group.type)
           const Icon = group.icon
-          const ready = docs.filter((doc) => doc.status === 'ready').length
-          const allReady = ready === docs.length
+          const status = materialGroupStatus(docs)
           const upload = (
             <Button
               variant="outline"
@@ -152,7 +152,7 @@ export function ProjectDocumentsTab({ projectId }: { projectId: string }): JSX.E
                   </h3>
                   {lab && upload}
                 </div>
-                <p className="break-words text-[13px] text-muted-foreground lab:text-xs">
+                <p className="break-words text-[13px] text-muted-foreground lab:text-[11px]">
                   {t(group.descriptionKey)}
                 </p>
                 {docs.length === 0 ? (
@@ -168,10 +168,20 @@ export function ProjectDocumentsTab({ projectId }: { projectId: string }): JSX.E
                     <span
                       className={cn(
                         'lab:font-mono',
-                        allReady ? 'text-primary' : 'text-muted-foreground',
+                        status.kind === 'ready'
+                          ? 'text-primary'
+                          : status.kind === 'failed' || status.kind === 'partial'
+                            ? 'text-destructive'
+                            : 'text-muted-foreground',
                       )}
                     >
-                      {allReady ? t('materials.analyzed') : t('materials.processing')}
+                      {status.kind === 'ready'
+                        ? t('materials.analyzed')
+                        : status.kind === 'failed'
+                          ? t('materials.failed')
+                          : status.kind === 'partial'
+                            ? t('materials.partFailed', { count: status.failed })
+                            : t('materials.processing')}
                     </span>
                   </p>
                 )}

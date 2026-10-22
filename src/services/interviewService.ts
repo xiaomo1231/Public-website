@@ -398,11 +398,38 @@ export class InterviewService {
     text: string,
     options: { signal?: AbortSignal } = {},
   ): Promise<InterviewSession> {
-    const ai = this.requireAI()
     const turn = text.trim().slice(0, MAX_TURN)
     if (!turn) throw new ValidationError(t('interview.emptyTurn'))
     const session = await this.get(projectId, sessionId)
+    return this.answer(session, turn, false, options)
+  }
+
+  /**
+   * Ask again the student's last question when it has no patient reply (a
+   * reply that never arrived, e.g. from an interrupted older version). The
+   * unanswered turn is replaced by the question and its reply.
+   */
+  async resendLast(
+    projectId: string,
+    sessionId: string,
+    options: { signal?: AbortSignal } = {},
+  ): Promise<InterviewSession> {
+    const session = await this.get(projectId, sessionId)
+    const last = session.turns[session.turns.length - 1]
+    if (!last || last.role !== 'student') throw new ValidationError(t('interview.nothingToResend'))
+    return this.answer({ ...session, turns: session.turns.slice(0, -1) }, last.text, true, options)
+  }
+
+  /** The patient's reply to `turn`; stored with the question in one write. */
+  private async answer(
+    session: InterviewSession,
+    turn: string,
+    replaceLast: boolean,
+    options: { signal?: AbortSignal },
+  ): Promise<InterviewSession> {
+    const ai = this.requireAI()
     if (session.status !== 'interviewing') throw new ValidationError(t('interview.ended'))
+    const sessionId = session.id
     const { data } = await ai.chatJSON<unknown>(
       [
         {
@@ -438,7 +465,9 @@ export class InterviewService {
     return this.update(sessionId, (current) => ({
       ...current,
       turns: [
-        ...current.turns,
+        ...(replaceLast && current.turns[current.turns.length - 1]?.role === 'student'
+          ? current.turns.slice(0, -1)
+          : current.turns),
         {
           role: 'student',
           text: turn,

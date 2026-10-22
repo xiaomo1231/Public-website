@@ -43,6 +43,7 @@ import { useGenerationRun } from '@/shared/lib/useGenerationRun'
 import { isGenerationInterruption } from '@/shared/lib/generationControl'
 import { cn } from '@/shared/lib/utils'
 import { useTranslation, type TranslationKey } from '@/i18n'
+import { formatPercent } from '@/shared/lib/percent'
 
 const KIND_LABEL_KEYS: Record<ExamScopeKind, TranslationKey> = {
   midterm: 'syllabus.kind.midterm',
@@ -527,7 +528,7 @@ function ScopeView({
         <div className="min-w-0 flex-1">
           <h3
             id={`scope-${scope.id}`}
-            className="break-words font-heading text-base font-semibold lecture:text-[19px] lecture:font-bold lab:font-mono lab:text-[12px] lab:uppercase lab:tracking-[0.06em]"
+            className="break-words font-heading text-base font-semibold lecture:text-[19px] lecture:font-bold lab:text-[14px]"
           >
             {scope.label || t('syllabus.scopeUntitled')}
           </h3>
@@ -640,8 +641,9 @@ function ScopeView({
       ) : (
         <div className="overflow-x-auto">
           <table className="w-full border-collapse text-sm">
-            <thead className="sr-only lab:not-sr-only">
-              <tr className="lab:border lab:border-border lab:bg-muted/40 lab:font-mono lab:text-[11px] lab:uppercase lab:tracking-[0.06em] lab:text-muted-foreground">
+            {/* Visible in both styles: the numbers in a row need their column names. */}
+            <thead>
+              <tr className="text-xs text-muted-foreground lecture:border-b-[1.5px] lecture:border-foreground/70 lab:border lab:border-border lab:bg-muted/40 lab:font-mono lab:text-[11px] lab:uppercase lab:tracking-[0.06em]">
                 <th scope="col" className="w-10 px-2 py-1.5 text-left font-medium">
                   #
                 </th>
@@ -674,7 +676,7 @@ function ScopeView({
                         <th
                           scope="colgroup"
                           colSpan={6}
-                          className="px-2 pb-1 pt-4 text-left text-xs font-semibold uppercase tracking-[0.04em] text-muted-foreground lecture:font-heading lecture:text-[15px] lecture:normal-case lecture:tracking-normal lecture:text-foreground lab:border lab:border-border lab:bg-muted/20 lab:py-1.5 lab:font-mono lab:text-[11px]"
+                          className="px-2 pb-1 pt-4 text-left text-xs font-semibold text-muted-foreground lecture:font-heading lecture:text-[15px] lecture:text-foreground lab:border lab:border-border lab:bg-muted/20 lab:py-1.5 lab:font-mono lab:text-[11px]"
                         >
                           {group}
                         </th>
@@ -747,7 +749,7 @@ function ScopeView({
                         title={t('syllabus.masteryHint')}
                       >
                         {info?.mastery !== null && info?.mastery !== undefined
-                          ? `${Math.round(info.mastery * 100)}%`
+                          ? formatPercent(info.mastery)
                           : '—'}
                       </td>
                       <td className="px-2 py-2.5">

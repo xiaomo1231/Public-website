@@ -64,7 +64,10 @@ export interface BookSummary {
 }
 
 export interface VocabStats {
+  /** Reviews due in the current book (all books when none is chosen). */
   due: number
+  /** Reviews due across every book, the current one included. */
+  dueAllBooks: number
   newToday: number
   dailyNew: number
   reviewsToday: number
@@ -326,11 +329,11 @@ export class VocabService {
    */
   async session(now = Date.now()): Promise<SessionItem[]> {
     const settings = await this.settings()
-    const [due, cards, languages] = await Promise.all([
-      this.repo.dueCards(now, MAX_SESSION_REVIEWS),
-      this.repo.listCards(),
-      this.languages(),
-    ])
+    const [cards, languages] = await Promise.all([this.repo.listCards(), this.languages()])
+    const due = (await this.dueInBook(cards, settings.bookId, now, languages)).slice(
+      0,
+      MAX_SESSION_REVIEWS,
+    )
     const items: SessionItem[] = []
     for (const card of due) {
       const language = languages.get(card.bookId)
@@ -356,6 +359,30 @@ export class VocabService {
       }
     }
     return items
+  }
+
+  /**
+   * Due cards of the current book, earliest first: cards added from it, and
+   * words of it learned elsewhere in the same language (progress is global).
+   * A German card never shows up in an English book's session. Without a
+   * chosen book every due card counts.
+   */
+  private async dueInBook(
+    cards: VocabCard[],
+    bookId: string | null | undefined,
+    now: number,
+    languages: Map<string, string>,
+  ): Promise<VocabCard[]> {
+    const due = cards.filter((card) => card.due <= now).sort((a, b) => a.due - b.due)
+    if (!bookId) return due
+    const language = languages.get(bookId)
+    const words = new Set(
+      (await this.bookWords(bookId)).map((view) => wordKey(view.word, language)),
+    )
+    return due.filter(
+      (card) =>
+        card.bookId === bookId || (languages.get(card.bookId) === language && words.has(card.word)),
+    )
   }
 
   /** Spelling practice of the words misspelled before, most recent first. */
@@ -461,11 +488,13 @@ export class VocabService {
   }
 
   async stats(now = Date.now()): Promise<VocabStats> {
-    const [settings, cards, reviews] = await Promise.all([
+    const [settings, cards, reviews, languages] = await Promise.all([
       this.settings(),
       this.repo.listCards(),
       this.repo.listReviews(),
+      this.languages(),
     ])
+    const dueHere = await this.dueInBook(cards, settings.bookId, now, languages)
     const today = startOfDay(now)
     const days = new Set(reviews.map((review) => startOfDay(review.at)))
     let streak = 0
@@ -480,7 +509,8 @@ export class VocabService {
       return cards.filter((card) => card.due < end && card.due >= start).length
     })
     return {
-      due: cards.filter((card) => card.due <= now).length,
+      due: dueHere.length,
+      dueAllBooks: cards.filter((card) => card.due <= now).length,
       newToday: cards.filter((card) => card.addedAt >= today).length,
       dailyNew: settings.dailyNew,
       reviewsToday: reviews.filter((review) => review.at >= today).length,

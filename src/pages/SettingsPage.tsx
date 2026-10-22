@@ -9,7 +9,6 @@ import {
   ListRestart,
   Loader2,
   RotateCcw,
-  Save,
   Wifi,
 } from 'lucide-react'
 import { useAISettings } from '@/features/settings/useAISettings'
@@ -34,21 +33,23 @@ import { AIService } from '@/services/aiService'
 import { DataManagementPanel } from '@/widgets/dataManagement/DataManagementPanel'
 import { ModelCombobox } from '@/widgets/settings/ModelCombobox'
 import { UsagePanel } from '@/widgets/settings/UsagePanel'
+import {
+  SETTINGS_SECTION,
+  SETTINGS_SECTION_BODY,
+  SETTINGS_SECTION_HEAD,
+  SETTINGS_SECTION_TITLE,
+  SETTINGS_SHELL,
+} from '@/widgets/settings/settingsSection'
+import { SettingsGroup } from '@/widgets/settings/SettingsGroup'
+import { SaveBar } from '@/widgets/settings/SaveBar'
 import { fetchModelList, type ModelListResult } from '@/infrastructure/ai/models'
 import { APP_VERSION } from '@/shared/config/config'
 import { LANGUAGE_LABELS, UI_LANGUAGES, useTranslation, type UILanguage } from '@/i18n'
 
-/*
- * Section shells. Lecture lays each section out as a ruled row — serif title
- * and note on the left, controls on the right. Lab keeps a hairline panel
- * with a mono label bar.
- */
-const SECTION =
-  'lecture:rounded-none lecture:border-x-0 lecture:border-t-0 lecture:bg-transparent lecture:shadow-none md:lecture:grid md:lecture:grid-cols-[13rem_minmax(0,1fr)] md:lecture:gap-8'
-const SECTION_HEAD = 'lecture:px-0 lecture:pb-2 md:lecture:pb-6 lab:border-b lab:px-3.5 lab:py-2.5'
-const SECTION_TITLE =
-  'lecture:font-heading lecture:text-base lecture:font-bold lecture:leading-snug lab:font-mono lab:text-[11px] lab:font-normal lab:uppercase lab:tracking-wider lab:text-muted-foreground'
-const SECTION_BODY = 'lecture:px-0 md:lecture:pt-6 lab:p-3.5 lab:pt-3.5'
+const SECTION = SETTINGS_SECTION
+const SECTION_HEAD = SETTINGS_SECTION_HEAD
+const SECTION_TITLE = SETTINGS_SECTION_TITLE
+const SECTION_BODY = SETTINGS_SECTION_BODY
 
 export function SettingsPage(): JSX.Element {
   const { t } = useTranslation()
@@ -84,6 +85,17 @@ export function SettingsPage(): JSX.Element {
     const target = document.getElementById(location.hash.slice(1))
     target?.scrollIntoView({ block: 'start' })
   }, [ready, location.hash])
+
+  // Leaving the page (reload / close) with unsaved edits asks first.
+  useEffect(() => {
+    if (!dirty) return
+    const warn = (event: BeforeUnloadEvent) => {
+      event.preventDefault()
+      event.returnValue = ''
+    }
+    window.addEventListener('beforeunload', warn)
+    return () => window.removeEventListener('beforeunload', warn)
+  }, [dirty])
 
   if (!loaded || loading || !draft) {
     return (
@@ -158,6 +170,13 @@ export function SettingsPage(): JSX.Element {
       const msg = err instanceof Error ? err.message : t('settings.resetFailed')
       toast({ variant: 'error', title: t('settings.resetFailedTitle'), description: msg })
     }
+  }
+
+  /** Throw the unsaved edits away: back to the stored settings. */
+  function discard() {
+    if (settings) setDraft(settings)
+    setTestResult(null)
+    setDirty(false)
   }
 
   /** The stored settings were cleared elsewhere on the page: drop the old draft. */
@@ -236,291 +255,298 @@ export function SettingsPage(): JSX.Element {
                 {testing ? t('settings.testing') : t('settings.testConnection')}
               </span>
             </Button>
-            <Button onClick={save} disabled={!dirty || saving}>
-              <Save className="h-4 w-4" />
-              {saving ? t('settings.saving') : t('settings.saveChanges')}
-            </Button>
           </>
         }
       />
       <PageContent>
-        <div className="space-y-4 lecture:mx-auto lecture:max-w-[860px] lecture:space-y-0 lecture:border-t lab:max-w-[880px]">
-          <Card className={SECTION}>
-            <CardHeader className={SECTION_HEAD}>
-              <CardTitle className={cn(SECTION_TITLE, 'flex items-center gap-2')}>
-                <Languages className="h-4 w-4 lecture:hidden" />
-                {t('settings.language.title')}
-              </CardTitle>
-              <CardDescription>{t('settings.language.description')}</CardDescription>
-            </CardHeader>
-            <CardContent className={cn(SECTION_BODY, 'space-y-2')}>
-              <Label htmlFor="ui-language">{t('settings.language.label')}</Label>
-              <Select value={language} onValueChange={(v) => setLanguage(v as UILanguage)}>
-                <SelectTrigger id="ui-language" className="sm:max-w-xs">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {UI_LANGUAGES.map((lang) => (
-                    <SelectItem key={lang} value={lang}>
-                      {LANGUAGE_LABELS[lang]}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <p className="text-xs text-muted-foreground">{t('settings.language.hint')}</p>
-            </CardContent>
-          </Card>
+        <div className="space-y-6 lecture:mx-auto lecture:max-w-[860px] lecture:space-y-0 lab:max-w-[880px]">
+          <SettingsGroup
+            id="settings-instant"
+            title={t('settings.group.instant')}
+            note={t('settings.group.instantNote')}
+          >
+            <Card className={SECTION}>
+              <CardHeader className={SECTION_HEAD}>
+                <CardTitle className={cn(SECTION_TITLE, 'flex items-center gap-2')}>
+                  <Languages className="h-4 w-4 lecture:hidden" />
+                  {t('settings.language.title')}
+                </CardTitle>
+                <CardDescription>{t('settings.language.description')}</CardDescription>
+              </CardHeader>
+              <CardContent className={cn(SECTION_BODY, 'space-y-2')}>
+                <Label htmlFor="ui-language">{t('settings.language.label')}</Label>
+                <Select value={language} onValueChange={(v) => setLanguage(v as UILanguage)}>
+                  <SelectTrigger id="ui-language" className="sm:max-w-xs">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {UI_LANGUAGES.map((lang) => (
+                      <SelectItem key={lang} value={lang}>
+                        {LANGUAGE_LABELS[lang]}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">{t('settings.language.hint')}</p>
+              </CardContent>
+            </Card>
 
-          {/* Appearance applies instantly; it is not part of the Save button. */}
-          <ThemePicker />
+            {/* Appearance applies instantly; it is not part of the Save button. */}
+            <ThemePicker {...SETTINGS_SHELL} />
 
-          <NoteMarkStyleSetting
-            className={SECTION}
-            headerClassName={SECTION_HEAD}
-            titleClassName={SECTION_TITLE}
-            bodyClassName={SECTION_BODY}
-          />
+            <NoteMarkStyleSetting {...SETTINGS_SHELL} />
 
-          <WalkthroughLevelSetting
-            className={SECTION}
-            headerClassName={SECTION_HEAD}
-            titleClassName={SECTION_TITLE}
-            bodyClassName={SECTION_BODY}
-          />
+            <WalkthroughLevelSetting {...SETTINGS_SHELL} />
+          </SettingsGroup>
 
-          <Card className={SECTION}>
-            <CardHeader className={SECTION_HEAD}>
-              <CardTitle className={SECTION_TITLE}>{t('settings.provider.title')}</CardTitle>
-              <CardDescription>{t('settings.provider.description')}</CardDescription>
-            </CardHeader>
-            <CardContent className={cn(SECTION_BODY, 'space-y-4')}>
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div className="space-y-2">
-                  <Label htmlFor="provider">{t('settings.provider.label')}</Label>
-                  <Select value={draft.provider} onValueChange={onProviderChange}>
-                    <SelectTrigger id="provider">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {PROVIDER_PRESETS.map((p) => (
-                        <SelectItem key={p.id} value={p.id}>
-                          {p.id === 'custom' ? t('provider.custom') : p.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <p className="text-xs text-muted-foreground">{t('settings.provider.hint')}</p>
+          <SettingsGroup
+            id="settings-saved"
+            title={t('settings.group.saved')}
+            note={t('settings.group.savedNote')}
+          >
+            <Card className={SECTION}>
+              <CardHeader className={SECTION_HEAD}>
+                <CardTitle className={SECTION_TITLE}>{t('settings.provider.title')}</CardTitle>
+                <CardDescription>{t('settings.provider.description')}</CardDescription>
+              </CardHeader>
+              <CardContent className={cn(SECTION_BODY, 'space-y-4')}>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label htmlFor="provider">{t('settings.provider.label')}</Label>
+                    <Select value={draft.provider} onValueChange={onProviderChange}>
+                      <SelectTrigger id="provider">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {PROVIDER_PRESETS.map((p) => (
+                          <SelectItem key={p.id} value={p.id}>
+                            {p.id === 'custom' ? t('provider.custom') : p.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs text-muted-foreground">{t('settings.provider.hint')}</p>
+                  </div>
+
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <Label htmlFor="model">{t('settings.model')}</Label>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 px-2 text-xs"
+                        onClick={() => void loadModels(false)}
+                        disabled={fetchingModels}
+                      >
+                        {fetchingModels ? (
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
+                        ) : (
+                          <ListRestart className="h-3.5 w-3.5" aria-hidden />
+                        )}
+                        {fetchingModels
+                          ? t('settings.models.fetching')
+                          : t('settings.models.fetch')}
+                      </Button>
+                    </div>
+                    <ModelCombobox
+                      id="model"
+                      value={draft.model}
+                      onChange={(value) => patch('model', value)}
+                      models={modelList?.ok ? modelList.models : (preset?.models ?? [])}
+                      placeholder={preset?.defaultModel || t('settings.modelPlaceholder')}
+                    />
+                    {modelList && <ModelListNote result={modelList} />}
+                  </div>
                 </div>
 
                 <div className="space-y-2">
-                  <div className="flex items-center justify-between gap-2">
-                    <Label htmlFor="model">{t('settings.model')}</Label>
+                  <Label htmlFor="baseURL">{t('settings.baseUrl')}</Label>
+                  <Input
+                    id="baseURL"
+                    value={draft.baseURL}
+                    onChange={(e) => patch('baseURL', e.target.value)}
+                    onBlur={() => void loadModels(true)}
+                    placeholder="https://api.example.com/v1"
+                  />
+                  <p className="text-xs text-muted-foreground">{t('settings.baseUrlHint')}</p>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className={SECTION}>
+              <CardHeader className={SECTION_HEAD}>
+                <CardTitle className={SECTION_TITLE}>{t('settings.apiKey.title')}</CardTitle>
+                <CardDescription>{t('settings.apiKey.description')}</CardDescription>
+              </CardHeader>
+              <CardContent className={cn(SECTION_BODY, 'space-y-3')}>
+                <div className="space-y-2">
+                  <Label htmlFor="apiKey">{t('settings.apiKey.label')}</Label>
+                  <div className="flex gap-2">
+                    <Input
+                      id="apiKey"
+                      type={showKey ? 'text' : 'password'}
+                      value={draft.apiKey}
+                      onChange={(e) => patch('apiKey', e.target.value)}
+                      onBlur={() => void loadModels(true)}
+                      placeholder="sk-..."
+                      autoComplete="off"
+                      spellCheck={false}
+                      className="font-mono"
+                    />
                     <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      className="h-7 px-2 text-xs"
-                      onClick={() => void loadModels(false)}
-                      disabled={fetchingModels}
+                      variant="outline"
+                      size="icon"
+                      onClick={() => setShowKey((s) => !s)}
+                      aria-label={showKey ? t('settings.apiKey.hide') : t('settings.apiKey.show')}
                     >
-                      {fetchingModels ? (
-                        <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
-                      ) : (
-                        <ListRestart className="h-3.5 w-3.5" aria-hidden />
-                      )}
-                      {fetchingModels ? t('settings.models.fetching') : t('settings.models.fetch')}
+                      {showKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                     </Button>
                   </div>
-                  <ModelCombobox
-                    id="model"
-                    value={draft.model}
-                    onChange={(value) => patch('model', value)}
-                    models={modelList?.ok ? modelList.models : (preset?.models ?? [])}
-                    placeholder={preset?.defaultModel || t('settings.modelPlaceholder')}
-                  />
-                  {modelList && <ModelListNote result={modelList} />}
+                  {testResult && (
+                    <p
+                      className={cn(
+                        'text-xs',
+                        testResult.ok
+                          ? 'text-emerald-600 dark:text-emerald-400'
+                          : 'text-destructive',
+                      )}
+                    >
+                      {testResult.ok
+                        ? t('settings.apiKey.connected', {
+                            latency: testResult.latencyMs,
+                            model: testResult.model,
+                          })
+                        : t('settings.apiKey.failed', {
+                            error: testResult.error ?? t('settings.unknownError'),
+                          })}
+                    </p>
+                  )}
                 </div>
-              </div>
+              </CardContent>
+            </Card>
 
-              <div className="space-y-2">
-                <Label htmlFor="baseURL">{t('settings.baseUrl')}</Label>
-                <Input
-                  id="baseURL"
-                  value={draft.baseURL}
-                  onChange={(e) => patch('baseURL', e.target.value)}
-                  onBlur={() => void loadModels(true)}
-                  placeholder="https://api.example.com/v1"
-                />
-                <p className="text-xs text-muted-foreground">{t('settings.baseUrlHint')}</p>
-              </div>
-            </CardContent>
-          </Card>
+            <Card id="ai-usage" className={cn(SECTION, 'scroll-mt-20')}>
+              <CardHeader className={SECTION_HEAD}>
+                <CardTitle className={cn(SECTION_TITLE, 'flex items-center gap-2')}>
+                  <Gauge className="h-4 w-4 lecture:hidden" aria-hidden />
+                  {t('usage.title')}
+                </CardTitle>
+                <CardDescription>{t('usage.description')}</CardDescription>
+              </CardHeader>
+              <CardContent className={SECTION_BODY}>
+                <UsagePanel draft={draft} patch={patch} />
+              </CardContent>
+            </Card>
 
-          <Card className={SECTION}>
-            <CardHeader className={SECTION_HEAD}>
-              <CardTitle className={SECTION_TITLE}>{t('settings.apiKey.title')}</CardTitle>
-              <CardDescription>{t('settings.apiKey.description')}</CardDescription>
-            </CardHeader>
-            <CardContent className={cn(SECTION_BODY, 'space-y-3')}>
-              <div className="space-y-2">
-                <Label htmlFor="apiKey">{t('settings.apiKey.label')}</Label>
-                <div className="flex gap-2">
-                  <Input
-                    id="apiKey"
-                    type={showKey ? 'text' : 'password'}
-                    value={draft.apiKey}
-                    onChange={(e) => patch('apiKey', e.target.value)}
-                    onBlur={() => void loadModels(true)}
-                    placeholder="sk-..."
-                    autoComplete="off"
-                    spellCheck={false}
-                    className="font-mono"
+            <Card className={SECTION}>
+              <CardHeader className={SECTION_HEAD}>
+                <CardTitle className={SECTION_TITLE}>{t('settings.sampling.title')}</CardTitle>
+                <CardDescription>{t('settings.sampling.description')}</CardDescription>
+              </CardHeader>
+              <CardContent className={cn(SECTION_BODY, 'grid gap-6 sm:grid-cols-2')}>
+                <div className="space-y-3">
+                  <div className="flex items-baseline justify-between">
+                    <Label htmlFor="temperature">{t('settings.sampling.temperature')}</Label>
+                    <span className="text-sm tabular-nums text-muted-foreground lab:font-mono">
+                      {draft.temperature.toFixed(2)}
+                    </span>
+                  </div>
+                  <Slider
+                    id="temperature"
+                    min={0}
+                    max={2}
+                    step={0.05}
+                    value={[draft.temperature]}
+                    onValueChange={(v) => patch('temperature', v[0] ?? draft.temperature)}
                   />
-                  <Button
-                    variant="outline"
-                    size="icon"
-                    onClick={() => setShowKey((s) => !s)}
-                    aria-label={showKey ? t('settings.apiKey.hide') : t('settings.apiKey.show')}
-                  >
-                    {showKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                  </Button>
-                </div>
-                {testResult && (
-                  <p
-                    className={cn(
-                      'text-xs',
-                      testResult.ok ? 'text-emerald-600 dark:text-emerald-400' : 'text-destructive',
-                    )}
-                  >
-                    {testResult.ok
-                      ? t('settings.apiKey.connected', {
-                          latency: testResult.latencyMs,
-                          model: testResult.model,
-                        })
-                      : t('settings.apiKey.failed', {
-                          error: testResult.error ?? t('settings.unknownError'),
-                        })}
+                  <p className="text-xs text-muted-foreground">
+                    {t('settings.sampling.temperatureHint')}
                   </p>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card id="ai-usage" className={cn(SECTION, 'scroll-mt-20')}>
-            <CardHeader className={SECTION_HEAD}>
-              <CardTitle className={cn(SECTION_TITLE, 'flex items-center gap-2')}>
-                <Gauge className="h-4 w-4 lecture:hidden" aria-hidden />
-                {t('usage.title')}
-              </CardTitle>
-              <CardDescription>{t('usage.description')}</CardDescription>
-            </CardHeader>
-            <CardContent className={SECTION_BODY}>
-              <UsagePanel draft={draft} patch={patch} />
-            </CardContent>
-          </Card>
-
-          <Card className={SECTION}>
-            <CardHeader className={SECTION_HEAD}>
-              <CardTitle className={SECTION_TITLE}>{t('settings.sampling.title')}</CardTitle>
-              <CardDescription>{t('settings.sampling.description')}</CardDescription>
-            </CardHeader>
-            <CardContent className={cn(SECTION_BODY, 'grid gap-6 sm:grid-cols-2')}>
-              <div className="space-y-3">
-                <div className="flex items-baseline justify-between">
-                  <Label htmlFor="temperature">{t('settings.sampling.temperature')}</Label>
-                  <span className="text-sm tabular-nums text-muted-foreground lab:font-mono">
-                    {draft.temperature.toFixed(2)}
-                  </span>
                 </div>
-                <Slider
-                  id="temperature"
-                  min={0}
-                  max={2}
-                  step={0.05}
-                  value={[draft.temperature]}
-                  onValueChange={(v) => patch('temperature', v[0] ?? draft.temperature)}
-                />
-                <p className="text-xs text-muted-foreground">
-                  {t('settings.sampling.temperatureHint')}
-                </p>
-              </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="maxTokens">{t('settings.sampling.maxTokens')}</Label>
-                <Input
-                  id="maxTokens"
-                  type="number"
-                  min={64}
-                  max={32000}
-                  step={64}
-                  value={draft.maxTokens}
-                  onChange={(e) => patch('maxTokens', Number(e.target.value))}
-                />
-                <p className="text-xs text-muted-foreground">
-                  {t('settings.sampling.maxTokensHint')}
-                </p>
-              </div>
-            </CardContent>
-          </Card>
+                <div className="space-y-2">
+                  <Label htmlFor="maxTokens">{t('settings.sampling.maxTokens')}</Label>
+                  <Input
+                    id="maxTokens"
+                    type="number"
+                    min={64}
+                    max={32000}
+                    step={64}
+                    value={draft.maxTokens}
+                    onChange={(e) => patch('maxTokens', Number(e.target.value))}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    {t('settings.sampling.maxTokensHint')}
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
 
-          <Card className={SECTION}>
-            <CardHeader className={SECTION_HEAD}>
-              <CardTitle className={cn(SECTION_TITLE, 'flex items-center gap-2')}>
-                <ImageIcon className="h-4 w-4 lecture:hidden" aria-hidden />
-                {t('settings.webImages.title')}
-              </CardTitle>
-              <CardDescription>{t('settings.webImages.description')}</CardDescription>
-            </CardHeader>
-            <CardContent className={cn(SECTION_BODY, 'space-y-3')}>
-              <label className="flex cursor-pointer items-start gap-3">
-                <input
-                  type="checkbox"
-                  className="focus-ring mt-0.5 h-4 w-4 shrink-0 accent-primary"
-                  checked={draft.webImagesEnabled}
-                  onChange={(e) => patch('webImagesEnabled', e.target.checked)}
-                />
-                <span className="space-y-0.5">
-                  <span className="block text-sm font-medium">
-                    {t('settings.webImages.enable')}
+            <Card className={SECTION}>
+              <CardHeader className={SECTION_HEAD}>
+                <CardTitle className={cn(SECTION_TITLE, 'flex items-center gap-2')}>
+                  <ImageIcon className="h-4 w-4 lecture:hidden" aria-hidden />
+                  {t('settings.webImages.title')}
+                </CardTitle>
+                <CardDescription>{t('settings.webImages.description')}</CardDescription>
+              </CardHeader>
+              <CardContent className={cn(SECTION_BODY, 'space-y-3')}>
+                <label className="flex cursor-pointer items-start gap-3">
+                  <input
+                    type="checkbox"
+                    className="focus-ring mt-0.5 h-4 w-4 shrink-0 accent-primary"
+                    checked={draft.webImagesEnabled}
+                    onChange={(e) => patch('webImagesEnabled', e.target.checked)}
+                  />
+                  <span className="space-y-0.5">
+                    <span className="block text-sm font-medium">
+                      {t('settings.webImages.enable')}
+                    </span>
+                    <span className="block text-xs text-muted-foreground">
+                      {t('settings.webImages.enableHint')}
+                    </span>
                   </span>
-                  <span className="block text-xs text-muted-foreground">
-                    {t('settings.webImages.enableHint')}
+                </label>
+                <label
+                  className={cn(
+                    'flex items-start gap-3 pl-7',
+                    draft.webImagesEnabled ? 'cursor-pointer' : 'cursor-not-allowed opacity-50',
+                  )}
+                >
+                  <input
+                    type="checkbox"
+                    className="focus-ring mt-0.5 h-4 w-4 shrink-0 accent-primary"
+                    checked={draft.webImagesVisionCheck}
+                    disabled={!draft.webImagesEnabled}
+                    onChange={(e) => patch('webImagesVisionCheck', e.target.checked)}
+                  />
+                  <span className="space-y-0.5">
+                    <span className="block text-sm font-medium">
+                      {t('settings.webImages.vision')}
+                    </span>
+                    <span className="block text-xs text-muted-foreground">
+                      {t('settings.webImages.visionHint')}
+                    </span>
                   </span>
-                </span>
-              </label>
-              <label
-                className={cn(
-                  'flex items-start gap-3 pl-7',
-                  draft.webImagesEnabled ? 'cursor-pointer' : 'cursor-not-allowed opacity-50',
-                )}
-              >
-                <input
-                  type="checkbox"
-                  className="focus-ring mt-0.5 h-4 w-4 shrink-0 accent-primary"
-                  checked={draft.webImagesVisionCheck}
-                  disabled={!draft.webImagesEnabled}
-                  onChange={(e) => patch('webImagesVisionCheck', e.target.checked)}
-                />
-                <span className="space-y-0.5">
-                  <span className="block text-sm font-medium">
-                    {t('settings.webImages.vision')}
-                  </span>
-                  <span className="block text-xs text-muted-foreground">
-                    {t('settings.webImages.visionHint')}
-                  </span>
-                </span>
-              </label>
-            </CardContent>
-          </Card>
+                </label>
+              </CardContent>
+            </Card>
+          </SettingsGroup>
 
-          <div className="lecture:pt-8">
-            <DataManagementPanel onSettingsCleared={onSettingsCleared} />
-          </div>
+          <SettingsGroup
+            id="settings-data"
+            title={t('settings.group.data')}
+            note={t('settings.group.dataNote')}
+          >
+            <DataManagementPanel onSettingsCleared={onSettingsCleared} {...SETTINGS_SHELL} />
+          </SettingsGroup>
           {/* Lets a bug report say which release it came from. */}
           <p className="text-center text-xs text-muted-foreground lecture:pt-6 lab:font-mono lab:text-[11px]">
             {t('settings.version', { version: APP_VERSION })}
           </p>
         </div>
+        <SaveBar visible={dirty} saving={saving} onSave={() => void save()} onDiscard={discard} />
       </PageContent>
     </PageContainer>
   )

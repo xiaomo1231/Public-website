@@ -8,6 +8,7 @@ import { TutorPanel } from '@/widgets/tutor/TutorPanel'
 import { topicKicker, topicNumber } from '@/widgets/tutor/lessonStyle'
 import { ProjectFlowNav } from '@/widgets/project/ProjectFlowNav'
 import { useProjectTopics } from '@/features/tutor/useProjectTopics'
+import { TopicNotFound } from '@/widgets/tutor/TopicNotFound'
 import { useTranslation } from '@/i18n'
 import { useAuth } from '@/features/auth/useAuth'
 import { resolveContentLanguage } from '@/entities/user/types'
@@ -44,6 +45,11 @@ export function InteractiveTutorPage(): JSX.Element {
   }
 
   const activeTopic = topics.find((topic) => topic.id === topicId)
+
+  // An analysed course without this topic: the address is wrong, not the course.
+  if (analysis && topics.length > 0 && !activeTopic) {
+    return <TopicNotFound projectId={projectId} />
+  }
 
   if (!analysis || !activeTopic) {
     return (

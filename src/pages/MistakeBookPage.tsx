@@ -251,7 +251,10 @@ export function MistakeBookPage(): JSX.Element {
           </Card>
         )}
 
-        <WeaknessPanel projectId={projectId} onReview={handleReviewSession} />
+        {/* With no mistakes at all, the empty state below says so once. */}
+        {stats && stats.total > 0 && (
+          <WeaknessPanel projectId={projectId} onReview={handleReviewSession} />
+        )}
 
         <div className="flex flex-wrap items-center gap-2">
           <div className="relative min-w-[200px] flex-1">
@@ -303,7 +306,18 @@ export function MistakeBookPage(): JSX.Element {
               stats && stats.total > 0 ? t('mistakes.emptyFilteredHint') : t('mistakes.emptyHint')
             }
             action={
-              stats && stats.total > 0 ? undefined : (
+              stats && stats.total > 0 ? (
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setQuery('')
+                    setStatus('all')
+                    setMistakeType('all')
+                  }}
+                >
+                  {t('mistakes.showAll')}
+                </Button>
+              ) : (
                 <Button onClick={() => setAddOpen(true)}>
                   <Plus className="h-4 w-4" />
                   {t('mistakes.addTitle')}

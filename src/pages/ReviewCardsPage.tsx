@@ -29,6 +29,7 @@ import { Input } from '@/shared/ui/Input'
 import { Label } from '@/shared/ui/Label'
 import { LoadingState } from '@/shared/ui/LoadingState'
 import { Progress } from '@/shared/ui/Progress'
+import { RichText } from '@/shared/ui/RichText'
 import { Textarea } from '@/shared/ui/Textarea'
 import { PageContainer, PageContent, PageHeader } from '@/shared/ui/Page'
 import { ProjectFlowNav } from '@/widgets/project/ProjectFlowNav'
@@ -89,6 +90,8 @@ export function ReviewCardsPage(): JSX.Element {
   const [reloadKey, setReloadKey] = useState(0)
   const [query, setQuery] = useState('')
   const [generating, setGenerating] = useState(false)
+  /** Concepts with a definition: without any, generating offers nothing. */
+  const [conceptCount, setConceptCount] = useState<number | null>(null)
   // Review session: the queue is fixed when it starts; "again" re-queues a card.
   const [queue, setQueue] = useState<ReviewCard[] | null>(null)
   /** Times each card was re-queued by "again" in the current session. */
@@ -105,9 +108,14 @@ export function ReviewCardsPage(): JSX.Element {
 
   const refresh = useCallback(async () => {
     if (!projectId) return
-    const [list, nextStats] = await Promise.all([service.list(projectId), service.stats(projectId)])
+    const [list, nextStats, concepts] = await Promise.all([
+      service.list(projectId),
+      service.stats(projectId),
+      service.conceptCount(projectId).catch(() => null),
+    ])
     setCards(list.sort((a, b) => a.due - b.due))
     setStats(nextStats)
+    setConceptCount(concepts)
   }, [projectId, service])
 
   useEffect(() => {
@@ -256,7 +264,12 @@ export function ReviewCardsPage(): JSX.Element {
                 {t('phrases.open')}
               </Button>
             )}
-            <Button variant="outline" onClick={() => void generate()} disabled={generating}>
+            <Button
+              variant="outline"
+              onClick={() => void generate()}
+              disabled={generating || conceptCount === 0}
+              title={conceptCount === 0 ? t('cards.noConcepts') : undefined}
+            >
               {generating ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
               ) : (
@@ -287,12 +300,20 @@ export function ReviewCardsPage(): JSX.Element {
           <EmptyState
             icon={<Layers className="h-10 w-10" />}
             title={t('cards.empty')}
-            description={t('cards.emptyHint')}
+            description={conceptCount ? t('cards.emptyHint') : t('cards.emptyNoConceptsHint')}
             action={
-              <Button onClick={() => void generate()} disabled={generating}>
-                <Sparkles className="h-4 w-4" />
-                {t('cards.generate')}
-              </Button>
+              // Only actions that work: generating needs concepts with a definition.
+              conceptCount ? (
+                <Button onClick={() => void generate()} disabled={generating}>
+                  <Sparkles className="h-4 w-4" />
+                  {t('cards.generate')}
+                </Button>
+              ) : (
+                <Button onClick={() => setEditing('new')}>
+                  <Plus className="h-4 w-4" />
+                  {t('cards.add')}
+                </Button>
+              )
             }
           />
         ) : (
@@ -372,12 +393,19 @@ export function ReviewCardsPage(): JSX.Element {
                         className="flex items-start gap-3 px-6 py-3 lecture:px-0 lab:px-3.5 lab:py-2.5"
                       >
                         <div className="min-w-0 flex-1 space-y-1">
-                          <p className="break-words text-sm font-medium lecture:text-[15px]">
-                            {card.front}
-                          </p>
-                          <p className="line-clamp-2 break-words text-sm text-muted-foreground">
-                            {card.back}
-                          </p>
+                          <RichText
+                            text={card.front}
+                            format="markdown"
+                            className="space-y-1"
+                            paragraphClassName="text-sm font-medium leading-relaxed lecture:text-[15px]"
+                          />
+                          {/* A preview: about two lines, the full back shows in review / edit. */}
+                          <RichText
+                            text={card.back}
+                            format="markdown"
+                            className="max-h-[3.25rem] space-y-1 overflow-hidden"
+                            paragraphClassName="text-sm leading-relaxed text-muted-foreground"
+                          />
                           <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
                             <Badge variant="outline">
                               {t(`cards.source.${card.source}` as TranslationKey)}
@@ -486,16 +514,23 @@ function ReviewSession({
             {t('cards.endSession')}
           </Button>
         </div>
-        <div className="min-h-24 rounded-lg border border-border/70 bg-muted/30 px-5 py-6 text-center lecture:bg-card lab:bg-background">
-          <p className="whitespace-pre-wrap break-words text-xl font-medium lecture:font-heading lecture:text-2xl lecture:font-bold">
-            {card.front}
-          </p>
+        <div className="min-h-24 rounded-lg border border-border/70 bg-muted/30 px-5 py-6 lecture:bg-card lab:bg-background">
+          {/* The prompt is short and centred; the answer reads left-aligned at a readable width. */}
+          <RichText
+            text={card.front}
+            format="markdown"
+            className="space-y-2 text-center"
+            paragraphClassName="text-xl font-medium leading-snug lecture:font-heading lecture:text-2xl lecture:font-bold"
+          />
           {revealed && (
             <>
               <div className="mx-auto my-4 h-px w-16 bg-border" />
-              <p className="whitespace-pre-wrap break-words text-base text-foreground/90">
-                {card.back}
-              </p>
+              <RichText
+                text={card.back}
+                format="markdown"
+                className="mx-auto max-w-[70ch] space-y-3 text-left"
+                paragraphClassName="text-base leading-relaxed"
+              />
             </>
           )}
         </div>

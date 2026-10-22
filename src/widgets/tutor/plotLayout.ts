@@ -42,3 +42,27 @@ export function layoutForWidth(measured: number): PlotLayout {
     compact: true,
   }
 }
+
+/** Compare a legend label with its LaTeX: no spaces, delimiters, braces or spacing commands. */
+function comparableMath(text: string): string {
+  return text
+    .toLowerCase()
+    .replace(/\\(?:left|right|displaystyle|[,;:! ])/g, '')
+    .replace(/\\cdot|\\times/g, '*')
+    .replace(/[\s${}\\]/g, '')
+}
+
+/**
+ * The text label to show beside an expression in the plot legend, or nothing
+ * when it only repeats the expression ("y = 2x + 1" next to $y = 2x + 1$).
+ */
+export function legendLabelFor(expression: { latex: string; label?: string }): string | undefined {
+  const label = expression.label?.trim()
+  if (!label) return undefined
+  const plainLabel = comparableMath(label)
+  const plainLatex = comparableMath(expression.latex)
+  if (!plainLabel) return undefined
+  if (plainLabel === plainLatex) return undefined
+  if (plainLatex.length >= 3 && plainLabel.includes(plainLatex)) return undefined
+  return label
+}

@@ -14,6 +14,11 @@ import type { Topic } from '@/entities/courseAnalysis/types'
  *   tables with mono header labels, square accent-ruled blocks.
  */
 export const LESSON_PROSE_CLASS = [
+  // Scroll shadows on formulas wider than the column (globals.css).
+  'lesson-prose',
+  // Titled teaching blocks ("Example 2: …") keep their heading as a compact title.
+  'lecture:[&_section[aria-label]>div>:is(h2,h3):first-child]:pt-0 lecture:[&_section[aria-label]>div>:is(h2,h3):first-child]:text-[17px]',
+  'lab:[&_section[aria-label]>div>:is(h2,h3):first-child]:pt-0 lab:[&_section[aria-label]>div>:is(h2,h3):first-child]:text-[15px]',
   // lecture — headings
   'lecture:[&_h2]:pt-5 lecture:[&_h2]:font-heading lecture:[&_h2]:text-[22px] lecture:[&_h2]:font-bold lecture:[&_h2]:tracking-normal',
   'lecture:[&_h3]:font-heading lecture:[&_h3]:font-bold lecture:[&_h3]:tracking-normal',

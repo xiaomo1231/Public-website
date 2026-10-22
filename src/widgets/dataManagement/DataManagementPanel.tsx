@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { AlertTriangle, Database, Download, Loader2, Trash2 } from 'lucide-react'
 import { Button } from '@/shared/ui/Button'
+import { cn } from '@/shared/lib/utils'
+import type { SectionShellProps } from '@/widgets/settings/settingsSection'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/shared/ui/Card'
 import { Badge } from '@/shared/ui/Badge'
 import { LoadingState } from '@/shared/ui/LoadingState'
@@ -41,7 +43,11 @@ interface DataManagementPanelProps {
 
 export function DataManagementPanel({
   onSettingsCleared,
-}: DataManagementPanelProps = {}): JSX.Element {
+  className,
+  headerClassName,
+  titleClassName,
+  bodyClassName,
+}: DataManagementPanelProps & SectionShellProps = {}): JSX.Element {
   const { t } = useTranslation()
   const navigate = useNavigate()
   const [inventory, setInventory] = useState<DataInventory | null>(null)
@@ -139,15 +145,15 @@ export function DataManagementPanel({
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2 text-base">
-          <Database className="h-4 w-4" />
+    <Card className={className}>
+      <CardHeader className={headerClassName}>
+        <CardTitle className={cn('flex items-center gap-2 text-base', titleClassName)}>
+          <Database className="h-4 w-4 lecture:hidden" />
           {t('data.title')}
         </CardTitle>
         <CardDescription>{t('data.description')}</CardDescription>
       </CardHeader>
-      <CardContent className="space-y-4">
+      <CardContent className={cn('space-y-4', bodyClassName)}>
         {loading ? (
           <LoadingState label={t('data.loading')} inline />
         ) : inventory ? (

@@ -7,6 +7,7 @@ import { LoadingState } from '@/shared/ui/LoadingState'
 import { Progress } from '@/shared/ui/Progress'
 import { WeaknessService, type WeaknessReport } from '@/services/weaknessService'
 import { useTranslation } from '@/i18n'
+import { formatPercent } from '@/shared/lib/percent'
 
 /** Lecture: set on the page under a rule with a serif title. Lab: a hairline panel with a mono label bar. */
 const PANEL =
@@ -105,15 +106,19 @@ export function WeaknessPanel({ projectId, onReview, compact }: WeaknessPanelPro
               <Badge variant="outline">{t('weakness.count', { count: area.mistakeCount })}</Badge>
               {area.mastery !== null && (
                 <Badge variant="secondary">
-                  {t('weakness.mastery', { value: `${Math.round(area.mastery * 100)}%` })}
+                  {t('weakness.mastery', { value: formatPercent(area.mastery) })}
                 </Badge>
               )}
-              <span className="ml-auto text-xs tabular-nums text-muted-foreground lab:font-mono">
-                {Math.round(area.weaknessScore * 100)}%
+              <span
+                className="ml-auto text-xs tabular-nums text-muted-foreground lab:font-mono"
+                title={t('weakness.priorityHint')}
+              >
+                {t('weakness.priority', { value: formatPercent(area.weaknessScore) })}
               </span>
             </div>
             <Progress
               value={area.weaknessScore * 100}
+              aria-label={t('weakness.priority', { value: formatPercent(area.weaknessScore) })}
               className="h-1.5 lecture:h-1 lab:h-1 lab:rounded-none"
             />
             {area.recentMistakeCount > 0 && (

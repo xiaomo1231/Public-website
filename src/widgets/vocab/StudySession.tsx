@@ -120,6 +120,8 @@ export function WordMeaning({
 export interface StudySessionProps {
   items: SessionItem[]
   bookId: string | null
+  /** What is being studied (the book's name, or the mistake list), shown with the word's language. */
+  sourceLabel?: string
   service: VocabService
   onExit: () => void
   /** After every rating, so the counts around the session stay current. */
@@ -129,6 +131,7 @@ export interface StudySessionProps {
 export function StudySession({
   items,
   bookId,
+  sourceLabel,
   service,
   onExit,
   onProgress,
@@ -288,6 +291,9 @@ export function StudySession({
   return (
     <Card>
       <CardContent className="space-y-5 p-6">
+        <p className="text-sm text-muted-foreground" data-testid="vocab-session-source">
+          {[sourceLabel, languageName(language ?? 'en', uiLanguage)].filter(Boolean).join(' · ')}
+        </p>
         <div className="flex items-center gap-3 text-xs text-muted-foreground">
           <span className="tabular-nums">{t('vocab.progress', { done, total })}</span>
           <Progress value={total ? (done / total) * 100 : 0} className="h-1.5 flex-1" />

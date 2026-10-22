@@ -23,6 +23,7 @@ import type {
   QuizResumeState,
   QuizScore,
 } from '@/entities/quiz/types'
+import { knowledgeStatPercent } from '@/entities/quiz/types'
 import {
   isAbortError,
   resolveControl,
@@ -77,7 +78,7 @@ import { logger } from '@/infrastructure/logger/logger'
 import { AppError } from '@/infrastructure/errors/AppError'
 import { t } from '@/i18n'
 import { loadProjectSubjectContext } from './projectSubject'
-import { ShortAnswerGrader } from './shortAnswerGrader'
+import { ShortAnswerGrader, tooShortEvaluation } from './shortAnswerGrader'
 import { OralExamService } from './oralExamService'
 import { checkBlanksWithAi } from './fillBlankChecker'
 import { projectTargetLanguage } from './projectTargetLanguage'
@@ -1557,14 +1558,23 @@ export class QuizService {
        * the error is rethrown and no attempt is recorded.
        */
       signal?: AbortSignal
+      /**
+       * Submitted after the countdown ran out. A blank short answer then
+       * scores 0 points locally (no AI call) and is labelled as timed out
+       * instead of "could not be graded".
+       */
+      timedOut?: boolean
     } = {},
   ): Promise<SubmitAnswerResult> {
     const quiz = await this.getQuiz(quizId)
     const question = await this.questions.get(questionId)
     if (!question) throw new AppError(t('errors.questionNotFound'), 'NOT_FOUND')
 
-    let evaluation =
-      question.type === 'short_answer' && opts.gradeShortAnswer
+    const timedOutBlank =
+      opts.timedOut === true && question.type === 'short_answer' && userAnswer.trim() === ''
+    let evaluation = timedOutBlank
+      ? { ...tooShortEvaluation(question, ''), note: t('quiz.timedOutBlank') }
+      : question.type === 'short_answer' && opts.gradeShortAnswer
         ? await new ShortAnswerGrader(this.ai).grade(
             question,
             userAnswer.trim(),
@@ -1604,6 +1614,7 @@ export class QuizService {
       userAnswer,
       evaluation,
       ...(opts.durationMs !== undefined ? { durationMs: opts.durationMs } : {}),
+      ...(timedOutBlank ? { timedOut: true } : {}),
       hintsUsed: opts.hintsUsed ?? 0,
       createdAt: Date.now(),
     }
@@ -1822,7 +1833,14 @@ export function scoreQuiz(quiz: Quiz, attempts: QuestionAttempt[]): QuizScore {
 
     const kp = attempt?.knowledgePoint ?? t('common.unknown')
     if (!byKpMap.has(kp)) {
-      byKpMap.set(kp, { knowledgePoint: kp, correct: 0, wrong: 0, unverified: 0, total: 0 })
+      byKpMap.set(kp, {
+        knowledgePoint: kp,
+        correct: 0,
+        wrong: 0,
+        unverified: 0,
+        total: 0,
+        points: 0,
+      })
     }
     const kStat = byKpMap.get(kp)!
     kStat.total++
@@ -1839,14 +1857,17 @@ export function scoreQuiz(quiz: Quiz, attempts: QuestionAttempt[]): QuizScore {
     if (isCorrect === true) {
       correct++
       points += 1
+      kStat.points = (kStat.points ?? 0) + 1
       dStat.correct++
       kStat.correct++
     } else if (isCorrect === false) {
       wrong++
-      points +=
+      const partial =
         evaluation.score && evaluation.score.total > 0
           ? evaluation.score.earned / evaluation.score.total
           : 0
+      points += partial
+      kStat.points = (kStat.points ?? 0) + partial
       dStat.wrong++
       kStat.wrong++
     } else {
@@ -1859,13 +1880,16 @@ export function scoreQuiz(quiz: Quiz, attempts: QuestionAttempt[]): QuizScore {
   const gradable = correct + wrong
   const percentage = gradable > 0 ? Math.round((points / gradable) * 100) : 0
 
-  const byKnowledgePoint = [...byKpMap.values()].sort((a, b) => {
-    const aAcc = a.correct + a.wrong > 0 ? a.correct / (a.correct + a.wrong) : 1
-    const bAcc = b.correct + b.wrong > 0 ? b.correct / (b.correct + b.wrong) : 1
-    return aAcc - bAcc
-  })
+  // Per knowledge point on the same basis as the overall percentage: a short
+  // answer covering 4 of 5 points counts 0.8, not 0 (it is still a mistake).
+  const byKnowledgePoint = [...byKpMap.values()]
+    .map((k) => ({ ...k, points: Math.round((k.points ?? 0) * 100) / 100 }))
+    .sort((a, b) => (knowledgeStatPercent(a) ?? 100) - (knowledgeStatPercent(b) ?? 100))
   const weakKnowledgePoints = byKnowledgePoint
-    .filter((k) => k.correct + k.wrong > 0 && k.correct / (k.correct + k.wrong) < 0.6)
+    .filter((k) => {
+      const percent = knowledgeStatPercent(k)
+      return percent !== null && percent < 60
+    })
     .map((k) => k.knowledgePoint)
 
   return {

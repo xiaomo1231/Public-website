@@ -24,12 +24,19 @@ import { LESSON_PROSE_CLASS } from '@/widgets/tutor/lessonStyle'
 import { useTranslation } from '@/i18n'
 import { buildAIServices } from '@/services/aiServices'
 import type { DifficultyLevel, TutorEvaluation } from '@/infrastructure/ai/prompts/types'
-import type { TutorQuestion, TutorSession } from '@/entities/tutorSession/types'
-import { friendlyTutorError } from '@/shared/lib/aiErrors'
-import type { TutorService } from '@/services/tutorService'
+import {
+  TURN_KIND_LABEL_KEYS,
+  type TutorQuestion,
+  type TutorSession,
+  type TutorTurn,
+} from '@/entities/tutorSession/types'
+import { findResumableSession, type TutorService } from '@/services/tutorService'
+import { noProviderInfo, tutorErrorInfo, type TutorErrorInfo } from '@/features/tutor/tutorErrors'
+import { TutorErrorNotice } from '@/widgets/tutor/TutorErrorNotice'
 import { isAbortError } from '@/shared/lib/generationControl'
 import { useGenerationRun } from '@/shared/lib/useGenerationRun'
 import { GenerationControls } from '@/shared/ui/GenerationControls'
+import { formatPercent } from '@/shared/lib/percent'
 
 export interface TutorPanelProps {
   projectId: string
@@ -58,9 +65,17 @@ export function TutorPanel(props: TutorPanelProps): JSX.Element {
   const [answer, setAnswer] = useState('')
   const [busy, setBusy] = useState(false)
   /** Fatal: the tutor itself could not open. */
-  const [error, setError] = useState<string | null>(null)
+  const [error, setError] = useState<TutorErrorInfo | null>(null)
   /** Non-fatal: the lesson is open but an action failed. */
-  const [actionError, setActionError] = useState<string | null>(null)
+  const [actionError, setActionErrorState] = useState<TutorErrorInfo | null>(null)
+  /** What "Try again" re-runs for `actionError`. */
+  const [retryAction, setRetryAction] = useState<(() => void) | null>(null)
+  /** Bumped by the fatal error's "Try again" to reopen the tutor. */
+  const [attempt, setAttempt] = useState(0)
+  /** Showing an earlier conversation without a configured AI provider. */
+  const [noProvider, setNoProvider] = useState(false)
+  /** Turns the resumed conversation already had when the page opened. */
+  const [earlierTurns, setEarlierTurns] = useState<TutorTurn[]>([])
   const [revealedHints, setRevealedHints] = useState(0)
   const [lastQuestion, setLastQuestion] = useState<TutorQuestion | undefined>()
   const [lastEvaluation, setLastEvaluation] = useState<TutorEvaluation | undefined>()
@@ -70,8 +85,24 @@ export function TutorPanel(props: TutorPanelProps): JSX.Element {
   // Every tutor turn is one request: Stop aborts it, leaving the page aborts it.
   const generation = useGenerationRun({ abortOnUnmount: true })
 
+  function setActionError(info: TutorErrorInfo | null, retry?: () => void): void {
+    setActionErrorState(info)
+    setRetryAction(() => (info && retry ? retry : null))
+  }
+
+  /** The AI is needed for this action; without a provider say so (with a Settings link). */
+  async function requireBundle(): Promise<TutorBundle | null> {
+    const bundle = await buildTutorBundle()
+    if (!bundle) {
+      setNoProvider(true)
+      setActionError(noProviderInfo())
+    }
+    return bundle
+  }
+
   useEffect(() => {
     let cancelled = false
+    setError(null)
     // Unmounting (topic or language change) cancels the in-flight
     // introduction / first question instead of paying for a hidden run.
     const run = generation.start()
@@ -79,10 +110,28 @@ export function TutorPanel(props: TutorPanelProps): JSX.Element {
       try {
         setBusy(true)
         const bundle = await buildTutorBundle()
+        if (cancelled) return
         if (!bundle) {
-          setError(t('tutor.noProvider'))
+          // Reading an earlier conversation needs no AI: show it, and say
+          // that continuing needs a provider.
+          const earlier = await findResumableSession({
+            projectId: props.projectId,
+            topicId: props.topicId,
+            language: props.language,
+          })
+          if (cancelled) return
+          if (!earlier) {
+            setError(noProviderInfo())
+            return
+          }
+          setNoProvider(true)
+          setSession(earlier)
+          setEarlierTurns(previousTurns(earlier))
+          setIntro(earlier.turns.find((turn) => turn.kind === 'introduction')?.content ?? '')
+          setLastQuestion(earlier.pendingQuestion)
           return
         }
+        setNoProvider(false)
         const { session: s, resumed } = await bundle.tutor.findOrStartSession({
           projectId: props.projectId,
           topicId: props.topicId,
@@ -97,6 +146,7 @@ export function TutorPanel(props: TutorPanelProps): JSX.Element {
         if (resumed) {
           // Continue where the student left off — no AI call, no repeated
           // introduction.
+          setEarlierTurns(previousTurns(s))
           setIntro(s.turns.find((turn) => turn.kind === 'introduction')?.content ?? '')
           setLastQuestion(s.pendingQuestion)
           return
@@ -117,7 +167,9 @@ export function TutorPanel(props: TutorPanelProps): JSX.Element {
         setLastQuestion(next.session.pendingQuestion)
         setRevealedHints(0)
         setLastEvaluation(undefined)
-        if (next.questionError) setActionError(next.questionError)
+        if (next.questionError) {
+          setActionError({ message: next.questionError, needsSettings: false })
+        }
         // Stopped while the first question was being written.
         if (run.signal.aborted && !next.session.pendingQuestion) setStopped(true)
       } catch (err) {
@@ -126,7 +178,7 @@ export function TutorPanel(props: TutorPanelProps): JSX.Element {
           // Nothing of a stopped introduction was saved; drop the streamed part.
           setIntro('')
           setStopped(true)
-        } else setError(friendlyTutorError(err))
+        } else setError(tutorErrorInfo(err))
       } finally {
         run.finish()
         if (!cancelled) setBusy(false)
@@ -137,11 +189,11 @@ export function TutorPanel(props: TutorPanelProps): JSX.Element {
       run.stopNow()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [attempt])
 
   async function nextQuestion() {
     if (!session) return
-    const bundle = await buildTutorBundle()
+    const bundle = await requireBundle()
     if (!bundle) return
     setBusy(true)
     setActionError(null)
@@ -156,7 +208,7 @@ export function TutorPanel(props: TutorPanelProps): JSX.Element {
       setLastQuestion(result.session.pendingQuestion)
     } catch (err) {
       if (isAbortError(err, run.signal)) setStopped(true)
-      else setActionError(friendlyTutorError(err))
+      else setActionError(tutorErrorInfo(err), () => void nextQuestion())
     } finally {
       run.finish()
       setBusy(false)
@@ -166,7 +218,7 @@ export function TutorPanel(props: TutorPanelProps): JSX.Element {
   /** Redo a stopped introduction (nothing of it was saved). */
   async function beginAgain() {
     if (!session) return
-    const bundle = await buildTutorBundle()
+    const bundle = await requireBundle()
     if (!bundle) return
     setBusy(true)
     setStopped(false)
@@ -180,13 +232,15 @@ export function TutorPanel(props: TutorPanelProps): JSX.Element {
       })
       setSession(next.session)
       setLastQuestion(next.session.pendingQuestion)
-      if (next.questionError) setActionError(next.questionError)
+      if (next.questionError) {
+        setActionError({ message: next.questionError, needsSettings: false })
+      }
       if (run.signal.aborted && !next.session.pendingQuestion) setStopped(true)
     } catch (err) {
       if (isAbortError(err, run.signal)) {
         setIntro('')
         setStopped(true)
-      } else setActionError(friendlyTutorError(err))
+      } else setActionError(tutorErrorInfo(err), () => void beginAgain())
     } finally {
       run.finish()
       setBusy(false)
@@ -195,16 +249,17 @@ export function TutorPanel(props: TutorPanelProps): JSX.Element {
 
   async function revealHint() {
     if (!session) return
-    const bundle = await buildTutorBundle()
+    const bundle = await requireBundle()
     if (!bundle) return
     setBusy(true)
+    setActionError(null)
     try {
       const { session: next, hint } = await bundle.tutor.requestHint(session.id)
       setSession(next)
       setRevealedHints((c) => c + 1)
       toast({ variant: 'info', title: t('tutor.hintReleased'), description: hint })
     } catch (err) {
-      setActionError(friendlyTutorError(err))
+      setActionError(tutorErrorInfo(err))
     } finally {
       setBusy(false)
     }
@@ -216,7 +271,7 @@ export function TutorPanel(props: TutorPanelProps): JSX.Element {
       toast({ variant: 'warning', title: t('tutor.enterAnswer') })
       return
     }
-    const bundle = await buildTutorBundle()
+    const bundle = await requireBundle()
     if (!bundle) return
     setBusy(true)
     setActionError(null)
@@ -229,7 +284,7 @@ export function TutorPanel(props: TutorPanelProps): JSX.Element {
       setLastQuestion(undefined)
     } catch (err) {
       // Stopped: the answer stays in the box and nothing was recorded.
-      if (!isAbortError(err, run.signal)) setActionError(friendlyTutorError(err))
+      if (!isAbortError(err, run.signal)) setActionError(tutorErrorInfo(err))
     } finally {
       run.finish()
       setBusy(false)
@@ -238,19 +293,20 @@ export function TutorPanel(props: TutorPanelProps): JSX.Element {
 
   if (error) {
     return (
-      <Card>
-        <CardHeader>
-          <CardTitle>{t('tutor.unavailable')}</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <p className="text-sm text-destructive">{error}</p>
-          {props.onClose && (
-            <Button variant="outline" onClick={props.onClose}>
-              {t('common.close')}
-            </Button>
-          )}
-        </CardContent>
-      </Card>
+      <div className="space-y-3">
+        <TutorErrorNotice
+          title={t('tutor.unavailable')}
+          message={error.message}
+          needsSettings={error.needsSettings}
+          onRetry={() => setAttempt((n) => n + 1)}
+          retrying={busy}
+        />
+        {props.onClose && (
+          <Button variant="outline" onClick={props.onClose}>
+            {t('common.close')}
+          </Button>
+        )}
+      </div>
     )
   }
 
@@ -282,7 +338,7 @@ export function TutorPanel(props: TutorPanelProps): JSX.Element {
               variant="outline"
               className="shrink-0 tabular-nums lab:font-mono lab:text-[11px]"
             >
-              {t('tutor.mastery', { value: `${Math.round(session.mastery * 100)}%` })}
+              {t('tutor.mastery', { value: formatPercent(session.mastery) })}
             </Badge>
           </CardTitle>
         </CardHeader>
@@ -304,17 +360,23 @@ export function TutorPanel(props: TutorPanelProps): JSX.Element {
         </CardContent>
       </Card>
 
+      {earlierTurns.length > 0 && <EarlierTurns turns={earlierTurns} />}
+
+      {noProvider && !actionError && (
+        <TutorErrorNotice tone="warning" message={t('tutor.noProviderSession')} needsSettings />
+      )}
+
       {actionError && (
-        <Card className="border-destructive/40 bg-destructive/5">
-          <CardContent className="flex flex-wrap items-center justify-between gap-2 p-4 text-[15px] leading-[1.7]">
-            <span className="min-w-0 break-words text-destructive">{actionError}</span>
-            {!lastQuestion && (
-              <Button variant="outline" onClick={nextQuestion} disabled={busy}>
-                {t('tutor.retryQuestion')}
-              </Button>
-            )}
-          </CardContent>
-        </Card>
+        <TutorErrorNotice
+          message={actionError.message}
+          needsSettings={actionError.needsSettings}
+          {...(retryAction
+            ? { onRetry: retryAction }
+            : !lastQuestion && !noProvider
+              ? { onRetry: () => void nextQuestion(), retryLabel: t('tutor.retryQuestion') }
+              : {})}
+          retrying={busy}
+        />
       )}
 
       {lastEvaluation && <FeedbackCard evaluation={lastEvaluation} />}
@@ -434,6 +496,46 @@ export function TutorPanel(props: TutorPanelProps): JSX.Element {
         <EmptyState title={t('tutor.thinking')} description={t('tutor.generatingFirst')} />
       )}
     </div>
+  )
+}
+
+/**
+ * The turns a resumed conversation already had (after the introduction, minus
+ * the question still waiting for an answer, which is shown below as usual).
+ */
+function previousTurns(session: TutorSession): TutorTurn[] {
+  const pendingId = session.pendingQuestion?.id
+  return session.turns.filter(
+    (turn) =>
+      turn.kind !== 'introduction' &&
+      !(pendingId && turn.kind === 'question' && turn.question?.id === pendingId),
+  )
+}
+
+/** The earlier part of a resumed conversation, folded so it never buries the current question. */
+function EarlierTurns({ turns }: { turns: TutorTurn[] }) {
+  const { t } = useTranslation()
+  return (
+    <details className="rounded-lg border border-border/70 lecture:rounded-none lecture:border-x-0 lab:rounded-none">
+      <summary className="focus-ring cursor-pointer list-none px-4 py-3 text-sm font-medium text-foreground lecture:px-0 lab:font-mono lab:text-[12px]">
+        {t('tutor.earlierTurns', { count: turns.length })}
+      </summary>
+      <ol className="space-y-3 border-t border-border/60 px-4 py-3 lecture:px-0">
+        {turns.map((turn, index) => (
+          <li key={`${turn.createdAt}-${index}`} className="min-w-0 space-y-1">
+            <p className="text-xs text-muted-foreground lab:font-mono lab:text-[11px] lab:uppercase lab:tracking-[0.06em]">
+              {turn.role === 'student' ? t('tutor.you') : t(TURN_KIND_LABEL_KEYS[turn.kind])}
+            </p>
+            <RichText
+              text={turn.content}
+              format="markdown"
+              className="min-w-0 space-y-2 break-words"
+              paragraphClassName="text-[15px] leading-[1.7]"
+            />
+          </li>
+        ))}
+      </ol>
+    </details>
   )
 }
 

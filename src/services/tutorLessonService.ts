@@ -140,6 +140,21 @@ function keyOf(input: TutorLessonKey): string {
 }
 
 /**
+ * The stored lesson for a topic + language, read without an AI provider.
+ *
+ * Reading a lesson that is already on disk never needs the AI, so the Topic
+ * page uses this when no provider is configured; only generating or
+ * refreshing a lesson requires one.
+ */
+export async function loadStoredLesson(
+  key: TutorLessonKey,
+  db: AppDatabase = getDb(),
+): Promise<TutorLesson | undefined> {
+  const stored = await new TutorLessonRepository(db).find(key)
+  return stored && stored.content.trim().length > 0 ? stored : undefined
+}
+
+/**
  * Cache-first lesson generation.
  *
  * Reading a topic must never cost tokens twice: the first visit generates and

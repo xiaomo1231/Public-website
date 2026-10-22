@@ -75,6 +75,8 @@ export function groupIntoSections(blocks: MarkdownBlock[]): LessonSection[] {
       if (spec) {
         if (current.blocks.length > 0) sections.push(current)
         current = { spec, level: block.level, blocks: [] }
+        // A titled block ("Example 2: …") keeps its heading as the title.
+        if (spec.titled) current.blocks.push(block)
         continue
       }
 

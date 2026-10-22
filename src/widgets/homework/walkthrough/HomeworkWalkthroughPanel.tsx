@@ -4,11 +4,15 @@ import {
   AlignJustify,
   AlignLeft,
   BookOpenText,
+  Check,
+  ChevronDown,
   FileUp,
   ListChecks,
+  ListOrdered,
   Link2,
   Loader2,
   MessageSquareText,
+  MoreHorizontal,
   Printer,
   RefreshCw,
   RotateCcw,
@@ -43,6 +47,12 @@ import { toast } from '@/features/toast/toastStore'
 import { Badge } from '@/shared/ui/Badge'
 import { Button } from '@/shared/ui/Button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/shared/ui/Card'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/shared/ui/DropdownMenu'
 import { ConfirmDialog } from '@/shared/ui/ConfirmDialog'
 import { RegenerateSectionDialog } from './RegenerateSectionDialog'
 import { ImportWalkthroughDialog } from './ImportWalkthroughDialog'
@@ -62,6 +72,8 @@ import { WalkthroughNotesDialog } from './WalkthroughNotesDialog'
 import { WalkthroughPrint, type PrintableSection } from './WalkthroughPrint'
 import { PassageHoverCard, type PassageHoverSubject } from './PassageHoverCard'
 import { usePassageHover, type PassageHoverTarget } from './usePassageHover'
+import { useScrollSpy } from './scrollSpy'
+import { WalkthroughSpoilerGate } from './WalkthroughSpoilerGate'
 import {
   caretAt,
   hitPassage,
@@ -80,6 +92,8 @@ export interface HomeworkWalkthroughPanelProps {
   set: HomeworkSet
   /** In practice mode the walkthrough is behind a "contains the answers" notice. */
   mode: 'practice' | 'review'
+  /** 先去做题 on that notice: switch to the practice view. */
+  onPractice?: () => void
 }
 
 /**
@@ -91,6 +105,7 @@ export interface HomeworkWalkthroughPanelProps {
 export function HomeworkWalkthroughPanel({
   set,
   mode,
+  onPractice,
 }: HomeworkWalkthroughPanelProps): JSX.Element {
   const { t, language: uiLanguage } = useTranslation()
   const {
@@ -249,6 +264,31 @@ export function HomeworkWalkthroughPanel({
   )
   const passageHover = usePassageHover(resolveHover)
 
+  // Contents: the section being read is highlighted (and offers its 普通 / 详细).
+  const sectionIds = useMemo(() => (state?.plan ?? []).map((entry) => entry.id), [state?.plan])
+  const activeId = useScrollSpy(sectionIds, { enabled: revealed && writtenCount > 0 })
+  const tocRef = useRef<HTMLOListElement>(null)
+  useEffect(() => {
+    // Keep the current entry visible inside the (scrollable) contents list.
+    const list = tocRef.current
+    const item = list?.querySelector<HTMLElement>('[aria-current="location"]')
+    if (!list || !item) return
+    if (item.offsetTop < list.scrollTop) list.scrollTop = item.offsetTop
+    else if (item.offsetTop + item.offsetHeight > list.scrollTop + list.clientHeight)
+      list.scrollTop = item.offsetTop + item.offsetHeight - list.clientHeight
+  }, [activeId])
+
+  /** Scroll to a section and move focus there (keyboard and screen-reader users). */
+  function jumpTo(id: string): void {
+    const target = document.getElementById(`wt-${id}`)
+    if (!target) return
+    target.scrollIntoView({
+      behavior: prefersReducedMotion() ? 'auto' : 'smooth',
+      block: 'start',
+    })
+    target.focus({ preventScroll: true })
+  }
+
   /** Open a marked passage's conversation as a full window. */
   function openMarked(key: string): void {
     const id = key.slice(2)
@@ -388,31 +428,31 @@ export function HomeworkWalkthroughPanel({
 
   if (!revealed) {
     return (
-      <Card className="border-amber-500/40 bg-amber-500/5">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-base">
-            <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400" aria-hidden />
-            {t('homework.walkthrough.spoilerTitle')}
-          </CardTitle>
-          <CardDescription>{t('homework.walkthrough.spoilerBody')}</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Button
-            onClick={() => {
-              dismissed.add(set.id)
-              setRevealed(true)
-              void homework?.markWalkthroughNoticeSeen(set.id)
-            }}
-          >
-            <BookOpenText className="h-4 w-4" />
-            {t('homework.walkthrough.spoilerOpen')}
-          </Button>
-        </CardContent>
-      </Card>
+      <WalkthroughSpoilerGate
+        onOpen={() => {
+          dismissed.add(set.id)
+          setRevealed(true)
+          void homework?.markWalkthroughNoticeSeen(set.id)
+        }}
+        {...(onPractice ? { onPractice } : {})}
+      />
     )
   }
 
   if (loading || !state) return <LoadingState label={t('common.loading')} />
+
+  const activeEntry = entries.find((entry) => entry.id === activeId)
+  const activeTitle = activeEntry ? sectionTitle(activeEntry, labels, t) : ''
+  // The current section's 普通 / 详细, kept in reach while scrolling its text.
+  const activeLevelToggle =
+    activeEntry?.kind === 'question' && activeEntry.section?.status === 'ready' ? (
+      <LevelToggle
+        level={sectionLevel(activeEntry.section, defaultLevel)}
+        onChange={(level) => void changeLevel(activeEntry, level)}
+        busy={progress?.section?.id === activeEntry.id && progress.section.variant === true}
+        label={`${t('homework.walkthrough.levelGroup')} · ${activeTitle}`}
+      />
+    ) : null
 
   const printable: PrintableSection[] = entries
     .filter((entry) => entry.section?.status === 'ready')
@@ -457,9 +497,11 @@ export function HomeworkWalkthroughPanel({
             </Badge>
           )}
           <div className="ml-auto flex flex-wrap items-center gap-2">
+            {/* Secondary actions: buttons on wide screens, one menu below xl. */}
             <Button
               variant="outline"
               size="sm"
+              className="hidden xl:inline-flex"
               disabled={running}
               onClick={() => setImportOpen(true)}
             >
@@ -473,6 +515,7 @@ export function HomeworkWalkthroughPanel({
             <Button
               variant="outline"
               size="sm"
+              className="hidden xl:inline-flex"
               disabled={readyCount === 0}
               onClick={() => setPrinting(true)}
             >
@@ -515,6 +558,7 @@ export function HomeworkWalkthroughPanel({
               <Button
                 variant="ghost"
                 size="sm"
+                className="hidden xl:inline-flex"
                 disabled={running}
                 onClick={() => setConfirmRedo(true)}
               >
@@ -522,6 +566,35 @@ export function HomeworkWalkthroughPanel({
                 {t('homework.walkthrough.regenerateAll')}
               </Button>
             )}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="xl:hidden"
+                  aria-label={t('homework.walkthrough.moreActions')}
+                  title={t('homework.walkthrough.moreActions')}
+                >
+                  <MoreHorizontal className="h-4 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem disabled={running} onSelect={() => setImportOpen(true)}>
+                  <FileUp className="h-4 w-4" />
+                  {t('walkthroughImport.open')}
+                </DropdownMenuItem>
+                <DropdownMenuItem disabled={readyCount === 0} onSelect={() => setPrinting(true)}>
+                  <Printer className="h-4 w-4" />
+                  {t('homework.walkthrough.print')}
+                </DropdownMenuItem>
+                {writtenCount > 0 && (
+                  <DropdownMenuItem disabled={running} onSelect={() => setConfirmRedo(true)}>
+                    <RotateCcw className="h-4 w-4" />
+                    {t('homework.walkthrough.regenerateAll')}
+                  </DropdownMenuItem>
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         </CardContent>
       </Card>
@@ -640,42 +713,95 @@ export function HomeworkWalkthroughPanel({
       ) : (
         <div className="grid gap-6 lg:grid-cols-[12rem_minmax(0,1fr)] lecture:lg:gap-12">
           <nav aria-label={t('homework.walkthrough.toc')} className="hidden lg:block">
-            <ol className="sticky top-4 max-h-[calc(100vh-4rem)] space-y-1 overflow-y-auto text-sm lecture:space-y-0 lab:space-y-px lab:border lab:bg-card lab:p-1">
-              {entries.map((entry) => (
-                <li key={entry.id}>
-                  <a
-                    href={`#wt-${entry.id}`}
-                    onClick={(event) => {
-                      event.preventDefault()
-                      const target = document.getElementById(`wt-${entry.id}`)
-                      if (!target) return
-                      target.scrollIntoView({
-                        behavior: prefersReducedMotion() ? 'auto' : 'smooth',
-                        block: 'start',
-                      })
-                      // Move focus too, so keyboard and screen-reader users land there.
-                      target.focus({ preventScroll: true })
-                    }}
-                    className={cn(
-                      'focus-ring block truncate rounded px-2 py-1 transition-colors duration-150 hover:bg-muted',
-                      'lecture:rounded-none lecture:border-l lecture:py-1.5 lecture:pl-3 lecture:hover:border-primary lecture:hover:bg-transparent',
-                      entry.section?.status === 'ready'
-                        ? 'text-foreground'
-                        : 'text-muted-foreground',
-                    )}
-                  >
-                    <span
-                      aria-hidden
-                      className="mr-2 hidden font-mono text-[11px] tabular-nums text-muted-foreground lab:inline"
+            <div className="sticky top-4 space-y-3">
+              <ol
+                ref={tocRef}
+                className="relative max-h-[calc(100vh-12rem)] space-y-1 overflow-y-auto text-sm lecture:space-y-0 lab:space-y-px lab:border lab:bg-card lab:p-1"
+              >
+                {entries.map((entry) => (
+                  <li key={entry.id}>
+                    <a
+                      href={`#wt-${entry.id}`}
+                      aria-current={entry.id === activeId ? 'location' : undefined}
+                      onClick={(event) => {
+                        event.preventDefault()
+                        jumpTo(entry.id)
+                      }}
+                      className={cn(
+                        'focus-ring block truncate rounded px-2 py-1 transition-colors duration-150 hover:bg-muted',
+                        'lecture:rounded-none lecture:border-l lecture:py-1.5 lecture:pl-3 lecture:hover:border-primary lecture:hover:bg-transparent',
+                        entry.section?.status === 'ready'
+                          ? 'text-foreground'
+                          : 'text-muted-foreground',
+                        entry.id === activeId &&
+                          'bg-theme-primary-soft font-medium text-foreground lecture:border-l-2 lecture:border-primary lecture:bg-transparent lecture:pl-[11px] lecture:text-primary-strong lab:bg-muted lab:shadow-[inset_2px_0_0_hsl(var(--primary))]',
+                      )}
                     >
-                      {sectionMarker(entry, labels)}
-                    </span>
-                    {sectionTitle(entry, labels, t)}
-                  </a>
-                </li>
-              ))}
-            </ol>
+                      <span
+                        aria-hidden
+                        className="mr-2 hidden font-mono text-[11px] tabular-nums text-muted-foreground lab:inline"
+                      >
+                        {sectionMarker(entry, labels)}
+                      </span>
+                      {sectionTitle(entry, labels, t)}
+                    </a>
+                  </li>
+                ))}
+              </ol>
+              {activeLevelToggle && (
+                <div className="space-y-1.5 border-t pt-3" data-print-hidden>
+                  <p className="truncate text-xs text-muted-foreground">{activeTitle}</p>
+                  {activeLevelToggle}
+                </div>
+              )}
+            </div>
           </nav>
+
+          {/* Narrower screens: a compact contents menu (and the current section's
+              普通 / 详细) that stays at the top while reading. */}
+          <div
+            className="sticky top-2 z-20 flex min-w-0 items-center gap-2 rounded-md border bg-card/95 px-1.5 py-1 shadow-sm backdrop-blur lecture:rounded-none lecture:border-x-0 lecture:bg-background/95 lecture:shadow-none lab:rounded-none lab:shadow-none lg:hidden"
+            data-print-hidden
+          >
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="min-w-0 flex-1 justify-start"
+                  aria-label={
+                    activeTitle
+                      ? `${t('homework.walkthrough.toc')} · ${activeTitle}`
+                      : t('homework.walkthrough.toc')
+                  }
+                >
+                  <ListOrdered className="h-4 w-4 shrink-0" aria-hidden />
+                  <span className="shrink-0 text-muted-foreground">
+                    {t('homework.walkthrough.toc')}
+                  </span>
+                  {activeTitle && <span className="min-w-0 truncate">{activeTitle}</span>}
+                  <ChevronDown className="h-4 w-4 shrink-0 opacity-60" aria-hidden />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent
+                align="start"
+                className="max-h-[60vh] overflow-y-auto"
+                // Focus goes to the section, not back to the menu button.
+                onCloseAutoFocus={(event) => event.preventDefault()}
+              >
+                {entries.map((entry) => (
+                  <DropdownMenuItem key={entry.id} onSelect={() => jumpTo(entry.id)}>
+                    <Check
+                      className={cn('h-4 w-4 shrink-0', entry.id !== activeId && 'invisible')}
+                      aria-hidden
+                    />
+                    <span className="truncate">{sectionTitle(entry, labels, t)}</span>
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+            {activeLevelToggle}
+          </div>
 
           <Card className="min-w-0 lecture:rounded-none lecture:border-0 lecture:bg-transparent lecture:shadow-none">
             <CardContent className="relative p-5 lecture:mx-auto lecture:max-w-[680px] lecture:px-0 sm:p-8 sm:lecture:px-0 lab:sm:px-9">
@@ -1211,16 +1337,19 @@ function LevelToggle({
   level,
   onChange,
   busy,
+  label,
 }: {
   level: WalkthroughLevel
   onChange: (level: WalkthroughLevel) => void
   busy: boolean
+  /** Accessible name; defaults to 讲解详略. */
+  label?: string
 }): JSX.Element {
   const { t } = useTranslation()
   return (
     <div
       role="group"
-      aria-label={t('homework.walkthrough.levelGroup')}
+      aria-label={label ?? t('homework.walkthrough.levelGroup')}
       data-walkthrough-level={level}
       data-print-hidden
       className="inline-flex items-center overflow-hidden rounded-md border text-xs lecture:rounded-none lab:rounded-none lab:font-mono"

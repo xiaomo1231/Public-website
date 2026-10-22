@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { scoreQuiz } from '@/services/quizService'
-import type { Quiz } from '@/entities/quiz/types'
+import { knowledgeStatPercent, type Quiz } from '@/entities/quiz/types'
 import type { QuestionAttempt, QuestionEvaluation } from '@/entities/questionAttempt/types'
 
 function evaluation(isCorrect: boolean | null): QuestionEvaluation {
@@ -111,7 +111,37 @@ describe('scoreQuiz', () => {
       wrong: 2,
       unverified: 0,
       total: 2,
+      points: 0,
     })
+  })
+
+  it('judges weak knowledge points on the same basis as the overall score', () => {
+    // An oral topic: every answer covers most of its scoring points, so none is
+    // fully correct, but the overall score is 80% — not a weak point.
+    const quiz = makeQuiz(['q1', 'q2'])
+    const partial = (questionId: string): QuestionAttempt => ({
+      ...attempt(questionId, false, { knowledgePoint: 'Brachial plexus' }),
+      evaluation: {
+        isCorrect: false,
+        method: 'rubric_ai',
+        confidence: 1,
+        score: { earned: 4, total: 5 },
+      },
+    })
+    const score = scoreQuiz(quiz, [partial('q1'), partial('q2')])
+    expect(score.percentage).toBe(80)
+    expect(score.byKnowledgePoint[0]!.points).toBe(1.6)
+    expect(knowledgeStatPercent(score.byKnowledgePoint[0]!)).toBe(80)
+    expect(score.weakKnowledgePoints).toEqual([])
+  })
+
+  it('falls back to the correct count for scores saved without points', () => {
+    expect(
+      knowledgeStatPercent({ knowledgePoint: 'x', correct: 1, wrong: 1, unverified: 0, total: 2 }),
+    ).toBe(50)
+    expect(
+      knowledgeStatPercent({ knowledgePoint: 'x', correct: 0, wrong: 0, unverified: 1, total: 1 }),
+    ).toBeNull()
   })
 
   it('flags weak knowledge points below 60% accuracy', () => {

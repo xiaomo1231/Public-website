@@ -1,6 +1,6 @@
 import { useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { Bookmark, Layers, Loader2, Maximize2 } from 'lucide-react'
+import { Bookmark, Layers, Link2, Loader2, Maximize2 } from 'lucide-react'
 import type { WalkthroughNote } from '@/entities/homework/walkthrough'
 import { useFloatingQA } from '@/features/homework/floatingQAStore'
 import { addNoteToCards, saveWindow, windowTitle } from '@/features/homework/floatingQA'
@@ -139,13 +139,31 @@ export function PassageHoverCard({
         visibility: position ? undefined : 'hidden',
       }}
       // Above the dock (z-44), below dialogs (z-50).
-      className="fixed z-[45] flex w-[min(22rem,calc(100vw-1rem))] animate-pop-in flex-col overflow-hidden rounded-xl border bg-card text-card-foreground shadow-xl lecture:rounded-2xl lecture:border-input lecture:shadow-lift lab:rounded-none lab:border-input lab:shadow-lift"
+      data-passage-kind={noteId ? 'note' : 'tucked'}
+      // A raised surface in every style and mode: a firmer border, an accent
+      // edge on top and a deep shadow (lab dark has no other elevation cue).
+      className="fixed z-[45] flex w-[min(22rem,calc(100vw-1rem))] animate-pop-in flex-col overflow-hidden rounded-xl border border-t-2 border-t-primary bg-card text-card-foreground shadow-xl lecture:rounded-2xl lecture:border-input lecture:border-t-primary lecture:shadow-lift lab:rounded-none lab:border-foreground/30 lab:border-t-primary lab:shadow-lift dark:border-foreground/25 dark:border-t-primary dark:shadow-[0_18px_44px_-10px_rgb(0_0_0/0.85)]"
     >
       <p
-        className="truncate border-b px-3 py-1.5 text-xs font-medium text-muted-foreground lecture:border-b-0 lecture:pt-2.5 lecture:font-heading lab:bg-background lab:font-mono lab:text-[11px]"
+        className="flex min-w-0 items-center gap-2 border-b px-3 py-1.5 text-xs font-medium text-muted-foreground lecture:border-b-0 lecture:pt-2.5 lecture:font-heading lab:bg-muted lab:font-mono lab:text-[11px]"
         title={title}
       >
-        {title}
+        {/* Saved note vs. a conversation tucked into the text (not saved). */}
+        <span
+          className={
+            noteId
+              ? 'inline-flex shrink-0 items-center gap-1 rounded-sm bg-theme-primary-soft px-1.5 py-px text-[11px] text-foreground'
+              : 'inline-flex shrink-0 items-center gap-1 rounded-sm border border-dashed border-primary/60 px-1.5 py-px text-[11px]'
+          }
+        >
+          {noteId ? (
+            <Bookmark className="h-3 w-3" aria-hidden />
+          ) : (
+            <Link2 className="h-3 w-3" aria-hidden />
+          )}
+          {noteId ? t('walkthroughQA.savedBadge') : t('walkthroughQA.tucked')}
+        </span>
+        <span className="min-w-0 truncate">{title}</span>
       </p>
       <div className="max-h-[320px] min-h-0 space-y-2 overflow-y-auto px-3 py-2">
         {pending ? (

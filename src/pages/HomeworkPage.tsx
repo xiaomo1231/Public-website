@@ -6,10 +6,18 @@ import {
   ArrowRight,
   ClipboardList,
   Loader2,
+  MoreHorizontal,
   RefreshCw,
   RotateCcw,
 } from 'lucide-react'
 import type { HomeworkQuestion, HomeworkSet, ReanalysisSummary } from '@/entities/homework/types'
+import { isPracticeSet } from '@/entities/homework/types'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/shared/ui/DropdownMenu'
 import { Badge } from '@/shared/ui/Badge'
 import { Button } from '@/shared/ui/Button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/shared/ui/Card'
@@ -22,6 +30,7 @@ import { formatHomeworkQuestion } from '@/entities/homework/formatQuestion'
 import { HomeworkQuestionView } from '@/widgets/homework/HomeworkQuestionView'
 import { GuidedPracticeView } from '@/widgets/homework/guided/GuidedPracticeView'
 import { HomeworkWalkthroughPanel } from '@/widgets/homework/walkthrough/HomeworkWalkthroughPanel'
+import { practiceSourceFor } from '@/widgets/homework/practice/practiceSource'
 import { ProjectFlowNav } from '@/widgets/project/ProjectFlowNav'
 import { useHomeworkService } from '@/features/homework/useHomeworkService'
 import { startHomeworkRun, useHomeworkRun } from '@/features/homework/homeworkRuns'
@@ -48,6 +57,11 @@ export function HomeworkPage(): JSX.Element {
   const [set, setSet] = useState<HomeworkSet | null>(null)
   const [questions, setQuestions] = useState<HomeworkQuestion[]>([])
   const [retired, setRetired] = useState<HomeworkQuestion[]>([])
+  /** Practice sets: the assignment they were made from, and its questions. */
+  const [parent, setParent] = useState<{
+    set: HomeworkSet | null
+    questions: HomeworkQuestion[]
+  } | null>(null)
   const [activeId, setActiveId] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [retrying, setRetrying] = useState(false)
@@ -93,6 +107,14 @@ export function HomeworkPage(): JSX.Element {
     setSet(owned)
     setQuestions(ownedQuestions)
     setRetired(owned ? nextRetired : [])
+    if (owned && isPracticeSet(owned) && owned.parentSetId) {
+      const [parentSet, parentQuestions] = await Promise.all([
+        service.getSet(owned.parentSetId),
+        service.listQuestions(owned.parentSetId),
+      ])
+      const ownedParent = parentSet && parentSet.projectId === projectId ? parentSet : null
+      setParent({ set: ownedParent, questions: ownedParent ? parentQuestions : [] })
+    } else setParent(null)
     setActiveId((prev) =>
       prev && ownedQuestions.some((q) => q.id === prev) ? prev : (ownedQuestions[0]?.id ?? null),
     )
@@ -170,6 +192,7 @@ export function HomeworkPage(): JSX.Element {
   }
 
   if (!projectId) return <div />
+  const canReanalyze = set?.status === 'ready' && questions.length > 0 && set.kind !== 'practice'
 
   return (
     <PageContainer>
@@ -226,8 +249,13 @@ export function HomeworkPage(): JSX.Element {
                 </Button>
               </div>
             )}
-            {set?.status === 'ready' && questions.length > 0 && set.kind !== 'practice' && (
-              <Button variant="outline" onClick={() => void retrySet()} disabled={retrying}>
+            {canReanalyze && (
+              <Button
+                variant="outline"
+                className="hidden xl:inline-flex"
+                onClick={() => void retrySet()}
+                disabled={retrying}
+              >
                 {retrying ? (
                   <Loader2 className="h-4 w-4 animate-spin" />
                 ) : (
@@ -245,12 +273,45 @@ export function HomeworkPage(): JSX.Element {
                 onStopNow={runHandle.stopNow}
               />
             )}
-            <Button asChild variant="outline">
+            <Button asChild variant="outline" className="hidden xl:inline-flex">
               <Link to={`/projects/${projectId}/homework`}>
                 <ArrowLeft className="h-4 w-4" />
                 {t('homework.back')}
               </Link>
             </Button>
+            {/* Narrower screens: the secondary actions sit in one menu, so the
+                header stays one tidy row next to the title. */}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="outline"
+                  size="icon"
+                  className="xl:hidden"
+                  aria-label={t('homework.menu.label')}
+                  title={t('homework.menu.label')}
+                >
+                  {retrying ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <MoreHorizontal className="h-4 w-4" />
+                  )}
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                {canReanalyze && (
+                  <DropdownMenuItem disabled={retrying} onSelect={() => void retrySet()}>
+                    <RefreshCw className="h-4 w-4" />
+                    {t('homework.reanalyze')}
+                  </DropdownMenuItem>
+                )}
+                <DropdownMenuItem asChild>
+                  <Link to={`/projects/${projectId}/homework`}>
+                    <ArrowLeft className="h-4 w-4" />
+                    {t('homework.back')}
+                  </Link>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         }
       />
@@ -348,7 +409,11 @@ export function HomeworkPage(): JSX.Element {
             )}
 
             {view === 'walkthrough' && questions.length > 0 ? (
-              <HomeworkWalkthroughPanel set={set} mode={mode} />
+              <HomeworkWalkthroughPanel
+                set={set}
+                mode={mode}
+                onPractice={() => showView('practice')}
+              />
             ) : questions.length === 0 && set.status === 'paused' ? null : questions.length ===
               0 ? (
               <Card>
@@ -450,6 +515,12 @@ export function HomeworkPage(): JSX.Element {
                     service={service}
                     mode={mode}
                     onStartGuided={() => showView('guided')}
+                    practiceSource={practiceSourceFor(
+                      set,
+                      parent?.set ?? null,
+                      parent?.questions ?? [],
+                      active,
+                    )}
                     {...(set.answerDocumentId ? { answerDocumentId: set.answerDocumentId } : {})}
                   />
                 ) : null}

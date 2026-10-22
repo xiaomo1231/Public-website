@@ -40,6 +40,8 @@ import { PageContainer, PageContent } from '@/shared/ui/Page'
 import { TruncatedText } from '@/shared/ui/TruncatedText'
 import { cn, relativeTime } from '@/shared/lib/utils'
 import { LOCALE_TAGS, useTranslation, type TranslationKey } from '@/i18n'
+import { toPercent } from '@/shared/lib/percent'
+import { joinMeta } from '@/shared/lib/joinMeta'
 
 type T = ReturnType<typeof useTranslation>['t']
 
@@ -327,7 +329,9 @@ function resumeHref(item: ResumeItem): string {
 
 interface FocusCard {
   href: string
+  /** A small label, set in caps in lab; the course name beside it keeps its case. */
   kicker: string
+  course: string
   title: string
   meta: string
   action: string
@@ -344,11 +348,15 @@ function StudyFocus({ overview }: { overview: HomeOverview }): JSX.Element {
     const kicker = t(`home.resume.kind.${resume.kind}` as TranslationKey)
     focus = {
       href: resumeHref(resume),
-      kicker: `${kicker} · ${resume.projectName}`,
+      kicker,
+      course: resume.projectName,
       title: resume.kind === 'tutor' ? resume.topicName : resume.title,
       meta:
         resume.kind === 'homework'
-          ? `${relativeTime(resume.at)} · ${t('home.resume.remaining', { count: resume.remaining })}`
+          ? joinMeta([
+              relativeTime(resume.at),
+              t('home.resume.remaining', { count: resume.remaining }),
+            ])
           : relativeTime(resume.at),
       action: t('home.resume.continue'),
     }
@@ -356,7 +364,8 @@ function StudyFocus({ overview }: { overview: HomeOverview }): JSX.Element {
     const step = stepText(courses[0].nextStep, t)
     focus = {
       href: stepHref(courses[0].project.id, courses[0].nextStep),
-      kicker: `${t('home.resume.kind.nextStep')} · ${courses[0].project.name}`,
+      kicker: t('home.resume.kind.nextStep'),
+      course: courses[0].project.name,
       title: step.title,
       meta: step.hint,
       action: t('home.resume.start'),
@@ -386,7 +395,15 @@ function StudyFocus({ overview }: { overview: HomeOverview }): JSX.Element {
             )}
           >
             <p className="min-w-0 break-words text-[13px] text-muted-foreground [overflow-wrap:anywhere] lab:font-mono lab:text-[11px] lab:uppercase lab:tracking-[0.06em]">
-              {focus.kicker}
+              {focus.course ? (
+                <>
+                  {focus.kicker}
+                  <span aria-hidden> · </span>
+                  <span className="normal-case tracking-normal">{focus.course}</span>
+                </>
+              ) : (
+                focus.kicker
+              )}
             </p>
             <p className="mt-2 break-words font-heading text-foreground transition-colors duration-200 lecture:text-[26px] lecture:font-bold lecture:leading-snug lecture:group-hover:text-primary lab:text-[20px] lab:font-semibold lab:leading-tight">
               {focus.title}
@@ -443,11 +460,17 @@ function NextStepRow({ course, href }: { course: CourseOverview; href: string })
         <Icon className={cn('h-4 w-4', busy && 'motion-safe:animate-spin')} />
       </span>
       <span className="flex min-w-0 flex-1 flex-col">
-        <span className="order-2 block truncate text-foreground transition-colors duration-200 lecture:font-heading lecture:text-[18px] lecture:font-bold lecture:group-hover:text-primary lab:order-1 lab:text-sm lab:font-medium">
+        <span
+          title={text.title}
+          className="order-2 block truncate text-foreground transition-colors duration-200 lecture:font-heading lecture:text-[18px] lecture:font-bold lecture:group-hover:text-primary lab:order-1 lab:text-sm lab:font-medium"
+        >
           {text.title}
         </span>
-        <span className="order-1 block truncate text-[13px] text-muted-foreground lab:order-2 lab:text-xs">
-          {course.project.name} · {text.hint}
+        <span
+          title={joinMeta([course.project.name, text.hint])}
+          className="order-1 block truncate text-[13px] text-muted-foreground lab:order-2 lab:text-xs"
+        >
+          {joinMeta([course.project.name, text.hint])}
         </span>
       </span>
       <ChevronRight
@@ -524,10 +547,12 @@ function CourseList({
                   className="block font-heading text-[17px] font-bold text-foreground transition-colors duration-200 group-hover:text-primary"
                 />
                 <span className="mt-0.5 block truncate text-[13px] text-muted-foreground">
-                  {t(SUBJECT_LABEL_KEYS[project.subject])} ·{' '}
-                  {t('home.courses.lastActive', {
-                    date: relativeTime(course?.lastActivityAt ?? project.updatedAt),
-                  })}
+                  {joinMeta([
+                    t(SUBJECT_LABEL_KEYS[project.subject]),
+                    t('home.courses.lastActive', {
+                      date: relativeTime(course?.lastActivityAt ?? project.updatedAt),
+                    }),
+                  ])}
                 </span>
                 {course && <CourseStats course={course} estimate={estimate} />}
               </Link>
@@ -561,13 +586,14 @@ function CourseStats({
   if (course.activeMistakes > 0)
     items.push(t('home.courses.mistakes', { count: course.activeMistakes }))
   if (estimate)
-    items.push(t('home.courses.masteryEstimate', { value: Math.round(estimate.average * 100) }))
+    items.push(t('home.courses.masteryEstimate', { value: toPercent(estimate.average) }))
   return (
     <span className="data-num mt-1 flex flex-wrap gap-x-1.5 text-[12.5px] leading-5 text-muted-foreground">
+      {/* The separator trails each item, so a wrapped line never starts with "·". */}
       {items.map((item, index) => (
         <span key={item} className="inline-flex gap-1.5">
-          {index > 0 && <span aria-hidden>·</span>}
           <span>{item}</span>
+          {index < items.length - 1 && <span aria-hidden>·</span>}
         </span>
       ))}
     </span>
@@ -632,8 +658,10 @@ function CourseTable({
                         className="font-medium text-foreground"
                       />
                       <span className="block truncate text-xs text-muted-foreground">
-                        {t(SUBJECT_LABEL_KEYS[project.subject])} ·{' '}
-                        {relativeTime(course?.lastActivityAt ?? project.updatedAt)}
+                        {joinMeta([
+                          t(SUBJECT_LABEL_KEYS[project.subject]),
+                          relativeTime(course?.lastActivityAt ?? project.updatedAt),
+                        ])}
                       </span>
                     </Link>
                   </td>
@@ -643,7 +671,7 @@ function CourseTable({
                   <td className={cell}>
                     {estimate ? (
                       <span className="flex items-center gap-2.5">
-                        <span className="font-mono">{Math.round(estimate.average * 100)}%</span>
+                        <span className="font-mono">{toPercent(estimate.average)}%</span>
                         <MiniBar value={estimate.average} className="w-16" />
                       </span>
                     ) : (
@@ -692,7 +720,7 @@ function WeakPoints({ courses }: { courses: CourseOverview[] }): JSX.Element | n
       <p className="mb-3 mt-1 text-[13px] text-muted-foreground">{t('home.weak.hint')}</p>
       <ul className="hairline-list lecture:border-y lecture:border-border lab:border lab:border-border lab:bg-card">
         {points.map((point) => {
-          const value = Math.round(point.mastery * 100)
+          const value = toPercent(point.mastery)
           return (
             <li key={`${point.project.id}:${point.knowledgePoint}`}>
               <Link
@@ -700,14 +728,20 @@ function WeakPoints({ courses }: { courses: CourseOverview[] }): JSX.Element | n
                 className="focus-ring group block py-2.5 transition-colors duration-200 lecture:py-3 lab:px-3.5 lab:hover:bg-accent/60"
               >
                 <span className="flex items-baseline justify-between gap-3">
-                  <span className="min-w-0 truncate text-sm font-medium text-foreground transition-colors duration-200 lecture:group-hover:text-primary">
+                  <span
+                    title={point.knowledgePoint}
+                    className="min-w-0 truncate text-sm font-medium text-foreground transition-colors duration-200 lecture:group-hover:text-primary"
+                  >
                     {point.knowledgePoint}
                   </span>
                   <span className="data-num shrink-0 text-[13px] text-muted-foreground lab:font-mono lab:text-xs">
                     {t('home.weak.mastery', { value })}
                   </span>
                 </span>
-                <span className="mt-0.5 block truncate text-[12px] text-muted-foreground">
+                <span
+                  title={point.project.name}
+                  className="mt-0.5 block truncate text-[12px] text-muted-foreground"
+                >
                   {point.project.name}
                 </span>
                 <MiniBar

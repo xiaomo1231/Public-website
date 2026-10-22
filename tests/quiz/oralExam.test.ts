@@ -440,4 +440,22 @@ describe('oral grading, follow-ups and results', () => {
     const after = oralTopicScores(questions, await service.getAttempts(quiz.id))[0]!
     expect(after).toMatchObject({ earned: 2, total: 3, unscored: 1 })
   })
+
+  it('scores a blank answer after the countdown as timed out, without asking the AI', async () => {
+    const { projectId } = await seedCourse()
+    const { ai, chatJSON } = oralAI()
+    const service = new QuizService({ ai, db })
+    const quiz = await service.generateQuiz(projectId, oralConfig({ count: 1 }))
+    const main = oralGroups(await service.getQuestions(quiz.id))[0]!.main
+    chatJSON.mockClear()
+
+    const result = await service.submitAnswer(quiz.id, main.id, '   ', {
+      gradeShortAnswer: true,
+      timedOut: true,
+    })
+    expect(chatJSON).not.toHaveBeenCalled()
+    expect(result.evaluation.isCorrect).toBe(false)
+    expect(result.evaluation.score).toEqual({ earned: 0, total: main.rubric!.length })
+    expect(result.attempt.timedOut).toBe(true)
+  })
 })

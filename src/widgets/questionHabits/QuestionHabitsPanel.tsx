@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Loader2, Pencil, Plus, RefreshCw, Sparkles, Trash2 } from 'lucide-react'
+import { ArrowUpRight, Loader2, Pencil, Plus, RefreshCw, Sparkles, Trash2 } from 'lucide-react'
 import {
   QUESTION_HABIT_CATEGORIES,
   type QuestionHabitCategory,
@@ -138,7 +138,8 @@ export function QuestionHabitsPanel({ projectId }: { projectId: string }): JSX.E
   })).filter((group) => group.items.length > 0)
 
   return (
-    <div className="space-y-6">
+    // ~70ch measure: the statements and quotes are read as prose.
+    <div className="max-w-[70ch] space-y-6">
       <SectionHeading
         title={t('habits.title')}
         description={t('habits.description')}
@@ -365,9 +366,10 @@ function HabitRow({
                 </blockquote>
                 <Link
                   to={evidenceLink(projectId, evidence)}
-                  className="focus-ring rounded-sm pl-3 text-primary underline-offset-2 hover:underline"
+                  className="focus-ring ml-3 inline-flex min-h-8 items-center gap-1 rounded-sm text-sm font-medium text-primary underline-offset-2 hover:underline"
                 >
                   {t('habits.openSource')}
+                  <ArrowUpRight className="h-3.5 w-3.5" aria-hidden />
                 </Link>
               </li>
             ))}

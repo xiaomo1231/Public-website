@@ -7,6 +7,9 @@ import { EmptyState } from '@/shared/ui/EmptyState'
 import { LoadingState } from '@/shared/ui/LoadingState'
 import { Progress } from '@/shared/ui/Progress'
 import { TruncatedText } from '@/shared/ui/TruncatedText'
+import { Math as TeX } from '@/shared/ui/Math'
+import { RichText } from '@/shared/ui/RichText'
+import { inlineMath, stripMathDelimiters } from '@/shared/lib/mathDisplay'
 import { toast } from '@/features/toast/toastStore'
 import {
   CourseContentService,
@@ -233,14 +236,6 @@ export function CourseAnalysisPanel({
               : analysis.language.toUpperCase()}
           </Badge>
         )}
-        {analysis?.promptVersion && (
-          <Badge variant="outline" title={analysis.promptVersion}>
-            {/* Full provenance (with the subject profile) stays in the tooltip. */}
-            {t('analysis.prompt', {
-              version: analysis.promptVersion.split('+')[0] ?? analysis.promptVersion,
-            })}
-          </Badge>
-        )}
         {analysis && !busy && freshness?.fresh && (
           <Badge variant="outline">{t('analysis.saved')}</Badge>
         )}
@@ -251,7 +246,7 @@ export function CourseAnalysisPanel({
         freshness &&
         !freshness.fresh &&
         freshness.reasons.some((reason) => reason !== 'missing') && (
-          <div className="space-y-1 rounded-lg border border-amber-500/40 bg-amber-500/5 px-3 py-2 text-sm">
+          <div className="max-w-[70ch] space-y-1 rounded-lg border border-amber-500/40 bg-amber-500/5 px-3 py-2 text-sm">
             <p className="font-medium">
               {freshness.reasons.every((reason) => reason === 'input-truncated')
                 ? t('analysis.staleTruncated')
@@ -274,7 +269,7 @@ export function CourseAnalysisPanel({
       {!busy && paused && controls}
 
       {analysis?.status === 'failed' && analysis.errorMessage && (
-        <div className="space-y-1 rounded-lg border border-destructive/40 bg-destructive/5 px-3 py-2 text-sm">
+        <div className="max-w-[70ch] space-y-1 rounded-lg border border-destructive/40 bg-destructive/5 px-3 py-2 text-sm">
           <p className="font-medium text-destructive">{t('analysis.failed')}</p>
           <p className="text-muted-foreground">
             {t('analysis.failedReason', { reason: analysis.errorMessage })}
@@ -318,19 +313,26 @@ export function CourseAnalysisPanel({
           <CardContent className="space-y-2 text-sm">
             {formulas.slice(0, 10).map((f) => (
               <div key={f.id} className="min-w-0 rounded-lg border bg-muted/30 px-3 py-2">
-                <div className="flex min-w-0 flex-wrap items-baseline gap-2">
-                  <TruncatedText text={f.name} className="font-medium" />
-                  <code className="max-w-full break-all rounded bg-background px-1 font-mono text-xs">
-                    {f.latex}
-                  </code>
-                </div>
-                <p className="break-words text-xs text-muted-foreground">{f.description}</p>
+                <TruncatedText text={f.name} className="font-medium" />
+                {/* Typeset, left-aligned; a wide formula scrolls inside its own box. */}
+                <TeX
+                  latex={stripMathDelimiters(f.latex)}
+                  display
+                  className="my-1 text-left [&_.katex-display>.katex]:text-left [&_.katex-display]:text-left"
+                />
+                <p className="max-w-[70ch] break-words text-xs text-muted-foreground">
+                  {f.description}
+                </p>
                 {f.variables.length > 0 && (
-                  <p className="mt-1 text-[11px] text-muted-foreground">
-                    {t('analysis.variables', {
-                      variables: f.variables.map((v) => `${v.symbol} = ${v.meaning}`).join(', '),
+                  <RichText
+                    text={t('analysis.variables', {
+                      variables: f.variables
+                        .map((v) => `${inlineMath(v.symbol)} = ${v.meaning}`)
+                        .join(', '),
                     })}
-                  </p>
+                    className="mt-1 max-w-[70ch]"
+                    paragraphClassName="text-[11px] leading-relaxed text-muted-foreground"
+                  />
                 )}
               </div>
             ))}
@@ -351,16 +353,28 @@ export function CourseAnalysisPanel({
           <CardContent className="grid gap-2 sm:grid-cols-2">
             {symbols.slice(0, 18).map((s) => (
               <div key={s.id} className="rounded-lg border bg-muted/30 px-3 py-2 text-sm">
-                <div className="flex items-baseline gap-2">
-                  <code className="rounded bg-background px-1 font-mono text-sm">{s.symbol}</code>
+                <div className="flex min-w-0 items-baseline gap-2">
+                  <TeX latex={stripMathDelimiters(s.symbol)} className="min-w-0" />
                   {s.unit && <span className="text-xs text-muted-foreground">[{s.unit}]</span>}
                 </div>
-                <p className="text-xs">{s.meaning}</p>
+                <p className="max-w-[70ch] text-xs">{s.meaning}</p>
                 <p className="text-[11px] text-muted-foreground">{s.context}</p>
               </div>
             ))}
           </CardContent>
         </Card>
+      )}
+
+      {analysis?.promptVersion && (
+        // Provenance is for troubleshooting, not for studying: tucked away, collapsed.
+        <details className="text-xs text-muted-foreground">
+          <summary className="w-fit cursor-pointer select-none rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+            {t('analysis.technicalDetails')}
+          </summary>
+          <p className="mt-1 break-all font-mono text-[11px]">
+            {t('analysis.prompt', { version: analysis.promptVersion })}
+          </p>
+        </details>
       )}
     </div>
   )
@@ -432,7 +446,7 @@ function TopicContents({
                       className="text-[15px] text-foreground transition-colors duration-150 group-hover:text-primary"
                     />
                     {topic.description && (
-                      <span className="line-clamp-1 break-words text-xs text-muted-foreground">
+                      <span className="line-clamp-1 max-w-[70ch] break-words text-xs text-muted-foreground">
                         {topic.description}
                       </span>
                     )}
@@ -497,7 +511,7 @@ function TopicTable({
                     className="font-medium text-foreground transition-colors duration-150 hover:text-primary"
                   />
                   {topic.description && (
-                    <span className="line-clamp-1 break-words text-xs text-muted-foreground">
+                    <span className="line-clamp-1 max-w-[70ch] break-words text-xs text-muted-foreground">
                       {topic.description}
                     </span>
                   )}

@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import {
   ArrowLeft,
   Brain,
+  ChevronRight,
   ClipboardList,
   Clock,
   ListChecks,
@@ -20,10 +21,13 @@ import { QuizConfigDialog } from '@/widgets/quiz/QuizConfigDialog'
 import { ProjectFlowNav } from '@/widgets/project/ProjectFlowNav'
 import { buildAIServices, buildOfflineQuizService } from '@/services/aiServices'
 import { QuizRepository } from '@/entities/quiz/repository'
+import { PracticeService } from '@/services/practiceService'
+import type { PracticeSet } from '@/entities/practice/types'
 import {
   QUIZ_STATUS_LABEL_KEYS,
   quizGenerationProgress,
   quizLength,
+  splitQuizzes,
   type Quiz,
   type QuizConfig,
 } from '@/entities/quiz/types'
@@ -41,7 +45,10 @@ export function QuizLandingPage(): JSX.Element {
   const navigate = useNavigate()
   const { t } = useTranslation()
   const [quizzes, setQuizzes] = useState<Quiz[]>([])
+  const [practiceSets, setPracticeSets] = useState<PracticeSet[]>([])
   const [loading, setLoading] = useState(true)
+  /** Whether a quiz can be generated (the course is analysed); null while loading. */
+  const [canGenerate, setCanGenerate] = useState<boolean | null>(null)
   const [busy, setBusy] = useState(false)
   const [progress, setProgress] = useState<{ stage: string; progress: number } | null>(null)
   /** The paused quiz whose remaining questions are being generated. */
@@ -73,8 +80,14 @@ export function QuizLandingPage(): JSX.Element {
         await buildOfflineQuizService()
           .recoverInterruptedQuizzes(projectId)
           .catch(() => undefined)
-        const rows = await new QuizRepository().listByProject(projectId)
-        if (!cancelled) setQuizzes(rows)
+        const [rows, sets] = await Promise.all([
+          new QuizRepository().listByProject(projectId),
+          new PracticeService().listSets(projectId).catch(() => [] as PracticeSet[]),
+        ])
+        if (!cancelled) {
+          setQuizzes(rows)
+          setPracticeSets(sets)
+        }
       } finally {
         if (!cancelled) setLoading(false)
       }
@@ -210,6 +223,54 @@ export function QuizLandingPage(): JSX.Element {
 
   if (!projectId) return <div />
 
+  const { active, finished } = splitQuizzes(quizzes)
+
+  const quizRow = (q: Quiz) =>
+    q.status === 'paused' ? (
+      <PausedQuizRow
+        key={q.id}
+        quiz={q}
+        busy={busy}
+        continuing={continuingId === q.id}
+        progress={continuingId === q.id ? progress : null}
+        controls={controls}
+        onContinue={() => void handleContinue(q.id)}
+      />
+    ) : (
+      <Link
+        key={q.id}
+        to={
+          q.status === 'completed'
+            ? `/projects/${projectId}/quiz/${q.id}/result`
+            : `/projects/${projectId}/quiz/${q.id}`
+        }
+        className={ROW_LINK}
+        title={q.title}
+      >
+        <span className="min-w-0 flex-1 truncate font-medium lecture:font-heading">{q.title}</span>
+        <Badge
+          variant={
+            q.status === 'completed'
+              ? 'default'
+              : q.status === 'failed'
+                ? 'destructive'
+                : 'secondary'
+          }
+        >
+          {t(QUIZ_STATUS_LABEL_KEYS[q.status])}
+        </Badge>
+        {q.score && (
+          <Badge variant="outline" className="data-num lab:font-mono">
+            {q.score.percentage}%
+          </Badge>
+        )}
+        <span className="data-num flex items-center gap-1 text-xs text-muted-foreground lab:font-mono">
+          <Clock className="h-3 w-3" />
+          {formatDateTime(q.startedAt)}
+        </span>
+      </Link>
+    )
+
   return (
     <PageContainer>
       <PageHeader
@@ -236,6 +297,19 @@ export function QuizLandingPage(): JSX.Element {
         }
       />
       <PageContent className="space-y-6">
+        {/* Unfinished quizzes come first: continuing one is the likeliest next step. */}
+        {active.length > 0 && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">{t('quiz.inProgress')}</CardTitle>
+              <CardDescription>{t('quiz.inProgressHint')}</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-2 lab:space-y-0 lab:pt-px">
+              {active.map(quizRow)}
+            </CardContent>
+          </Card>
+        )}
+
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">
@@ -244,7 +318,28 @@ export function QuizLandingPage(): JSX.Element {
             </CardTitle>
             <CardDescription>{t('practice.subtitle')}</CardDescription>
           </CardHeader>
-          <CardContent>
+          <CardContent className="space-y-3">
+            {practiceSets.length > 0 && (
+              <ul className="space-y-2 lab:space-y-0">
+                {practiceSets.map((set) => (
+                  <li key={set.id}>
+                    <Link
+                      to={`/projects/${projectId}/practice`}
+                      className={ROW_LINK}
+                      title={set.name}
+                    >
+                      <span className="min-w-0 flex-1 truncate font-medium lecture:font-heading">
+                        {set.name}
+                      </span>
+                      <span className="data-num text-xs text-muted-foreground lab:font-mono">
+                        {t('quiz.practiceSetCount', { count: set.questionCount })}
+                      </span>
+                      <ChevronRight className="h-4 w-4 text-muted-foreground" aria-hidden />
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            )}
             <Button asChild variant="outline" size="sm">
               <Link to={`/projects/${projectId}/practice`}>
                 <Upload className="h-4 w-4" />
@@ -261,86 +356,48 @@ export function QuizLandingPage(): JSX.Element {
             busy={busy}
             progress={continuingId ? null : progress}
             controls={controls}
+            onAvailability={setCanGenerate}
           />
         </div>
 
         {loading ? (
           <LoadingState label={t('quiz.loading')} />
         ) : quizzes.length === 0 ? (
-          <EmptyState
-            icon={<ListChecks className="h-10 w-10" />}
-            title={t('quiz.empty')}
-            description={t('quiz.emptyHint')}
-            action={
-              <Button variant="outline" onClick={focusConfig}>
-                <Sparkles className="h-4 w-4" />
-                {t('quiz.setup')}
-              </Button>
-            }
-          />
-        ) : (
+          // Only when a quiz can be generated: otherwise the setup card above
+          // already says what to do first, with its own button.
+          canGenerate ? (
+            <EmptyState
+              icon={<ListChecks className="h-10 w-10" />}
+              title={t('quiz.empty')}
+              description={t('quiz.emptyHint')}
+              action={
+                <Button variant="outline" onClick={focusConfig}>
+                  <Sparkles className="h-4 w-4" />
+                  {t('quiz.setup')}
+                </Button>
+              }
+            />
+          ) : null
+        ) : finished.length > 0 ? (
           <Card>
             <CardHeader>
               <CardTitle className="text-base">{t('quiz.previous')}</CardTitle>
               <CardDescription>
-                {t('quiz.previousCount', { count: quizzes.length })}
+                {t('quiz.previousCount', { count: finished.length })}
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-2 lab:space-y-0 lab:pt-px">
-              {quizzes.map((q) =>
-                q.status === 'paused' ? (
-                  <PausedQuizRow
-                    key={q.id}
-                    quiz={q}
-                    busy={busy}
-                    continuing={continuingId === q.id}
-                    progress={continuingId === q.id ? progress : null}
-                    controls={controls}
-                    onContinue={() => void handleContinue(q.id)}
-                  />
-                ) : (
-                  <Link
-                    key={q.id}
-                    to={
-                      q.status === 'completed'
-                        ? `/projects/${projectId}/quiz/${q.id}/result`
-                        : `/projects/${projectId}/quiz/${q.id}`
-                    }
-                    className="flex flex-wrap items-center gap-3 rounded-lg border px-3 py-2 text-sm transition-colors duration-150 ease-out hover:bg-accent/50 lecture:rounded-xl lecture:px-4 lecture:py-2.5 lab:-mt-px lab:rounded-none lab:hover:bg-background"
-                  >
-                    <span className="min-w-0 flex-1 truncate font-medium lecture:font-heading">
-                      {q.title}
-                    </span>
-                    <Badge
-                      variant={
-                        q.status === 'completed'
-                          ? 'default'
-                          : q.status === 'failed'
-                            ? 'destructive'
-                            : 'secondary'
-                      }
-                    >
-                      {t(QUIZ_STATUS_LABEL_KEYS[q.status])}
-                    </Badge>
-                    {q.score && (
-                      <Badge variant="outline" className="data-num lab:font-mono">
-                        {q.score.percentage}%
-                      </Badge>
-                    )}
-                    <span className="data-num flex items-center gap-1 text-xs text-muted-foreground lab:font-mono">
-                      <Clock className="h-3 w-3" />
-                      {formatDateTime(q.startedAt)}
-                    </span>
-                  </Link>
-                ),
-              )}
+              {finished.map(quizRow)}
             </CardContent>
           </Card>
-        )}
+        ) : null}
       </PageContent>
     </PageContainer>
   )
 }
+
+const ROW_LINK =
+  'flex flex-wrap items-center gap-3 rounded-lg border px-3 py-2 text-sm transition-colors duration-150 ease-out hover:bg-accent/50 lecture:rounded-xl lecture:px-4 lecture:py-2.5 lab:-mt-px lab:rounded-none lab:hover:bg-background'
 
 /**
  * An unfinished quiz: its questions so far are kept, it cannot be taken yet,

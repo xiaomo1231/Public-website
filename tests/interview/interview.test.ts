@@ -397,6 +397,24 @@ describe('interview service', () => {
     await expect(service.ask(project.id, session.id, 'Van láza?')).rejects.toThrow()
     expect((await service.get(project.id, session.id)).turns).toHaveLength(2)
 
+    // Nothing to resend while the last question has its reply.
+    await expect(service.resendLast(project.id, session.id)).rejects.toThrow()
+    // A stored question without a reply is asked again and replaced, not duplicated.
+    await db.interviewSessions.update(session.id, {
+      turns: [...session.turns, { role: 'student', text: 'Van láza?', at: Date.now() }],
+    })
+    session = await service.resendLast(project.id, session.id)
+    expect(session.turns.map((turn) => turn.role)).toEqual([
+      'student',
+      'patient',
+      'student',
+      'patient',
+    ])
+    expect(session.turns[2]!.text).toBe('Van láza?')
+    session = await service.get(project.id, session.id)
+    session = { ...session, turns: session.turns.slice(0, 2) }
+    await db.interviewSessions.put(session)
+
     await service.endInterview(session.id)
     session = await service.grade(project.id, session.id, 'The patient is József Szabó, 66.')
     expect(session.status).toBe('graded')

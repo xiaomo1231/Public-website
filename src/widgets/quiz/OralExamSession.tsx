@@ -146,6 +146,7 @@ export function OralExamSession({
       try {
         result = await (graded ?? service).submitAnswer(quiz.id, current.id, answer, {
           durationMs: Date.now() - startedAt.current,
+          ...(timeUp ? { timedOut: true } : {}),
           ...(graded ? { gradeShortAnswer: true } : {}),
           ...(run ? { signal: run.signal } : {}),
         })
@@ -291,7 +292,9 @@ export function OralExamSession({
                           <span key={index}>{segment.text}</span>
                         ),
                       )
-                    : t('quizResult.blank')}
+                    : attempt?.timedOut
+                      ? t('quiz.timedOutBlank')
+                      : t('quizResult.blank')}
                 </p>
                 {evidence.length > 0 && (
                   <p className="text-xs text-muted-foreground">{t('oral.evidenceLegend')}</p>

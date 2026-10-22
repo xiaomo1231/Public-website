@@ -26,7 +26,7 @@ import { buildOfflineQuizService, buildAIServices } from '@/services/aiServices'
 import { QuestionSource } from '@/widgets/quiz/QuestionSource'
 import { OralTopicScores } from '@/widgets/quiz/OralTopicScores'
 import { ProjectFlowNav } from '@/widgets/project/ProjectFlowNav'
-import type { Quiz } from '@/entities/quiz/types'
+import { knowledgeStatPercent, type Quiz } from '@/entities/quiz/types'
 import {
   QUESTION_TYPE_LABEL_KEYS,
   displayAnswer,
@@ -341,8 +341,8 @@ export function QuizResultPage(): JSX.Element {
                 <p className="text-xs text-muted-foreground">{t('quizResult.noData')}</p>
               ) : (
                 score.byKnowledgePoint.map((k) => {
-                  const gradable = k.correct + k.wrong
-                  const pct = gradable > 0 ? Math.round((k.correct / gradable) * 100) : 0
+                  // Same basis as the overall score (partial short-answer credit).
+                  const pct = knowledgeStatPercent(k) ?? 0
                   return (
                     <div key={k.knowledgePoint} className={RULE_ROW}>
                       <div className="flex items-center justify-between text-sm">
@@ -446,20 +446,24 @@ export function QuizResultPage(): JSX.Element {
                           })}
                         </p>
                       )}
-                      <p className="mt-1 text-xs text-muted-foreground">
-                        {t('quizResult.yourAnswer', {
-                          value: displayAnswer(q, attempt.userAnswer) || t('quizResult.blank'),
+                      <AnswerText
+                        className="mt-1"
+                        text={t('quizResult.yourAnswer', {
+                          value: attempt.timedOut
+                            ? t('quiz.timedOutBlank')
+                            : displayAnswer(q, attempt.userAnswer) || t('quizResult.blank'),
                         })}
-                      </p>
-                      <p className="whitespace-pre-wrap text-xs text-muted-foreground">
-                        {t('quizResult.expected', {
+                      />
+                      <AnswerText
+                        text={t('quizResult.expected', {
                           value: attempt.evaluation.expected ?? expectedText(q),
                         })}
-                      </p>
+                      />
                       {q.solution && (
-                        <p className="mt-1 text-xs text-muted-foreground">
-                          {t('quizResult.solution', { value: q.solution })}
-                        </p>
+                        <AnswerText
+                          className="mt-1"
+                          text={t('quizResult.solution', { value: q.solution })}
+                        />
                       )}
                       <div className="mt-2">
                         <QuestionSource
@@ -495,14 +499,14 @@ export function QuizResultPage(): JSX.Element {
                       format="markdown"
                       paragraphClassName="text-sm font-medium leading-[1.7]"
                     />
-                    <p className="text-xs text-muted-foreground">
-                      {t('quizResult.answerExpected', {
-                        yours:
+                    <AnswerText
+                      text={t('quizResult.yourAnswer', {
+                        value:
                           (attempt && displayAnswer(q, attempt.userAnswer)) ||
                           t('quizResult.blank'),
-                        expected: expectedText(q),
                       })}
-                    </p>
+                    />
+                    <AnswerText text={t('quizResult.expected', { value: expectedText(q) })} />
                   </div>
                 )
               })}
@@ -551,6 +555,22 @@ export function QuizResultPage(): JSX.Element {
         )}
       </PageContent>
     </PageContainer>
+  )
+}
+
+/**
+ * An answer / reference line. Answers and references often carry `$…$` math
+ * (matrices, fractions), so they go through RichText instead of plain text;
+ * wide display math scrolls inside the line rather than being clipped.
+ */
+function AnswerText({ text, className }: { text: string; className?: string }): JSX.Element {
+  return (
+    <RichText
+      text={text}
+      format="markdown"
+      className={cn('max-w-full space-y-1 overflow-x-auto', className)}
+      paragraphClassName="text-xs leading-[1.7] text-muted-foreground"
+    />
   )
 }
 

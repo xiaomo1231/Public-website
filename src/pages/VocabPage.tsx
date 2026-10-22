@@ -29,7 +29,7 @@ import { useThemeStore } from '@/features/theme/themeStore'
 import { StudySession } from '@/widgets/vocab/StudySession'
 import { ExportMenu, ImportDialog, WordListDialog } from '@/widgets/vocab/VocabDialogs'
 import { WordListImportDialog } from '@/widgets/vocab/WordListImportDialog'
-import { targetLanguageOf } from '@/shared/lib/language'
+import { languageName, targetLanguageOf } from '@/shared/lib/language'
 import {
   MAX_DAILY_NEW,
   VocabService,
@@ -82,6 +82,7 @@ export function VocabPage(): JSX.Element {
   const [error, setError] = useState(false)
   const [reloadKey, setReloadKey] = useState(0)
   const [session, setSession] = useState<SessionItem[] | null>(null)
+  const [sessionKind, setSessionKind] = useState<'today' | 'mistakes'>('today')
   const [starting, setStarting] = useState(false)
   const [importOpen, setImportOpen] = useState(false)
   const [viewing, setViewing] = useState<BookSummary | null>(null)
@@ -128,6 +129,7 @@ export function VocabPage(): JSX.Element {
         })
         return
       }
+      setSessionKind(kind)
       setSession(items)
     } catch (err) {
       // e.g. the dictionary (public/vocab/dictionary.json) failed to load.
@@ -189,6 +191,11 @@ export function VocabPage(): JSX.Element {
           <StudySession
             items={session}
             bookId={settings.bookId}
+            {...(sessionKind === 'mistakes'
+              ? { sourceLabel: t('vocab.tab.mistakes') }
+              : current
+                ? { sourceLabel: bookName(current, t) }
+                : {})}
             service={service}
             onProgress={refreshStats}
             onExit={() => {
@@ -436,6 +443,11 @@ function TodayCard({
             {starting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
             {allDone ? t('vocab.allDone') : t('vocab.start', { review: stats.due, fresh: newLeft })}
           </Button>
+          {stats.dueAllBooks > stats.due && (
+            <span className="text-xs text-muted-foreground">
+              {t('vocab.dueOtherBooks', { count: stats.dueAllBooks - stats.due })}
+            </span>
+          )}
         </div>
         <div className="grid gap-4 border-t border-border/70 pt-4 lecture:border-b lecture:pb-4 lab:border lab:bg-card lab:p-4 sm:grid-cols-3">
           <div className="space-y-1">
@@ -656,7 +668,11 @@ function BookList({
   t: T
 }): JSX.Element {
   return (
-    <Card className="lecture:rounded-none lecture:border-x-0 lecture:border-b-0 lecture:bg-transparent lecture:shadow-none">
+    <Card className={FLAT_IN_LECTURE}>
+      <CardHeader className={PANEL_HEAD}>
+        <CardTitle className={PANEL_TITLE}>{t('vocab.tab.books')}</CardTitle>
+        <CardDescription>{t('vocab.booksHint')}</CardDescription>
+      </CardHeader>
       <CardContent className="divide-y divide-border/70 p-0 lecture:divide-border">
         {books.map((book) => (
           <BookRow
@@ -671,7 +687,9 @@ function BookList({
           />
         ))}
       </CardContent>
-      <p className="px-6 pb-4 text-xs text-muted-foreground">{t('vocab.dictionarySource')}</p>
+      <p className="px-6 pb-4 pt-3 text-xs text-muted-foreground lecture:px-0 lab:px-3.5">
+        {t('vocab.dictionarySource')}
+      </p>
     </Card>
   )
 }
@@ -694,6 +712,7 @@ function CourseVocabPanel({
   t: T
 }): JSX.Element {
   const { projects, loading } = useProjects()
+  const { language } = useTranslation()
   const [running, setRunning] = useState<string | null>(null)
   /** The language course whose textbook word list is being imported. */
   const [importFor, setImportFor] = useState<string | null>(null)
@@ -772,9 +791,16 @@ function CourseVocabPanel({
           return (
             <div key={project.id}>
               <div className="flex flex-wrap items-center gap-3 px-6 py-3 lecture:px-0 lab:px-3.5">
-                <p className="min-w-0 flex-1 text-sm font-medium lecture:font-heading lecture:text-base lecture:font-bold">
-                  {project.name}
-                </p>
+                <div className="min-w-0 flex-1">
+                  <p className="break-words text-sm font-medium lecture:font-heading lecture:text-base lecture:font-bold">
+                    {project.name}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    {t('vocab.course.sourceLanguage', {
+                      language: languageName(targetLanguageOf(project) ?? 'en', language),
+                    })}
+                  </p>
+                </div>
                 <Button
                   variant="outline"
                   size="sm"

@@ -14,6 +14,7 @@ import { MISTAKE_TYPE_LABEL_KEYS } from '@/entities/mistake/types'
 import { Badge } from '@/shared/ui/Badge'
 import { Button } from '@/shared/ui/Button'
 import { Card, CardContent, CardHeader } from '@/shared/ui/Card'
+import { RichText } from '@/shared/ui/RichText'
 import { MistakeAnalysisView, AnalysisPlaceholder } from './MistakeAnalysisView'
 import { PracticeMoreMenu } from './PracticeMoreMenu'
 import { QuestionSource } from '@/widgets/quiz/QuestionSource'
@@ -23,6 +24,22 @@ import { useTranslation } from '@/i18n'
 import { useGenerationRun } from '@/shared/lib/useGenerationRun'
 import { GenerationControls } from '@/shared/ui/GenerationControls'
 import { DIFFICULTY_LABEL_KEYS } from '@/infrastructure/ai/prompts/types'
+
+function AnswerItem({ label, value }: { label: string; value: string }): JSX.Element {
+  return (
+    <div className="flex min-w-0 max-w-full items-baseline gap-1">
+      <dt className="shrink-0">{label}</dt>
+      <dd className="min-w-0">
+        <RichText
+          text={value}
+          format="markdown"
+          className="space-y-1"
+          paragraphClassName="text-xs leading-relaxed text-muted-foreground"
+        />
+      </dd>
+    </div>
+  )
+}
 
 export interface MistakeCardProps {
   mistake: Mistake
@@ -111,13 +128,20 @@ export function MistakeCard({
               </Badge>
             )}
           </div>
-          <p className="line-clamp-2 text-sm font-medium lecture:text-[15px]">{mistake.question}</p>
-          <p className="text-xs text-muted-foreground">
-            {t('mistakeCard.answerLine', {
-              yours: mistake.studentAnswer || t('quizResult.blank'),
-              correct: mistake.correctAnswer,
-            })}
-          </p>
+          {/* Stored question / answers are Markdown + LaTeX; wide matrices scroll in their own box. */}
+          <RichText
+            text={mistake.question}
+            format="markdown"
+            className="min-w-0 space-y-2"
+            paragraphClassName="text-sm font-medium leading-relaxed lecture:text-[15px]"
+          />
+          <dl className="flex flex-wrap gap-x-5 gap-y-1 text-xs text-muted-foreground">
+            <AnswerItem
+              label={t('mistakeCard.yourAnswer')}
+              value={mistake.studentAnswer || t('quizResult.blank')}
+            />
+            <AnswerItem label={t('mistakeCard.correctAnswer')} value={mistake.correctAnswer} />
+          </dl>
         </div>
         <span className="text-xs tabular-nums text-muted-foreground lab:font-mono lab:text-[11px]">
           {relativeTime(mistake.createdAt)}

@@ -264,7 +264,7 @@ export function WordListImportDialog({
                   {groups.map((group, g) => (
                     <section key={`${group.lesson}-${g}`} aria-label={group.lesson || undefined}>
                       {group.lesson && (
-                        <h3 className="sticky top-0 z-[1] bg-background px-2 py-1.5 text-xs font-semibold text-muted-foreground lecture:font-heading lab:font-mono lab:uppercase">
+                        <h3 className="sticky top-0 z-[1] bg-background px-2 py-1.5 text-xs font-semibold text-muted-foreground lecture:font-heading">
                           {group.lesson}
                         </h3>
                       )}

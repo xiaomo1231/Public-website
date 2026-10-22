@@ -53,6 +53,28 @@ export function TeachingBlock({ spec, level, children }: TeachingBlockProps): JS
     )
   }
 
+  if (spec.titled) {
+    // The heading carries its own title ("Example 2: …", maths included); the
+    // block type is a small kicker above it, the title is the first child.
+    return (
+      <section
+        className={cn('rounded-lg border px-4 py-3.5', BOXED_TONE[spec.kind] ?? 'border-border')}
+        aria-label={label}
+      >
+        <p className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground lab:font-mono lab:text-[11px] lab:uppercase lab:tracking-[0.06em]">
+          <Icon
+            className={cn('h-3.5 w-3.5 shrink-0', ICON_TONE[spec.kind] ?? 'text-muted-foreground')}
+            aria-hidden
+          />
+          {label}
+        </p>
+        <div className="mt-1.5 space-y-3 [&>:is(h1,h2,h3,h4):first-child]:pt-0 [&>:is(h1,h2,h3,h4):first-child]:text-[17px] [&>:is(h1,h2,h3,h4):first-child]:font-semibold [&>:is(h1,h2,h3,h4):first-child]:leading-snug">
+          {children}
+        </div>
+      </section>
+    )
+  }
+
   return (
     <section
       className={cn('rounded-lg border px-4 py-3.5', BOXED_TONE[spec.kind] ?? 'border-border')}

@@ -143,4 +143,27 @@ describe('Settings page persistence', () => {
     expect(stored.apiKey).toBe('')
     expect(stored.baseURL).not.toBe('https://api.old.example/v1')
   })
+
+  it('shows the save bar only with unsaved changes, and discard restores the stored values', async () => {
+    const user = userEvent.setup()
+    await new SettingsService().update({ model: 'model-a' })
+    reloadCaches()
+    render(
+      <MemoryRouter>
+        <SettingsPage />
+      </MemoryRouter>,
+    )
+    const model = await screen.findByLabelText('Model')
+    expect(screen.queryByText('You have unsaved changes')).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Save changes' })).toBeNull()
+
+    await user.clear(model)
+    await user.type(model, 'model-z')
+    expect(screen.getByText('You have unsaved changes')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Discard' }))
+
+    expect(screen.getByLabelText('Model')).toHaveValue('model-a')
+    expect(screen.queryByText('You have unsaved changes')).toBeNull()
+    expect((await new SettingsService().get()).model).toBe('model-a')
+  })
 })

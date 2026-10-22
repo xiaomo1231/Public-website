@@ -5,6 +5,7 @@ import { COLOR_THEMES, isCssHexColor } from '@/features/theme/colorThemes'
 import { useColorTheme, useThemePreference, useUiStyle } from '@/features/theme/useAppearance'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/shared/ui/Card'
 import { cn } from '@/shared/lib/utils'
+import type { SectionShellProps } from '@/widgets/settings/settingsSection'
 import { useTranslation, type TranslationKey } from '@/i18n'
 
 const MODES: Array<{
@@ -29,19 +30,24 @@ const MODES: Array<{
  * so keyboard navigation, Space/arrow selection and focus rings work without
  * any custom key handling.
  */
-export function ThemePicker(): JSX.Element {
+export function ThemePicker({
+  className,
+  headerClassName,
+  titleClassName,
+  bodyClassName,
+}: SectionShellProps = {}): JSX.Element {
   const { t } = useTranslation()
   const { preference, setPreference } = useThemePreference()
   const { colorTheme, setColorTheme } = useColorTheme()
   const { uiStyle, setUiStyle } = useUiStyle()
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>{t('theme.appearance')}</CardTitle>
+    <Card className={className}>
+      <CardHeader className={headerClassName}>
+        <CardTitle className={titleClassName}>{t('theme.appearance')}</CardTitle>
         <CardDescription>{t('theme.appearanceHint')}</CardDescription>
       </CardHeader>
-      <CardContent className="space-y-5">
+      <CardContent className={cn('space-y-5', bodyClassName)}>
         <fieldset className="space-y-2">
           <legend className="text-sm font-medium">{t('theme.uiStyle')}</legend>
           <p className="text-xs text-muted-foreground">{t('theme.uiStyleHint')}</p>
