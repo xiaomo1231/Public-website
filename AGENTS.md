@@ -19,7 +19,7 @@
 
 **这不是"AI PDF 总结工具"。** 教学以题目为主要载体，而不是长篇总结。
 
-当前版本：**V0.9.4（0.9.4）**。
+当前版本：**V0.9.5（0.9.5）**。
 
 ---
 
@@ -656,6 +656,8 @@ docs/             architecture.md
 | 7z.12 | 作业完整讲解全面升级（详细版 / 排版与步骤卡片 / 引导练习 / 做练习题 / 导入讲解 / 教授答案对齐 / 原题翻译）、题库式自适应测验、作答图片与手写板、AI 用量与余额、模型列表与模型上限、全部生成可暂停、教授出题习惯、考点清单与口试、模拟问诊、平板触控适配、token 优化、全站完整审查 | 已交付（v0.9.0）                                                                                                               |
 | 8     | Dashboard 强化                                                                                                                                                                                                                                                                    | 部分交付（v0.2.8：视觉与交互函数图；v0.3.1：构图与动效打磨；指标类未做）；交互函数图已删除，视觉方向已被 7z.6 两种界面风格取代 |
 | 9     | PWA · a11y · 导入导出打磨                                                                                                                                                                                                                                                         | 未开始                                                                                                                         |
+
+**V0.9.5 已提交并发布**（tag `v0.9.5`，两个远程仓库各一份 Release + 源码压缩包）。本版包含：关闭问答窗口直接收进原文（`closeIntoText`，不再询问；原文找不到时存入我的问答；`WalkthroughNote.markHidden` 与「从原文中移除标记」）；完整讲解正文不横向滚动（`FitWidthScope` + `fitToWidth` / `mathBreak`：顶层关系拆行、缩放到 70%、换行，步骤卡片堆叠，表格 / 代码换行，打印按纸宽缩放）。未升 Dexie。
 
 **V0.9.4 已提交并发布**（tag `v0.9.4`，两个远程仓库各一份 Release + 源码压缩包；跳过 0.9.3）。本版包含：教授答案通用对应（`professor-answer-map/v1`，本地分段 + 逐字核对引文，直接 / 间接 / 未给出 / 未定位与「请确认」，学生修改优先；`homework-question/v5`、`homework-walkthrough/v9`、`walkthrough-compare/v2`，`PROFESSOR_ALIGN_VERSION = align-v2`）；依据教授答案生成支持部分留给学生、分小题生成、逐题失败原因；导入讲解模板与本地按模板导入；同时进行的 AI 请求数（自适应限流）；输出额度直接给到上限（未知上限探测并记住）；MiniMax 适配（新地址 / 模型、`reasoning_split`、`max_completion_tokens`、`REASONING_EXHAUSTED`、错误码）；原题翻译 v2 与原题浮动窗口；行化简核对系数 / 增广区分（`homework-walkthrough/v8`、`walkthrough-import/v2`）；荧光笔颜色；划词问答自动保存与窗口形态恢复。未升 Dexie。
 
