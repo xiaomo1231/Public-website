@@ -4,13 +4,6 @@ import {
   dedupeByKey,
   planAnalyzerBatches,
 } from '@/entities/homework/analyzerBatching'
-import {
-  ANALYZER_OUTPUT_CEILING,
-  MIN_OUTPUT_TOKENS,
-  QUESTION_OUTPUT_CEILING,
-  planAnalyzerOutputBudget,
-  planQuestionOutputBudget,
-} from '@/entities/homework/tokenBudget'
 import type { DocumentChunk } from '@/entities/chunk/types'
 
 function chunk(id: string, order: number, text: string): DocumentChunk {
@@ -70,45 +63,6 @@ describe('dedupeByKey', () => {
   it('removes later duplicates and keeps first-seen order', () => {
     const items = [{ k: 'a' }, { k: 'b' }, { k: 'a' }, { k: 'c' }]
     expect(dedupeByKey(items, (i) => i.k).map((i) => i.k)).toEqual(['a', 'b', 'c'])
-  })
-})
-
-describe('planAnalyzerOutputBudget', () => {
-  it('never forwards the raw 32000 setting for a small batch', () => {
-    const budget = planAnalyzerOutputBudget(6_000, 32_000)
-    expect(budget).toBeLessThan(32_000)
-    expect(budget).toBeLessThanOrEqual(ANALYZER_OUTPUT_CEILING)
-    expect(budget).toBeGreaterThan(0)
-  })
-
-  it('scales with the input size', () => {
-    expect(planAnalyzerOutputBudget(6_000, 32_000)).toBeGreaterThan(
-      planAnalyzerOutputBudget(600, 32_000),
-    )
-  })
-
-  it('respects a smaller user cap', () => {
-    expect(planAnalyzerOutputBudget(6_000, 2_048)).toBe(2_048)
-    expect(planAnalyzerOutputBudget(600, 2_048)).toBeLessThanOrEqual(2_048)
-  })
-
-  it('never drops below the floor unless the user cap is lower', () => {
-    expect(planAnalyzerOutputBudget(0, 32_000)).toBe(MIN_OUTPUT_TOKENS)
-    expect(planAnalyzerOutputBudget(1, 128)).toBe(128)
-  })
-
-  it('survives a missing or invalid setting', () => {
-    expect(Number.isFinite(planAnalyzerOutputBudget(6_000, Number.NaN))).toBe(true)
-    expect(planAnalyzerOutputBudget(6_000, Number.NaN)).toBe(
-      planAnalyzerOutputBudget(6_000, Number.POSITIVE_INFINITY),
-    )
-  })
-})
-
-describe('planQuestionOutputBudget', () => {
-  it('caps one hints+solution request to the question ceiling', () => {
-    expect(planQuestionOutputBudget(10_000, 32_000)).toBeLessThanOrEqual(QUESTION_OUTPUT_CEILING)
-    expect(planQuestionOutputBudget(10_000, 512)).toBe(512)
   })
 })
 

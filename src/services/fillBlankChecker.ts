@@ -43,7 +43,7 @@ export async function checkBlanksWithAi(
           }),
         },
       ],
-      { maxTokens: 256, ...(options.signal ? { signal: options.signal } : {}) },
+      options.signal ? { signal: options.signal } : {},
     )
     const verdicts = prompts.fillBlankCheck.readEquivalence(
       data,

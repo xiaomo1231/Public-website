@@ -34,8 +34,8 @@ import {
 import type { AIService } from '@/services/aiService'
 import type { HomeworkQuestion } from '@/entities/homework/types'
 
-// Modelled on Problem Set 4, 2: (a) is answered inside (b)'s solution, where the
-// professor's own "(a)" / "(b)" name two ways, not the question's sub-parts.
+// Modelled on Problem Set 4, 2: the professor's "(a)" — the solution of (a) —
+// is written under the heading of (b), followed by the rest of (b).
 const PROFESSOR_2 = [
   '(b) Solution: There are two ways to do this:',
   '(a) This is true because any vector (x,y,z,w) ∈ W satisfies x+y+z−w=0, y−z=0. The augmented matrix ⇒ RREF gives z=c3, w=c4, so any vector in W is of the form c3(−2,1,1,0)+c4(1,0,0,1).',
@@ -69,7 +69,7 @@ describe('homework-walkthrough/v6 prompts', () => {
         V5.buildVariantSystemPrompt({ linearSystems, level: 'detailed', part: true }),
       )
     }
-    expect(prompts.homeworkWalkthrough.VERSION).toBe('v7')
+    expect(prompts.homeworkWalkthrough.VERSION).toBe('v9')
     expect(prompts.homeworkWalkthrough.CACHE_VERSION).toBe('v1')
   })
 
@@ -317,6 +317,8 @@ function stubAI(handler: (call: Call) => unknown) {
   const calls: Call[] = []
   const streamJSON = vi.fn(async (messages: Array<{ content: string }>) => {
     const system = messages[0]!.content
+    // 小题 ⇄ 教授答案对应 requests are not part of these expectations.
+    if (system.includes('You map a professor')) return { data: { subparts: [] }, raw: {} }
     const call: Call = {
       kind: system.includes('You compare a study app') ? 'compare' : 'question',
       system,

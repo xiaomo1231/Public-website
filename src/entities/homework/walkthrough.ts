@@ -1,4 +1,5 @@
 import { fnv1a } from '@/shared/lib/hash'
+import { professorMapEditDigest } from './professorMap'
 import type { QuestionLanguage } from '@/entities/user/types'
 import type { SolutionKind } from '@/infrastructure/math/rref'
 import type { HomeworkQuestion, HomeworkSet } from './types'
@@ -60,6 +61,14 @@ export interface LinearSystemCheck {
   computedKind: SolutionKind
   /** LaTeX of the locally computed RREF, shown when the model's differs. */
   computedRref: string
+  /**
+   * LaTeX of the system the check worked on — `[A | b]`, or `[A | 0]` for a
+   * homogeneous system — shown with a conflict so the student can judge.
+   * Absent on checks saved before it was recorded.
+   */
+  matrix?: string
+  /** Read as the homogeneous system `A x = 0` (a coefficient matrix only). */
+  homogeneous?: boolean
 }
 
 /** One sub-part of a question written on its own (split mode). */
@@ -480,11 +489,14 @@ export function professorAnswerOf(question: HomeworkQuestion): string | undefine
 }
 
 /**
- * Bumped with the professor-alignment rules (homework-walkthrough prompt v6).
- * Only sections of questions WITH a professor answer carry it in their hash,
- * so those are offered for an update and every other section keeps its hash.
+ * Bumped with the professor-alignment rules (homework-walkthrough prompt v6;
+ * `align-v2`: v9 reads a nested sub-part label in the professor answer as
+ * that sub-part's misplaced solution and follows the checked 小题 ⇄ 教授答案
+ * map). Only sections of questions WITH a professor answer carry it in their
+ * hash, so those are offered for an update and every other section keeps its
+ * hash.
  */
-export const PROFESSOR_ALIGN_VERSION = 'align-v1'
+export const PROFESSOR_ALIGN_VERSION = 'align-v2'
 
 /** Inputs that change what a question's section says. */
 export function questionSectionHash(
@@ -513,6 +525,9 @@ export function questionSectionHash(
       previousSolution: !deferred && question.solution ? question.solution : undefined,
       // Only questions with a professor answer; absent keys keep other hashes.
       alignProfessor: align ? PROFESSOR_ALIGN_VERSION : undefined,
+      // The student's changes to the 小题 ⇄ 教授答案 map (only with them). The
+      // AI map itself follows from the answer + question already hashed here.
+      professorMapEdits: align ? professorMapEditDigest(question) : undefined,
     }),
   )
 }

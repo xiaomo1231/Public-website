@@ -51,6 +51,9 @@ export class UserRepository {
             ? { questionLanguage: patch.questionLanguage }
             : {}),
           ...(patch.noteMarkStyle !== undefined ? { noteMarkStyle: patch.noteMarkStyle } : {}),
+          ...(patch.noteHighlightColor !== undefined
+            ? { noteHighlightColor: patch.noteHighlightColor }
+            : {}),
           ...(patch.showUsageReadout !== undefined
             ? { showUsageReadout: patch.showUsageReadout }
             : {}),

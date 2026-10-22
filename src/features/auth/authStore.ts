@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import type { QuestionLanguage, UserProfile, UserTheme } from '@/entities/user/types'
 import type { ColorThemeId } from '@/features/theme/colorThemes'
-import type { NoteMarkStyle, UserUiStyle } from '@/entities/user/types'
+import type { NoteHighlightColor, NoteMarkStyle, UserUiStyle } from '@/entities/user/types'
 import type { UILanguage } from '@/i18n/types'
 import { t } from '@/i18n'
 import { UserService } from '@/services/userService'
@@ -28,6 +28,7 @@ interface AuthActions {
   setQuestionLanguage: (language: QuestionLanguage) => Promise<void>
   setWalkthroughLevel: (level: 'standard' | 'detailed') => Promise<void>
   setNoteMarkStyle: (style: NoteMarkStyle) => Promise<void>
+  setNoteHighlightColor: (color: NoteHighlightColor) => Promise<void>
   setShowUsageReadout: (show: boolean) => Promise<void>
 }
 
@@ -115,6 +116,11 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
 
   async setNoteMarkStyle(noteMarkStyle) {
     const next = await users.update({ noteMarkStyle })
+    set({ profile: next })
+  },
+
+  async setNoteHighlightColor(noteHighlightColor) {
+    const next = await users.update({ noteHighlightColor })
     set({ profile: next })
   },
 

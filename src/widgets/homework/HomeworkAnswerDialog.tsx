@@ -16,9 +16,14 @@ import { formatHomeworkQuestion } from '@/entities/homework/formatQuestion'
 import type { AnswerEntry, AnswerLine } from '@/entities/homework/answerMatching'
 import {
   isDeferredProfessorAnswer,
+  professorAnswerDeferral,
   segmentsToAnswerEntries,
 } from '@/entities/homework/answerMatching'
-import type { AnswerGenerationProgress, HomeworkService } from '@/services/homeworkService'
+import type {
+  AnswerGenerationFailure,
+  AnswerGenerationProgress,
+  HomeworkService,
+} from '@/services/homeworkService'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/shared/ui/Select2'
 import { Badge } from '@/shared/ui/Badge'
 import { Button } from '@/shared/ui/Button'
@@ -34,6 +39,7 @@ import {
   DialogTitle,
 } from '@/shared/ui/Dialog'
 import { TruncatedText } from '@/shared/ui/TruncatedText'
+import { ProfessorMapPanel } from './ProfessorMapPanel'
 import { friendlyAIError } from '@/shared/lib/aiErrors'
 import { isGenerationInterruption } from '@/shared/lib/generationControl'
 import { useGenerationRun } from '@/shared/lib/useGenerationRun'
@@ -163,6 +169,8 @@ export function HomeworkAnswerDialog({
   } | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
+  /** Why each question of the last generation failed (shown with a retry). */
+  const [failures, setFailures] = useState<AnswerGenerationFailure[]>([])
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [confirmReprocess, setConfirmReprocess] = useState(false)
   const [manualMode, setManualMode] = useState(false)
@@ -173,6 +181,7 @@ export function HomeworkAnswerDialog({
     setLoading(true)
     setError(null)
     setNotice(null)
+    setFailures([])
     try {
       const [mapping, list] = await Promise.all([
         service.buildAnswerMapping(set.id),
@@ -297,6 +306,7 @@ export function HomeworkAnswerDialog({
       onChanged()
       // Reload first: `load()` clears the notice, so set it afterwards.
       await load()
+      setFailures(result.failures ?? [])
       if (result.paused) {
         const snapshot = last as AnswerGenerationProgress | null
         setPaused({
@@ -486,6 +496,39 @@ export function HomeworkAnswerDialog({
         {notice && (
           <div className="rounded-lg border border-border/70 bg-muted/30 p-3 text-sm text-muted-foreground">
             {notice}
+          </div>
+        )}
+        {failures.length > 0 && (
+          <div
+            className="space-y-2 rounded-lg border border-destructive/40 bg-destructive/5 p-3"
+            data-answer-failures
+          >
+            <p className="text-sm font-medium text-destructive">
+              {t('homework.answer.failureListTitle')}
+            </p>
+            <ul className="space-y-2">
+              {failures.map((failure) => (
+                <li key={failure.questionId} className="flex flex-wrap items-center gap-2">
+                  <p className="min-w-0 flex-1 text-xs text-destructive">
+                    {t('homework.answer.failureItem', {
+                      number:
+                        failure.number ??
+                        String(questions.findIndex((q) => q.id === failure.questionId) + 1),
+                      reason: failure.reason,
+                    })}
+                  </p>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={busy}
+                    onClick={() => void handleRetryQuestion(failure.questionId)}
+                  >
+                    <RefreshCw className="h-4 w-4" />
+                    {t('homework.answer.retryQuestion')}
+                  </Button>
+                </li>
+              ))}
+            </ul>
           </div>
         )}
         {paused && !generation.active && (
@@ -750,6 +793,9 @@ export function HomeworkAnswerDialog({
                     const deferredAnswer = Boolean(
                       preview && isDeferredProfessorAnswer(preview.text),
                     )
+                    const partlyDeferred = Boolean(
+                      preview && professorAnswerDeferral(preview.text) === 'partial',
+                    )
                     return (
                       <li key={question.id} className="rounded-lg border border-border/70 p-3">
                         <div className="flex items-start gap-2">
@@ -814,6 +860,11 @@ export function HomeworkAnswerDialog({
                                 {t('homework.answer.deferredAnswer')}
                               </p>
                             )}
+                            {partlyDeferred && (
+                              <p className="text-xs text-muted-foreground">
+                                {t('homework.answer.partialDeferred')}
+                              </p>
+                            )}
                             {!deferredAnswer &&
                               question.generationStatus === 'failed' &&
                               question.generationError && (
@@ -848,6 +899,20 @@ export function HomeworkAnswerDialog({
                                 />
                               </div>
                             )}
+                            {preview &&
+                              question.answerStatus === 'matched' &&
+                              question.answerText === preview.text && (
+                                <ProfessorMapPanel
+                                  question={question}
+                                  service={service}
+                                  disabled={busy}
+                                  onQuestionChange={(updated) =>
+                                    setQuestions((prev) =>
+                                      prev.map((item) => (item.id === updated.id ? updated : item)),
+                                    )
+                                  }
+                                />
+                              )}
                           </div>
                         </div>
                       </li>

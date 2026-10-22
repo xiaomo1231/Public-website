@@ -244,7 +244,7 @@ export class PhraseCardService {
               }),
             },
           ],
-          { maxTokens: 4096, signal: control.signal },
+          { signal: control.signal },
         )
         const phrases = validatePhrases(prompts.phraseExtract.readPhrases(data), byId)
         results[index] = phrases

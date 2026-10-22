@@ -8,7 +8,7 @@ import { useSettingsStore } from '@/features/settings/settingsStore'
 import { useThemeStore, initThemeListener } from '@/features/theme/themeStore'
 import { DEFAULT_UI_STYLE } from '@/entities/user/types'
 import { isUiStyleSavePending } from '@/features/theme/useAppearance'
-import { applyNoteMarkStyle } from '@/features/theme/noteMarkStyle'
+import { applyNoteHighlightColor, applyNoteMarkStyle } from '@/features/theme/noteMarkStyle'
 import { useI18nStore, initUILanguage } from '@/i18n'
 import { Toaster } from '@/shared/ui/Toast'
 
@@ -64,6 +64,10 @@ export function App(): JSX.Element {
   useEffect(() => {
     applyNoteMarkStyle(profileNoteMark)
   }, [profileNoteMark])
+  const profileNoteColor = profile?.noteHighlightColor
+  useEffect(() => {
+    applyNoteHighlightColor(profileNoteColor)
+  }, [profileNoteColor])
 
   // The persisted profile is authoritative once it has loaded
   useEffect(() => {

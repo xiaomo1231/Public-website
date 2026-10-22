@@ -44,6 +44,7 @@ export class TranslationService {
     ]
     let { data, raw } = await this.ai.chatJSON<unknown>(messages, {
       ...(input.signal ? { signal: input.signal } : {}),
+      reasoning: 'low',
     })
     // Validate + sanitise before persisting.
     let output = normalizeTranslation(data)
@@ -56,7 +57,7 @@ export class TranslationService {
             content: `${messages[1]!.content}\nThe previous response omitted most of the selected text. Translate every sentence in full.`,
           },
         ],
-        { ...(input.signal ? { signal: input.signal } : {}) },
+        { ...(input.signal ? { signal: input.signal } : {}), reasoning: 'low' },
       )
       data = retry.data
       raw = retry.raw

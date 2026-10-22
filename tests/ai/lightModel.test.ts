@@ -1,4 +1,5 @@
 import 'fake-indexeddb/auto'
+import { PROBE_OUTPUT_TOKENS } from '@/infrastructure/ai/outputLimit'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { AIService, withLightModel } from '@/services/aiService'
 import { SettingsService } from '@/services/settingsService'
@@ -48,12 +49,12 @@ describe('轻量模型 (AIService.light)', () => {
     expect(ai.maxOutputTokens).toBe(384_000)
     const light = ai.light()
     expect(light).not.toBe(ai)
-    // No documented limit for the light model: the manual number.
-    expect(light.maxOutputTokens).toBe(8192)
+    // No documented limit for the light model (model mode): probed from a generous cap.
+    expect(light.maxOutputTokens).toBe(PROBE_OUTPUT_TOKENS)
     await light.chatJSON([{ role: 'user', content: 'q' }])
     await ai.chatJSON([{ role: 'user', content: 'q' }])
     expect(bodies.map((b) => b.model)).toEqual(['deepseek-v4-flash', 'deepseek-v4-pro'])
-    expect(bodies[0]!.max_tokens).toBe(8192)
+    expect(bodies[0]!.max_tokens).toBe(PROBE_OUTPUT_TOKENS)
   })
 
   it('withLightModel leaves test doubles alone', () => {

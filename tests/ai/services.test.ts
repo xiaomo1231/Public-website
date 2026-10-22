@@ -6,10 +6,7 @@ import { CourseAnalysisRepository } from '@/entities/courseAnalysis/repository'
 import { DocumentRepository } from '@/entities/document/repository'
 import { ChunkRepository } from '@/entities/chunk/repository'
 import { ProjectService } from '@/services/projectService'
-import {
-  ANALYSIS_MIN_OUTPUT_TOKENS,
-  DocumentAnalysisService,
-} from '@/services/documentAnalysisService'
+import { DocumentAnalysisService } from '@/services/documentAnalysisService'
 import { TutorService } from '@/services/tutorService'
 import { TranslationService } from '@/services/translationService'
 import { AppError } from '@/infrastructure/errors/AppError'
@@ -174,7 +171,7 @@ describe('DocumentAnalysisService', () => {
     expect(symbols[0]!.symbol).toBe('d')
   })
 
-  it('requests a large enough output budget for the structured analysis', async () => {
+  it('leaves the output budget to AIService (always the cap, never a per-call number)', async () => {
     const projects = new ProjectService(db)
     const p = await projects.create({ name: 'Calc', subject: 'calculus' })
     const docsRepo = new DocumentRepository(db)
@@ -225,9 +222,8 @@ describe('DocumentAnalysisService', () => {
 
     expect(streamJSON).toHaveBeenCalledTimes(1)
     // streamJSON(messages, onDelta, options)
-    const options = streamJSON.mock.calls[0]?.[2] as { maxTokens?: number }
-    expect(options.maxTokens).toBeGreaterThanOrEqual(ANALYSIS_MIN_OUTPUT_TOKENS)
-    expect(options.maxTokens).toBeGreaterThan(2048)
+    const options = streamJSON.mock.calls[0]?.[2] as Record<string, unknown>
+    expect(options).not.toHaveProperty('maxTokens')
   })
 
   it('streams the analysis instead of buffering it', async () => {

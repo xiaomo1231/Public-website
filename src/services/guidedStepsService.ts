@@ -258,13 +258,13 @@ async function requestJSON(
   messages: ChatMessage[],
   signal: AbortSignal | undefined,
 ): Promise<unknown> {
-  const maxTokens = Math.min(8_192, Math.max(4_096, ai.maxOutputTokens))
   for (let retries = 0; ; retries++) {
     if (signal?.aborted) throw new AbortedError()
     try {
       const { data } = await ai.chatJSON<unknown>(messages, {
-        maxTokens,
         ...(signal ? { signal } : {}),
+        // Re-shaping an existing explanation into steps: little thinking needed.
+        reasoning: 'low',
       })
       return data
     } catch (err) {

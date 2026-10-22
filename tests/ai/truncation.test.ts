@@ -84,16 +84,16 @@ describe('chatJSON truncation handling', () => {
     expect((err as OutputTruncatedError).message).toContain('2048')
   })
 
-  it('reports the requested budget when one is passed explicitly', async () => {
+  it('marks the truncation as at the cap (every request is sent at the cap)', async () => {
     replyWith('{"topics":[{"name":"A"', 'length')
     const ai = new AIService({ config })
 
     const err = await ai
-      .chatJSON([{ role: 'user', content: 'analyze' }], { maxTokens: 8192 })
+      .chatJSON([{ role: 'user', content: 'analyze' }])
       .then(() => null)
       .catch((e: unknown) => e)
 
-    expect((err as OutputTruncatedError).message).toContain('8192')
+    expect((err as OutputTruncatedError).atCap).toEqual({ limit: 2048, by: 'setting' })
   })
 
   it('does not retry a truncated response (a retry cannot fix it)', async () => {

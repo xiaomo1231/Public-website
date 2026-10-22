@@ -142,7 +142,7 @@ export class ReferenceImageService {
           }),
         },
       ],
-      { maxTokens: 512, ...(input.signal ? { signal: input.signal } : {}) },
+      input.signal ? { signal: input.signal } : {},
     )
     const queries = prompts.referenceImageQuery.normalizeReferenceQueries(data, sources)
     const existing = await this.list(input.projectId, input.topicId)
@@ -250,7 +250,7 @@ export class ReferenceImageService {
             images: [toDataUrl(image.bytes, image.mimeType)],
           },
         ],
-        { maxTokens: 64, ...(signal ? { signal } : {}) },
+        signal ? { signal } : {},
       )
       return prompts.referenceImageCheck.readRelevance(data)
     } catch (err) {

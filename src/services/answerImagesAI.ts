@@ -20,6 +20,7 @@ const UNRELATED_CODES = new Set([
   'TIMEOUT',
   'ABORTED',
   'OUTPUT_TRUNCATED',
+  'REASONING_EXHAUSTED',
 ])
 
 /**

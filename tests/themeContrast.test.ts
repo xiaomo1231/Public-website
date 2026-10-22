@@ -296,6 +296,94 @@ describe('WCAG contrast', () => {
           ).toBeGreaterThanOrEqual(3)
   })
 
+  describe('highlighter question marks (荧光笔颜色)', () => {
+    const COLORS = ['yellow', 'green', 'pink', 'blue', 'orange', 'purple', 'theme'] as const
+
+    function colorTokens(mode: Mode, color: (typeof COLORS)[number]): Tokens {
+      const wanted =
+        mode === 'dark' ? `.dark[data-note-color='${color}']` : `[data-note-color='${color}']`
+      const found = blocks.find((block) =>
+        block.selector.split(',').some((part) => part.trim() === wanted),
+      )
+      if (!found) throw new Error(`missing note colour block: ${wanted}`)
+      return found.tokens
+    }
+
+    /** The fill composited over `bg`, as the browser paints a translucent highlight. */
+    function fill(
+      mode: Mode,
+      theme: Theme,
+      style: Style,
+      color: (typeof COLORS)[number],
+      bg: string,
+      kind: 'saved' | 'unsaved',
+    ): { fill: Rgb; base: Rgb; tokens: Tokens } {
+      const tokens = new Map(effectiveTokens(mode, theme, style))
+      for (const [key, value] of colorTokens(mode, color)) tokens.set(key, value)
+      const hue = hslTripletToRgb(resolve(tokens, '--note-hl'))
+      const alpha = Number(resolve(tokens, `--note-hl-${kind}-a`))
+      const base = hslTripletToRgb(resolve(tokens, bg))
+      return {
+        fill: hue.map((v, i) => v * alpha + base[i]! * (1 - alpha)) as Rgb,
+        base,
+        tokens,
+      }
+    }
+
+    const distance = (a: Rgb, b: Rgb): number => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2])
+
+    for (const style of STYLES)
+      for (const mode of MODES)
+        for (const theme of THEMES)
+          it(`${style} + ${mode} + ${theme}: body text stays ≥4.5:1 on every highlight colour, and the fill shows`, () => {
+            for (const color of COLORS)
+              for (const bg of ['--background', '--card'] as const) {
+                const saved = fill(mode, theme, style, color, bg, 'saved')
+                const unsaved = fill(mode, theme, style, color, bg, 'unsaved')
+                const text = hslTripletToRgb(resolve(saved.tokens, '--foreground'))
+                for (const [kind, painted] of [
+                  ['saved', saved.fill],
+                  ['unsaved', unsaved.fill],
+                ] as const) {
+                  const value = contrast(text, painted)
+                  expect(
+                    value,
+                    `${color} ${kind} on ${bg}: ${value.toFixed(2)}:1`,
+                  ).toBeGreaterThanOrEqual(4.5)
+                }
+                // Clearly visible, and saved is stronger than unsaved.
+                const strong = distance(saved.fill, saved.base)
+                const light = distance(unsaved.fill, unsaved.base)
+                expect(strong, `${color} saved fill on ${bg}`).toBeGreaterThanOrEqual(45)
+                expect(light, `${color} unsaved fill on ${bg}`).toBeGreaterThanOrEqual(20)
+                expect(strong).toBeGreaterThan(light * 1.5)
+              }
+          })
+
+    it('highlighter mode draws no underline; link mode never fills the background', () => {
+      const clean = css.replace(/\/\*[\s\S]*?\*\//g, '')
+      const rules = [...clean.matchAll(/([^{}]*::highlight\([^)]*\)[^{}]*)\{([^{}]*)\}/g)].map(
+        (m) => ({ selector: m[1]!.trim().replace(/\s+/g, ' '), body: m[2]! }),
+      )
+      const marks = rules.filter((r) => /walkthrough-(note|link)/.test(r.selector))
+      expect(marks.length).toBeGreaterThanOrEqual(4)
+      for (const rule of marks) {
+        if (rule.selector.includes(":root[data-note-mark='highlighter']")) {
+          expect(rule.body, rule.selector).not.toMatch(/underline/)
+          expect(rule.body, rule.selector).toMatch(/text-decoration:\s*none/)
+          expect(rule.body, rule.selector).toMatch(/background-color:\s*hsl\(var\(--note-hl\)/)
+        } else {
+          // Every other mark rule is scoped to the link style only.
+          expect(rule.selector).toContain(":root:not([data-note-mark='highlighter'])")
+          expect(rule.body, rule.selector).not.toMatch(/background/)
+        }
+      }
+      // Rules for other highlights (the brief locate flash) never draw a line.
+      for (const rule of rules.filter((r) => !/walkthrough-(note|link)/.test(r.selector)))
+        expect(rule.body, rule.selector).not.toMatch(/text-decoration/)
+    })
+  })
+
   it('never uses the invalid palette entry as a CSS colour', () => {
     expect(css).not.toContain('4C1A2')
   })

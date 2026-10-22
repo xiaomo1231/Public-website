@@ -46,6 +46,7 @@ import {
   currentCompare,
   isAlignedWith,
 } from '@/entities/homework/professorCompare'
+import { checkHasConflict } from '@/entities/homework/walkthroughChecks'
 import { useAuth } from '@/features/auth/useAuth'
 import { useHomeworkService } from '@/features/homework/useHomeworkService'
 import { questionLabel, type SectionAttempt } from '@/services/homeworkWalkthroughService'
@@ -76,6 +77,11 @@ import { RichText } from '@/shared/ui/RichText'
 import { cn } from '@/shared/lib/utils'
 import { prefersReducedMotion } from '@/shared/lib/motion'
 import { useTranslation, type TranslationKey } from '@/i18n'
+import {
+  walkthroughAttemptText,
+  walkthroughInFlightText,
+  walkthroughProgressHeadline,
+} from './walkthroughProgressText'
 import { FloatingQALayer } from './FloatingQALayer'
 import { PracticeSetLauncher } from '../practice/PracticeSetLauncher'
 import { QuestionText } from '@/widgets/homework/QuestionText'
@@ -717,36 +723,39 @@ export function HomeworkWalkthroughPanel({
                           : 'homework.walkthrough.regenerating',
                     { title: regeneratingTitle(progress.section.id, entries, labels, t) },
                   )
-                : t(
-                    progress.variant
-                      ? 'homework.walkthrough.variantProgress'
-                      : progress.compare
-                        ? 'homework.walkthrough.compareProgress'
-                        : 'homework.walkthrough.progress',
-                    {
-                      done: progress.done,
-                      total: progress.total,
-                    },
-                  )}
+                : walkthroughProgressHeadline(progress, t)}
             </p>
-            {Object.entries(progress.parts ?? {}).map(([sectionId, part]) => (
-              <p key={sectionId} className="text-xs text-muted-foreground">
-                {t('homework.walkthrough.writingPartOf', {
-                  title: regeneratingTitle(sectionId, entries, labels, t),
-                  part,
-                })}
+            {progress.section
+              ? Object.entries(progress.parts ?? {}).map(([sectionId, part]) => (
+                  <p key={sectionId} className="text-xs text-muted-foreground">
+                    {t('homework.walkthrough.writingPartOf', {
+                      title: regeneratingTitle(sectionId, entries, labels, t),
+                      part,
+                    })}
+                  </p>
+                ))
+              : (() => {
+                  const inFlight = walkthroughInFlightText(
+                    progress,
+                    (id) => regeneratingTitle(id, entries, labels, t),
+                    t,
+                  )
+                  return inFlight ? (
+                    <p
+                      className="text-xs text-muted-foreground"
+                      data-testid="walkthrough-in-flight"
+                    >
+                      {inFlight}
+                    </p>
+                  ) : null
+                })()}
+            {Object.entries(progress.attempts ?? {}).map(([sectionId, attempt]) => (
+              <p key={sectionId} className="text-xs text-amber-700 dark:text-amber-300">
+                {regeneratingTitle(sectionId, entries, labels, t)}
+                {t('homework.walkthrough.titleSeparator')}
+                {walkthroughAttemptText(attempt, t)}
               </p>
             ))}
-            {Object.entries(progress.attempts ?? {})
-              // The opening and summary share one request: name it once.
-              .filter(([sectionId]) => sectionId !== 'summary')
-              .map(([sectionId, attempt]) => (
-                <p key={sectionId} className="text-xs text-amber-700 dark:text-amber-300">
-                  {regeneratingTitle(sectionId, entries, labels, t)}
-                  {t('homework.walkthrough.titleSeparator')}
-                  {attemptText(attempt, t)}
-                </p>
-              ))}
             <div className="flex flex-wrap items-center gap-3">
               <Progress
                 className="min-w-[12rem] flex-1"
@@ -1076,28 +1085,6 @@ function regeneratingTitle(
   return entry ? sectionTitle(entry, labels, t) : ''
 }
 
-/** 第 2 次尝试：上次超时 */
-function attemptText(attempt: SectionAttempt, t: T): string {
-  return t('homework.walkthrough.attempt', {
-    attempt: attempt.attempt,
-    reason: failureText(attempt.lastFailure, t),
-  })
-}
-
-function failureText(kind: SectionAttempt['lastFailure'], t: T): string {
-  switch (kind) {
-    case 'timeout':
-    case 'truncated':
-    case 'output-limit':
-    case 'rate-limited':
-    case 'unavailable':
-    case 'invalid-response':
-      return t(`homework.walkthrough.failure.${kind}` as TranslationKey)
-    default:
-      return t('homework.walkthrough.failure.other')
-  }
-}
-
 /** The lab style's mono section number: Q1, Q2(a) … for questions, § otherwise. */
 function sectionMarker(entry: WalkthroughPlanEntry, labels: ReadonlyMap<string, string>): string {
   if (!entry.question) return '§'
@@ -1244,7 +1231,7 @@ function WalkthroughSectionView({
             variant="outline"
             className="border-amber-500/50 text-amber-700 dark:text-amber-300"
           >
-            {attemptText(attempt, t)}
+            {walkthroughAttemptText(attempt, t)}
           </Badge>
         )}
         {!running && entry.outdated && (
@@ -1671,7 +1658,7 @@ function QuestionAnalysis({ analysis }: { analysis: string }): JSX.Element {
 
 function ChecksView({ checks }: { checks: LinearSystemCheck[] }): JSX.Element {
   const { t } = useTranslation()
-  const wrong = checks.filter((check) => !check.rrefMatches || !check.kindMatches)
+  const wrong = checks.filter(checkHasConflict)
   const kindLabel = (kind: LinearSystemCheck['computedKind']) =>
     t(`homework.walkthrough.kind.${kind}` as TranslationKey)
   return (
@@ -1702,14 +1689,31 @@ function ChecksView({ checks }: { checks: LinearSystemCheck[] }): JSX.Element {
               <span>
                 {!check.rrefMatches
                   ? t('homework.walkthrough.checkRref', { label: check.label })
-                  : t('homework.walkthrough.checkKind', {
-                      label: check.label,
-                      claimed: check.claimedKind ? kindLabel(check.claimedKind) : '',
-                      computed: kindLabel(check.computedKind),
-                    })}
+                  : t(
+                      check.homogeneous
+                        ? 'homework.walkthrough.checkKindHomogeneous'
+                        : 'homework.walkthrough.checkKind',
+                      {
+                        label: check.label,
+                        claimed: check.claimedKind ? kindLabel(check.claimedKind) : '',
+                        computed: kindLabel(check.computedKind),
+                      },
+                    )}
               </span>
             </p>
-            {!check.rrefMatches && (
+            {check.matrix && (
+              <div className="overflow-x-auto">
+                <p className="text-xs text-muted-foreground">
+                  {t(
+                    check.homogeneous
+                      ? 'homework.walkthrough.checkMatrixHomogeneous'
+                      : 'homework.walkthrough.checkMatrix',
+                  )}
+                </p>
+                <TeX latex={check.matrix} display />
+              </div>
+            )}
+            {(!check.rrefMatches || check.matrix) && (
               <div className="overflow-x-auto">
                 <p className="text-xs text-muted-foreground">
                   {t('homework.walkthrough.checkComputed', { kind: kindLabel(check.computedKind) })}

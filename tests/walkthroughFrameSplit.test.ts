@@ -22,11 +22,12 @@ import type { HomeworkQuestion, HomeworkSet } from '@/entities/homework/types'
 interface Call {
   kind: 'overview' | 'summary' | 'question'
   labels: string[]
-  maxTokens: number
+  /** A per-call budget (never set: AIService always sends the whole cap). */
+  maxTokens: number | undefined
   user: string
 }
 
-function classify(system: string, user: string, maxTokens: number): Call {
+function classify(system: string, user: string, maxTokens: number | undefined): Call {
   const labels = [...user.matchAll(/^Question (\S+)$/gm)].map((match) => match[1]!)
   if (system.includes('ONLY the opening')) return { kind: 'overview', labels, maxTokens, user }
   if (system.includes('ONLY the closing summary'))
@@ -36,7 +37,8 @@ function classify(system: string, user: string, maxTokens: number): Call {
 
 /**
  * A model whose opening / summary replies fit only `fits` questions at once:
- * a larger group is cut off at any budget. Question sections always fit.
+ * a larger group is cut off at the cap. Question sections always fit. Like
+ * AIService, a request without its own budget is sent at the cap.
  */
 function stubAI(
   fits: number,
@@ -44,8 +46,13 @@ function stubAI(
 ) {
   const calls: Call[] = []
   const streamJSON = vi.fn(
-    async (messages: Array<{ content: string }>, _delta: unknown, opts: { maxTokens: number }) => {
+    async (
+      messages: Array<{ content: string }>,
+      _delta: unknown,
+      opts: { maxTokens?: number } = {},
+    ) => {
       const call = classify(messages[0]!.content, messages[1]!.content, opts.maxTokens)
+      const sent = opts.maxTokens ?? options.cap ?? 8192
       calls.push(call)
       options.onCall?.(call)
       if (call.kind === 'question')
@@ -53,8 +60,8 @@ function stubAI(
           data: { status: 'ready', conclusion: `Done ${call.labels[0]}.`, body: 'Work.' },
           raw: {},
         }
-      if (call.labels.length > fits || opts.maxTokens < (options.truncateBelow ?? 0))
-        throw new OutputTruncatedError(opts.maxTokens)
+      if (call.labels.length > fits || sent < (options.truncateBelow ?? 0))
+        throw new OutputTruncatedError(sent)
       if (call.kind === 'overview')
         return {
           data: {
@@ -174,30 +181,30 @@ describe('opening and summary as separate requests', () => {
 })
 
 describe('a part too long for one reply', () => {
-  it('doubles the budget up to the resolved cap, past the old 16k ceiling', async () => {
+  it('sends the whole resolved cap on the first request (past the old 16k ceiling)', async () => {
     const { ai, calls } = stubAI(4, { cap: 64_000, truncateBelow: 40_000 })
     expect(await service(ai).generate(setId)).toEqual({ generated: 6, failed: 0 })
-    const budgets = calls.filter((call) => call.kind === 'overview').map((call) => call.maxTokens)
-    expect(budgets.at(-1)).toBeGreaterThanOrEqual(40_000)
-    expect(Math.max(...budgets)).toBeLessThanOrEqual(64_000)
+    const overview = calls.filter((call) => call.kind === 'overview')
+    // One request at the cap: no small first try, no doubling.
+    expect(overview).toHaveLength(1)
+    expect(calls.every((call) => call.maxTokens === undefined)).toBe(true)
   })
 
   it('is split into halves recursively and merged locally', async () => {
     const { ai, calls } = stubAI(1)
     expect(await service(ai).generate(setId)).toEqual({ generated: 6, failed: 0 })
     const overviewCalls = calls.filter((call) => call.kind === 'overview')
-    // The whole assignment, then halves, then single questions (the budget grew
-    // to the cap before each split).
+    // The whole assignment, then halves, then single questions — each group
+    // asked once (it was already at the cap), never again with more room.
     expect(overviewCalls.map((call) => call.labels.join(''))).toEqual([
-      ...Array(2).fill('1234'),
-      ...Array(2).fill('12'),
+      '1234',
+      '12',
       '1',
       '2',
-      ...Array(2).fill('34'),
+      '34',
       '3',
       '4',
     ])
-    expect(Math.max(...overviewCalls.map((call) => call.maxTokens))).toBe(8192)
     expect(overviewCalls.find((call) => call.labels.join('') === '3')!.user).toContain(
       'group 3 of 4',
     )

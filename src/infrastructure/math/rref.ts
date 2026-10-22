@@ -100,11 +100,12 @@ export function rationalToLatex(value: Rational): string {
   return `${negative ? '-' : ''}\\tfrac{${negative ? -value.n : value.n}}{${value.d}}`
 }
 
-export function parseMatrix(raw: unknown): Rational[][] | null {
+/** `minWidth` is 2 by default (an augmented matrix); a coefficient matrix may have 1 column. */
+export function parseMatrix(raw: unknown, minWidth = 2): Rational[][] | null {
   if (!Array.isArray(raw) || raw.length === 0 || raw.length > 12) return null
   const rows: Rational[][] = []
   for (const row of raw) {
-    if (!Array.isArray(row) || row.length < 2 || row.length > 12) return null
+    if (!Array.isArray(row) || row.length < minWidth || row.length > 12) return null
     const parsed = row.map(parseRational)
     if (parsed.some((entry) => entry === null)) return null
     rows.push(parsed as Rational[])
@@ -155,6 +156,28 @@ export function solutionKind(reduced: readonly (readonly Rational[])[]): Solutio
     pivots += 1
   }
   return pivots === variables ? 'unique' : 'infinite'
+}
+
+/**
+ * How many solutions the HOMOGENEOUS system `M x = 0` has, read from the RREF
+ * of `M` itself (every column is an unknown): `unique` means only the trivial
+ * solution. Never `none` — a homogeneous system is always consistent.
+ */
+export function homogeneousKind(reduced: readonly (readonly Rational[])[]): SolutionKind {
+  const width = reduced[0]?.length ?? 0
+  return nonZeroRows(reduced).length === width ? 'unique' : 'infinite'
+}
+
+/** The rows of a `\begin{array}{…} … \end{array}` written by `matrixToLatex`. */
+export function parseArrayLatex(latex: string): Rational[][] | null {
+  const body = /\\begin\{array\}\{[^}]*\}([\s\S]*?)\\end\{array\}/.exec(latex)?.[1]
+  if (!body) return null
+  const rows = body
+    .split('\\\\')
+    .map((row) => row.trim())
+    .filter(Boolean)
+    .map((row) => row.split('&').map((cell) => cell.trim()))
+  return parseMatrix(rows)
 }
 
 const nonZeroRows = (matrix: readonly (readonly Rational[])[]) =>

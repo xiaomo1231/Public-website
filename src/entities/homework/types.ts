@@ -1,4 +1,5 @@
 import type { QuestionTranslation } from './questionTranslation'
+import type { ProfessorAnswerMap, ProfessorMapEdits } from './professorMap'
 import type { SourceReference } from '@/entities/courseAnalysis/types'
 import type { AnswerEntry } from './answerMatching'
 import type { TranslationKey } from '@/i18n/types'
@@ -261,6 +262,10 @@ export interface HomeworkQuestion {
   guidedProgress?: GuidedProgress
   /** 中文翻译 of `prompt` (see `entities/homework/questionTranslation.ts`), made on request. */
   translation?: QuestionTranslation
+  /** 小题 ⇄ 教授答案对应 (AI, checked locally; see `entities/homework/professorMap.ts`). */
+  professorMap?: ProfessorAnswerMap
+  /** The student's changes to that map; they win over it. */
+  professorMapEdits?: ProfessorMapEdits
   /** Student's saved working. Restored on reload. */
   draftText: string
   /** How many hints the student has revealed (0..hints.length). */

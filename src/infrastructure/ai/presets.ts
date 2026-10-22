@@ -14,6 +14,52 @@ export interface ProviderPresetInfo {
    * responses can report token usage. Off for presets where it is unverified.
    */
   streamUsage?: boolean
+  /**
+   * The provider's models think before answering and the endpoint has
+   * switches for it (see `ReasoningProfile`). Absent: plain chat models.
+   */
+  reasoning?: ReasoningProfile
+}
+
+/**
+ * How a preset talks to models that think before answering. Every field is
+ * a wire-level switch; the business services only ever say "this task needs
+ * little reasoning" (`ChatRequest.reasoning: 'low'`).
+ */
+export interface ReasoningProfile {
+  /**
+   * Send `reasoning_split: true`, so the thinking arrives in
+   * `reasoning_content` apart from the answer instead of as `<think>` text.
+   */
+  split: boolean
+  /** The output-cap parameter the provider documents as current. */
+  outputParam: 'max_tokens' | 'max_completion_tokens'
+  /** Leave `temperature` out (the endpoint fixes it for these models). */
+  omitTemperature: boolean
+  /** Output budget of the connection test (thinking needs room before "pong"). */
+  testMaxTokens: number
+  /**
+   * Body fields that make `model` think less, for formatting-only tasks;
+   * undefined when the model has no such switch.
+   */
+  lowEffort?: (model: string) => Record<string, unknown> | undefined
+}
+
+/** MiniMax international and mainland-China endpoints (official docs, 2026-10). */
+export const MINIMAX_BASE_URL_INTL = 'https://api.minimax.io/v1'
+export const MINIMAX_BASE_URL_CN = 'https://api.minimax.cn/v1'
+
+/**
+ * MiniMax thinking switches (OpenAI-compatible API docs, 2026-10):
+ * MiniMax-M3 can turn thinking off (`thinking: {type: 'disabled'}`);
+ * MiniMax-M3.1-Flash cannot (400, code 2013) but takes
+ * `reasoning_effort: 'low'`; M2.x can do neither.
+ */
+export function miniMaxLowEffort(model: string): Record<string, unknown> | undefined {
+  const id = model.trim().toLowerCase()
+  if (/^minimax-m3\.1-flash\b/.test(id)) return { reasoning_effort: 'low' }
+  if (/^minimax-m3(?![.\d])/.test(id)) return { thinking: { type: 'disabled' } }
+  return undefined
 }
 
 /**
@@ -52,10 +98,23 @@ export const PROVIDER_PRESETS: ProviderPresetInfo[] = [
   {
     id: 'MiniMax',
     label: 'MiniMax',
-    baseURL: 'https://api.MiniMax.com/v1',
-    defaultModel: 'MiniMax-Text-01',
-    models: ['MiniMax-Text-01', 'MiniMax-VL-01'],
-    supportsJsonMode: true,
+    baseURL: MINIMAX_BASE_URL_INTL,
+    // M3: the flagship (1M context) and the one model whose thinking can be
+    // turned off for formatting-only tasks.
+    defaultModel: 'MiniMax-M3',
+    models: ['MiniMax-M3', 'MiniMax-M3.1-Flash', 'MiniMax-M2.7', 'MiniMax-M2.5'],
+    // `json_object` is not documented for the current models.
+    supportsJsonMode: false,
+    streamUsage: true,
+    reasoning: {
+      split: true,
+      // `max_tokens` is legacy; thinking counts toward either.
+      outputParam: 'max_completion_tokens',
+      // The OpenAI-compatible endpoint fixes temperature / top_p for M3.
+      omitTemperature: true,
+      testMaxTokens: 512,
+      lowEffort: miniMaxLowEffort,
+    },
   },
   {
     id: 'mimo',
@@ -122,5 +181,6 @@ export function createProvider(config: ProviderConfig): AIProvider {
     defaultModel: preset.defaultModel,
     supportsJsonMode: preset.supportsJsonMode,
     streamUsage: preset.streamUsage === true,
+    ...(preset.reasoning ? { reasoning: preset.reasoning } : {}),
   })
 }

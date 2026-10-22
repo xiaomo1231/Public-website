@@ -6,7 +6,6 @@
  * against a recording AI (see `tests/tokenUsage.test.ts`).
  */
 import { prompts } from '@/infrastructure/ai/prompts'
-import { planOutputBudget, planQuestionOutputBudget } from '@/entities/homework/tokenBudget'
 import { sectionKeyPoints } from '@/services/homeworkWalkthroughService'
 import { promptSourceText } from '@/services/homeworkService'
 import type { RecordedRequest } from './estimate'
@@ -48,17 +47,6 @@ function req(
   }
 }
 
-/** Same budget as `requestSectionJSON` in the walkthrough service. */
-function sectionBudget(system: string, user: string): number {
-  return planOutputBudget({
-    inputChars: system.length + user.length,
-    userMaxTokens: CONFIG_MAX_TOKENS,
-    ceiling: 8_192,
-    overhead: 4_000,
-    min: 2_048,
-  })
-}
-
 const clip = (value: string, max: number) =>
   value.length > max ? `${value.slice(0, max)}…` : value
 
@@ -89,7 +77,7 @@ function walkthroughWhole(): RecordedRequest[] {
       professorAnswer: PROFESSOR_ANSWER,
       previousSolution: PREVIOUS_SOLUTION,
     })
-    return { ...req('walkthrough.question', system, user), maxTokens: sectionBudget(system, user) }
+    return req('walkthrough.question', system, user)
   })
 }
 
@@ -115,7 +103,7 @@ function walkthroughSplit(): RecordedRequest[] {
       ...(index === 0 ? { analysis: true } : {}),
     })
     written.push({ label: part, conclusion: CONCLUSION, body: workedBody(3) })
-    return { ...req('walkthrough.part', system, user), maxTokens: sectionBudget(system, user) }
+    return req('walkthrough.part', system, user)
   })
 }
 
@@ -137,7 +125,7 @@ function walkthroughFrame(): RecordedRequest[] {
       language: 'zh_terms',
       part,
     })
-    return { ...req(`walkthrough.${part}`, system, user), maxTokens: sectionBudget(system, user) }
+    return req(`walkthrough.${part}`, system, user)
   })
 }
 
@@ -158,7 +146,7 @@ function walkthroughDetailed(): RecordedRequest[] {
       heading: `(${part}) 判断`,
       existing: { conclusion: CONCLUSION, body: workedBody(3) },
     })
-    return { ...req('walkthrough.detailed', system, user), maxTokens: sectionBudget(system, user) }
+    return req('walkthrough.detailed', system, user)
   })
 }
 
@@ -172,7 +160,7 @@ function walkthroughAnalysis(): RecordedRequest[] {
     conclusion: CONCLUSION,
     language: 'zh_terms',
   })
-  return [{ ...req('walkthrough.analysis', system, user), maxTokens: sectionBudget(system, user) }]
+  return [req('walkthrough.analysis', system, user)]
 }
 
 /** 完整讲解：与教授答案对照。 */
@@ -190,7 +178,7 @@ function walkthroughCompare(): RecordedRequest[] {
     body: workedBody(4),
     language: 'zh_terms',
   })
-  return [{ ...req('walkthrough.compare', system, user), maxTokens: sectionBudget(system, user) }]
+  return [req('walkthrough.compare', system, user)]
 }
 
 /** 导入讲解：一份约 3 900 字的部分。 */
@@ -222,14 +210,7 @@ function walkthroughImport(): RecordedRequest[] {
 /** 查看原题：中文翻译。 */
 function questionTranslate(): RecordedRequest[] {
   const user = prompts.questionTranslate.buildUserPrompt({ question: Q2.prompt })
-  return [
-    req(
-      'question.translate',
-      prompts.questionTranslate.buildSystemPrompt(),
-      user,
-      Math.max(2048, Math.ceil(Q2.prompt.length * 1.3) + 500),
-    ),
-  ]
+  return [req('question.translate', prompts.questionTranslate.buildSystemPrompt(), user)]
 }
 
 const HOMEWORK_UNGROUNDED = Q3.prompt
@@ -249,12 +230,7 @@ function homeworkHints(): RecordedRequest[] {
       sourceText: promptSourceText(question, source),
       language: 'zh',
     })
-    return req(
-      'homework.hints',
-      system,
-      user,
-      planQuestionOutputBudget(system.length + user.length, CONFIG_MAX_TOKENS),
-    )
+    return req('homework.hints', system, user)
   })
 }
 
@@ -267,14 +243,7 @@ function homeworkReview(): RecordedRequest[] {
     previousSolution: PREVIOUS_SOLUTION,
     language: 'zh',
   })
-  return [
-    req(
-      'homework.review',
-      system,
-      user,
-      planQuestionOutputBudget(system.length + user.length, CONFIG_MAX_TOKENS),
-    ),
-  ]
+  return [req('homework.review', system, user)]
 }
 
 /** 作业：检查答案（无出处的题）。 */
@@ -291,14 +260,7 @@ function homeworkCheck(): RecordedRequest[] {
     sourceText: promptSourceText(HOMEWORK_UNGROUNDED, HOMEWORK_UNGROUNDED),
     language: 'zh',
   })
-  return [
-    req(
-      'homework.check',
-      system,
-      user,
-      planQuestionOutputBudget(system.length + user.length, CONFIG_MAX_TOKENS),
-    ),
-  ]
+  return [req('homework.check', system, user)]
 }
 
 /** 作业：逐题问答，连续 3 轮（无出处的题）。 */

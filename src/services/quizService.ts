@@ -49,7 +49,7 @@ import {
   validateParadigmTable,
 } from './languageDrillValidation'
 import type { ChatMessage } from '@/infrastructure/ai/types'
-import type { AIService } from './aiService'
+import { exhaustedOutputCap, type AIService } from './aiService'
 import { evaluateDeterministic, parseTrueFalse } from './answerEvaluationService'
 import {
   decideNextDifficulty,
@@ -157,11 +157,6 @@ const MAX_GENERATION_ATTEMPTS = 2
 const QUIZ_BATCH_SIZE = 5
 /** Extra requests for questions a batch did not deliver (dropped or missing). */
 const MAX_TOP_UP_ROUNDS = 2
-/** Output room per question (prompt, options, solution, hints, quote) plus the envelope. */
-const QUIZ_TOKENS_PER_QUESTION = 900
-const QUIZ_BASE_OUTPUT_TOKENS = 1024
-/** Most providers refuse a larger `max_tokens`. */
-const QUIZ_MAX_OUTPUT_TOKENS = 8192
 /** Source passages offered: enough to spread a large quiz across the course. */
 const MIN_QUIZ_SNIPPETS = 8
 const MAX_QUIZ_SNIPPETS = 24
@@ -1339,19 +1334,12 @@ export class QuizService {
     let lastError: unknown = null
     for (let attempt = 1; attempt <= MAX_GENERATION_ATTEMPTS; attempt++) {
       try {
-        // Room for every question asked for: the chat default (2048) holds
-        // only a few, and a cut-off response is rejected as a whole.
-        const maxTokens = Math.min(
-          QUIZ_MAX_OUTPUT_TOKENS,
-          Math.max(
-            this.ai.maxOutputTokens ?? 0,
-            QUIZ_BASE_OUTPUT_TOKENS + QUIZ_TOKENS_PER_QUESTION * input.plan.length,
-          ),
+        // Sent at the output cap (AIService): a cut-off response is rejected
+        // as a whole, so the batch never starts with less room.
+        const { data } = await this.ai.chatJSON<QuizGenerationOutput>(
+          messages,
+          signal ? { signal } : {},
         )
-        const { data } = await this.ai.chatJSON<QuizGenerationOutput>(messages, {
-          maxTokens,
-          ...(signal ? { signal } : {}),
-        })
         const questions = this.validateGenerated(data, input.plan.length, {
           sourceText: input.sourceSnippets.join('\n\n'),
         })
@@ -1361,6 +1349,8 @@ export class QuizService {
         if (isAbortError(err, signal)) throw err
         lastError = err
         logger.warn('Quiz generation attempt failed', { attempt, error: (err as Error)?.message })
+        // Out of the whole output cap: the same request would end the same way.
+        if (exhaustedOutputCap(err)) break
       }
     }
     throw new AppError(

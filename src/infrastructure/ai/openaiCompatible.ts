@@ -15,8 +15,11 @@ import {
   ProviderUnavailableError,
   RateLimitedError,
   TimeoutError,
+  errorFromBaseResp,
   errorFromStatus,
+  parseRetryAfter,
 } from './errors'
+import type { ReasoningProfile } from './presets'
 import { logger } from '@/infrastructure/logger/logger'
 import { t } from '@/i18n'
 
@@ -54,6 +57,8 @@ export interface OpenAICompatibleOptions {
    * documentation lists the option; an unknown server might reject it.
    */
   streamUsage?: boolean
+  /** Thinking-model switches of the preset (absent: plain chat models). */
+  reasoning?: ReasoningProfile
 }
 
 /**
@@ -93,15 +98,13 @@ export class OpenAICompatibleProvider implements AIProvider {
         method: 'POST',
         body: JSON.stringify(body),
       })
-      if (!res.ok) {
-        const message = await safeReadError(res)
-        throw errorFromStatus(res.status, message)
-      }
+      if (!res.ok) throw withRetryAfter(await httpError(res), res)
       const json = await res.json().catch(() => null)
       if (!json) throw new AIProviderError(t('errors.aiNonJson'), 'INVALID_RESPONSE', res.status)
       if (hasErrorPayload(json)) throw errorFromPayload(json, res.status)
       const choice = json.choices?.[0]
       const content = choice?.message?.content ?? choice?.delta?.content ?? ''
+      const reasoningChars = reasoningText(choice?.message ?? choice?.delta).length
       const usage = parseUsage(json.usage)
       const model = json.model ?? req.model ?? this.config.model
       const finishReason =
@@ -110,6 +113,7 @@ export class OpenAICompatibleProvider implements AIProvider {
         content,
         usage,
         model,
+        ...(reasoningChars > 0 ? { reasoningChars } : {}),
         ...(finishReason ? { finishReason } : {}),
       }
       this.logRequestEnd('chat', startedAt, response)
@@ -132,14 +136,13 @@ export class OpenAICompatibleProvider implements AIProvider {
         method: 'POST',
         body: JSON.stringify(body),
       })
-      if (!res.ok || !res.body) {
-        const message = await safeReadError(res)
-        throw errorFromStatus(res.status, message)
-      }
+      if (!res.ok || !res.body) throw withRetryAfter(await httpError(res), res)
       const reader = res.body.getReader()
       const decoder = new TextDecoder('utf-8')
       let buffer = ''
       let content = ''
+      // Hidden reasoning sent apart from the answer: counted, never shown.
+      let reasoningChars = 0
       let usage: ChatResponse['usage'] | undefined
       let finalModel = ''
       let finalFinishReason: string | undefined
@@ -149,6 +152,7 @@ export class OpenAICompatibleProvider implements AIProvider {
           content,
           usage,
           model: finalModel || req.model || this.config.model,
+          ...(reasoningChars > 0 ? { reasoningChars } : {}),
           ...(finalFinishReason ? { finishReason: finalFinishReason } : {}),
         }
         this.logRequestEnd('stream', startedAt, response)
@@ -170,6 +174,7 @@ export class OpenAICompatibleProvider implements AIProvider {
         if (hasErrorPayload(parsed)) throw errorFromPayload(parsed, res.status)
         const choice = parsed.choices?.[0]
         const delta = choice?.delta?.content ?? choice?.message?.content ?? ''
+        reasoningChars += reasoningText(choice?.delta ?? choice?.message).length
         if (delta) {
           content += delta
           onChunk({ delta, done: false })
@@ -236,6 +241,7 @@ export class OpenAICompatibleProvider implements AIProvider {
           const parsed = json as SSEParsed
           const choice = parsed.choices?.[0]
           const whole = choice?.message?.content ?? choice?.delta?.content ?? ''
+          reasoningChars += reasoningText(choice?.message ?? choice?.delta).length
           if (whole) {
             content += whole
             onChunk({ delta: whole, done: false })
@@ -273,25 +279,20 @@ export class OpenAICompatibleProvider implements AIProvider {
       const url = this.endpoint()
       const res = await this.fetchWithBudget(url, budget, {
         method: 'POST',
-        body: JSON.stringify({
-          model: this.config.model,
-          messages: [{ role: 'user', content: 'ping' }],
-          max_tokens: 8,
-          stream: false,
-          temperature: 0,
-        }),
+        body: JSON.stringify(this.testBody()),
       })
       const latencyMs = Date.now() - start
       if (!res.ok) {
-        const message = await safeReadError(res)
         return {
           ok: false,
           latencyMs,
           model: this.config.model,
-          error: errorFromStatus(res.status, message).message,
+          error: (await httpError(res)).message,
         }
       }
       // Some providers answer 200 with `{"error": …}` (bad model, no balance).
+      // A thinking model may answer with reasoning only and no text yet: the
+      // connection works all the same, so the content is not checked.
       const json: unknown = await res.json().catch(() => null)
       if (hasErrorPayload(json)) {
         return {
@@ -398,18 +399,65 @@ export class OpenAICompatibleProvider implements AIProvider {
         if (m.name) msg.name = m.name
         return msg
       }),
-      temperature: req.temperature ?? this.config.temperature,
-      // Never above the model's own output limit, when known.
-      max_tokens: Math.min(
-        req.maxTokens ?? this.config.maxTokens,
-        this.config.modelMaxOutputTokens ?? Infinity,
-      ),
-      stream,
     }
+    // Never above the model's own output limit, when known.
+    const maxTokens = Math.min(
+      req.maxTokens ?? this.config.maxTokens,
+      this.config.modelMaxOutputTokens ?? Infinity,
+    )
+    this.applyModelSwitches(body, {
+      model,
+      maxTokens,
+      temperature: req.temperature ?? this.config.temperature,
+      low: req.reasoning === 'low',
+    })
+    body.stream = stream
     if (stream && this.options.streamUsage) body.stream_options = { include_usage: true }
     if (req.responseFormat?.type === 'json_object' && this.options.supportsJsonMode) {
       body.response_format = { type: 'json_object' }
     }
+    return body
+  }
+
+  /**
+   * Temperature, the output cap and the thinking switches, as the preset's
+   * reasoning profile asks for them (plain presets: `temperature` +
+   * `max_tokens`, as always).
+   */
+  private applyModelSwitches(
+    body: Record<string, unknown>,
+    opts: { model: string; maxTokens: number; temperature: number; low: boolean },
+  ): void {
+    const reasoning = this.options.reasoning
+    if (!reasoning?.omitTemperature) body.temperature = opts.temperature
+    if (reasoning?.outputParam === 'max_completion_tokens') {
+      body.max_completion_tokens = opts.maxTokens
+    } else {
+      body.max_tokens = opts.maxTokens
+    }
+    if (!reasoning) return
+    if (reasoning.split) body.reasoning_split = true
+    if (opts.low) Object.assign(body, reasoning.lowEffort?.(opts.model) ?? {})
+  }
+
+  /** The connection test: tiny, but with room for a thinking model to start. */
+  private testBody(): Record<string, unknown> {
+    const reasoning = this.options.reasoning
+    const body: Record<string, unknown> = {
+      model: this.config.model,
+      messages: [{ role: 'user', content: 'ping' }],
+    }
+    this.applyModelSwitches(body, {
+      model: this.config.model,
+      maxTokens: Math.min(
+        reasoning ? reasoning.testMaxTokens : 8,
+        this.config.modelMaxOutputTokens ?? Infinity,
+      ),
+      temperature: 0,
+      // Think as little as the model allows: it only has to answer.
+      low: true,
+    })
+    body.stream = false
     return body
   }
 
@@ -536,11 +584,19 @@ export function parseUsage(raw: unknown): TokenUsage | undefined {
   const cached =
     num(details && typeof details === 'object' ? details.cached_tokens : undefined) ??
     num(u.prompt_cache_hit_tokens)
+  const completionDetails = u.completion_tokens_details as
+    Record<string, unknown> | null | undefined
+  const reasoning = num(
+    completionDetails && typeof completionDetails === 'object'
+      ? completionDetails.reasoning_tokens
+      : undefined,
+  )
   return {
     promptTokens: prompt ?? 0,
     completionTokens: completion ?? 0,
     totalTokens: num(u.total_tokens) ?? (prompt ?? 0) + (completion ?? 0),
     ...(cached !== undefined && cached > 0 ? { cachedTokens: cached } : {}),
+    ...(reasoning !== undefined && reasoning > 0 ? { reasoningTokens: reasoning } : {}),
   }
 }
 
@@ -573,9 +629,14 @@ function parseBlock(block: string): { data: string } | null {
   return data ? { data } : null
 }
 
+interface SSEMessagePart {
+  content?: string
+  reasoning_content?: string
+  reasoning_details?: ({ text?: unknown } | null)[]
+}
 interface SSEChoice {
-  delta?: { content?: string }
-  message?: { content?: string }
+  delta?: SSEMessagePart
+  message?: SSEMessagePart
   finish_reason?: string | null
 }
 interface SSEParsed {
@@ -620,27 +681,81 @@ export function sanitizeProviderText(text: string): string {
 function providerMessage(json: unknown, fallback: string): string {
   const root = (json && typeof json === 'object' ? json : {}) as Record<string, unknown>
   const error = root.error
+  const base = root.base_resp
   const candidate =
     error && typeof error === 'object'
       ? (error as Record<string, unknown>).message
-      : (error ?? root.message)
+      : (error ??
+        root.message ??
+        (base && typeof base === 'object'
+          ? (base as Record<string, unknown>).status_msg
+          : undefined))
   return typeof candidate === 'string' && candidate.trim() ? candidate : fallback
 }
 
-async function safeReadError(res: Response): Promise<string | undefined> {
-  try {
-    const text = await res.text()
-    let message = text
-    try {
-      message = providerMessage(JSON.parse(text), text)
-    } catch {
-      /* not JSON — keep the raw text */
-    }
-    const clean = sanitizeProviderText(message.trim())
-    return clean || undefined
-  } catch {
-    return undefined
+/**
+ * A rate-limit error carries the provider's `Retry-After` (when sent and
+ * exposed to the page by CORS), so the scheduler waits exactly that long.
+ */
+function withRetryAfter(err: AIProviderError, res: Response): AIProviderError {
+  if (err instanceof RateLimitedError) {
+    const wait = parseRetryAfter(res.headers?.get?.('retry-after'))
+    if (wait !== undefined) err.retryAfterMs = wait
   }
+  return err
+}
+
+/**
+ * The typed error of a failed HTTP response: a `base_resp` code when the body
+ * carries one, else the status with the provider's (sanitised) message.
+ */
+async function httpError(res: Response): Promise<AIProviderError> {
+  let text: string
+  try {
+    text = await res.text()
+  } catch {
+    return errorFromStatus(res.status)
+  }
+  let json: unknown
+  let message = text
+  try {
+    json = JSON.parse(text)
+    message = providerMessage(json, text)
+  } catch {
+    /* not JSON — keep the raw text */
+  }
+  const clean = sanitizeProviderText(message.trim()) || undefined
+  const code = baseRespCode(json)
+  if (code !== undefined) return errorFromBaseResp(code, clean, res.status)
+  return errorFromStatus(res.status, clean)
+}
+
+/**
+ * The non-zero `base_resp.status_code` of a response (MiniMax's error
+ * envelope; `0` means success and is ignored).
+ */
+function baseRespCode(json: unknown): number | undefined {
+  if (!json || typeof json !== 'object') return undefined
+  const base = (json as Record<string, unknown>).base_resp
+  if (!base || typeof base !== 'object') return undefined
+  const code = Number((base as Record<string, unknown>).status_code)
+  return Number.isInteger(code) && code !== 0 ? code : undefined
+}
+
+/**
+ * Hidden reasoning a provider sends apart from the answer:
+ * `reasoning_content` (DeepSeek, MiniMax with `reasoning_split`) or MiniMax's
+ * older `reasoning_details[].text`. Only ever measured, never shown.
+ */
+function reasoningText(part: SSEChoice['delta'] | undefined): string {
+  if (!part) return ''
+  if (typeof part.reasoning_content === 'string') return part.reasoning_content
+  if (Array.isArray(part.reasoning_details)) {
+    return part.reasoning_details
+      .map((d) => (d && typeof d.text === 'string' ? d.text : ''))
+      .join('')
+  }
+  return ''
 }
 
 /**
@@ -654,6 +769,8 @@ function errorFromPayload(json: unknown, httpStatus: number): AIProviderError {
     unknown
   >
   const message = sanitizeProviderText(providerMessage(json, '').trim()) || undefined
+  const baseCode = baseRespCode(json)
+  if (baseCode !== undefined) return errorFromBaseResp(baseCode, message, httpStatus)
   const numeric = [error.status, error.code, error.http_status, root.status]
     .map((value) => Number(value))
     .find((value) => Number.isInteger(value) && value >= 400 && value < 600)
@@ -670,6 +787,8 @@ function errorFromPayload(json: unknown, httpStatus: number): AIProviderError {
 function hasErrorPayload(json: unknown): boolean {
   if (!json || typeof json !== 'object') return false
   const root = json as Record<string, unknown>
+  // A non-zero `base_resp` code is a failure even next to `choices`.
+  if (baseRespCode(json) !== undefined) return true
   return root.error !== undefined && root.error !== null && !Array.isArray(root.choices)
 }
 

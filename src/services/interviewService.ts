@@ -257,7 +257,7 @@ export class InterviewService {
               }),
             },
           ],
-          { maxTokens: 6144, signal: control.signal },
+          { signal: control.signal },
         )
         answered.set(
           key,
@@ -344,7 +344,7 @@ export class InterviewService {
           }),
         },
       ],
-      { maxTokens: 4096, ...(options.signal ? { signal: options.signal } : {}) },
+      options.signal ? { signal: options.signal } : {},
     )
     const scenario = validateGeneratedScenario(
       prompts.interviewScenario.readScenarios(data)[0],
@@ -452,7 +452,7 @@ export class InterviewService {
           }),
         },
       ],
-      { maxTokens: 1024, ...(options.signal ? { signal: options.signal } : {}) },
+      options.signal ? { signal: options.signal } : {},
     )
     // A stopped turn stores nothing: the session stays as it was.
     options.signal?.throwIfAborted()
@@ -533,7 +533,7 @@ export class InterviewService {
           }),
         },
       ],
-      { maxTokens: 2048, ...(options.signal ? { signal: options.signal } : {}) },
+      options.signal ? { signal: options.signal } : {},
     )
     // A stopped check grades nothing (the summary draft is kept).
     options.signal?.throwIfAborted()

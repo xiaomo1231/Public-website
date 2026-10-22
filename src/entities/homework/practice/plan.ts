@@ -3,6 +3,7 @@ import type { LinearSystemCheck, WalkthroughSection } from '../walkthrough'
 import { walkthroughSubparts } from '../splitQuestion'
 import type { SolutionKind } from '@/infrastructure/math/rref'
 import { systemFromRrefLatex } from './linearSystem'
+import { isAmbiguousLegacyCheck } from '../walkthroughChecks'
 import {
   MAX_PRACTICE_QUESTIONS,
   type PracticeMode,
@@ -176,6 +177,9 @@ function systemsFor(
   partCount: number,
 ): NonNullable<PracticeSlotPart['system']>[] | null {
   if (checks.length !== partCount) return null
+  // A homogeneous test (A x = 0) or an old check that may have been one is no
+  // shape for a constructed [A | b] system: the AI writes those parts.
+  if (checks.some((check) => check.homogeneous || isAmbiguousLegacyCheck(check))) return null
   const systems = checks.map((check) => systemFromRrefLatex(check.computedRref, check.computedKind))
   return systems.every(Boolean) ? (systems as NonNullable<PracticeSlotPart['system']>[]) : null
 }

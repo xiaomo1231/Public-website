@@ -9,7 +9,6 @@ import {
   IMPORT_SEGMENT_CHARS,
   WalkthroughImportPartError,
   WalkthroughImportService,
-  importOutputBudget,
   importPartMessage,
   importSegmentChars,
   mergeImportParts,
@@ -658,16 +657,16 @@ describe('importing a walkthrough', () => {
 describe('long imports and the output cap', () => {
   /** A model with an output cap: records each request's budget. */
   function cappedAI(
-    handler: (user: string, maxTokens: number) => unknown,
+    handler: (user: string, maxTokens: number | undefined) => unknown,
     caps: { maxOutputTokens?: number; modelMaxOutputTokens?: number } = {},
   ) {
-    const budgets: number[] = []
+    const budgets: Array<number | undefined> = []
     const users: string[] = []
     const streamJSON = vi.fn(
       async (
         messages: Array<{ content: string }>,
         _delta: unknown,
-        options: { maxTokens: number },
+        options: { maxTokens?: number },
       ) => {
         budgets.push(options.maxTokens)
         users.push(messages[1]!.content)
@@ -696,17 +695,14 @@ describe('long imports and the output cap', () => {
     ],
   })
 
-  it('plans parts from the output cap and never asks for more than the cap', () => {
+  it('plans parts from the output cap', () => {
     expect(importSegmentChars(8192)).toBe(IMPORT_SEGMENT_CHARS)
     expect(IMPORT_SEGMENT_CHARS).toBeLessThan(4_000)
-    // Estimated reply of a planned part fits the cap.
-    expect(importOutputBudget(IMPORT_SEGMENT_CHARS, 8192)).toBeLessThanOrEqual(8192)
     expect(importSegmentChars(384_000)).toBe(12_000)
     expect(importSegmentChars(1_024)).toBe(2_000)
-    expect(importOutputBudget(100_000, 8192)).toBe(8192)
   })
 
-  it('doubles the budget up to the cap, then reads the part in halves and merges them', async () => {
+  it('a part cut off at the cap is read in halves at once (no larger retry) and merged', async () => {
     await setup({ chunks: [PROBLEM_1_BODY, PROBLEM_2_BODY] })
     const { ai, budgets, users } = cappedAI((user) => {
       // The whole part never fits; each half does.
@@ -719,12 +715,11 @@ describe('long imports and the output cap', () => {
       documentId: importDocId,
       checkIssues: true,
     })
-    expect(budgets[0]).toBe(
-      importOutputBudget(`${PROBLEM_1_BODY}\n\n${PROBLEM_2_BODY}`.length, 8192),
-    )
-    expect(budgets.slice(0, 3)).toEqual([budgets[0], budgets[0]! * 2, 8192])
-    expect(users).toHaveLength(5)
-    expect(users[3]).toContain('only a fragment')
+    // Every request goes out at the cap (AIService): no per-call budget.
+    expect(budgets.every((budget) => budget === undefined)).toBe(true)
+    // The whole part once, then its two halves.
+    expect(users).toHaveLength(3)
+    expect(users[1]).toContain('only a fragment')
     expect(users[0]).not.toContain('only a fragment')
     expect(preview.complete).toBe(true)
     expect(preview.partsTotal).toBe(1)
@@ -813,18 +808,14 @@ describe('问答标记样式', () => {
     for (const name of ['walkthrough-note', 'walkthrough-link']) {
       expect(css).toContain(`:root:not([data-note-mark='highlighter']) ::highlight(${name})`)
       expect(css).toContain(`:root[data-note-mark='highlighter'] ::highlight(${name})`)
-      expect(css).toContain(`:root.dark[data-note-mark='highlighter'] ::highlight(${name})`)
     }
-    // Saved is stronger than unsaved in the highlighter style.
-    const alpha = (selector: string): number =>
-      Number(
-        new RegExp(
-          `${selector.replace(/[[\]().']/g, '\\$&')} \\{ background-color: hsl\\(var\\(--primary\\) / ([\\d.]+)\\)`,
-        ).exec(css)![1],
-      )
-    expect(
-      alpha(":root[data-note-mark='highlighter'] ::highlight(walkthrough-note)"),
-    ).toBeGreaterThan(alpha(":root[data-note-mark='highlighter'] ::highlight(walkthrough-link)"))
+    // Saved uses the strong fill, unsaved the light one (per-colour tokens).
+    expect(css).toContain(
+      ":root[data-note-mark='highlighter'] ::highlight(walkthrough-note) { background-color: hsl(var(--note-hl) / var(--note-hl-saved-a));",
+    )
+    expect(css).toContain(
+      ":root[data-note-mark='highlighter'] ::highlight(walkthrough-link) { background-color: hsl(var(--note-hl) / var(--note-hl-unsaved-a));",
+    )
     // No hard-coded colours in the mark rules.
     const rules = css.slice(
       css.indexOf('::highlight(walkthrough-note)') - 60,

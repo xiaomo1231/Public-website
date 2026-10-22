@@ -1,7 +1,10 @@
 import { useCallback } from 'react'
 import {
+  DEFAULT_NOTE_HIGHLIGHT_COLOR,
   DEFAULT_NOTE_MARK_STYLE,
+  NOTE_HIGHLIGHT_COLORS,
   NOTE_MARK_STYLES,
+  type NoteHighlightColor,
   type NoteMarkStyle,
 } from '@/entities/user/types'
 import { useAuthStore } from '@/features/auth/authStore'
@@ -47,4 +50,47 @@ export function useNoteMarkStyle(): {
     [persist],
   )
   return { style, setStyle }
+}
+
+/**
+ * Highlighter fill colour, applied as `<html data-note-color>`. The colours
+ * live in `globals.css` (`[data-note-color]` blocks set `--note-hl`,
+ * `--note-hl-saved-a`, `--note-hl-unsaved-a` per light / dark mode); any element
+ * carrying the attribute gets that colour's tokens, which the settings
+ * swatches use for their previews.
+ */
+export const NOTE_COLOR_ATTRIBUTE = 'data-note-color'
+
+export function resolveNoteHighlightColor(value: unknown): NoteHighlightColor {
+  return typeof value === 'string' && (NOTE_HIGHLIGHT_COLORS as readonly string[]).includes(value)
+    ? (value as NoteHighlightColor)
+    : DEFAULT_NOTE_HIGHLIGHT_COLOR
+}
+
+/** Apply a highlighter colour to the document (no-op outside a browser). */
+export function applyNoteHighlightColor(color: unknown, root?: HTMLElement): NoteHighlightColor {
+  const resolved = resolveNoteHighlightColor(color)
+  const target = root ?? (typeof document !== 'undefined' ? document.documentElement : undefined)
+  target?.setAttribute(NOTE_COLOR_ATTRIBUTE, resolved)
+  return resolved
+}
+
+/** The stored highlighter colour; changing it repaints at once and is then saved. */
+export function useNoteHighlightColor(): {
+  color: NoteHighlightColor
+  setColor: (color: NoteHighlightColor) => void
+} {
+  const color = resolveNoteHighlightColor(useAuthStore((s) => s.profile?.noteHighlightColor))
+  const persist = useAuthStore((s) => s.setNoteHighlightColor)
+  const setColor = useCallback(
+    (next: NoteHighlightColor) => {
+      applyNoteHighlightColor(next)
+      void persist(next).catch((err: unknown) => {
+        logger.warn('Failed to persist note highlight colour', { color: next })
+        logger.debug('Note highlight colour persistence error', { error: String(err) })
+      })
+    },
+    [persist],
+  )
+  return { color, setColor }
 }

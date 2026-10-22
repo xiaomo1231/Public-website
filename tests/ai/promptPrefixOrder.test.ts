@@ -83,10 +83,11 @@ describe('homework-walkthrough v7: sub-part line after the shared blocks', () =>
   }
 
   it('keeps every v6 line, the cache version and the other prompts', () => {
-    expect(prompts.homeworkWalkthrough.VERSION).toBe('v7')
+    expect(prompts.homeworkWalkthrough.VERSION).toBe('v9')
     expect(prompts.homeworkWalkthrough.CACHE_VERSION).toBe('v1')
-    expect(prompts.homeworkWalkthrough.buildPartSystemPrompt({ linearSystems: true })).toBe(
-      WalkthroughV6.buildPartSystemPrompt({ linearSystems: true }),
+    // v8 only rewrites the linear-system lines; without them the system prompt is v6's.
+    expect(prompts.homeworkWalkthrough.buildPartSystemPrompt({ linearSystems: false })).toBe(
+      WalkthroughV6.buildPartSystemPrompt({ linearSystems: false }),
     )
     const part = { ...input, part: 'b', earlier: [], analysis: true }
     const v7 = prompts.homeworkWalkthrough.buildPartUserPrompt(part)

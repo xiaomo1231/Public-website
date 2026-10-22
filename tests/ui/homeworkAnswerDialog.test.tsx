@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { HomeworkAnswerDialog } from '@/widgets/homework/HomeworkAnswerDialog'
@@ -68,7 +68,11 @@ function makeMapping(overrides: Partial<StubMapping> = {}): StubMapping {
   }
 }
 
-function renderDialog(mapping: StubMapping, questions = [question()]) {
+function renderDialog(
+  mapping: StubMapping,
+  questions = [question()],
+  generationResult: Record<string, unknown> = { generated: 1, failed: 0, skipped: 0 },
+) {
   const confirmAnswerMapping = vi.fn(async (_setId: string, _selections: unknown[]) => 1)
   const saveAnswerEntries = vi.fn(async (_setId: string, _entries: AnswerEntry[]) => 1)
   const clearAnswerEntries = vi.fn(async (_setId: string) => undefined)
@@ -77,7 +81,7 @@ function renderDialog(mapping: StubMapping, questions = [question()]) {
       _setId: string,
       _questionIds?: readonly string[],
       _onProgress?: (progress: AnswerGenerationProgress) => void,
-    ) => ({ generated: 1, failed: 0, skipped: 0 }),
+    ) => generationResult,
   )
   const onChanged = vi.fn()
   const onOpenChange = vi.fn()
@@ -297,5 +301,75 @@ describe('HomeworkAnswerDialog — answer matching', () => {
         expect.anything(),
       ),
     )
+  })
+
+  it('lists every failed question with its specific reason and a retry button after generating', async () => {
+    const user = userEvent.setup()
+    const matched = makeMapping({
+      entries: [{ number: '2', text: 'Solution: worked steps', chunkIds: ['c1'] }],
+      result: {
+        assignments: [
+          { questionId: 'q2', status: 'matched', reason: 'number-unique', answerIndex: 0 },
+        ],
+        unmatchedAnswers: [],
+      },
+    })
+    const reason = 'Part (b): The AI reply had no worked solution for this question.'
+    const { generateAnswerContent } = renderDialog(
+      matched,
+      [
+        question({
+          id: 'q2',
+          number: '2',
+          answerStatus: 'matched',
+          answerText: 'Solution: worked steps',
+          generationStatus: 'ready',
+        }),
+      ],
+      {
+        generated: 0,
+        failed: 1,
+        skipped: 0,
+        paused: false,
+        remainingIds: [],
+        failures: [{ questionId: 'q2', number: '2', reason }],
+      },
+    )
+    await user.click(await screen.findByRole('button', { name: /Save & generate help/i }))
+    const list = await waitFor(() => {
+      const element = document.querySelector('[data-answer-failures]')
+      expect(element).not.toBeNull()
+      return element as HTMLElement
+    })
+    expect(list.textContent).toContain(`Question 2: ${reason}`)
+    generateAnswerContent.mockClear()
+    await user.click(within(list).getByRole('button', { name: 'Retry this question' }))
+    await waitFor(() =>
+      expect(generateAnswerContent).toHaveBeenCalledWith(
+        's1',
+        ['q2'],
+        expect.any(Function),
+        expect.anything(),
+      ),
+    )
+  })
+
+  it('says when the professor leaves only part of the problem to the student', async () => {
+    const text =
+      'Solution: The first part is left to you. For the matrix, A = [[1, 2], [3, 4]] and det A = 1·4 − 2·3 = −2, so A is invertible.'
+    renderDialog(
+      makeMapping({
+        entries: [{ number: '1', text, chunkIds: ['c1'] }],
+        result: {
+          assignments: [
+            { questionId: 'q1', status: 'matched', reason: 'number-unique', answerIndex: 0 },
+          ],
+          unmatchedAnswers: [],
+        },
+      }),
+      [question({ answerStatus: 'matched', answerText: text })],
+    )
+    expect(await screen.findByText(/leaves part of this problem/i)).toBeInTheDocument()
+    expect(screen.queryByText(/provides no worked answer/i)).not.toBeInTheDocument()
   })
 })

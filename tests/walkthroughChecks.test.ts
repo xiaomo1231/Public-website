@@ -8,7 +8,16 @@ import {
   sameReducedMatrix,
   solutionKind,
 } from '@/infrastructure/math/rref'
-import { checkLinearSystems, involvesRowReduction } from '@/entities/homework/walkthroughChecks'
+import {
+  checkHasConflict,
+  checkLinearSystems,
+  involvesRowReduction,
+  isAmbiguousLegacyCheck,
+} from '@/entities/homework/walkthroughChecks'
+import type { LinearSystemCheck } from '@/entities/homework/walkthrough'
+import { prompts } from '@/infrastructure/ai/prompts'
+import * as HomeworkWalkthroughV1 from '@/infrastructure/ai/prompts/homework-walkthrough/v1'
+import * as HomeworkWalkthroughV7 from '@/infrastructure/ai/prompts/homework-walkthrough/v7'
 import { describeAnchor, findAnchorOffset, locateAnchor } from '@/shared/lib/textAnchor'
 import {
   planWalkthrough,
@@ -148,7 +157,8 @@ describe('checking the walkthrough arithmetic', () => {
           [1, 0, '1/2'],
           [0, 1, 2],
         ],
-        solution: 'infinite',
+        // Wrong under both readings: [A | b] has a unique solution, A x = 0 infinitely many.
+        solution: 'none',
       },
       { label: 'bad', augmented: [['a', 'b']], rref: [['1', '0']] },
     ])
@@ -159,6 +169,223 @@ describe('checking the walkthrough arithmetic', () => {
     ])
     expect(checks[1]!.computedRref).toContain('\\tfrac{21}{5}')
     expect(checks[2]!.computedKind).toBe('unique')
+    expect(checks[2]!.matrix).toContain('{cc|c}')
+  })
+
+  // HW4 2(c): B2 = {v1, v3} with v1 = (1,0,0,1), v3 = (1,1,1,3). The model tests
+  // independence (α1 v1 + α2 v3 = 0, only the trivial solution) and sends the
+  // coefficient matrix [v1 v3] in the old "augmented" field.
+  const independence = {
+    label: '(c)',
+    augmented: [
+      ['1', '1'],
+      ['0', '1'],
+      ['0', '1'],
+      ['1', '3'],
+    ],
+    rref: [
+      ['1', '0'],
+      ['0', '1'],
+      ['0', '0'],
+      ['0', '0'],
+    ],
+    solution: 'unique' as const,
+  }
+
+  it('reads an old-shape coefficient matrix of an independence test as A x = 0 (no false 无解)', () => {
+    const [check] = checkLinearSystems([independence])
+    expect(check).toMatchObject({
+      rrefMatches: true,
+      kindMatches: true,
+      computedKind: 'unique',
+      homogeneous: true,
+    })
+    expect(checkHasConflict(check!)).toBe(false)
+    // A dependent set sent the same way: "infinitely many" fits A x = 0.
+    const [dependent] = checkLinearSystems([
+      {
+        label: '(d)',
+        augmented: [
+          [1, 0, 1],
+          [0, 1, 1],
+          [1, 1, 2],
+        ],
+        rref: [
+          [1, 0, 1],
+          [0, 1, 1],
+          [0, 0, 0],
+        ],
+        solution: 'infinite',
+      },
+    ])
+    expect(checkHasConflict(dependent!)).toBe(false)
+  })
+
+  it('hides the conflict a check saved by the old checker reported for that payload', () => {
+    const legacy: LinearSystemCheck = {
+      label: '(c)',
+      rrefMatches: true,
+      kindMatches: false,
+      claimedKind: 'unique',
+      computedKind: 'none',
+      computedRref: matrixToLatex(rref(parseMatrix(independence.augmented)!)),
+    }
+    expect(isAmbiguousLegacyCheck(legacy)).toBe(true)
+    expect(checkHasConflict(legacy)).toBe(false)
+    // A real old conflict (claim fits neither reading) is still shown.
+    const real = { ...legacy, claimedKind: 'infinite' as const }
+    expect(checkHasConflict(real)).toBe(true)
+  })
+
+  it('checks the new coefficients + rhs shape exactly', () => {
+    const checks = checkLinearSystems([
+      {
+        label: '(c)',
+        coefficients: independence.augmented,
+        rhs: 'homogeneous',
+        rref: independence.rref,
+        solution: 'unique',
+      },
+      // Same with the RREF of [A | 0] and a zero rhs list.
+      {
+        label: '(c) #2',
+        coefficients: independence.augmented,
+        rhs: ['0', '0', '0', '0'],
+        rref: [
+          ['1', '0', '0'],
+          ['0', '1', '0'],
+        ],
+        solution: 'unique',
+      },
+      // Spanning check with a symbolic right-hand side: skipped, never a conflict.
+      {
+        label: '(b)',
+        coefficients: independence.augmented,
+        rhs: ['x', 'y', 'z', 'w'],
+        rref: [
+          ['1', '0', 'x-y'],
+          ['0', '1', 'y'],
+        ],
+        solution: 'unique',
+      },
+      // A genuine mismatch, numeric and certain: [A | b] is inconsistent.
+      {
+        label: '(e)',
+        coefficients: independence.augmented,
+        rhs: ['1', '0', '0', '0'],
+        rref: [
+          ['1', '0', '0'],
+          ['0', '1', '0'],
+          ['0', '0', '1'],
+        ],
+        solution: 'unique',
+      },
+    ])
+    expect(checks.map((check) => [check.label, check.rrefMatches, check.kindMatches])).toEqual([
+      ['(c)', true, true],
+      ['(c) #2', true, true],
+      ['(e)', true, false],
+    ])
+    expect(checks[0]!.homogeneous).toBe(true)
+    expect(checks[2]!.computedKind).toBe('none')
+    expect(checks[2]!.homogeneous).toBeUndefined()
+    expect(checks[2]!.matrix).toBe(
+      '\\left[\\begin{array}{cc|c} 1&1&1\\\\ 0&1&0\\\\ 0&1&0\\\\ 1&3&0 \\end{array}\\right]',
+    )
+    expect(checkHasConflict(checks[2]!)).toBe(true)
+  })
+
+  it('still flags an old-shape augmented system declared unique that is inconsistent', () => {
+    const [check, explicit] = checkLinearSystems([
+      {
+        label: '(f)',
+        augmented: [
+          [1, 2, 3],
+          [2, 4, 7],
+          [1, 1, 1],
+        ],
+        rref: [
+          [1, 0, 0],
+          [0, 1, 0],
+          [0, 0, 1],
+        ],
+        // Coefficient-only it would be A x = 0 with rank 3 = only the trivial
+        // solution, so a "unique" claim is ambiguous; "infinite" fits neither.
+        solution: 'infinite',
+      },
+      {
+        label: 'flag',
+        augmented: independence.augmented,
+        homogeneous: true,
+        rref: independence.rref,
+        solution: 'infinite',
+      },
+    ])
+    expect(check).toMatchObject({ kindMatches: false, computedKind: 'none' })
+    expect(checkHasConflict(check!)).toBe(true)
+    // Declared homogeneous, the reading is certain: "infinite" for independent columns is flagged.
+    expect(explicit).toMatchObject({
+      homogeneous: true,
+      kindMatches: false,
+      computedKind: 'unique',
+    })
+    expect(checkHasConflict(explicit!)).toBe(true)
+  })
+
+  it('reads both payload shapes from a model reply', () => {
+    const section = HomeworkWalkthroughV1.normalizeQuestionSection({
+      status: 'ready',
+      conclusion: 'c',
+      body: 'b',
+      linearSystems: [
+        independence,
+        {
+          label: '(b)',
+          coefficients: [[1]],
+          rhs: 'homogeneous',
+          rref: [[1]],
+          solutionType: 'unique',
+        },
+      ],
+    })
+    expect(section).toMatchObject({
+      status: 'ready',
+      linearSystems: [
+        { label: '(c)', augmented: independence.augmented, solution: 'unique' },
+        {
+          label: '(b)',
+          coefficients: [[1]],
+          rhs: 'homogeneous',
+          homogeneous: true,
+          solution: 'unique',
+        },
+      ],
+    })
+  })
+
+  it('asks v8 prompts and the import prompt for the unambiguous shape', () => {
+    for (const prompt of [
+      prompts.homeworkWalkthrough.buildQuestionSystemPrompt({ linearSystems: true }),
+      prompts.homeworkWalkthrough.buildPartSystemPrompt({ linearSystems: true }),
+      prompts.homeworkWalkthrough.buildVariantSystemPrompt({
+        linearSystems: true,
+        level: 'detailed',
+      }),
+      prompts.walkthroughImport.buildSystemPrompt({ checkIssues: true, linearSystems: true }),
+    ]) {
+      expect(prompt).toContain('"coefficients"')
+      expect(prompt).toContain('"homogeneous"')
+      expect(prompt).not.toContain('"augmented"')
+      expect(prompt).not.toContain('give the full augmented matrix')
+    }
+    expect(prompts.homeworkWalkthrough.buildPartSystemPrompt({ linearSystems: true })).toContain(
+      'in this sub-part, give "coefficients"',
+    )
+    // Without linear systems the prompts are v7's word for word.
+    expect(prompts.homeworkWalkthrough.buildQuestionSystemPrompt({ linearSystems: false })).toBe(
+      HomeworkWalkthroughV7.buildQuestionSystemPrompt({ linearSystems: false }),
+    )
+    expect(prompts.homeworkWalkthrough.CACHE_VERSION).toBe('v1')
   })
 
   it('recognises questions that involve row reduction', () => {

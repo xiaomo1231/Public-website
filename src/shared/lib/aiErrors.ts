@@ -42,11 +42,16 @@ export function friendlyAIError(err: unknown): string {
           return t(
             atCap.by === 'model'
               ? 'friendlyError.outputTruncatedModelMax'
-              : 'friendlyError.outputTruncatedSettingMax',
+              : atCap.by === 'unknown'
+                ? 'friendlyError.outputTruncatedUnknownMax'
+                : 'friendlyError.outputTruncatedSettingMax',
             { limit: atCap.limit },
           )
         return t('friendlyError.outputTruncated')
       }
+      case 'REASONING_EXHAUSTED':
+        // The error's own text already says what to change (budget / thinking).
+        return err.message
       case 'ABORTED':
         return t('friendlyError.cancelled')
       case 'INVALID_REQUEST':

@@ -82,6 +82,8 @@ function partAI(options: { onCall?: (n: number) => void; hang?: (n: number) => b
     chatJSON: vi.fn(),
     currentProvider: { id: 'custom' },
     maxOutputTokens: 2048,
+    // These tests pin two parts in flight at a time.
+    concurrency: 2,
   } as unknown as AIService
   return { ai, streamJSON }
 }

@@ -6,7 +6,6 @@ import { DocumentRepository } from '@/entities/document/repository'
 import { ChunkRepository } from '@/entities/chunk/repository'
 import { HomeworkRepository } from '@/entities/homework/repository'
 import { HomeworkService } from '@/services/homeworkService'
-import { ANALYZER_OUTPUT_CEILING } from '@/entities/homework/tokenBudget'
 import {
   ContextTooLongError,
   OutputLimitError,
@@ -267,7 +266,7 @@ describe('HomeworkService — analysis reliability', () => {
     expect(called).toBe(false)
   })
 
-  it('sends a controlled max_tokens per analyzer batch, never the raw setting', async () => {
+  it('never sets a per-batch max_tokens: AIService sends the whole cap', async () => {
     const calls: StubCall[] = []
     const service = new HomeworkService({
       db,
@@ -287,11 +286,7 @@ describe('HomeworkService — analysis reliability', () => {
       call.system.includes('extract the individual questions'),
     )
     expect(analyzerCalls.length).toBeGreaterThan(0)
-    for (const call of analyzerCalls) {
-      expect(call.maxTokens).toBeGreaterThan(0)
-      expect(call.maxTokens).toBeLessThanOrEqual(ANALYZER_OUTPUT_CEILING)
-      expect(call.maxTokens).toBeLessThan(32_000)
-    }
+    for (const call of analyzerCalls) expect(call.maxTokens).toBeUndefined()
   })
 
   it('splits a batch that overflows the context window, keeping order and real sources', async () => {
@@ -318,7 +313,7 @@ describe('HomeworkService — analysis reliability', () => {
     }
   })
 
-  it('retries a rejected output cap once with a smaller budget', async () => {
+  it('never answers a rejected output cap with a smaller budget of its own', async () => {
     const calls: StubCall[] = []
     let rejectedOnce = false
     const service = new HomeworkService({
@@ -338,26 +333,31 @@ describe('HomeworkService — analysis reliability', () => {
       ),
     })
 
-    const set = await service.createFromDocument(documentId)
-    expect(set.status).toBe('ready')
+    await service.createFromDocument(documentId)
     const analyzerCalls = calls.filter((call) =>
       call.system.includes('extract the individual questions'),
     )
-    expect(analyzerCalls.length).toBeGreaterThanOrEqual(2)
-    expect(analyzerCalls[1]!.maxTokens!).toBeLessThan(analyzerCalls[0]!.maxTokens!)
+    // Probing the limit is AIService's job (it learns and remembers it); the
+    // rejected batch is not re-sent here with a halved budget.
+    expect(analyzerCalls.filter((call) => call.user === analyzerCalls[0]!.user)).toHaveLength(1)
+    for (const call of analyzerCalls) expect(call.maxTokens).toBeUndefined()
   })
 
   it('stops the whole run when the account is out of credit', async () => {
     let calls = 0
     const service = new HomeworkService({
       db,
-      ai: stubAI((system) => {
-        if (system.includes('extract the individual questions')) {
-          calls += 1
-          throw new QuotaExceededError('insufficient quota')
-        }
-        return { hints: ['h'], solution: 's' }
-      }),
+      // One request at a time, so "the rest" is not already in flight.
+      ai: Object.assign(
+        stubAI((system) => {
+          if (system.includes('extract the individual questions')) {
+            calls += 1
+            throw new QuotaExceededError('insufficient quota')
+          }
+          return { hints: ['h'], solution: 's' }
+        }),
+        { concurrency: 1 },
+      ),
     })
 
     const set = await service.createFromDocument(documentId)

@@ -30,14 +30,86 @@ export interface AnswerEntry {
  * labels flattened from a nearby diagram.
  */
 export function isDeferredProfessorAnswer(text: string): boolean {
+  return professorAnswerDeferral(text) === 'full'
+}
+
+/**
+ * How much of a professor answer is left to the student:
+ *  - `none`: nothing is deferred;
+ *  - `partial`: some sub-parts are left to the student ("I leave the first
+ *    part to you", "the rest is left as an exercise") or the answer still
+ *    carries worked content besides the deferral — the worked parts are
+ *    usable, the others are written as our own explanation;
+ *  - `full`: the whole problem is left to the student (only flattened diagram
+ *    labels or a restated question may remain) — nothing to ground help in.
+ */
+export type ProfessorDeferral = 'none' | 'partial' | 'full'
+
+const DEFERRAL_EN =
+  /(?:left (?:to|for) you|leave\b[^.;!?\n]{0,40}?\b(?:to|for) you|(?:left|assigned) (?:as|for) (?:an |the )?exercises?|exercise (?:for|to) (?:the )?(?:reader|student)|homework for (?:the )?(?:reader|student)|try (?:it|this) (?:yourself|on your own)|solution (?:omitted|is omitted)|no (?:solution|answer) (?:provided|given))\b/
+const DEFERRAL_ZH =
+  /(?:留给(?:你|学生|读者)(?:自己)?(?:完成|解答|练习)|请(?:你|学生|读者)自行(?:完成|解答|求解)|答案略|解答略|解略|不提供(?:答案|解答))/
+/** A deferral sentence that names only some of the problem. */
+const PARTIAL_SCOPE =
+  /\b(?:first|second|third|fourth|last|other|remaining|next)\s+(?:two\s+|three\s+)?(?:parts?|steps?|questions?|half)\b|\bthe rest\b|\bpart\s*[(（]?[a-z0-9][)）]?(?=[\s,.;:]|$)|(?:^|[\s,;:])[(（][a-z0-9][)）](?=[\s,.;:]|$)|其余|剩下|第[一二三四五六七八九十\d]+(?:问|小题|部分)|前[一二两三四\d]+(?:问|小题)/
+/** Worked content: equations, implications, matrices written out. */
+const WORKED_SYMBOL = /[=⇒⟹→≠≤≥]/g
+
+export function professorAnswerDeferral(text: string): ProfessorDeferral {
   const normalized = text.replace(/\s+/g, ' ').trim().toLowerCase()
+  const isDeferral = (sentence: string) => DEFERRAL_EN.test(sentence) || DEFERRAL_ZH.test(sentence)
+  if (!isDeferral(normalized)) return 'none'
+  // An answer sheet often restates the problem before "Solution:"; only the
+  // professor's own part counts as worked content.
+  const marker = /\b(?:solution|answer|proof|sol)\s*[:.]|解[:：]|解答[:：]|答[:：]/.exec(normalized)
+  const own = marker ? normalized.slice(marker.index + marker[0].length) : normalized
+  const sentences = own.split(/(?<=[.!?。！？;；])\s+|(?<=[。！？；])/)
+  const deferring = sentences.filter(isDeferral)
+  if (deferring.some((sentence) => PARTIAL_SCOPE.test(sentence))) return 'partial'
+  const rest = sentences.filter((sentence) => !isDeferral(sentence)).join(' ')
+  const worked = (rest.match(WORKED_SYMBOL) ?? []).length
+  return worked >= 2 && rest.replace(/\s+/g, '').length >= 30 ? 'partial' : 'full'
+}
+
+/** Lines that are a running page header with its page number ("Problem Set 4 9"). */
+const PAGE_HEADER_LINE =
+  /^\s*(?:problem\s+set|homework|assignment|hw|exercise\s+sheet|exercises|solutions?|tutorial|worksheet|作业|习题|答案)\b[^\n]{0,40}?\s\d{1,3}\s*$|^\s*page\s+\d{1,3}(?:\s+of\s+\d{1,3})?\s*$|^\s*第\s*\d{1,3}\s*页(?:\s*[/／共]\s*\d{1,3}\s*页?)?\s*$/i
+
+/**
+ * Clean PDF-extraction artifacts from a professor answer before it is sent to
+ * a model: running page headers inside a solution ("Problem Set 4 9"), the
+ * combining vector arrow (U+20D7) detached from its letter (`,⃗ v₂`, `⃗v₂`)
+ * and the blank lines left where bracket glyphs of a big matrix were dropped.
+ * The stored answer is never changed (it stays the student-checked evidence).
+ */
+export function cleanProfessorAnswerText(text: string): string {
   return (
-    /(?:left (?:to|for) you|leave (?:it|this|the problem|the exercise) (?:to|for) you|(?:left|assigned) as an exercise|exercise (?:for|to) (?:the )?(?:reader|student)|homework for (?:the )?(?:reader|student)|try (?:it|this) (?:yourself|on your own)|solution (?:omitted|is omitted)|no (?:solution|answer) (?:provided|given))\b/.test(
-      normalized,
-    ) ||
-    /(?:留给(?:你|学生|读者)(?:自己)?(?:完成|解答|练习)|请(?:你|学生|读者)自行(?:完成|解答|求解)|答案略|解答略|解略|不提供(?:答案|解答))/.test(
-      normalized,
-    )
+    text
+      .replace(/\r\n?/g, '\n')
+      .split('\n')
+      .filter((line) => !PAGE_HEADER_LINE.test(line))
+      .join('\n')
+      // A detached arrow belongs to the letter after it; write every vector
+      // as `vec(v)` so its subscript stays attached.
+      .replace(
+        /⃗[ \t]*([A-Za-z])([₀-₉]*)|([A-Za-z])⃗([₀-₉]*)/g,
+        (
+          _match,
+          after: string | undefined,
+          afterSub: string | undefined,
+          before: string | undefined,
+          beforeSub: string | undefined,
+          offset: number,
+          whole: string,
+        ) => {
+          const space = /[A-Za-z]/.test(whole[offset - 1] ?? '') ? ' ' : ''
+          return `${space}vec(${after ?? before})${(after ? afterSub : beforeSub) ?? ''}`
+        },
+      )
+      .replace(/⃗/g, '')
+      .replace(/[ \t]+\n/g, '\n')
+      .replace(/\n{3,}/g, '\n\n')
+      .trim()
   )
 }
 
@@ -273,6 +345,9 @@ function entryFromLines(
 export function parseAnswerEntries(chunks: ReadonlyArray<AnswerSourceChunk>): AnswerEntry[] {
   const lines = buildAnswerLines(chunks)
   if (lines.length === 0) return []
+  const header = runningHeaderLines(lines)
+  // "Problem 2 (continued)": more of an answer that started earlier.
+  const continuations = new Map<number, string>()
 
   const answerFamily: number[] = []
   const questionFamily: number[] = []
@@ -285,6 +360,13 @@ export function parseAnswerEntries(chunks: ReadonlyArray<AnswerSourceChunk>): An
   }
   for (let i = 0; i < lines.length; i++) {
     const text = lines[i]!.text
+    // A running page header ("Problem 2" printed on top of every page) is no label.
+    if (header.has(i)) continue
+    const continued = matchContinuationLabel(text)
+    if (continued) {
+      continuations.set(i, normalizeAnswerNumber(continued.number))
+      continue
+    }
     const label = matchAnswerLabel(text)
     if (label) {
       const number = normalizeAnswerNumber(label.number)
@@ -312,11 +394,12 @@ export function parseAnswerEntries(chunks: ReadonlyArray<AnswerSourceChunk>): An
   // its `Solution N` must not double-count), and explicit labels win over bare
   // numbers (numbered steps inside a labelled answer must not be torn out).
   const usingAnswerFamily = answerFamily.length > 0
-  const markers = usingAnswerFamily
+  const familyMarkers = usingAnswerFamily
     ? answerFamily
     : questionFamily.length > 0
       ? questionFamily
       : bare
+  const markers = [...familyMarkers, ...continuations.keys()].sort((a, b) => a - b)
   const questionMarkers = new Set(questionFamily)
 
   if (markers.length === 0) {
@@ -345,11 +428,66 @@ export function parseAnswerEntries(chunks: ReadonlyArray<AnswerSourceChunk>): An
       }
     }
     const text = lines[start]!.text
+    const continuedNumber = continuations.get(start)
+    if (continuedNumber !== undefined) {
+      const continued = matchContinuationLabel(text)!
+      const more = entryFromLines(lines.slice(start, end), continued)
+      const earlier = entries.find((entry) => entry.number === continuedNumber)
+      if (more && earlier) {
+        earlier.text = `${earlier.text}
+${more.text}`.trim()
+        earlier.chunkIds = [...new Set([...earlier.chunkIds, ...more.chunkIds])]
+        earlier.pageNumbers = uniqueInOrder([
+          ...(earlier.pageNumbers ?? []),
+          ...(more.pageNumbers ?? []),
+        ])
+      } else if (more) entries.push(more)
+      continue
+    }
     const marker = matchAnswerLabel(text) ?? matchBareAnswerLabel(text)
     const entry = entryFromLines(lines.slice(start, end), marker ?? undefined)
     if (entry) entries.push(entry)
   }
   return entries
+}
+
+const CONTINUATION_LABEL = new RegExp(
+  String.raw`^\s*${LABEL_QUALIFIER}(?:problem|exercise|question|solution|answer|prob|sol|ans|q)\.?\s*[#＃]?\s*${NUMBER}\s*[(（[]?\s*(?:cont(?:inued|['’]d|\.)?(?![a-z])|continuation|ctd\.?|续(?:上页)?)\s*[)）\]]?\s*[:：.、–—-]?\s*(.*)$`,
+  'i',
+)
+
+/** `Problem 2 (continued)`, `Solution 3 cont'd:`, `Q4（续）` → the number it continues. */
+export function matchContinuationLabel(line: string): Marker | null {
+  const match = CONTINUATION_LABEL.exec(line)
+  return match ? { number: match[1]!, rest: (match[2] ?? '').trim() } : null
+}
+
+/**
+ * Label lines that are a running page header: the same text as the first or
+ * last line of at least two different pages (e.g. "Problem 2" printed on top
+ * of every page of a long answer). Such a line is never an answer start.
+ */
+function runningHeaderLines(lines: readonly AnswerLine[]): Set<number> {
+  const edges = new Map<string, { pages: Set<number>; indices: number[] }>()
+  lines.forEach((line, index) => {
+    if (line.pageNumber === undefined) return
+    const first = index === 0 || lines[index - 1]!.pageNumber !== line.pageNumber
+    const last = index === lines.length - 1 || lines[index + 1]!.pageNumber !== line.pageNumber
+    if (!first && !last) return
+    if (!matchAnswerLabel(line.text) && !matchBareAnswerLabel(line.text)) return
+    const key = line.text.replace(/\s+/g, ' ').trim().toLowerCase()
+    const slot = edges.get(key) ?? { pages: new Set<number>(), indices: [] }
+    slot.pages.add(line.pageNumber)
+    slot.indices.push(index)
+    edges.set(key, slot)
+  })
+  const out = new Set<number>()
+  for (const slot of edges.values()) {
+    if (slot.pages.size < 2) continue
+    // Keep the first one: it is where that answer starts.
+    for (const index of slot.indices.slice(1)) out.add(index)
+  }
+  return out
 }
 
 /** True when parsing produced a single, unnumbered fragment (the hard case). */

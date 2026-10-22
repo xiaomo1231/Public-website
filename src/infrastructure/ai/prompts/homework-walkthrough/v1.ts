@@ -85,11 +85,37 @@ export function buildQuestionUserPrompt(input: WalkthroughQuestionInput): string
     .join('\n')
 }
 
+/**
+ * One linear system as returned: the old `augmented` [A | b], or (v8 prompts)
+ * `coefficients` A + `rhs` (b, or `"homogeneous"` for A x = 0). Matrices are
+ * kept raw; `entities/homework/walkthroughChecks.ts` reads them.
+ */
 export interface RawLinearSystem {
   label: string
-  augmented: unknown
+  augmented?: unknown
+  coefficients?: unknown
+  rhs?: unknown
+  homogeneous?: boolean
   rref: unknown
   solution?: 'none' | 'unique' | 'infinite'
+}
+
+/** Read one `linearSystems` item (either shape; `solutionType` is accepted for `solution`). */
+export function readRawLinearSystem(item: unknown, index: number): RawLinearSystem | null {
+  if (!item || typeof item !== 'object' || Array.isArray(item)) return null
+  const system = item as Record<string, unknown>
+  const solution = system.solution ?? system.solutionType
+  return {
+    label: text(system.label, 40) || `#${index + 1}`,
+    ...(system.augmented !== undefined ? { augmented: system.augmented } : {}),
+    ...(system.coefficients !== undefined ? { coefficients: system.coefficients } : {}),
+    ...(system.rhs !== undefined ? { rhs: system.rhs } : {}),
+    ...(system.homogeneous === true || system.rhs === 'homogeneous' ? { homogeneous: true } : {}),
+    rref: system.rref,
+    ...(solution === 'none' || solution === 'unique' || solution === 'infinite'
+      ? { solution }
+      : {}),
+  }
 }
 
 export type NormalizedQuestionSection =
@@ -116,17 +142,8 @@ export function normalizeQuestionSection(raw: unknown): NormalizedQuestionSectio
   const linearSystems: RawLinearSystem[] = []
   if (Array.isArray(row.linearSystems)) {
     for (const item of row.linearSystems.slice(0, 12)) {
-      if (!item || typeof item !== 'object') continue
-      const system = item as Record<string, unknown>
-      const solution = system.solution
-      linearSystems.push({
-        label: text(system.label, 40) || `#${linearSystems.length + 1}`,
-        augmented: system.augmented,
-        rref: system.rref,
-        ...(solution === 'none' || solution === 'unique' || solution === 'infinite'
-          ? { solution }
-          : {}),
-      })
+      const system = readRawLinearSystem(item, linearSystems.length)
+      if (system) linearSystems.push(system)
     }
   }
   return { status: 'ready', conclusion, body, linearSystems }

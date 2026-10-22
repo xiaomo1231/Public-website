@@ -6,6 +6,7 @@ import type {
 } from '@/infrastructure/ai/prompts/walkthrough-compare/v1'
 import { quoteFoundIn } from '@/entities/questionHabits/types'
 import type { LinearSystemCheck, WalkthroughSection } from './walkthrough'
+import { checkHasConflict } from './walkthroughChecks'
 
 export type { CompareRecommendation, CompareStatus }
 
@@ -136,6 +137,13 @@ export interface CompareContext {
   professorAnswer: string
   /** The section's local RREF checks (labels like `(a)` or `(a) #2`). */
   checks?: readonly LinearSystemCheck[]
+  /**
+   * The checked 小题 ⇄ 教授答案 map, when there is one: "not_in_professor" is
+   * kept only for a sub-part it marks "none" (or does not list), and
+   * "missing_in_walkthrough" for a sub-part it marks "none" becomes
+   * "not_in_professor".
+   */
+  professorMap?: ReadonlyArray<{ label: string; coverage: 'direct' | 'indirect' | 'none' }>
 }
 
 export interface ValidatedCompare {
@@ -146,6 +154,8 @@ export interface ValidatedCompare {
   droppedLabels: number
   /** Quotes dropped because they do not occur in the professor answer. */
   droppedQuotes: number
+  /** "not_in_professor" items dropped because the map says the answer covers them. */
+  droppedByMap: number
 }
 
 /**
@@ -169,6 +179,8 @@ export function validateCompare(
   const byLabel = new Map<string, ProfessorCompareItem>()
   let droppedLabels = 0
   let droppedQuotes = 0
+  let droppedByMap = 0
+  const mapped = new Map((context.professorMap ?? []).map((entry) => [entry.label, entry.coverage]))
   for (const raw of reply.items) {
     const label = normalizeCompareLabel(raw.label)
     if (label === null || !allowed.has(label)) {
@@ -176,16 +188,25 @@ export function validateCompare(
       continue
     }
     if (byLabel.has(label)) continue
+    const coverage = mapped.get(label)
+    if (raw.status === 'not_in_professor' && coverage && coverage !== 'none') {
+      droppedByMap += 1
+      continue
+    }
+    const status =
+      raw.status === 'missing_in_walkthrough' && coverage === 'none'
+        ? 'not_in_professor'
+        : raw.status
     let quote = raw.professorQuote
     if (quote && !quoteFoundIn(quote, context.professorAnswer)) {
       droppedQuotes += 1
       quote = undefined
     }
     const localCheck =
-      raw.status === 'result_differs' ? checkVerdict(label, context.checks ?? []) : undefined
+      status === 'result_differs' ? checkVerdict(label, context.checks ?? []) : undefined
     byLabel.set(label, {
       label,
-      status: raw.status,
+      status,
       note: raw.note,
       ...(quote ? { professorQuote: quote } : {}),
       ...(localCheck ? { localCheck } : {}),
@@ -204,6 +225,7 @@ export function validateCompare(
     suggestion: recommendation === 'keep' ? '' : reply.suggestion,
     droppedLabels,
     droppedQuotes,
+    droppedByMap,
   }
 }
 
@@ -214,7 +236,7 @@ function checkVerdict(
 ): ProfessorCompareItem['localCheck'] {
   const own = label ? checks.filter((check) => check.label.includes(`(${label})`)) : checks
   if (own.length === 0) return undefined
-  return own.every((check) => check.rrefMatches && check.kindMatches) ? 'verified' : 'mismatch'
+  return own.some(checkHasConflict) ? 'mismatch' : 'verified'
 }
 
 /** Most of the suggestion `regenerateSection` accepts. */

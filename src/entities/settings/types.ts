@@ -8,7 +8,19 @@ export interface ProviderPreset {
   baseURL: string
   defaultModel: string
   models: string[]
+  /**
+   * Regional endpoints of the same API (same key format, separate accounts):
+   * offered as one-click Base URL choices. The first one is `baseURL`.
+   */
+  regions?: { id: 'intl' | 'cn'; baseURL: string }[]
 }
+
+/**
+ * The base URL the MiniMax preset used to have (`api.MiniMax.com`, never a
+ * MiniMax endpoint). A stored row with exactly this value is moved to the
+ * international endpoint on read; any other value is the user's own.
+ */
+export const LEGACY_MINIMAX_BASE_URL = 'https://api.MiniMax.com/v1'
 
 export const PROVIDER_PRESETS: ProviderPreset[] = [
   {
@@ -35,9 +47,13 @@ export const PROVIDER_PRESETS: ProviderPreset[] = [
   {
     id: 'MiniMax',
     label: 'MiniMax',
-    baseURL: 'https://api.MiniMax.com/v1',
-    defaultModel: 'MiniMax-Text-01',
-    models: ['MiniMax-Text-01', 'MiniMax-VL-01'],
+    baseURL: 'https://api.minimax.io/v1',
+    defaultModel: 'MiniMax-M3',
+    models: ['MiniMax-M3', 'MiniMax-M3.1-Flash', 'MiniMax-M2.7', 'MiniMax-M2.5'],
+    regions: [
+      { id: 'intl', baseURL: 'https://api.minimax.io/v1' },
+      { id: 'cn', baseURL: 'https://api.minimax.cn/v1' },
+    ],
   },
   {
     id: 'mimo',
@@ -104,6 +120,16 @@ export interface AISettingsRow {
    */
   modelOutputLimits?: ModelOutputLimits
   /**
+   * Output limits learned from provider rejections (自动探测) for `baseURL`:
+   * the model's limit was unknown and the provider said (or halving found)
+   * how large `max_tokens` may be.
+   */
+  learnedOutputLimits?: ModelOutputLimits
+  /**
+   * 同时进行的 AI 请求数 (1–8). Absent on older rows: the default 4.
+   */
+  maxConcurrency?: number
+  /**
    * 轻量模型 (optional): same provider and key, used only for simple tasks
    * (`AIService.light()`). Absent / empty: the main model does everything.
    */
@@ -149,6 +175,10 @@ export interface AISettings {
   maxTokensMode: MaxTokensMode
   /** Limits read from `/models` for the current base URL (empty when none). */
   modelOutputLimits: Record<string, number>
+  /** Limits learned (自动探测) for the current base URL (empty when none). */
+  learnedOutputLimits: Record<string, number>
+  /** 同时进行的 AI 请求数, 1–8 (default 4). */
+  maxConcurrency: number
   /** Off by default; see `AISettingsRow.webImagesEnabled`. */
   webImagesEnabled: boolean
   webImagesVisionCheck: boolean
@@ -167,6 +197,7 @@ export interface UpdateAISettingsInput {
   temperature?: number
   maxTokens?: number
   maxTokensMode?: MaxTokensMode
+  maxConcurrency?: number
   webImagesEnabled?: boolean
   webImagesVisionCheck?: boolean
   adminApiKey?: string

@@ -1,5 +1,14 @@
 import { useCallback, useEffect, useState } from 'react'
-import { AlertTriangle, FileUp, Loader2, RotateCcw, Upload } from 'lucide-react'
+import {
+  AlertTriangle,
+  Copy,
+  Download,
+  FileUp,
+  Loader2,
+  RotateCcw,
+  Sparkles,
+  Upload,
+} from 'lucide-react'
 import type { HomeworkSet } from '@/entities/homework/types'
 import {
   buildWalkthroughImportService,
@@ -24,6 +33,7 @@ import { GenerationControls } from '@/shared/ui/GenerationControls'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/shared/ui/Select2'
 import { useGenerationRun } from '@/shared/lib/useGenerationRun'
 import { friendlyAIError } from '@/shared/lib/aiErrors'
+import { downloadText } from '@/shared/lib/download'
 import { toast } from '@/features/toast/toastStore'
 import { useTranslation } from '@/i18n'
 
@@ -56,6 +66,9 @@ export function ImportWalkthroughDialog({
   const [preview, setPreview] = useState<WalkthroughImportPreview | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
+  const [isTemplate, setIsTemplate] = useState(false)
+  /** The template shown to copy by hand when the clipboard is unavailable. */
+  const [templateText, setTemplateText] = useState<string | null>(null)
   const generation = useGenerationRun({ abortOnUnmount: true })
   const running = generation.active
 
@@ -92,9 +105,60 @@ export function ImportWalkthroughDialog({
     generation.reset()
   }
 
-  async function prepare(resume?: WalkthroughImportPreview): Promise<void> {
+  useEffect(() => {
+    if (!service || !documentId) {
+      setIsTemplate(false)
+      return
+    }
+    let alive = true
+    void service
+      .isTemplateDocument(documentId)
+      .then((value) => {
+        if (alive) setIsTemplate(value)
+      })
+      .catch(() => {
+        if (alive) setIsTemplate(false)
+      })
+    return () => {
+      alive = false
+    }
+  }, [service, documentId])
+
+  async function loadTemplate(): Promise<{ text: string; fileName: string } | null> {
+    if (!service) return null
+    try {
+      return await service.template(set.id)
+    } catch (err) {
+      setError(friendlyAIError(err))
+      return null
+    }
+  }
+
+  async function copyTemplate(): Promise<void> {
+    const template = await loadTemplate()
+    if (!template) return
+    try {
+      if (!navigator.clipboard?.writeText) throw new Error('clipboard unavailable')
+      await navigator.clipboard.writeText(template.text)
+      setTemplateText(null)
+      toast({ variant: 'success', title: t('walkthroughImport.template.copied') })
+    } catch {
+      // No clipboard (insecure context, denied): show the text to copy by hand.
+      setTemplateText(template.text)
+      toast({ variant: 'error', title: t('walkthroughImport.template.copyFallback') })
+    }
+  }
+
+  async function downloadTemplate(): Promise<void> {
+    const template = await loadTemplate()
+    if (template) downloadText(template.fileName, template.text, 'text/markdown;charset=utf-8')
+  }
+
+  async function prepare(resume?: WalkthroughImportPreview, rest = false): Promise<void> {
     if (!service || !documentId) return
     setError(null)
+    // 用 AI 整理剩下的 continues a template import: its progress replaces the summary.
+    if (rest && resume?.complete) setPreview(null)
     const run = generation.start()
     try {
       // 继续导入 after a failure re-reads the AI settings (a raised output cap applies).
@@ -107,6 +171,7 @@ export function ImportWalkthroughDialog({
         control: run,
         onProgress: setProgress,
         ...(resume ? { resume } : {}),
+        ...(rest || resume?.mode === 'template' ? { rest: true } : {}),
       })
       setPreview(result)
     } catch (err) {
@@ -165,6 +230,48 @@ export function ImportWalkthroughDialog({
 
           {!ready && (
             <div className="space-y-4">
+              <section
+                aria-labelledby="walkthrough-import-template"
+                className="space-y-2 rounded-md border border-border p-3 lecture:rounded-none lab:rounded-none"
+              >
+                <h3 id="walkthrough-import-template" className="text-sm font-medium">
+                  {t('walkthroughImport.template.title')}
+                </h3>
+                <p className="text-xs text-muted-foreground">
+                  {t('walkthroughImport.template.hint')}
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={!service || running}
+                    onClick={() => void copyTemplate()}
+                  >
+                    <Copy className="h-4 w-4" aria-hidden />
+                    {t('walkthroughImport.template.copy')}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={!service || running}
+                    onClick={() => void downloadTemplate()}
+                  >
+                    <Download className="h-4 w-4" aria-hidden />
+                    {t('walkthroughImport.template.download')}
+                  </Button>
+                </div>
+                {templateText !== null && (
+                  <textarea
+                    readOnly
+                    aria-label={t('walkthroughImport.template.manual')}
+                    className="focus-ring h-32 w-full resize-y rounded-md border border-input bg-background p-2 font-mono text-xs lecture:rounded-none lab:rounded-none"
+                    value={templateText}
+                    ref={(node) => node?.select()}
+                    onFocus={(event) => event.currentTarget.select()}
+                  />
+                )}
+              </section>
+
               <div className="space-y-2">
                 <Label htmlFor="walkthrough-import-doc">{t('walkthroughImport.file')}</Label>
                 <div className="flex flex-wrap items-center gap-2">
@@ -202,24 +309,30 @@ export function ImportWalkthroughDialog({
                 <p className="text-xs text-muted-foreground">{t('walkthroughImport.fileHint')}</p>
               </div>
 
-              <label className="flex cursor-pointer items-start gap-3 text-sm">
-                <input
-                  type="checkbox"
-                  className="focus-ring mt-0.5 h-4 w-4 shrink-0 accent-primary"
-                  checked={formatOnly}
-                  disabled={running}
-                  onChange={(event) => {
-                    setFormatOnly(event.target.checked)
-                    setPreview(null)
-                  }}
-                />
-                <span>
-                  <span className="font-medium">{t('walkthroughImport.formatOnly')}</span>
-                  <span className="block text-xs text-muted-foreground">
-                    {t('walkthroughImport.formatOnlyHint')}
+              {isTemplate ? (
+                <p className="text-sm" data-template-import>
+                  {t('walkthroughImport.template.detected')}
+                </p>
+              ) : (
+                <label className="flex cursor-pointer items-start gap-3 text-sm">
+                  <input
+                    type="checkbox"
+                    className="focus-ring mt-0.5 h-4 w-4 shrink-0 accent-primary"
+                    checked={formatOnly}
+                    disabled={running}
+                    onChange={(event) => {
+                      setFormatOnly(event.target.checked)
+                      setPreview(null)
+                    }}
+                  />
+                  <span>
+                    <span className="font-medium">{t('walkthroughImport.formatOnly')}</span>
+                    <span className="block text-xs text-muted-foreground">
+                      {t('walkthroughImport.formatOnlyHint')}
+                    </span>
                   </span>
-                </span>
-              </label>
+                </label>
+              )}
 
               {(running || paused) && progress && (
                 <div className="space-y-2" role="status">
@@ -252,7 +365,17 @@ export function ImportWalkthroughDialog({
             </div>
           )}
 
-          {ready && <ImportSummary preview={ready} />}
+          {ready && (
+            <ImportSummary
+              preview={ready}
+              {...(ready.restText
+                ? {
+                    onRest: () => void prepare(ready, true),
+                    restDisabled: !service?.hasAI() || running || saving,
+                  }
+                : {})}
+            />
+          )}
 
           {error && (
             <p role="alert" className="text-sm text-destructive">
@@ -314,11 +437,54 @@ export function ImportWalkthroughDialog({
 }
 
 /** What the import found, before saving. */
-function ImportSummary({ preview }: { preview: WalkthroughImportPreview }): JSX.Element {
+function ImportSummary({
+  preview,
+  onRest,
+  restDisabled,
+}: {
+  preview: WalkthroughImportPreview
+  /** 用 AI 整理剩下的 (offered when the template has blocks an AI could read). */
+  onRest?: () => void
+  restDisabled?: boolean
+}): JSX.Element {
   const { t } = useTranslation()
   const issues = preview.sections.reduce((sum, section) => sum + (section.issues?.length ?? 0), 0)
+  const problems = preview.templateProblems ?? []
   return (
     <div className="space-y-2 text-sm">
+      {preview.mode === 'template' && (
+        <p className="text-muted-foreground" data-template-import>
+          {t('walkthroughImport.template.detected')}
+        </p>
+      )}
+      {problems.length > 0 && (
+        <div className="space-y-1 text-amber-700 dark:text-amber-300">
+          <p className="flex items-start gap-2">
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
+            {t('walkthroughImport.template.problems', { count: problems.length })}
+          </p>
+          <ul className="list-disc space-y-0.5 pl-10 text-xs">
+            {problems.map((problem, index) => (
+              <li key={`${problem.questionId ?? ''}-${index}`}>
+                {t(`walkthroughImport.template.reason.${problem.reason}`, {
+                  label: problem.label ?? problem.questionId ?? '?',
+                })}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+      {onRest && (
+        <div className="space-y-1">
+          <Button variant="outline" size="sm" disabled={restDisabled} onClick={onRest}>
+            <Sparkles className="h-4 w-4" aria-hidden />
+            {t('walkthroughImport.template.rest')}
+          </Button>
+          <p className="text-xs text-muted-foreground">
+            {t('walkthroughImport.template.restHint')}
+          </p>
+        </div>
+      )}
       <p>
         {t('walkthroughImport.found', {
           count: preview.sections.filter((section) => section.kind === 'question').length,

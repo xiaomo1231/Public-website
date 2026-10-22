@@ -88,7 +88,8 @@ function glossAI(onCall?: (call: number, signal?: AbortSignal) => Promise<void> 
       },
     }
   })
-  return { ai: { chatJSON } as unknown as AIService, chatJSON }
+  // One batch at a time: these tests pin down which request is in flight.
+  return { ai: { chatJSON, concurrency: 1 } as unknown as AIService, chatJSON }
 }
 
 /** A request that only ends when its signal is aborted. */
@@ -157,7 +158,7 @@ describe('course vocabulary glossing', () => {
     })
     const result = await new CourseVocabService({
       projects,
-      ai: { chatJSON } as unknown as AIService,
+      ai: { chatJSON, concurrency: 1 } as unknown as AIService,
       db,
     }).extract(projectId, { control: createGenerationRun(), now: NOW })
     expect(chatJSON).toHaveBeenCalledTimes(1)
@@ -208,7 +209,8 @@ function wordListAI(onCall?: (call: number, signal?: AbortSignal) => Promise<voi
     const noun = /der (\p{Lu}\p{Ll}+),/u.exec(messages[1]!.content)?.[1] ?? 'Kopf'
     return { data: { items: [{ term: noun, gloss: `${noun} (en)`, article: 'der' }] } }
   })
-  return { ai: { chatJSON } as unknown as AIService, chatJSON }
+  // Two parts at once: these tests pin down which requests are in flight.
+  return { ai: { chatJSON, concurrency: 2 } as unknown as AIService, chatJSON }
 }
 
 describe('textbook word list import', () => {

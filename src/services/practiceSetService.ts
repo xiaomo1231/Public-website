@@ -1,4 +1,11 @@
-import type { AIService } from './aiService'
+import { aiConcurrency, type AIService } from './aiService'
+import {
+  createAdaptivePool,
+  isOverloadError,
+  type AdaptivePool,
+  type PoolOutcome,
+  type PoolTaskContext,
+} from '@/shared/lib/concurrency'
 import type { AppDatabase } from '@/infrastructure/db/database'
 import { getDb } from '@/infrastructure/db/database'
 import type { ChatMessage } from '@/infrastructure/ai/types'
@@ -402,26 +409,40 @@ export class PracticeSetService {
     try {
       for (;;) {
         // Write the slots the AI still owes.
+        // 同时进行的 AI 请求数 batches at once (halved on a rate limit, which
+        // is sent again after a back-off); each batch is saved when it ends.
         const writeTotal = draft.pendingSlots.length
         let written = 0
-        while (draft.pendingSlots.length > 0) {
-          report('writing', written, writeTotal)
-          if (!control.shouldContinue()) return await this.pause(setId, draft)
-          const batch = draft.pendingSlots.slice(0, GENERATE_BATCH)
-          await this.writeSlots(batch, draft, context, control)
-          draft.pendingSlots = draft.pendingSlots.filter((id) => !batch.includes(id))
-          written += batch.length
-          await this.saveDraft(setId, draft)
-        }
+        report('writing', written, writeTotal)
+        const writeBatches = chunked(draft.pendingSlots, GENERATE_BATCH)
+        const writing = await this.pool(control).run(
+          writeBatches,
+          haltOnFailure(async (batch) => {
+            await this.writeSlots(batch, draft, context, control)
+            draft.pendingSlots = draft.pendingSlots.filter((id) => !batch.includes(id))
+            written += batch.length
+            await this.saveDraft(setId, draft)
+            report('writing', written, writeTotal)
+          }),
+        )
+        throwFirstFailure(writing)
+        if (draft.pendingSlots.length > 0) return await this.pause(setId, draft)
         // Review everything not reviewed yet.
         const unreviewed = () => draft.candidates.filter((candidate) => !candidate.review)
         const reviewTotal = unreviewed().length
-        while (unreviewed().length > 0) {
-          report('reviewing', reviewTotal - unreviewed().length, reviewTotal)
-          if (!control.shouldContinue()) return await this.pause(setId, draft)
-          await this.review(unreviewed().slice(0, REVIEW_BATCH), draft, context, control)
-          await this.saveDraft(setId, draft)
-        }
+        let reviewed = 0
+        report('reviewing', reviewed, reviewTotal)
+        const reviewing = await this.pool(control).run(
+          chunked(unreviewed(), REVIEW_BATCH),
+          haltOnFailure(async (batch) => {
+            await this.review(batch, draft, context, control)
+            reviewed += batch.length
+            await this.saveDraft(setId, draft)
+            report('reviewing', reviewed, reviewTotal)
+          }),
+        )
+        throwFirstFailure(reviewing)
+        if (unreviewed().length > 0) return await this.pause(setId, draft)
         const failed = draft.candidates.filter((candidate) => candidate.review?.pass === false)
         if (draft.stage === 'generating' && failed.length > 0) {
           // One more chance: rebuild locally / rewrite with the AI, then review again.
@@ -525,7 +546,6 @@ export class PracticeSetService {
       },
     ]
     const { data } = await ai.streamJSON<unknown>(messages, undefined, {
-      maxTokens: Math.min(8192, 600 + 1100 * slots.length),
       signal: control.signal,
     })
     const output = prompts.practiceGenerate.normalizeOutput(data, new Set(slotIds))
@@ -621,7 +641,6 @@ export class PracticeSetService {
       },
     ]
     const { data } = await ai.streamJSON<unknown>(messages, undefined, {
-      maxTokens: Math.min(4096, 300 + 80 * candidates.length),
       signal: control.signal,
     })
     const verdicts = prompts.practiceReview.normalizeReview(
@@ -635,6 +654,11 @@ export class PracticeSetService {
         ? { pass: verdict.pass, reason: verdict.reason }
         : { pass: false, reason: t('practiceSet.reason.noVerdict') }
     }
+  }
+
+  /** 同时进行的 AI 请求数 requests at once, halved on a rate limit. */
+  private pool(control: GenerationControl): AdaptivePool {
+    return createAdaptivePool({ max: aiConcurrency(this.ai), control })
   }
 
   private async pause(setId: string, draft: PracticeDraft): Promise<PracticeRunResult> {
@@ -792,4 +816,31 @@ function structureText(slot: PracticeSlot): string {
   return labelled
     .map((part) => `(${part.label})${part.system ? ` ${part.system.solution}` : ''}`)
     .join(', ')
+}
+
+/** `items` in consecutive groups of `size`. */
+function chunked<T>(items: readonly T[], size: number): T[][] {
+  const groups: T[][] = []
+  for (let i = 0; i < items.length; i += size) groups.push(items.slice(i, i + size))
+  return groups
+}
+
+/** A failing batch (other than a rate limit, which is retried) stops new batches. */
+function haltOnFailure<I>(
+  task: (item: I) => Promise<void>,
+): (item: I, ctx: PoolTaskContext) => Promise<void> {
+  return async (item, ctx) => {
+    try {
+      await task(item)
+    } catch (err) {
+      if (!isOverloadError(err)) ctx.halt()
+      throw err
+    }
+  }
+}
+
+/** A batch that failed (after the pool's rate-limit retries) fails the run. */
+function throwFirstFailure(outcomes: readonly PoolOutcome<unknown>[]): void {
+  const failure = outcomes.find((outcome) => outcome.status === 'rejected')
+  if (failure?.status === 'rejected') throw failure.reason
 }

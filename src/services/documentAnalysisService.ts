@@ -28,7 +28,8 @@ import {
   type AnalysisSegment,
   type ChunkFormatter,
 } from '@/entities/courseContent/analysisInput'
-import type { AIService } from './aiService'
+import { aiConcurrency, type AIService } from './aiService'
+import { createAdaptivePool, isOverloadError } from '@/shared/lib/concurrency'
 import type { ProjectService } from './projectService'
 import type { ChatMessage } from '@/infrastructure/ai/types'
 import { prompts } from '@/infrastructure/ai/prompts'
@@ -82,21 +83,6 @@ export function clearAnalyzedPartsForTesting(): void {
 export function rememberedAnalysisPartCount(): number {
   return analyzedParts.size
 }
-
-/** Parts of a long course analysed at the same time. */
-const ANALYSIS_CONCURRENCY = 2
-
-/**
- * The analyzer must return a large structured object (topics, concepts,
- * formulas, symbols, examples, exercises, prerequisites).
- *
- * The user's chat `maxTokens` (default 2048) is far too small for that: even a
- * minimal analysis needs roughly 2.2k tokens of JSON and a typical one needs
- * about 8k. Without an explicit budget the provider truncates the response
- * mid-JSON and parsing fails, which used to surface as a misleading
- * "the AI returned something unreadable" error.
- */
-export const ANALYSIS_MIN_OUTPUT_TOKENS = 8_192
 
 /** Top-level collections the analyzer is asked to return. */
 const ANALYSIS_COLLECTION_KEYS = [
@@ -588,7 +574,7 @@ export class DocumentAnalysisService {
   }
 
   /**
-   * Analyse each part of the course, at most `ANALYSIS_CONCURRENCY` at a time,
+   * Analyse each part of the course, 同时进行的 AI 请求数 at a time,
    * returning the outputs in part order. Any failure fails the whole run, so a
    * partial analysis is never stored.
    */
@@ -656,15 +642,12 @@ export class DocumentAnalysisService {
     }
     report()
     const queue = requests.map((_, index) => index).filter((index) => !outputs[index])
-    let failed = false
     let interrupted = false
-    const worker = async () => {
-      while (!failed && queue.length > 0) {
-        if (!control.shouldContinue()) {
-          interrupted = true
-          return
-        }
-        const index = queue.shift()!
+    // 同时进行的 AI 请求数 parts at once. A rate-limited part is tried again
+    // after a back-off while the pool halves; any other failure fails the run.
+    const outcomes = await createAdaptivePool({ max: aiConcurrency(this.ai), control }).run(
+      queue,
+      async (index, ctx) => {
         const request = requests[index]!
         try {
           outputs[index] = await this.requestAnalysis(request.messages, {
@@ -679,17 +662,18 @@ export class DocumentAnalysisService {
             interrupted = true
             return
           }
-          // Stop handing out parts; the run fails as a whole.
-          failed = true
+          // Stop handing out parts (a rate limit is retried by the pool first).
+          if (!isOverloadError(err)) ctx.halt()
           throw err
         }
         // Kept for a later run, in case this one is paused or fails elsewhere.
         if (total > 1) rememberPart(request.key, outputs[index]!)
         done++
         report()
-      }
-    }
-    await Promise.all(Array.from({ length: Math.min(ANALYSIS_CONCURRENCY, queue.length) }, worker))
+      },
+    )
+    const failure = outcomes.find((outcome) => outcome.status === 'rejected')
+    if (failure?.status === 'rejected') throw failure.reason
     if (interrupted || outputs.filter(Boolean).length < total) {
       throw new GenerationPausedError(control.signal.aborted)
     }
@@ -705,7 +689,8 @@ export class DocumentAnalysisService {
   ): Promise<DocumentAnalysisOutput> {
     const { projectId } = context
     // Structured output needs far more room than a chat reply.
-    const maxTokens = Math.max(this.ai.maxOutputTokens, ANALYSIS_MIN_OUTPUT_TOKENS)
+    // Sent at the output cap (AIService): a structured analysis is large.
+    const maxTokens = this.ai.maxOutputTokens
     const promptChars = messages.reduce((total, m) => total + m.content.length, 0)
     const requestStartedAt = Date.now()
     logger.debug('AI analysis request started', {
@@ -722,10 +707,11 @@ export class DocumentAnalysisService {
     // Streamed, not buffered: a structured analysis can take minutes to
     // generate, and a non-streaming request must finish entirely within the
     // request budget.
-    const { data, raw } = await this.ai.streamJSON<unknown>(messages, undefined, {
-      maxTokens,
-      ...(context.signal ? { signal: context.signal } : {}),
-    })
+    const { data, raw } = await this.ai.streamJSON<unknown>(
+      messages,
+      undefined,
+      context.signal ? { signal: context.signal } : {},
+    )
 
     // Structured diagnostics. Sizes, keys and short snippets only — never the
     // API key, and never the full course text.

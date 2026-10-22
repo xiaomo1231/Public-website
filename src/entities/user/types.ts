@@ -49,6 +49,24 @@ export type NoteMarkStyle = 'link' | 'highlighter'
 export const NOTE_MARK_STYLES: readonly NoteMarkStyle[] = ['link', 'highlighter']
 export const DEFAULT_NOTE_MARK_STYLE: NoteMarkStyle = 'link'
 
+/**
+ * Fill colour of the highlighter mark style. `theme` follows the palette's
+ * accent; the others are fixed hues with tuned light / dark values (see
+ * `[data-note-color]` in globals.css).
+ */
+export type NoteHighlightColor =
+  'yellow' | 'green' | 'pink' | 'blue' | 'orange' | 'purple' | 'theme'
+export const NOTE_HIGHLIGHT_COLORS: readonly NoteHighlightColor[] = [
+  'yellow',
+  'green',
+  'pink',
+  'blue',
+  'orange',
+  'purple',
+  'theme',
+]
+export const DEFAULT_NOTE_HIGHLIGHT_COLOR: NoteHighlightColor = 'yellow'
+
 export interface UserProfile {
   id: 'singleton'
   name: string
@@ -76,6 +94,8 @@ export interface UserProfile {
   questionLanguage?: QuestionLanguage
   /** Walkthrough question marks; absent means `DEFAULT_NOTE_MARK_STYLE`. */
   noteMarkStyle?: NoteMarkStyle
+  /** Highlighter fill colour; absent means `DEFAULT_NOTE_HIGHLIGHT_COLOR`. */
+  noteHighlightColor?: NoteHighlightColor
   /**
    * Show the AI usage / balance readout in the lab side rail and the lecture
    * account menu. Absent means off (the settings breakdown is always shown).
@@ -100,6 +120,7 @@ export interface UpdateUserInput {
   uiLanguage?: UILanguage
   questionLanguage?: QuestionLanguage
   noteMarkStyle?: NoteMarkStyle
+  noteHighlightColor?: NoteHighlightColor
   showUsageReadout?: boolean
   vocabBookId?: string
   vocabDailyNew?: number

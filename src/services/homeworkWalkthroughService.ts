@@ -1,4 +1,4 @@
-import type { AIService } from './aiService'
+import { aiConcurrency, asTruncatedAtCap, type AIService } from './aiService'
 import { isHeldOut } from '@/entities/evaluation/evalRole'
 import type { AppDatabase } from '@/infrastructure/db/database'
 import { getDb } from '@/infrastructure/db/database'
@@ -9,15 +9,14 @@ import type {
   NormalizedSummaryPart,
 } from '@/infrastructure/ai/prompts/homework-walkthrough/v5'
 import { prompts } from '@/infrastructure/ai/prompts'
-import {
-  AbortedError,
-  OutputTruncatedError,
-  TimeoutError as AITimeoutError,
-} from '@/infrastructure/ai/errors'
+import { AbortedError, TimeoutError as AITimeoutError } from '@/infrastructure/ai/errors'
 import { AppError, NotFoundError } from '@/infrastructure/errors/AppError'
 import { HomeworkRepository } from '@/entities/homework/repository'
 import { UserRepository } from '@/entities/user/repository'
-import { isDeferredProfessorAnswer } from '@/entities/homework/answerMatching'
+import {
+  cleanProfessorAnswerText,
+  isDeferredProfessorAnswer,
+} from '@/entities/homework/answerMatching'
 import {
   awaitsCompare,
   compareSectionHash,
@@ -32,7 +31,6 @@ import {
   isRetryableHomeworkError,
   type HomeworkErrorKind,
 } from '@/entities/homework/errorKind'
-import { MIN_OUTPUT_TOKENS, planOutputBudget } from '@/entities/homework/tokenBudget'
 import {
   checkLinearSystems,
   involvesRowReduction,
@@ -85,30 +83,31 @@ import {
   type GenerationControl,
   type GenerationRun,
 } from '@/shared/lib/generationControl'
+import {
+  createAdaptivePool,
+  isOverloadError,
+  retryDelay,
+  type PoolTaskContext,
+} from '@/shared/lib/concurrency'
 import { t } from '@/i18n'
 import { HomeworkService } from './homeworkService'
 import { loadProjectSubjectContext } from './projectSubject'
+import { ProfessorAnswerMapService } from './professorAnswerMapService'
+import { professorMapPromptEntries, type PromptMapEntry } from '@/entities/homework/professorMap'
 
-/** Sections prepared at once (rate-limit safe). */
-const SECTION_CONCURRENCY = 2
 /** A long question (seven parts of row reduction) streams for a while. */
 const SECTION_DEADLINE_MS = 240_000
 /**
- * Every attempt of one section request together (retries, budget changes):
+ * Every attempt of one section request together (transient retries):
  * past this the section is saved as failed ("timed out, try again") and the
  * run moves on, instead of trying for 20+ minutes with no sign of life.
  */
 export const SECTION_TOTAL_MS = 360_000
-/**
- * First budget of a section request. A truncated reply doubles it up to the
- * resolved output cap (`ai.maxOutputTokens`: the model's own limit, or the
- * user's number) — no fixed ceiling of its own; time stays bounded by
- * `SECTION_TOTAL_MS`.
- */
-const SECTION_OUTPUT_CEILING = 8_192
-/** Hard cap on paid requests for one section (budget changes + transient retries). */
+/** Hard cap on paid requests for one section (transient retries). */
 const SECTION_MAX_ATTEMPTS = 6
 const MAX_TRANSIENT_RETRIES = 2
+/** A rate limit is retried a little more patiently (the pool also slows down). */
+const MAX_OVERLOAD_RETRIES = 4
 const RETRY_BASE_DELAY_MS = 700
 /**
  * How much of each question the opening / summary request sees: the question,
@@ -165,7 +164,16 @@ export interface SectionAttempt {
   /** 2 for the first retry. */
   attempt: number
   lastFailure: HomeworkErrorKind
+  /** What this attempt does differently, when anything. */
+  change?: AttemptChange
 }
+
+/**
+ * How a retry differs from the attempt that failed: the question now written
+ * sub-part by sub-part, or a wait the provider asked for. (Every request is
+ * already sent at the output cap, so there is never a larger budget to try.)
+ */
+export type AttemptChange = { kind: 'split' } | { kind: 'wait'; seconds: number }
 
 export interface WalkthroughRunResult {
   generated: number
@@ -463,142 +471,151 @@ export class HomeworkWalkthroughService {
       if (!(await this.repo.putSection(base, section))) gone = true
     }
 
-    const queue = [...todo]
-    const worker = async (): Promise<void> => {
-      while (queue.length > 0) {
-        if (fatal || gone) return
-        // A pause lets the sections in flight finish; no new one starts.
-        if (!control.shouldContinue()) {
+    const pool = createAdaptivePool({
+      max: aiConcurrency(ai),
+      control,
+      // Each section request retries a rate limit itself (through the pool's throttle).
+      maxOverloadRetries: 0,
+    })
+    const outcomes = await pool.run(todo, async (entry, ctx): Promise<void> => {
+      if (fatal || gone) {
+        ctx.halt()
+        return
+      }
+      progress.running.push(entry.id)
+      emit()
+      const label = labels.get(entry.question!.id) ?? '?'
+      let aborted = false
+      try {
+        const section = await this.writeQuestion(ai, {
+          entry,
+          label,
+          language: state.language,
+          subject,
+          control: ctx.control,
+          pool: ctx,
+          mode: 'generate',
+          // A resumed "rewrite everything" continues only its own drafts.
+          ...(forceSince !== undefined ? { draftSince: forceSince } : {}),
+          saveSection: save,
+          onPart: (part) => {
+            progress.parts = { ...progress.parts }
+            if (part) progress.parts[entry.id] = part
+            else delete progress.parts[entry.id]
+            // 「改为按小题分别生成」 stays up while the sub-parts are written.
+            if (progress.attempts?.[entry.id]?.change?.kind !== 'split')
+              setAttempt(progress, [entry.id], null)
+            else emit()
+          },
+          onAttempt: (attempt) => setAttempt(progress, [entry.id], attempt),
+        })
+        // "Not enough information" is a finished answer, not a failure —
+        // but it never replaces a section that is ready (a rewrite whose
+        // model answered "not enough" keeps the good text, and counts as
+        // not done).
+        const latest = await this.storedSection(base.id, entry.id)
+        // (A ready section for inputs that have since changed is about
+        // another question text, so "not enough" may replace that one.)
+        const kept = generatedSource(latest)
+        if (
+          section.status === 'insufficient' &&
+          kept?.status === 'ready' &&
+          kept.inputHash === entry.inputHash
+        ) {
+          result.failed += 1
+          progress.failed += 1
+          return
+        }
+        // The student's 普通 / 详细 choice outlives a rewrite (read now: it
+        // may have been switched while the section was being written).
+        await save(withLevel(section, latest ?? entry.section))
+        result.generated += 1
+      } catch (err) {
+        if (isAbortError(err, control.signal)) {
+          // Stopped: not a failure, nothing is written, it stays to do.
+          aborted = true
           interrupted = true
           return
         }
-        const entry = queue.shift()!
-        progress.running.push(entry.id)
-        emit()
-        const label = labels.get(entry.question!.id) ?? '?'
-        let aborted = false
-        try {
-          const section = await this.writeQuestion(ai, {
-            entry,
-            label,
-            language: state.language,
-            subject,
-            control,
-            mode: 'generate',
-            // A resumed "rewrite everything" continues only its own drafts.
-            ...(forceSince !== undefined ? { draftSince: forceSince } : {}),
-            saveSection: save,
-            onPart: (part) => {
-              progress.parts = { ...progress.parts }
-              if (part) progress.parts[entry.id] = part
-              else delete progress.parts[entry.id]
-              setAttempt(progress, [entry.id], null)
-            },
-            onAttempt: (attempt) => setAttempt(progress, [entry.id], attempt),
-          })
-          // "Not enough information" is a finished answer, not a failure —
-          // but it never replaces a section that is ready (a rewrite whose
-          // model answered "not enough" keeps the good text, and counts as
-          // not done).
-          const latest = await this.storedSection(base.id, entry.id)
-          // (A ready section for inputs that have since changed is about
-          // another question text, so "not enough" may replace that one.)
-          const kept = generatedSource(latest)
-          if (
-            section.status === 'insufficient' &&
-            kept?.status === 'ready' &&
-            kept.inputHash === entry.inputHash
-          ) {
-            result.failed += 1
-            progress.failed += 1
-            continue
-          }
-          // The student's 普通 / 详细 choice outlives a rewrite (read now: it
-          // may have been switched while the section was being written).
-          await save(withLevel(section, latest ?? entry.section))
-          result.generated += 1
-        } catch (err) {
-          if (isAbortError(err, control.signal)) {
-            // Stopped: not a failure, nothing is written, it stays to do.
-            aborted = true
-            interrupted = true
-            continue
-          }
-          const kind = classifyHomeworkError(err)
-          if (isAccountFatalError(kind)) fatal = friendlyAIError(err)
-          result.failed += 1
-          progress.failed += 1
-          // A finished section is never replaced by a failure; finished
-          // sub-parts of a split question are kept for the next run.
-          const latest = await this.storedSection(base.id, entry.id)
-          if (latest?.status !== 'ready') {
-            await save({
-              ...failedSection(entry, label, friendlyAIError(err)),
-              ...(latest?.draft ? { draft: latest.draft } : {}),
-            })
-          }
-        } finally {
-          progress.running = progress.running.filter((id) => id !== entry.id)
-          if (progress.parts?.[entry.id]) {
-            progress.parts = { ...progress.parts }
-            delete progress.parts[entry.id]
-          }
-          if (!aborted) progress.done += 1
-          setAttempt(progress, [entry.id], null)
-        }
-      }
-    }
-    await Promise.all(
-      Array.from({ length: Math.min(SECTION_CONCURRENCY, queue.length) }, () => worker()),
-    )
-
-    // The opening and the summary come last, one request each (split into
-    // question groups when one is too long for a reply). A pause between them
-    // keeps what is written; the rest stays to do.
-    for (const entry of frameParts) {
-      if (fatal || gone) break
-      if (interrupted || !control.shouldContinue()) {
-        interrupted = true
-        break
-      }
-      const part = entry.kind as FramePart
-      progress.running.push(part)
-      emit()
-      let aborted = false
-      try {
-        const section = await this.writeFramePart(ai, part, entry, state, labels, subject, {
-          control,
-          mode: 'generate',
-          ...(forceSince !== undefined ? { draftSince: forceSince } : {}),
-          save,
-          onAttempt: (attempt) => setAttempt(progress, [part], attempt),
-        })
-        if (section) {
-          await save(section)
-          result.generated += 1
-        }
-      } catch (err) {
-        if (isAbortError(err, control.signal)) {
-          aborted = true
-          interrupted = true
-          break
-        }
-        if (isAccountFatalError(classifyHomeworkError(err))) fatal = friendlyAIError(err)
+        const kind = classifyHomeworkError(err)
+        if (isAccountFatalError(kind)) fatal = friendlyAIError(err)
         result.failed += 1
         progress.failed += 1
-        // A finished part is never replaced by a failure; finished groups are kept.
+        // A finished section is never replaced by a failure; finished
+        // sub-parts of a split question are kept for the next run.
         const latest = await this.storedSection(base.id, entry.id)
         if (latest?.status !== 'ready') {
           await save({
-            ...failedSection(entry, entry.kind, friendlyAIError(err)),
-            ...(latest?.frameDraft ? { frameDraft: latest.frameDraft } : {}),
+            ...failedSection(entry, label, friendlyAIError(err)),
+            ...(latest?.draft ? { draft: latest.draft } : {}),
           })
         }
       } finally {
-        progress.running = progress.running.filter((id) => id !== part)
+        progress.running = progress.running.filter((id) => id !== entry.id)
+        if (progress.parts?.[entry.id]) {
+          progress.parts = { ...progress.parts }
+          delete progress.parts[entry.id]
+        }
         if (!aborted) progress.done += 1
-        setAttempt(progress, [part], null)
+        setAttempt(progress, [entry.id], null)
       }
+    })
+    // Sections never started: the run was paused or stopped (not a fatal error).
+    if (!(fatal || gone) && outcomes.some((outcome) => outcome.status === 'skipped'))
+      interrupted = true
+
+    // The opening and the summary come last: each sees every question's
+    // conclusion and key points, so neither can start before the questions
+    // are done — but they do not depend on each other, so the two requests
+    // run at the same time (each split into question groups when one is too
+    // long for a reply). A pause keeps what is written; the rest stays to do.
+    if (!fatal && !gone && !interrupted && frameParts.length > 0) {
+      const frames = await pool.run(frameParts, async (entry, ctx): Promise<void> => {
+        if (fatal || gone) {
+          ctx.halt()
+          return
+        }
+        const part = entry.kind as FramePart
+        progress.running.push(part)
+        emit()
+        let aborted = false
+        try {
+          const section = await this.writeFramePart(ai, part, entry, state, labels, subject, {
+            control: ctx.control,
+            mode: 'generate',
+            ...(forceSince !== undefined ? { draftSince: forceSince } : {}),
+            save,
+            onAttempt: (attempt) => setAttempt(progress, [part], attempt),
+          })
+          if (section) {
+            await save(section)
+            result.generated += 1
+          }
+        } catch (err) {
+          if (isAbortError(err, control.signal)) {
+            aborted = true
+            interrupted = true
+            return
+          }
+          if (isAccountFatalError(classifyHomeworkError(err))) fatal = friendlyAIError(err)
+          result.failed += 1
+          progress.failed += 1
+          // A finished part is never replaced by a failure; finished groups are kept.
+          const latest = await this.storedSection(base.id, entry.id)
+          if (latest?.status !== 'ready') {
+            await save({
+              ...failedSection(entry, entry.kind, friendlyAIError(err)),
+              ...(latest?.frameDraft ? { frameDraft: latest.frameDraft } : {}),
+            })
+          }
+        } finally {
+          progress.running = progress.running.filter((id) => id !== part)
+          if (!aborted) progress.done += 1
+          setAttempt(progress, [part], null)
+        }
+      })
+      if (!fatal && !gone && frames.some((outcome) => outcome.status === 'skipped'))
+        interrupted = true
     }
 
     if (interrupted) return this.finishInterrupted(base.id, state, result, fatal, control)
@@ -874,7 +891,7 @@ export class HomeworkWalkthroughService {
     ]
     try {
       const analysis = prompts.homeworkWalkthrough.readAnalysis(
-        await requestSectionJSON(ai, messages, control.signal, (attempt) =>
+        await requestSectionJSON(ai, messages, control, (attempt) =>
           setAttempt(progress, [sectionId], attempt),
         ),
       )
@@ -993,51 +1010,54 @@ export class HomeworkWalkthroughService {
     const result: WalkthroughRunResult = { generated: 0, failed: 0 }
     let fatal: string | undefined
     let interrupted = false
-    const queue = [...todo]
-    const worker = async (): Promise<void> => {
-      while (queue.length > 0) {
-        if (fatal) return
-        if (!control.shouldContinue()) {
+    const pool = createAdaptivePool({
+      max: aiConcurrency(ai),
+      control,
+      // Each section request retries a rate limit itself (through the pool's throttle).
+      maxOverloadRetries: 0,
+    })
+    const outcomes = await pool.run(todo, async (entry, ctx): Promise<void> => {
+      if (fatal) {
+        ctx.halt()
+        return
+      }
+      progress.running.push(entry.id)
+      emit()
+      let aborted = false
+      try {
+        await this.writeCompare(ai, {
+          id,
+          entry,
+          label: labels.get(entry.question!.id) ?? '?',
+          language: state.language,
+          subject,
+          control: ctx.control,
+          onAttempt: (attempt) => setAttempt(progress, [entry.id], attempt),
+        })
+        result.generated += 1
+      } catch (err) {
+        if (isAbortError(err, control.signal)) {
+          aborted = true
           interrupted = true
           return
         }
-        const entry = queue.shift()!
-        progress.running.push(entry.id)
-        emit()
-        let aborted = false
-        try {
-          await this.writeCompare(ai, {
-            id,
-            entry,
-            label: labels.get(entry.question!.id) ?? '?',
-            language: state.language,
-            subject,
-            control,
-            onAttempt: (attempt) => setAttempt(progress, [entry.id], attempt),
-          })
-          result.generated += 1
-        } catch (err) {
-          if (isAbortError(err, control.signal)) {
-            aborted = true
-            interrupted = true
-            continue
-          }
-          if (isAccountFatalError(classifyHomeworkError(err))) fatal = friendlyAIError(err)
-          // A failed comparison changes nothing on the section.
-          result.failed += 1
-          progress.failed += 1
-          // One section on its own: the caller shows why.
-          if (progress.section) throw err
-        } finally {
-          progress.running = progress.running.filter((item) => item !== entry.id)
-          if (!aborted) progress.done += 1
-          setAttempt(progress, [entry.id], null)
-        }
+        if (isAccountFatalError(classifyHomeworkError(err))) fatal = friendlyAIError(err)
+        // A failed comparison changes nothing on the section.
+        result.failed += 1
+        progress.failed += 1
+        // One section on its own: the caller shows why.
+        if (progress.section) throw err
+      } finally {
+        progress.running = progress.running.filter((item) => item !== entry.id)
+        if (!aborted) progress.done += 1
+        setAttempt(progress, [entry.id], null)
       }
-    }
-    await Promise.all(
-      Array.from({ length: Math.min(SECTION_CONCURRENCY, queue.length) }, () => worker()),
-    )
+    })
+    // Sections never started: the run was paused or stopped (not a fatal error).
+    if (!fatal && outcomes.some((outcome) => outcome.status === 'skipped')) interrupted = true
+    // One section on its own: the caller shows why it failed.
+    const rejected = outcomes.find((outcome) => outcome.status === 'rejected')
+    if (rejected?.status === 'rejected') throw rejected.reason
     if (interrupted)
       return {
         ...result,
@@ -1092,11 +1112,17 @@ export class HomeworkWalkthroughService {
     const question = job.entry.question!
     const professorAnswer = professorAnswerOf(question)!
     const parts = walkthroughSubparts(question.prompt).map((part) => part.label)
+    // The checked 小题 ⇄ 教授答案 map: "not_in_professor" only where it says "none".
+    const professorMap = professorMapPromptEntries(
+      await new ProfessorAnswerMapService({ ai: this.ai, db: this.db }).ensure(question, {
+        signal: job.control.signal,
+      }),
+    )
     const messages: ChatMessage[] = [
       {
         role: 'system',
         content: prompts.subjectProfile.withSubject(
-          prompts.walkthroughCompare.buildSystemPrompt(),
+          prompts.walkthroughCompare.buildSystemPrompt(professorMap ? { professorMap: true } : {}),
           job.subject,
         ),
       },
@@ -1107,6 +1133,7 @@ export class HomeworkWalkthroughService {
           question: question.prompt,
           parts,
           professorAnswer,
+          ...(professorMap ? { professorMap } : {}),
           ...(section.conclusion ? { conclusion: section.conclusion } : {}),
           body: section.body,
           language: job.language,
@@ -1114,13 +1141,14 @@ export class HomeworkWalkthroughService {
       },
     ]
     const reply = prompts.walkthroughCompare.normalizeCompare(
-      await requestSectionJSON(ai, messages, job.control.signal, job.onAttempt),
+      await requestSectionJSON(ai, messages, job.control, job.onAttempt),
     )
     const validated = reply
       ? validateCompare(reply, {
           questionParts: parts,
           professorAnswer,
           ...(section.checks ? { checks: section.checks } : {}),
+          ...(professorMap ? { professorMap } : {}),
         })
       : null
     if (!validated) throw new AppError(t('homework.walkthrough.compareInvalid'), 'INVALID_RESPONSE')
@@ -1163,7 +1191,7 @@ export class HomeworkWalkthroughService {
       `homework-walkthrough/${prompts.homeworkWalkthrough.CACHE_VERSION}`,
       subject,
     )
-    const base = await this.questionInputs(question, subject)
+    const base = await this.questionInputs(question, subject, options.control.signal)
     const inputs: QuestionInputs = options.align
       ? base
       : {
@@ -1225,13 +1253,23 @@ export class HomeworkWalkthroughService {
   private async questionInputs(
     question: HomeworkQuestion,
     subject: SubjectContext | undefined,
+    signal?: AbortSignal,
   ): Promise<QuestionInputs> {
     const deferred =
       question.answerStatus === 'matched' && isDeferredProfessorAnswer(question.answerText ?? '')
     const professorAnswer = professorAnswerOf(question)
+    // 小题 ⇄ 教授答案对应 (cached on the question; shared with the answer-based hints).
+    const professorMap = professorAnswer
+      ? professorMapPromptEntries(
+          await new ProfessorAnswerMapService({ ai: this.ai, db: this.db }).ensure(question, {
+            ...(signal ? { signal } : {}),
+          }),
+        )
+      : undefined
     return {
       sourceText: await this.homework.questionSourceText(question),
       ...(professorAnswer ? { professorAnswer } : {}),
+      ...(professorMap ? { professorMap } : {}),
       ...(!deferred && question.solution ? { previousSolution: question.solution } : {}),
       linearSystems: subject?.subject === 'linear_algebra' || involvesRowReduction(question.prompt),
     }
@@ -1243,7 +1281,7 @@ export class HomeworkWalkthroughService {
    * sub-part, saved as it goes so an interruption continues where it stopped.
    */
   private async writeQuestion(ai: AIService, job: QuestionJob): Promise<WalkthroughSection> {
-    const inputs = await this.questionInputs(job.entry.question!, job.subject)
+    const inputs = await this.questionInputs(job.entry.question!, job.subject, job.control.signal)
     const section = await this.writeQuestionWith(ai, job, inputs)
     // Written under the professor-alignment rules: 「已按教授答案」.
     return inputs.professorAnswer && section.status === 'ready'
@@ -1271,9 +1309,11 @@ export class HomeworkWalkthroughService {
         subparts.length >= 2 &&
         !isAbortError(err, job.control.signal) &&
         classifyHomeworkError(err) === 'truncated'
-      )
-        // Too long for one reply even with the larger budget: split it.
+      ) {
+        // Too long for one reply at the output cap: split it.
+        job.onAttempt?.({ attempt: 2, lastFailure: 'truncated', change: { kind: 'split' } })
         return this.writeSplit(ai, job, inputs, subparts, undefined, true)
+      }
       throw err
     }
   }
@@ -1294,6 +1334,7 @@ export class HomeworkWalkthroughService {
             analysis: true,
             steps: true,
             ...(inputs.professorAnswer ? { alignProfessor: true } : {}),
+            ...(inputs.professorAnswer && inputs.professorMap ? { professorMap: true } : {}),
           }),
           job.subject,
         ),
@@ -1305,13 +1346,18 @@ export class HomeworkWalkthroughService {
           question: question.prompt,
           sourceText: inputs.sourceText,
           language: job.language,
-          ...(inputs.professorAnswer ? { professorAnswer: inputs.professorAnswer } : {}),
+          ...(inputs.professorAnswer
+            ? {
+                professorAnswer: cleanProfessorAnswerText(inputs.professorAnswer),
+                ...(inputs.professorMap ? { professorMap: inputs.professorMap } : {}),
+              }
+            : {}),
           ...(inputs.previousSolution ? { previousSolution: inputs.previousSolution } : {}),
           ...(job.mode === 'regenerate' ? { revision: revisionOf(job, job.current) } : {}),
         }),
       },
     ]
-    const data = await requestSectionJSON(ai, messages, job.control.signal, job.onAttempt)
+    const data = await requestSectionJSON(ai, messages, job.control, job.onAttempt)
     const normalized = prompts.homeworkWalkthrough.normalizeQuestionSection(data)
     if (!normalized) throw new AppError(t('homework.walkthrough.invalid'), 'INVALID_RESPONSE')
     if (normalized.status === 'insufficient')
@@ -1332,7 +1378,15 @@ export class HomeworkWalkthroughService {
     }
   }
 
-  /** Split mode: one request per sub-part, each saved before the next starts. */
+  /**
+   * Split mode: one request per sub-part. The first sub-part is written on its
+   * own (it also brings the 题目分析 and usually sets up what the others build
+   * on); the remaining sub-parts are then written at the same time, each
+   * seeing the question, its sources and the first sub-part's worked text.
+   * Every finished sub-part is saved at once (saves are queued so the stored
+   * draft always holds every finished sub-part, in any completion order), so
+   * an interruption continues with exactly the ones not written yet.
+   */
   private async writeSplit(
     ai: AIService,
     job: QuestionJob,
@@ -1370,6 +1424,23 @@ export class HomeworkWalkthroughService {
               generatedAt: Date.now(),
             },
       )
+    // Saves run one after another, each with every sub-part finished so far.
+    let saving: Promise<void> = Promise.resolve()
+    const addPart = (written: WalkthroughPart, analysis: string): Promise<void> => {
+      draft = {
+        ...draft,
+        parts: orderParts(
+          [...draft.parts.filter((item) => item.label !== written.label), written],
+          labels,
+        ),
+        ...(analysis ? { analysis: formatHomeworkReviewText(analysis) } : {}),
+      }
+      const snapshot = draft
+      // The last one is saved as the finished section by the caller.
+      if (snapshot.parts.length >= subparts.length) return saving
+      saving = saving.then(() => saveDraft(snapshot))
+      return saving
+    }
     // Fallen back after a truncated reply: remember to continue split.
     if (persistStart && !resumeFrom) await saveDraft(draft)
     const system = prompts.subjectProfile.withSubject(
@@ -1378,69 +1449,132 @@ export class HomeworkWalkthroughService {
         punctuation: true,
         steps: true,
         ...(inputs.professorAnswer ? { alignProfessor: true } : {}),
+        ...(inputs.professorAnswer && inputs.professorMap ? { professorMap: true } : {}),
       }),
       job.subject,
     )
-    for (let index = draft.parts.length; index < subparts.length; index++) {
-      // Pausing stops between sub-parts; the finished ones are saved.
-      if (!control.shouldContinue()) throw new GenerationPausedError(control.signal.aborted)
-      const part = subparts[index]!.label
-      job.onPart?.(part, index, subparts.length)
-      const currentPart = job.current?.parts?.find((item) => item.label === part)
-      const messages: ChatMessage[] = [
-        { role: 'system', content: system },
-        {
-          role: 'user',
-          content: prompts.homeworkWalkthrough.buildPartUserPrompt({
-            label,
-            question: question.prompt,
-            sourceText: inputs.sourceText,
-            language: job.language,
-            ...(inputs.professorAnswer ? { professorAnswer: inputs.professorAnswer } : {}),
-            ...(inputs.previousSolution ? { previousSolution: inputs.previousSolution } : {}),
-            part,
-            parts: labels,
-            earlier: earlierParts(draft.parts),
-            // The first sub-part also brings the analysis of the whole question.
-            ...(index === 0 ? { analysis: true } : {}),
-            ...(job.mode === 'regenerate'
-              ? { revision: revisionOf(job, currentPart ?? job.current) }
-              : {}),
-          }),
-        },
-      ]
-      const raw = await requestSectionJSON(ai, messages, control.signal, job.onAttempt)
-      const normalized = prompts.homeworkWalkthrough.normalizePart(raw)
-      if (!normalized) throw new AppError(t('homework.walkthrough.invalid'), 'INVALID_RESPONSE')
-      if (normalized.status === 'insufficient')
-        return insufficientSection(entry, label, `(${part}) ${normalized.reason}`)
-      const checks = inputs.linearSystems
-        ? checkLinearSystems(normalized.linearSystems.map((system) => partClaim(part, system)))
-        : []
-      const written: WalkthroughPart = {
-        label: part,
-        heading: stripPartLabel(normalized.heading, part),
-        conclusion: formatHomeworkReviewText(stripPartLabel(normalized.conclusion, part)),
-        body: formatHomeworkReviewText(normalized.body),
-        ...(checks.length > 0 ? { checks } : {}),
-      }
-      const analysis = index === 0 ? prompts.homeworkWalkthrough.readAnalysis(raw) : ''
-      draft = {
-        ...draft,
-        parts: [...draft.parts, written],
-        ...(analysis ? { analysis: formatHomeworkReviewText(analysis) } : {}),
-      }
-      // The last one is saved as the finished section by the caller.
-      if (index < subparts.length - 1) await saveDraft(draft)
+    const inFlight = new Set<string>()
+    const report = (): void => {
+      const running = labels.filter((item) => inFlight.has(item))
+      job.onPart?.(
+        running.length > 0 ? running.join(', ') : null,
+        draft.parts.length,
+        subparts.length,
+      )
     }
+    /** One sub-part: its request, checked and saved. `insufficient` ends the question. */
+    const writePart = async (
+      index: number,
+      requestControl: GenerationControl,
+    ): Promise<{ insufficient: string } | null> => {
+      const part = subparts[index]!.label
+      inFlight.add(part)
+      report()
+      try {
+        const currentPart = job.current?.parts?.find((item) => item.label === part)
+        // Later sub-parts see the first one (written before them); the first
+        // sees nothing earlier.
+        const first = draft.parts.find((item) => item.label === labels[0])
+        const messages: ChatMessage[] = [
+          { role: 'system', content: system },
+          {
+            role: 'user',
+            content: prompts.homeworkWalkthrough.buildPartUserPrompt({
+              label,
+              question: question.prompt,
+              sourceText: inputs.sourceText,
+              language: job.language,
+              ...(inputs.professorAnswer
+                ? {
+                    professorAnswer: cleanProfessorAnswerText(inputs.professorAnswer),
+                    ...(inputs.professorMap ? { professorMap: inputs.professorMap } : {}),
+                  }
+                : {}),
+              ...(inputs.previousSolution ? { previousSolution: inputs.previousSolution } : {}),
+              part,
+              parts: labels,
+              earlier: earlierParts(index > 0 && first ? [first] : []),
+              // The first sub-part also brings the analysis of the whole question.
+              ...(index === 0 ? { analysis: true } : {}),
+              ...(job.mode === 'regenerate'
+                ? { revision: revisionOf(job, currentPart ?? job.current) }
+                : {}),
+            }),
+          },
+        ]
+        const raw = await requestSectionJSON(ai, messages, requestControl, job.onAttempt)
+        const normalized = prompts.homeworkWalkthrough.normalizePart(raw)
+        if (!normalized) throw new AppError(t('homework.walkthrough.invalid'), 'INVALID_RESPONSE')
+        if (normalized.status === 'insufficient')
+          return { insufficient: `(${part}) ${normalized.reason}` }
+        const checks = inputs.linearSystems
+          ? checkLinearSystems(normalized.linearSystems.map((system) => partClaim(part, system)))
+          : []
+        await addPart(
+          {
+            label: part,
+            heading: stripPartLabel(normalized.heading, part),
+            conclusion: formatHomeworkReviewText(stripPartLabel(normalized.conclusion, part)),
+            body: formatHomeworkReviewText(normalized.body),
+            ...(checks.length > 0 ? { checks } : {}),
+          },
+          index === 0 ? prompts.homeworkWalkthrough.readAnalysis(raw) : '',
+        )
+        return null
+      } finally {
+        inFlight.delete(part)
+        report()
+      }
+    }
+
+    const done = new Set(draft.parts.map((part) => part.label))
+    // 1. The first sub-part, on its own.
+    if (!done.has(labels[0]!)) {
+      if (!control.shouldContinue()) throw new GenerationPausedError(control.signal.aborted)
+      const first = await writePart(0, control)
+      if (first) return insufficientSection(entry, label, first.insufficient)
+    }
+    // 2. The rest at the same time (through the run's pool when there is one).
+    const remaining = subparts
+      .map((_, index) => index)
+      .filter((index) => index > 0 && !done.has(labels[index]!))
+    if (remaining.length > 0) {
+      if (!control.shouldContinue()) throw new GenerationPausedError(control.signal.aborted)
+      const task = (
+        index: number,
+        ctx: PoolTaskContext,
+      ): Promise<{ insufficient: string } | null> => writePart(index, ctx.control)
+      const outcomes = job.pool
+        ? await job.pool.nested(remaining, task)
+        : await createAdaptivePool({
+            max: aiConcurrency(ai),
+            control,
+            maxOverloadRetries: 0,
+          }).run(remaining, task)
+      await saving
+      // An abort first, then the first failure in sub-part order.
+      const reasons = outcomes.flatMap((outcome) =>
+        outcome.status === 'rejected' ? [outcome.reason] : [],
+      )
+      const aborted = reasons.find((reason) => isAbortError(reason, control.signal))
+      if (aborted !== undefined) throw aborted
+      if (reasons.length > 0) throw reasons[0]
+      for (const outcome of outcomes)
+        if (outcome.status === 'fulfilled' && outcome.value)
+          return insufficientSection(entry, label, outcome.value.insufficient)
+      // Sub-parts never started: paused (the finished ones are saved).
+      if (outcomes.some((outcome) => outcome.status === 'skipped'))
+        throw new GenerationPausedError(control.signal.aborted)
+    }
+    await saving
     job.onPart?.(null, subparts.length, subparts.length)
-    return joinParts(entry, label, draft.parts, draft.analysis)
+    return joinParts(entry, label, orderParts(draft.parts, labels), draft.analysis)
   }
 
   /**
    * The opening or the summary, from every question that has a section. One
-   * request for the whole assignment; a reply cut off even at the largest
-   * allowed budget is asked again for each half of the questions (recursively,
+   * request for the whole assignment; a reply cut off at the output cap is
+   * asked again for each half of the questions (recursively,
    * down to one question) and the pieces are merged locally. Finished groups
    * are saved as a draft, so a pause or a failure continues from there.
    */
@@ -1559,9 +1693,9 @@ export class HomeworkWalkthroughService {
       ]
       let piece: NormalizedOverviewPart | NormalizedSummaryPart | null
       try {
-        piece = normalize(await requestSectionJSON(ai, messages, job.control.signal, job.onAttempt))
+        piece = normalize(await requestSectionJSON(ai, messages, job.control, job.onAttempt))
       } catch (err) {
-        // Too long even at the largest budget: ask for each half on its own.
+        // Too long at the output cap: ask for each half on its own.
         if (classifyHomeworkError(err) === 'truncated' && group.length > 1) {
           const groups = [...draft.groups]
           groups.splice(index, 1, ...halves(group))
@@ -1704,68 +1838,71 @@ export class HomeworkWalkthroughService {
     const result: WalkthroughRunResult = { generated: 0, failed: 0 }
     let fatal: string | undefined
     let interrupted = false
-    const queue = [...todo]
-    const worker = async (): Promise<void> => {
-      while (queue.length > 0) {
-        if (fatal) return
-        if (!control.shouldContinue()) {
+    const pool = createAdaptivePool({
+      max: aiConcurrency(ai),
+      control,
+      // Each section request retries a rate limit itself (through the pool's throttle).
+      maxOverloadRetries: 0,
+    })
+    const outcomes = await pool.run(todo, async (entry, ctx): Promise<void> => {
+      if (fatal) {
+        ctx.halt()
+        return
+      }
+      progress.running.push(entry.id)
+      emit()
+      let aborted = false
+      try {
+        await this.writeVariant(ai, {
+          id,
+          entry,
+          section: entry.section!,
+          label: labels.get(entry.question!.id) ?? '?',
+          language: state.language,
+          subject,
+          control: ctx.control,
+          mode: 'generate',
+          onPart: (part, done, total) => {
+            if (progress.section) {
+              progress.section = { ...progress.section, split: true }
+              progress.total = total
+              progress.done = done
+            }
+            progress.parts = { ...progress.parts }
+            if (part) progress.parts[entry.id] = part
+            else delete progress.parts[entry.id]
+            setAttempt(progress, [entry.id], null)
+          },
+          onAttempt: (attempt) => setAttempt(progress, [entry.id], attempt),
+        })
+        result.generated += 1
+      } catch (err) {
+        if (isAbortError(err, control.signal)) {
+          aborted = true
           interrupted = true
           return
         }
-        const entry = queue.shift()!
-        progress.running.push(entry.id)
-        emit()
-        let aborted = false
-        try {
-          await this.writeVariant(ai, {
-            id,
-            entry,
-            section: entry.section!,
-            label: labels.get(entry.question!.id) ?? '?',
-            language: state.language,
-            subject,
-            control,
-            mode: 'generate',
-            onPart: (part, done, total) => {
-              if (progress.section) {
-                progress.section = { ...progress.section, split: true }
-                progress.total = total
-                progress.done = done
-              }
-              progress.parts = { ...progress.parts }
-              if (part) progress.parts[entry.id] = part
-              else delete progress.parts[entry.id]
-              setAttempt(progress, [entry.id], null)
-            },
-            onAttempt: (attempt) => setAttempt(progress, [entry.id], attempt),
-          })
-          result.generated += 1
-        } catch (err) {
-          if (isAbortError(err, control.signal)) {
-            aborted = true
-            interrupted = true
-            continue
-          }
-          if (isAccountFatalError(classifyHomeworkError(err))) fatal = friendlyAIError(err)
-          // A failed detailed version leaves the standard one as it is.
-          result.failed += 1
-          progress.failed += 1
-          // One section on its own: the caller shows why.
-          if (progress.section) throw err
-        } finally {
-          progress.running = progress.running.filter((item) => item !== entry.id)
-          if (progress.parts?.[entry.id]) {
-            progress.parts = { ...progress.parts }
-            delete progress.parts[entry.id]
-          }
-          if (!aborted && !progress.section) progress.done += 1
-          setAttempt(progress, [entry.id], null)
+        if (isAccountFatalError(classifyHomeworkError(err))) fatal = friendlyAIError(err)
+        // A failed detailed version leaves the standard one as it is.
+        result.failed += 1
+        progress.failed += 1
+        // One section on its own: the caller shows why.
+        if (progress.section) throw err
+      } finally {
+        progress.running = progress.running.filter((item) => item !== entry.id)
+        if (progress.parts?.[entry.id]) {
+          progress.parts = { ...progress.parts }
+          delete progress.parts[entry.id]
         }
+        if (!aborted && !progress.section) progress.done += 1
+        setAttempt(progress, [entry.id], null)
       }
-    }
-    await Promise.all(
-      Array.from({ length: Math.min(SECTION_CONCURRENCY, queue.length) }, () => worker()),
-    )
+    })
+    // Sections never started: the run was paused or stopped (not a fatal error).
+    if (!fatal && outcomes.some((outcome) => outcome.status === 'skipped')) interrupted = true
+    // One section on its own: the caller shows why it failed.
+    const rejected = outcomes.find((outcome) => outcome.status === 'rejected')
+    if (rejected?.status === 'rejected') throw rejected.reason
     if (interrupted)
       return {
         ...result,
@@ -1842,14 +1979,19 @@ export class HomeworkWalkthroughService {
   private async writeVariant(ai: AIService, job: VariantJob): Promise<WalkthroughVariant> {
     const { section, entry, control } = job
     const question = entry.question!
-    const inputs = await this.questionInputs(question, job.subject)
+    const inputs = await this.questionInputs(question, job.subject, job.control.signal)
     const common = {
       label: job.label,
       question: question.prompt,
       sourceText: inputs.sourceText,
       language: job.language,
       level: 'detailed' as const,
-      ...(inputs.professorAnswer ? { professorAnswer: inputs.professorAnswer } : {}),
+      ...(inputs.professorAnswer
+        ? {
+            professorAnswer: cleanProfessorAnswerText(inputs.professorAnswer),
+            ...(inputs.professorMap ? { professorMap: inputs.professorMap } : {}),
+          }
+        : {}),
     }
     let variant: WalkthroughVariant
     const parts = section.parts ?? []
@@ -1878,6 +2020,7 @@ export class HomeworkWalkthroughService {
           level: 'detailed',
           part: true,
           ...(inputs.professorAnswer ? { alignProfessor: true } : {}),
+          ...(inputs.professorAnswer && inputs.professorMap ? { professorMap: true } : {}),
         }),
         job.subject,
       )
@@ -1903,7 +2046,7 @@ export class HomeworkWalkthroughService {
               }),
             },
           ],
-          control.signal,
+          control,
           job.onAttempt,
         )
         const normalized = prompts.homeworkWalkthrough.normalizeVariant(raw)
@@ -1963,6 +2106,7 @@ export class HomeworkWalkthroughService {
                 linearSystems: inputs.linearSystems,
                 level: 'detailed',
                 ...(inputs.professorAnswer ? { alignProfessor: true } : {}),
+                ...(inputs.professorAnswer && inputs.professorMap ? { professorMap: true } : {}),
               }),
               job.subject,
             ),
@@ -1981,7 +2125,7 @@ export class HomeworkWalkthroughService {
             }),
           },
         ],
-        control.signal,
+        control,
         job.onAttempt,
       )
       const normalized = prompts.homeworkWalkthrough.normalizeVariant(raw)
@@ -2041,6 +2185,8 @@ function failedSection(
 interface QuestionInputs {
   sourceText: string
   professorAnswer?: string
+  /** The checked 小题 ⇄ 教授答案 map (only with a professor answer). */
+  professorMap?: PromptMapEntry[]
   previousSolution?: string
   linearSystems: boolean
 }
@@ -2060,10 +2206,27 @@ interface QuestionJob {
   /** Drafts started before this time are not continued ("rewrite everything"). */
   draftSince?: number
   saveSection: (section: WalkthroughSection) => Promise<void>
-  /** Split mode: the sub-part now being written (`null` when all are done). */
+  /**
+   * Split mode: the sub-parts now being written (`b, c`; `null` when all are
+   * done), with how many are finished.
+   */
   onPart?: (part: string | null, done: number, total: number) => void
   /** A request is being tried again (shown as 第 2 次尝试：上次超时). */
   onAttempt?: (attempt: SectionAttempt) => void
+  /** The run's pool slot: a split question's sub-parts run through it. */
+  pool?: PoolTaskContext
+}
+
+/** Sub-parts in the question's order (finished ones may arrive in any order). */
+function orderParts(
+  parts: readonly WalkthroughPart[],
+  labels: readonly string[],
+): WalkthroughPart[] {
+  const rank = (label: string): number => {
+    const index = labels.indexOf(label)
+    return index < 0 ? labels.length : index
+  }
+  return [...parts].sort((a, b) => rank(a.label) - rank(b.label))
 }
 
 /** A saved draft this job may continue: same inputs, same request, same sub-parts. */
@@ -2278,45 +2441,36 @@ function frameText(section: WalkthroughSection): string {
 }
 
 /**
- * One section request. A worked section is much longer than its prompt, so it
- * starts with generous room and doubles it once the model stops early; a
- * provider that rejects the size gets half; brief outages are retried twice.
- * Each attempt has its own deadline even while the stream keeps trickling, and
- * all attempts together stop at `SECTION_TOTAL_MS` with a "timed out, try
- * again" error, so one section never holds the run for 20+ minutes.
+ * One section request, sent at the output cap (AIService). A reply cut off
+ * there fails at once with the cap message (`truncatedAtCap`) — asking again
+ * would be cut off at the same place — so callers go straight to their
+ * structural fallback (sub-parts, smaller groups). Brief outages are retried
+ * twice. Each attempt has its own deadline even while the stream keeps
+ * trickling, and all attempts together stop at `SECTION_TOTAL_MS` with a
+ * "timed out, try again" error, so one section never holds the run for 20+
+ * minutes.
  */
 async function requestSectionJSON(
   ai: AIService,
   messages: ChatMessage[],
-  runSignal?: AbortSignal,
+  control?: GenerationControl,
   onAttempt?: (attempt: SectionAttempt) => void,
 ): Promise<unknown> {
+  const runSignal = control?.signal
   const startedAt = Date.now()
   const remaining = (): number => SECTION_TOTAL_MS - (Date.now() - startedAt)
-  const inputChars = messages.reduce((sum, message) => sum + message.content.length, 0)
-  const userCap =
-    Number.isFinite(ai.maxOutputTokens) && ai.maxOutputTokens > 0 ? ai.maxOutputTokens : Infinity
-  let budget = planOutputBudget({
-    inputChars,
-    userMaxTokens: ai.maxOutputTokens,
-    ceiling: SECTION_OUTPUT_CEILING,
-    overhead: 4_000,
-    min: 2_048,
-  })
   let retries = 0
   let attempts = 0
-  // Lowest budget the provider rejected as too large: never ask for it (or
-  // more) again, so truncated / output-limit cannot ping-pong forever.
-  let rejectedBudget = Infinity
-  const tried = new Set<number>()
   let lastFailure: HomeworkErrorKind | undefined
+  let change: AttemptChange | undefined
   for (;;) {
     attempts += 1
-    tried.add(budget)
     if (runSignal?.aborted) throw new AbortedError()
     const left = remaining()
     if (left <= 0) throw sectionTimeoutError()
-    if (attempts > 1 && lastFailure) onAttempt?.({ attempt: attempts, lastFailure })
+    if (attempts > 1 && lastFailure)
+      onAttempt?.({ attempt: attempts, lastFailure, ...(change ? { change } : {}) })
+    change = undefined
     // The last attempt only gets what is left of the section's total time.
     const deadline = Math.min(SECTION_DEADLINE_MS, left)
     const controller = new AbortController()
@@ -2330,7 +2484,6 @@ async function requestSectionJSON(
     runSignal?.addEventListener('abort', onRunAbort)
     try {
       const { data } = await ai.streamJSON<unknown>(messages, undefined, {
-        maxTokens: budget,
         signal: controller.signal,
       })
       return data
@@ -2343,23 +2496,17 @@ async function requestSectionJSON(
       // Out of total time: a clear "timed out, try again", whatever came last.
       if (remaining() <= 0) throw sectionTimeoutError()
       if (attempts >= SECTION_MAX_ATTEMPTS) throw failure
-      if (kind === 'truncated') {
-        const next = Math.min(userCap, budget * 2, rejectedBudget - 1)
-        if (next <= budget || tried.has(next)) {
-          // Cut off at the largest budget allowed: asking again cannot help.
-          if (budget >= userCap) throw truncatedAtCap(ai, budget)
-          throw failure
-        }
-        budget = next
-      } else if (kind === 'output-limit') {
-        rejectedBudget = Math.min(rejectedBudget, budget)
-        const next = Math.max(Math.min(MIN_OUTPUT_TOKENS, userCap), Math.floor(budget / 2))
-        if (next >= budget || tried.has(next)) throw failure
-        budget = next
-      } else if (isRetryableHomeworkError(kind) && retries < MAX_TRANSIENT_RETRIES) {
+      // Cut off at the cap (the only budget ever sent): asking again cannot help.
+      if (kind === 'truncated') throw asTruncatedAtCap(ai, failure)
+      if (
+        isRetryableHomeworkError(kind) &&
+        retries < (isOverloadError(failure) ? MAX_OVERLOAD_RETRIES : MAX_TRANSIENT_RETRIES)
+      ) {
         retries += 1
-        const delay = RETRY_BASE_DELAY_MS * 2 ** retries
+        // A rate limit also slows the whole run down (the pool halves).
+        const delay = retryDelay(control, failure, RETRY_BASE_DELAY_MS * 2 ** retries)
         if (delay >= remaining()) throw sectionTimeoutError()
+        if (delay >= 1_000) change = { kind: 'wait', seconds: Math.round(delay / 1_000) }
         await new Promise((resolve) => setTimeout(resolve, delay))
         if (runSignal?.aborted) throw new AbortedError()
       } else {
@@ -2370,18 +2517,6 @@ async function requestSectionJSON(
       runSignal?.removeEventListener('abort', onRunAbort)
     }
   }
-}
-
-/**
- * Cut off at the largest budget allowed: say whose limit it was (the model's
- * own, or the user's setting) and how large.
- */
-function truncatedAtCap(ai: AIService, budget: number): OutputTruncatedError {
-  const modelMax = ai.modelMaxOutputTokens
-  return new OutputTruncatedError(budget, {
-    limit: budget,
-    by: modelMax !== undefined && budget >= modelMax ? 'model' : 'setting',
-  })
 }
 
 /** A section that ran out of total time: saved as failed, the run moves on. */

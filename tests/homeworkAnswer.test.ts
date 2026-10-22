@@ -498,7 +498,12 @@ describe('HomeworkService — professor answer key', () => {
       await gate
       return { data: { hints: ['Try a step'], solution: 'Worked answer' }, raw: {} }
     })
-    const svc = service({ streamJSON, maxOutputTokens: 2048 } as unknown as AIService)
+    // 同时进行的 AI 请求数 = 2: the third question waits for a free slot.
+    const svc = service({
+      streamJSON,
+      maxOutputTokens: 2048,
+      concurrency: 2,
+    } as unknown as AIService)
     const progress: number[] = []
     const run = svc.generateAnswerContent(setId, undefined, (step) => progress.push(step.completed))
     await vi.waitFor(() => expect(started).toBe(2))
@@ -510,6 +515,7 @@ describe('HomeworkService — professor answer key', () => {
       skipped: 0,
       paused: false,
       remainingIds: [],
+      failures: [],
     })
     expect(started).toBe(3)
     expect(progress.at(-1)).toBe(3)
@@ -520,6 +526,7 @@ describe('HomeworkService — professor answer key', () => {
       skipped: 3,
       paused: false,
       remainingIds: [],
+      failures: [],
     })
     expect(started).toBe(3)
   })
@@ -548,7 +555,12 @@ describe('HomeworkService — professor answer key', () => {
     expect(saved.answerBased).toBe(true)
     expect(saved.hints).toEqual(['Add the terms'])
     expect(saved.solution).toBe('4 + 5 = 9')
-    expect(streamJSON).toHaveBeenCalledTimes(4)
+    // Combined once (cut off at the cap: never asked again, not even in a
+    // compact rewrite), then hints and solution — none with its own budget.
+    expect(streamJSON).toHaveBeenCalledTimes(3)
+    expect(streamJSON.mock.calls.every(([, , options]) => !('maxTokens' in (options ?? {})))).toBe(
+      true,
+    )
     expect(
       streamJSON.mock.calls.every(([messages]) =>
         messages[1]?.content.includes('PROFESSOR ANSWER'),
@@ -559,24 +571,63 @@ describe('HomeworkService — professor answer key', () => {
     ).toBe(true)
   })
 
-  it('stops scheduling more answer generation after the provider rate-limits the batch', async () => {
+  it('a rate limit slows the batch down and retries before failing a question', async () => {
+    await repo.updateQuestion('q1', { answerText: '9', answerStatus: 'matched' })
+    await repo.updateQuestion('q2', { answerText: '42', answerStatus: 'matched' })
+    await repo.upsertQuestion(
+      question({ id: 'q3', order: 2, number: '3', answerText: '7', answerStatus: 'matched' }),
+    )
+    let calls = 0
+    const streamJSON = vi.fn(async () => {
+      calls += 1
+      // q1's first attempt is rate-limited (Retry-After: now); everything else works.
+      if (calls === 1) {
+        const err = new RateLimitedError()
+        err.retryAfterMs = 0
+        throw err
+      }
+      return { data: { hints: ['h'], solution: 's' }, raw: {} }
+    })
+    const svc = service({
+      streamJSON,
+      maxOutputTokens: 2048,
+      concurrency: 2,
+    } as unknown as AIService)
+    expect(await svc.generateAnswerContent(setId)).toMatchObject({
+      generated: 3,
+      failed: 0,
+      skipped: 0,
+      paused: false,
+      remainingIds: [],
+    })
+    expect(streamJSON).toHaveBeenCalledTimes(4)
+  })
+
+  it('fails the questions still rate-limited after the retries', async () => {
     await repo.updateQuestion('q1', { answerText: '9', answerStatus: 'matched' })
     await repo.updateQuestion('q2', { answerText: '42', answerStatus: 'matched' })
     await repo.upsertQuestion(
       question({ id: 'q3', order: 2, number: '3', answerText: '7', answerStatus: 'matched' }),
     )
     const streamJSON = vi.fn(async () => {
-      throw new RateLimitedError()
+      const err = new RateLimitedError()
+      err.retryAfterMs = 0
+      throw err
     })
-    const svc = service({ streamJSON, maxOutputTokens: 2048 } as unknown as AIService)
-    expect(await svc.generateAnswerContent(setId)).toEqual({
+    const svc = service({
+      streamJSON,
+      maxOutputTokens: 2048,
+      concurrency: 2,
+    } as unknown as AIService)
+    expect(await svc.generateAnswerContent(setId)).toMatchObject({
       generated: 0,
       failed: 3,
       skipped: 0,
       paused: false,
       remainingIds: [],
     })
-    expect(streamJSON).toHaveBeenCalledTimes(2)
+    // Each question: the first try and two retries after a back-off.
+    expect(streamJSON).toHaveBeenCalledTimes(9)
     expect((await repo.getQuestion('q3'))?.generationError).toMatch(/rate limit|限流/i)
   })
 
@@ -586,19 +637,50 @@ describe('HomeworkService — professor answer key', () => {
     await repo.upsertQuestion(
       question({ id: 'q3', order: 2, number: '3', answerText: '7', answerStatus: 'matched' }),
     )
+    // Two more questions: with two requests at once, at most one more starts
+    // while the first two are timing out.
+    for (const [id, order] of [
+      ['q4', 3],
+      ['q5', 4],
+    ] as const)
+      await repo.upsertQuestion(
+        question({
+          id,
+          order,
+          number: String(order + 1),
+          answerText: '1',
+          answerStatus: 'matched',
+        }),
+      )
     const streamJSON = vi.fn(async () => {
       throw new TimeoutError(120_000)
     })
-    const svc = service({ streamJSON, maxOutputTokens: 2048 } as unknown as AIService)
-    expect(await svc.generateAnswerContent(setId)).toEqual({
+    const svc = service({
+      streamJSON,
+      maxOutputTokens: 2048,
+      concurrency: 2,
+    } as unknown as AIService)
+    const timedOut = await svc.generateAnswerContent(setId)
+    expect(timedOut).toMatchObject({
       generated: 0,
-      failed: 3,
+      failed: 5,
       skipped: 0,
       paused: false,
       remainingIds: [],
     })
-    expect(streamJSON).toHaveBeenCalledTimes(2)
-    expect((await repo.getQuestion('q3'))?.generationError).toMatch(/long|time|超时|过长/i)
+    // Every failure carries its reason (the summary lists them).
+    expect(timedOut.failures.map((failure) => failure.number).sort()).toEqual([
+      '1',
+      '2',
+      '3',
+      '4',
+      '5',
+    ])
+    expect(timedOut.failures.every((failure) => /long|time|超时|过长/i.test(failure.reason))).toBe(
+      true,
+    )
+    expect(streamJSON.mock.calls.length).toBeLessThanOrEqual(3)
+    expect((await repo.getQuestion('q5'))?.generationError).toMatch(/long|time|超时|过长/i)
   })
 
   it('marks old AI help ungrounded when a confirmed answer changes, while retaining student records', async () => {

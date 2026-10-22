@@ -10,6 +10,7 @@ import { ChunkRepository } from '@/entities/chunk/repository'
 import type { AIService } from '@/services/aiService'
 import type { QuizConfig } from '@/entities/quiz/types'
 import type { ChatMessage } from '@/infrastructure/ai/types'
+import { OutputTruncatedError } from '@/infrastructure/ai/errors'
 
 let db: AppDatabase
 
@@ -82,14 +83,15 @@ beforeEach(() => {
 })
 
 describe('quiz generation for large quizzes', () => {
-  it('asks in batches with room for every question', async () => {
+  it('asks in batches, each at the whole output cap', async () => {
     const { projectId } = await seed(30)
     const { ai, chatJSON } = planAI()
     const quiz = await new QuizService({ ai, db }).generateQuiz(projectId, config(12, ['numeric']))
     expect(quiz.questionIds).toHaveLength(12)
     expect(chatJSON).toHaveBeenCalledTimes(3) // 5 + 5 + 2
-    const budgets = chatJSON.mock.calls.map((c) => c[1]?.maxTokens)
-    expect(budgets).toEqual([5524, 5524, 2824])
+    // No per-batch budget: AIService sends the whole cap with every batch.
+    const budgets = chatJSON.mock.calls.map((c) => (c[1] as { maxTokens?: number })?.maxTokens)
+    expect(budgets).toEqual([undefined, undefined, undefined])
     // Later batches are told what was already asked.
     expect((chatJSON.mock.calls[2]![0] as ChatMessage[])[1]!.content).toContain('Avoid repeating')
   })
@@ -118,6 +120,19 @@ describe('quiz generation for large quizzes', () => {
     await expect(
       new QuizService({ ai: short.ai, db }).generateQuiz(projectId, config(3, ['numeric'])),
     ).rejects.toThrow()
+  })
+
+  it('never re-sends a batch cut off at the output cap', async () => {
+    const { projectId } = await seed(10)
+    const chatJSON = vi.fn(async () => {
+      throw new OutputTruncatedError(2048, { limit: 2048, by: 'setting' })
+    })
+    const ai = { chatJSON, currentProvider: {}, maxOutputTokens: 2048 } as unknown as AIService
+    await expect(
+      new QuizService({ ai, db }).generateQuiz(projectId, config(3, ['numeric'])),
+    ).rejects.toThrow()
+    // One request: the same batch would be cut off at the same place.
+    expect(chatJSON).toHaveBeenCalledTimes(1)
   })
 })
 

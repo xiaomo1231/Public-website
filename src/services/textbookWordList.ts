@@ -18,7 +18,8 @@ import {
   normalizeForSource,
   sourceContradictsArticle,
 } from './languageDrillValidation'
-import type { AIService } from './aiService'
+import { aiConcurrency, type AIService } from './aiService'
+import { createAdaptivePool, isOverloadError } from '@/shared/lib/concurrency'
 import { t } from '@/i18n'
 import { fnv1a } from '@/shared/lib/hash'
 import {
@@ -37,8 +38,6 @@ import {
 
 /** Characters of textbook text per request (a chapter, or part of a long one). */
 export const WORD_LIST_PART_CHARS = 12_000
-/** Requests in flight at once. */
-const CONCURRENCY = 2
 const MAX_TERM = 80
 const MAX_GLOSS = 160
 const MAX_LESSON = 80
@@ -288,12 +287,10 @@ export class TextbookWordListService {
     }
     const queue = parts.map((_, index) => index).filter((index) => !results[index])
     options.onProgress?.(done, parts.length)
-    const worker = async () => {
-      for (let index = queue.shift(); index !== undefined; index = queue.shift()) {
-        if (!control.shouldContinue()) {
-          interrupted = true
-          return
-        }
+    // 同时进行的 AI 请求数 parts at once (halved on a rate limit).
+    const outcomes = await createAdaptivePool({ max: aiConcurrency(this.ai), control }).run(
+      queue,
+      async (index): Promise<void> => {
         const part = parts[index]!
         const text = part.chunks.map((chunk) => chunk.text).join('\n')
         try {
@@ -312,7 +309,7 @@ export class TextbookWordListService {
                 }),
               },
             ],
-            { maxTokens: 4096, signal: control.signal },
+            { signal: control.signal, reasoning: 'low' },
           )
           const items = validateWordListItems(
             prompts.vocabListSplit.readItems(data),
@@ -328,6 +325,8 @@ export class TextbookWordListService {
             interrupted = true
             return
           }
+          // A rate limit: the pool slows down and reads this part again.
+          if (isOverloadError(err)) throw err
           failed++
           firstError ??= err
           results[index] = []
@@ -335,9 +334,17 @@ export class TextbookWordListService {
         }
         done++
         options.onProgress?.(done, parts.length)
-      }
-    }
-    await Promise.all(Array.from({ length: Math.min(CONCURRENCY, queue.length) }, worker))
+      },
+    )
+    outcomes.forEach((outcome, position) => {
+      if (outcome.status === 'skipped') interrupted = true
+      if (outcome.status !== 'rejected') return
+      // Still rate-limited after the retries.
+      failed++
+      firstError ??= outcome.reason
+      results[queue[position]!] = []
+      done++
+    })
     const paused = interrupted || !control.shouldContinue() ? done < parts.length : false
     if (!paused && failed === parts.length && firstError) throw firstError
 

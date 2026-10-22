@@ -1,9 +1,9 @@
-import type { AIService } from './aiService'
+import { aiConcurrency, type AIService } from './aiService'
 import { hasPromptCorrection } from '@/entities/homework/proofread'
 import type { AppDatabase } from '@/infrastructure/db/database'
 import { getDb } from '@/infrastructure/db/database'
 import type { ChatMessage } from '@/infrastructure/ai/types'
-import type { HomeworkQuestionMode } from '@/infrastructure/ai/prompts/homework-question/v3'
+import type { HomeworkQuestionMode } from '@/infrastructure/ai/prompts/homework-question/v4'
 import { prompts } from '@/infrastructure/ai/prompts'
 import { asArray, asRecord, asStringArray, asTrimmedString } from '@/infrastructure/ai/validation'
 import { AppError, NotFoundError } from '@/infrastructure/errors/AppError'
@@ -13,12 +13,13 @@ import { ChunkRepository } from '@/entities/chunk/repository'
 import { ProcessingJobRepository } from '@/entities/processingJob/repository'
 import { ProjectService } from './projectService'
 import { ProcessingService } from './processingService'
-import { TimeoutError as AITimeoutError } from '@/infrastructure/ai/errors'
+import { RateLimitedError, TimeoutError as AITimeoutError } from '@/infrastructure/ai/errors'
+import { createAdaptivePool, retryDelay } from '@/shared/lib/concurrency'
 import { buildCandidateChunkLabel } from '@/entities/courseContent/topicDependency'
 import { resolveMaterialType, type Document } from '@/entities/document/types'
 import { renderPdfPageImage } from '@/infrastructure/files/pdfExtractor'
 import { detectExamMinutes } from '@/entities/exam/paper'
-import { splitHomeworkSubparts } from '@/entities/homework/splitQuestion'
+import { answerSubparts, splitHomeworkSubparts } from '@/entities/homework/splitQuestion'
 import type { DocumentChunk } from '@/entities/chunk/types'
 import type { SourceReference } from '@/entities/courseAnalysis/types'
 import { friendlyAIError } from '@/shared/lib/aiErrors'
@@ -69,8 +70,10 @@ import {
 import { locateQuestionExcerpt, resolveSourceChunkIds } from '@/entities/homework/sourceGrounding'
 import {
   buildAnswerLines,
+  cleanProfessorAnswerText,
   isDeferredProfessorAnswer,
   matchAnswersToQuestions,
+  professorAnswerDeferral,
   MAX_STORED_ANSWER_CHARS,
   normalizeAnswerNumber,
   parseAnswerEntries,
@@ -101,30 +104,95 @@ import { checkPracticeAnswer } from '@/entities/homework/practice/verify'
 import { practiceSigFigFeedback, projectSigFigPolicy } from './projectGradingRules'
 import { recordPracticeCheck } from './practiceLearning'
 import {
-  ANALYZER_OUTPUT_CEILING,
-  MIN_OUTPUT_TOKENS,
-  planAnalyzerOutputBudget,
-  planQuestionOutputBudget,
-} from '@/entities/homework/tokenBudget'
-import {
   classifyHomeworkError,
   isAccountFatalError,
   isRetryableHomeworkError,
   type HomeworkErrorKind,
 } from '@/entities/homework/errorKind'
 import { loadProjectSubjectContext } from './projectSubject'
+import { ProfessorAnswerMapService } from './professorAnswerMapService'
+import {
+  professorMapPromptEntries,
+  type PromptMapEntry,
+  type ProfessorCoverage,
+} from '@/entities/homework/professorMap'
 import type { SubjectInput } from '@/entities/project/types'
 
 /** Hard cap on questions extracted from one assignment. */
 const MAX_QUESTIONS = 50
 /** How many previous chat turns are sent back to the model. */
 const CHAT_HISTORY_TURNS = 8
-/** How many questions' hints+solutions are prepared at once (rate-limit safe). */
-const CONTENT_CONCURRENCY = 3
-/** Fewer simultaneous answer-grounded requests avoid provider rate limits. */
-const ANSWER_CONTENT_CONCURRENCY = 2
-/** Bound a single professor-answer explanation even if a stream keeps trickling. */
-const ANSWER_GENERATION_DEADLINE_MS = 120_000
+/**
+ * Answer-grounded hints / solutions run 同时进行的 AI 请求数 at once; a question
+ * still rate-limited after this many back-offs is failed.
+ */
+const ANSWER_RATE_LIMIT_RETRIES = 2
+/** Timeouts in a row that stop scheduling more answer-grounded requests. */
+const ANSWER_TIMEOUT_STOP = 2
+/**
+ * Bound one professor-answer request group (the whole question, or one
+ * sub-part / one stage) even if a stream keeps trickling.
+ * It was 120 s for everything together: a long worked answer (several
+ * sub-parts, matrices) needs more than that just to be written, so the
+ * second attempt was always cut by the deadline. Like the walkthrough's
+ * per-section limit, a split request gets its own budget.
+ */
+const ANSWER_GENERATION_DEADLINE_MS = 360_000
+
+/** The whole-question deadline of a professor-answer request group ran out. */
+class AnswerDeadlineError extends AITimeoutError {
+  constructor() {
+    super(ANSWER_GENERATION_DEADLINE_MS)
+  }
+}
+
+/** One sub-part of a split professor-answer generation failed. */
+class AnswerPartError extends AppError {
+  constructor(
+    readonly label: string,
+    readonly reason: unknown,
+  ) {
+    super(describeAnswerFailure(reason), 'ANSWER_PART_FAILED')
+  }
+}
+
+/** The error a failure is classified by (the part's own cause, when split). */
+function rootAnswerError(err: unknown): unknown {
+  return err instanceof AnswerPartError ? err.reason : err
+}
+
+/** A specific, actionable reason for a failed professor-answer explanation. */
+function describeAnswerFailure(err: unknown): string {
+  if (err instanceof AnswerPartError)
+    return t('homework.answer.partFailed', {
+      label: /^\d+$/.test(err.label) ? err.label : `(${err.label})`,
+      reason: describeAnswerFailure(err.reason),
+    })
+  if (err instanceof AnswerDeadlineError)
+    return t('homework.answer.deadline', {
+      minutes: Math.round(ANSWER_GENERATION_DEADLINE_MS / 60_000),
+    })
+  return friendlyAIError(err)
+}
+
+/** Run `fn` with its own deadline, still stopped by the student's signal. */
+async function withAnswerDeadline<T>(
+  outer: AbortSignal | undefined,
+  fn: (signal: AbortSignal) => Promise<T>,
+): Promise<T> {
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), ANSWER_GENERATION_DEADLINE_MS)
+  const linked = linkSignals(controller.signal, outer)
+  try {
+    return await fn(linked.signal)
+  } catch (err) {
+    if (!outer?.aborted && controller.signal.aborted) throw new AnswerDeadlineError()
+    throw err
+  } finally {
+    clearTimeout(timer)
+    linked.dispose()
+  }
+}
 /** Bounded retries for one analyzer batch / one question request. */
 const MAX_REQUEST_RETRIES = 2
 /** Base backoff before retrying a transient batch/question failure. */
@@ -136,6 +204,8 @@ const MAX_BATCH_SPLIT_DEPTH = 5
 interface GeneratedQuestionResult {
   question?: HomeworkQuestion
   kind?: HomeworkErrorKind
+  /** The provider error behind `kind` (a rate limit's `Retry-After` travels with it). */
+  error?: unknown
   skipped?: boolean
   /** Stopped by the student: the question kept its previous status and content. */
   interrupted?: boolean
@@ -193,6 +263,13 @@ function linkSignals(...signals: Array<AbortSignal | undefined>): {
     cleanups.push(() => signal.removeEventListener('abort', onAbort))
   }
   return { signal: controller.signal, dispose: () => cleanups.forEach((cleanup) => cleanup()) }
+}
+
+/** One question whose professor-answer explanation failed, and why. */
+export interface AnswerGenerationFailure {
+  questionId: string
+  number?: string
+  reason: string
 }
 
 export interface AnswerGenerationProgress {
@@ -414,19 +491,16 @@ export class HomeworkService {
           }),
         },
       ]
-      const budget = planQuestionOutputBudget(
-        messages[0]!.content.length + messages[1]!.content.length,
-        ai.maxOutputTokens,
-      )
       const { result, imagesIgnored } = await withAnswerImages(
         messages,
         answerImageUrls(answerImages),
         answerImageNote(answerImages.length),
         (request) =>
-          ai.streamJSON<unknown>(request, undefined, {
-            maxTokens: budget,
-            ...(options.signal ? { signal: options.signal } : {}),
-          }),
+          ai.streamJSON<unknown>(
+            request,
+            undefined,
+            options.signal ? { signal: options.signal } : {},
+          ),
         {
           ...(options.signal ? { signal: options.signal } : {}),
           textOnlyFallback: !!submittedDraft,
@@ -510,13 +584,11 @@ export class HomeworkService {
         }),
       },
     ]
-    const result = await ai.streamJSON<unknown>(messages, undefined, {
-      maxTokens: planQuestionOutputBudget(
-        messages[0]!.content.length + messages[1]!.content.length,
-        ai.maxOutputTokens,
-      ),
-      ...(options.signal ? { signal: options.signal } : {}),
-    })
+    const result = await ai.streamJSON<unknown>(
+      messages,
+      undefined,
+      options.signal ? { signal: options.signal } : {},
+    )
     const assessed = prompts.homeworkAnswerCheck.normalizeAssessment(result.data)
     if (!assessed) throw new AppError(t('homework.check.invalid'), 'INVALID_RESPONSE')
     if (assessed.status === 'insufficient') return { verdict: 'uncertain', method: 'ai' }
@@ -595,14 +667,7 @@ export class HomeworkService {
       },
       { role: 'user', content: prompts.homeworkReview.buildUserPrompt(input) },
     ]
-    const budget = planQuestionOutputBudget(
-      messages[0]!.content.length + messages[1]!.content.length,
-      ai.maxOutputTokens,
-    )
-    const { data } = await ai.streamJSON<unknown>(messages, undefined, {
-      maxTokens: budget,
-      ...(signal ? { signal } : {}),
-    })
+    const { data } = await ai.streamJSON<unknown>(messages, undefined, signal ? { signal } : {})
     const normalized = prompts.homeworkReview.normalizeReviewOutput(data)
     if (!normalized) throw new AppError(t('homework.review.invalid'), 'INVALID_RESPONSE')
     if (normalized.status === 'insufficient') {
@@ -1120,6 +1185,27 @@ export class HomeworkService {
     return this.startAnswerGenerate(questionId, options.signal).then((result) => result.question)
   }
 
+  /** 小题 ⇄ 教授答案对应: a new AI map for one question (the answer dialog). */
+  remapProfessorAnswer(
+    questionId: string,
+    options: { signal?: AbortSignal } = {},
+  ): Promise<HomeworkQuestion> {
+    return new ProfessorAnswerMapService({ ai: this.ai, db: this.db }).remap(questionId, options)
+  }
+
+  /** The student's choice for one sub-part of that map (`null`: undo it). */
+  setProfessorMapEdit(
+    questionId: string,
+    label: string,
+    edit: { coverage: ProfessorCoverage; quotes: string[] } | null,
+  ): Promise<HomeworkQuestion> {
+    return new ProfessorAnswerMapService({ ai: this.ai, db: this.db }).setEdit(
+      questionId,
+      label,
+      edit,
+    )
+  }
+
   /**
    * Generate answer-based hints + solution for the set's matched questions.
    * Each question is isolated: one failure keeps that question's existing help
@@ -1138,6 +1224,8 @@ export class HomeworkService {
     paused: boolean
     /** Questions not done yet: pass them back to continue (explicit lists). */
     remainingIds: string[]
+    /** Every failed question with the specific reason stored on it. */
+    failures: AnswerGenerationFailure[]
   }> {
     const control = resolveControl(options.control)
     const set = await this.homework.getSet(setId)
@@ -1169,39 +1257,69 @@ export class HomeworkService {
     let completed = 0
     let stopKind: HomeworkErrorKind | undefined
     let timeoutFailures = 0
-    const queue = [...targets]
     const interrupted: string[] = []
+    const failures: AnswerGenerationFailure[] = []
     const report = (): void =>
       onProgress?.({ completed, total: targets.length, generated, failed, skipped })
     report()
-    while (queue.length > 0 && !stopKind && control.shouldContinue()) {
-      // Finish the current pair before scheduling more. This avoids sending a
-      // third request while the second is still deciding whether the provider
-      // is timing out or rate-limiting the whole batch.
-      const batch = queue.splice(0, ANSWER_CONTENT_CONCURRENCY)
-      await Promise.all(
-        batch.map(async (question) => {
-          const result = await this.startAnswerGenerate(question.id, control.signal)
-          // Stopped by the student: not done, not failed; it keeps its content.
-          if (result.interrupted) {
-            interrupted.push(question.id)
-            return
-          }
-          if (result.skipped) skipped += 1
-          else if (result.question?.generationStatus === 'ready' && result.question.answerBased)
-            generated += 1
-          else failed += 1
-          if (result.kind && (isAccountFatalError(result.kind) || result.kind === 'rate-limited')) {
-            stopKind = result.kind
-          }
-          if (result.kind === 'timeout' && ++timeoutFailures >= ANSWER_CONTENT_CONCURRENCY) {
-            stopKind = 'timeout'
-          }
-          completed += 1
-          report()
-        }),
-      )
-    }
+    // 同时进行的 AI 请求数 at once. A rate limit halves the pool and the
+    // question is tried again after a back-off (instead of failing the rest).
+    const pool = createAdaptivePool({
+      max: aiConcurrency(this.ai),
+      control,
+      maxOverloadRetries: ANSWER_RATE_LIMIT_RETRIES,
+    })
+    const outcomes = await pool.run(targets, async (question, ctx): Promise<boolean> => {
+      if (stopKind) {
+        ctx.halt()
+        return false
+      }
+      const result = await this.startAnswerGenerate(question.id, control.signal)
+      // Stopped by the student: not done, not failed; it keeps its content.
+      if (result.interrupted) {
+        interrupted.push(question.id)
+        return true
+      }
+      // Handed back to the pool: it slows down and tries this question again.
+      if (result.kind === 'rate-limited') throw result.error ?? new RateLimitedError()
+      if (result.skipped) skipped += 1
+      else if (result.question?.generationStatus === 'ready' && result.question.answerBased)
+        generated += 1
+      else {
+        failed += 1
+        failures.push({
+          questionId: question.id,
+          ...(question.number ? { number: question.number } : {}),
+          reason: result.question?.generationError ?? t('homework.questionFailed'),
+        })
+      }
+      if (result.kind && isAccountFatalError(result.kind)) stopKind = result.kind
+      if (result.kind === 'timeout' && ++timeoutFailures >= ANSWER_TIMEOUT_STOP)
+        stopKind = 'timeout'
+      if (stopKind) ctx.halt()
+      completed += 1
+      report()
+      return true
+    })
+    // Still rate-limited after the retries: failed (its message is stored).
+    outcomes.forEach((outcome, index) => {
+      if (outcome.status !== 'rejected') return
+      const question = targets[index]!
+      stopKind ??= 'rate-limited'
+      failed += 1
+      completed += 1
+      failures.push({
+        questionId: question.id,
+        ...(question.number ? { number: question.number } : {}),
+        reason: t('friendlyError.rateLimited'),
+      })
+    })
+    report()
+    // Never started (paused, or stopped by a fatal error).
+    const queue = targets.filter((_, index) => {
+      const outcome = outcomes[index]!
+      return outcome.status === 'skipped' || (outcome.status === 'fulfilled' && !outcome.value)
+    })
     const paused = wasInterrupted(control) && (queue.length > 0 || interrupted.length > 0)
     if (paused) {
       return {
@@ -1210,6 +1328,7 @@ export class HomeworkService {
         skipped,
         paused: true,
         remainingIds: [...interrupted, ...queue.map((question) => question.id)],
+        failures,
       }
     }
     if (stopKind && queue.length > 0) {
@@ -1228,10 +1347,15 @@ export class HomeworkService {
         })
         failed += 1
         completed += 1
+        failures.push({
+          questionId: question.id,
+          ...(question.number ? { number: question.number } : {}),
+          reason: message,
+        })
       }
       report()
     }
-    return { generated, failed, skipped, paused: false, remainingIds: [] }
+    return { generated, failed, skipped, paused: false, remainingIds: [], failures }
   }
 
   /**
@@ -1682,31 +1806,40 @@ export class HomeworkService {
     offset = 0,
   ): Promise<{ failed: number; paused: boolean }> {
     const total = offset + ids.length
-    const queue = [...ids]
     let completed = offset
     let failed = 0
     let interrupted = 0
     let fatal: HomeworkErrorKind | undefined
 
-    const worker = async (): Promise<void> => {
-      while (queue.length > 0 && !fatal && control.shouldContinue()) {
-        const id = queue.shift()!
+    // 同时进行的 AI 请求数 questions at once (halved on a rate limit).
+    const outcomes = await createAdaptivePool({ max: aiConcurrency(this.ai), control }).run(
+      ids,
+      async (id, ctx): Promise<boolean> => {
+        if (fatal) {
+          ctx.halt()
+          return false
+        }
         const result = await this.startGenerate(id, control.signal)
         // Stopped mid-request: the question stays pending, nothing is failed.
         if (result.interrupted) {
           interrupted += 1
-          continue
+          return true
         }
         if (result.question?.generationStatus === 'failed') failed += 1
-        if (result.kind && isAccountFatalError(result.kind)) fatal = result.kind
+        if (result.kind && isAccountFatalError(result.kind)) {
+          fatal = result.kind
+          ctx.halt()
+        }
         completed += 1
         await this.setProgress(setId, { stage: 'generating', completed, total })
-      }
-    }
-
-    await Promise.all(
-      Array.from({ length: Math.max(1, Math.min(CONTENT_CONCURRENCY, total)) }, () => worker()),
+        return true
+      },
     )
+    // Never started: paused, or stopped by a fatal error.
+    const queue = ids.filter((_, index) => {
+      const outcome = outcomes[index]!
+      return outcome.status === 'skipped' || (outcome.status === 'fulfilled' && !outcome.value)
+    })
 
     if (fatal) {
       const message =
@@ -1765,12 +1898,8 @@ export class HomeworkService {
         language: 'mixed',
       }) + (reminder ? `\n\n${reminder}` : '')
 
-    const inputCharsFor = (batch: readonly DocumentChunk[], reminder?: string): number =>
-      system.length + buildUser(batch, reminder).length
-
     const runBatch = async (
       batch: readonly DocumentChunk[],
-      budget: number,
       reminder?: string,
     ): Promise<{ raw: number; normalized: NormalizedQuestion[] }> => {
       const messages: ChatMessage[] = [
@@ -1778,7 +1907,6 @@ export class HomeworkService {
         { role: 'user', content: buildUser(batch, reminder) },
       ]
       const { data } = await ai.streamJSON<unknown>(messages, undefined, {
-        maxTokens: budget,
         signal: control.signal,
       })
       return {
@@ -1788,43 +1916,30 @@ export class HomeworkService {
     }
 
     /**
-     * Send one request with a budget derived from its own input. Reacts to the
+     * Send one request (at the output cap, AIService). Reacts to the
      * provider's real error instead of one blanket retry:
-     *  - a rejected output cap is retried once with a smaller budget,
-     *  - a truncation is retried once with a larger budget (up to the ceiling),
+     *  - a truncation is never retried as is (it was cut off at the cap): the
+     *    caller halves the batch,
      *  - transient failures (rate limit / timeout / unavailable) are retried
      *    with a short backoff, never in an unbounded loop.
      */
     const runBatchResilient = async (
       batch: readonly DocumentChunk[],
+      requestControl: GenerationControl,
       reminder?: string,
     ): Promise<{ raw: number; normalized: NormalizedQuestion[] }> => {
-      let budget = planAnalyzerOutputBudget(inputCharsFor(batch, reminder), ai.maxOutputTokens)
       let retries = 0
       for (;;) {
         try {
-          return await runBatch(batch, budget, reminder)
+          return await runBatch(batch, reminder)
         } catch (err) {
           if (isAbortError(err, control.signal)) throw err
           if (retries >= MAX_REQUEST_RETRIES) throw err
           const kind = classifyHomeworkError(err)
-          if (kind === 'output-limit') {
-            const halved = Math.max(1, Math.floor(Math.min(budget, ai.maxOutputTokens) / 2))
-            budget = Math.max(halved, Math.min(MIN_OUTPUT_TOKENS, ai.maxOutputTokens))
-            retries += 1
-            continue
-          }
-          if (kind === 'truncated') {
-            const ceiling = Math.min(ANALYZER_OUTPUT_CEILING, ai.maxOutputTokens)
-            const next = Math.min(ceiling, budget * 2)
-            if (next <= budget) throw err
-            budget = next
-            retries += 1
-            continue
-          }
           if (isRetryableHomeworkError(kind)) {
             retries += 1
-            await delay(RETRY_BASE_DELAY_MS * retries)
+            // A rate limit also slows the other batches down (the pool halves).
+            await delay(retryDelay(requestControl, err, RETRY_BASE_DELAY_MS * retries))
             continue
           }
           throw err
@@ -1832,46 +1947,50 @@ export class HomeworkService {
       }
     }
 
-    const collected: NormalizedQuestion[] = []
     let invalidSourceRanges = 0
     let failedRanges = 0
     let firstError: unknown
 
-    const processBatch = async (batch: readonly DocumentChunk[], depth: number): Promise<void> => {
+    /** One batch's questions (halves of it, in order, when it had to be split). */
+    const processBatch = async (
+      batch: readonly DocumentChunk[],
+      depth: number,
+      requestControl: GenerationControl,
+    ): Promise<NormalizedQuestion[]> => {
       // A batch a paused run already read (this page visit) costs nothing.
       const key = recognizedBatchKey(document.id, batch)
       const known = recognizedBatches.get(key)
       if (known) {
-        collected.push(...known.normalized)
         if (known.invalid) invalidSourceRanges += 1
         state.completed += 1
         await emit()
-        return
+        return known.normalized
       }
       if (!control.shouldContinue()) {
         paused = true
-        return
+        return []
       }
+      let read: NormalizedQuestion[] = []
       try {
-        let result = await runBatchResilient(batch)
+        let result = await runBatchResilient(batch, requestControl)
         let invalid = false
         if (result.raw > 0 && result.normalized.length === 0) {
           // The model proposed questions but the source ids did not match any
           // real chunk. Try once more with an explicit reminder; still invalid
           // ids are never guessed into the database.
-          result = await runBatchResilient(batch, ANALYZER_CORRECTION_REMINDER)
+          result = await runBatchResilient(batch, requestControl, ANALYZER_CORRECTION_REMINDER)
           if (result.raw > 0 && result.normalized.length === 0) {
             invalidSourceRanges += 1
             invalid = true
           }
         }
-        collected.push(...result.normalized)
+        read = result.normalized
         recognizedBatches.set(key, { normalized: result.normalized, invalid })
       } catch (err) {
         // Stopped by the student: not a failed range, and nothing to report.
         if (isAbortError(err, control.signal)) {
           paused = true
-          return
+          return []
         }
         const kind = classifyHomeworkError(err)
         // No credit / rejected key: stop the whole run so we stop hammering.
@@ -1886,20 +2005,39 @@ export class HomeworkService {
           // further, so it falls through to a reported unread range.
           const mid = Math.ceil(batch.length / 2)
           state.total += 1
-          await processBatch(batch.slice(0, mid), depth + 1)
-          await processBatch(batch.slice(mid), depth + 1)
-          return
+          const head = await processBatch(batch.slice(0, mid), depth + 1, requestControl)
+          const tail = await processBatch(batch.slice(mid), depth + 1, requestControl)
+          return [...head, ...tail]
         }
         failedRanges += 1
         if (firstError === undefined) firstError = err
       }
       state.completed += 1
       await emit()
+      return read
     }
 
     await emit()
-    for (const batch of batches) {
-      await processBatch(batch, 0)
+    // 同时进行的 AI 请求数 batches at once; the questions are collected in
+    // document order whatever order the batches finish in.
+    const outcomes = await createAdaptivePool({
+      max: aiConcurrency(ai),
+      control,
+      maxOverloadRetries: 0,
+    }).run(batches, async (batch, ctx) => {
+      try {
+        return await processBatch(batch, 0, ctx.control)
+      } catch (err) {
+        // No credit / rejected key: no further batch is sent.
+        ctx.halt()
+        throw err
+      }
+    })
+    const collected: NormalizedQuestion[] = []
+    for (const outcome of outcomes) {
+      if (outcome.status === 'rejected') throw outcome.reason
+      if (outcome.status === 'fulfilled') collected.push(...outcome.value)
+      else paused = true
     }
 
     if (droppedChunks > 0) failedRanges += 1
@@ -2196,7 +2334,6 @@ export class HomeworkService {
             currentLanguage(),
             subject,
             'combined',
-            splitHomeworkSubparts(question.prompt).length >= 2 ? 1 : 6,
             undefined,
             signal,
           ),
@@ -2278,7 +2415,7 @@ export class HomeworkService {
         generationStatus: 'failed',
         generationError: friendlyAIError(err),
       })
-      return { question: updated, kind: classifyHomeworkError(err) }
+      return { question: updated, kind: classifyHomeworkError(err), error: err }
     }
   }
 
@@ -2297,10 +2434,13 @@ export class HomeworkService {
     if (signal?.aborted) return { question, interrupted: true }
     const answer = (question.answerText ?? '').trim()
     if (!answer) return { question }
-    if (isDeferredProfessorAnswer(answer)) {
+    const deferral = professorAnswerDeferral(answer)
+    if (deferral === 'full') {
       // The numbered entry is a deliberate exercise, not an official worked
       // answer. Do not ask the model to invent a professor-grounded solution
       // from flattened diagram labels and then wait for a doomed timeout.
+      // (A partly deferred answer — "I leave the first part to you" — is
+      // generated: the worked parts follow the professor, the rest is ours.)
       const updated = await this.homework.updateQuestion(questionId, {
         generationStatus: 'failed',
         generationError: t('homework.answer.deferredAnswer'),
@@ -2311,56 +2451,31 @@ export class HomeworkService {
       generationStatus: 'pending',
       generationError: undefined,
     })
-    const controller = new AbortController()
-    const deadline = setTimeout(() => controller.abort(), ANSWER_GENERATION_DEADLINE_MS)
-    // The deadline and the student's stop both cancel the request.
-    const linked = linkSignals(controller.signal, signal)
     try {
       const ai = this.requireAI()
       const sourceText = await this.promptSource(question)
       const subject = await loadProjectSubjectContext(question.projectId, this.db)
-      let content: { hints: string[]; solution: string }
-      try {
-        content = normalizeQuestionContent(
-          await requestHomeworkQuestionJSON(
-            ai,
-            question.prompt,
-            sourceText,
-            currentLanguage(),
-            subject,
-            'combined',
-            2,
-            answer,
-            linked.signal,
-          ),
-        )
-      } catch (err) {
-        if (signal?.aborted) throw err
-        const kind = classifyHomeworkError(err)
-        if (
-          kind !== 'truncated' &&
-          kind !== 'output-limit' &&
-          kind !== 'invalid-response' &&
-          !(err instanceof AppError && err.code === 'INVALID_RESPONSE')
-        )
-          throw err
-        // Smaller one-field responses are more reliable when a model cannot
-        // finish the combined hints + worked solution. Commit only when both
-        // stages succeed; previous help and student work stay untouched.
-        content = await prepareHomeworkQuestionInStages(
-          ai,
-          question.prompt,
+      // 小题 ⇄ 教授答案对应 (cached; without it the prompt is the one without a map).
+      const mapped = await new ProfessorAnswerMapService({ ai, db: this.db }).ensure(question, {
+        ...(signal ? { signal } : {}),
+      })
+      const professorMap = professorMapPromptEntries(mapped)
+      const content = await prepareAnswerGroundedContent(
+        ai,
+        {
+          question: question.prompt,
           sourceText,
-          currentLanguage(),
+          language: currentLanguage(),
           subject,
-          answer,
-          linked.signal,
-        )
-      }
+          professorAnswer: cleanProfessorAnswerText(answer),
+          partiallyDeferred: deferral === 'partial',
+          ...(professorMap ? { professorMap } : {}),
+        },
+        signal,
+      )
       const previousSolution =
         !question.answerBased && (question.solution ?? '').trim() ? question.solution : undefined
       if (signal?.aborted) throw new DOMException('Generation stopped', 'AbortError')
-      if (controller.signal.aborted) throw new AITimeoutError(ANSWER_GENERATION_DEADLINE_MS)
       const updated = await this.homework.applyAnswerBasedContent(
         questionId,
         content.hints,
@@ -2380,17 +2495,17 @@ export class HomeworkService {
         })
         return { question: restored, interrupted: true }
       }
-      const failure = controller.signal.aborted
-        ? new AITimeoutError(ANSWER_GENERATION_DEADLINE_MS)
-        : err
+      // The stored reason is specific (truncated / timed out / which sub-part
+      // / what was missing), so the dialog can say why and offer a retry.
       const updated = await this.homework.updateQuestion(questionId, {
         generationStatus: 'failed',
-        generationError: friendlyAIError(failure),
+        generationError: describeAnswerFailure(err),
       })
-      return { question: updated, kind: classifyHomeworkError(failure) }
-    } finally {
-      clearTimeout(deadline)
-      linked.dispose()
+      return {
+        question: updated,
+        kind: classifyHomeworkError(rootAnswerError(err)),
+        error: rootAnswerError(err),
+      }
     }
   }
 
@@ -2517,9 +2632,10 @@ function currentLanguage(): 'zh' | 'en' {
   return getUILanguage() === 'zh-CN' ? 'zh' : 'en'
 }
 
-/** Increase the output room only when the model actually stops early. A model
- * that rejects a larger max_tokens gets a shorter prompt at a smaller budget.
- * Each (budget, compactness) pair is tried once, with a hard request limit. */
+/** One help request, sent at the output cap (AIService). A reply cut off there
+ * is never asked again as is (nor in a compact rewrite): the caller goes
+ * straight to its structural fallback (per sub-part, or hints and solution in
+ * separate stages). */
 async function requestHomeworkQuestionJSON(
   ai: AIService,
   question: string,
@@ -2527,78 +2643,43 @@ async function requestHomeworkQuestionJSON(
   language: 'zh' | 'en',
   subject: SubjectInput,
   mode: HomeworkQuestionMode,
-  maxAttempts = 6,
   professorAnswer?: string,
   signal?: AbortSignal,
+  answerOptions: {
+    part?: { label: string; text: string }
+    partiallyDeferred?: boolean
+    /** The checked 小题 ⇄ 教授答案 map. */
+    professorMap?: PromptMapEntry[]
+  } = {},
 ): Promise<unknown> {
   const hasProfessorAnswer = Boolean(professorAnswer?.trim())
   const userPrompt = prompts.homeworkQuestion.buildUserPrompt({
     question,
     sourceText,
     language,
-    ...(hasProfessorAnswer ? { professorAnswer } : {}),
-  })
-  const initialSystem = prompts.subjectProfile.withSubject(
-    prompts.homeworkQuestion.buildSystemPrompt(mode, false, hasProfessorAnswer),
-    subject,
-  )
-  const userCap =
-    Number.isFinite(ai.maxOutputTokens) && ai.maxOutputTokens > 0 ? ai.maxOutputTokens : 4_096
-  let budget = planQuestionOutputBudget(
-    initialSystem.length + userPrompt.length,
-    ai.maxOutputTokens,
-  )
-  let compact = false
-  const attempted = new Set<string>()
-  let lastError: unknown
-  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
-    const key = `${budget}:${compact}`
-    if (attempted.has(key)) break
-    attempted.add(key)
-    const messages: ChatMessage[] = [
-      {
-        role: 'system',
-        content: prompts.subjectProfile.withSubject(
-          prompts.homeworkQuestion.buildSystemPrompt(mode, compact, hasProfessorAnswer),
-          subject,
-        ),
-      },
-      { role: 'user', content: userPrompt },
-    ]
-    try {
-      // Streaming uses an idle timeout, so a long but active solution can finish.
-      const { data } = await ai.streamJSON<unknown>(messages, undefined, {
-        maxTokens: budget,
-        ...(signal ? { signal } : {}),
-      })
-      return data
-    } catch (err) {
-      lastError = err
-      if (isAbortError(err, signal)) throw err
-      const kind = classifyHomeworkError(err)
-      if (kind === 'output-limit') {
-        const smaller = Math.max(Math.min(MIN_OUTPUT_TOKENS, userCap), Math.floor(budget / 2))
-        if (smaller === budget) throw err
-        budget = smaller
-        compact = true
-      } else if (kind === 'truncated') {
-        if (!compact && budget >= 8_192) {
-          compact = true
-        } else if (budget < userCap) {
-          budget = Math.min(userCap, Math.max(budget + MIN_OUTPUT_TOKENS, budget * 2))
-        } else if (!compact) {
-          compact = true
-        } else {
-          throw err
+    ...(hasProfessorAnswer
+      ? {
+          professorAnswer,
+          ...(answerOptions.part ? { part: answerOptions.part } : {}),
+          ...(answerOptions.partiallyDeferred ? { partiallyDeferred: true } : {}),
+          ...(answerOptions.professorMap ? { professorMap: answerOptions.professorMap } : {}),
         }
-      } else {
-        throw err
-      }
-      if (attempt === maxAttempts - 1) throw err
-    }
-  }
-  // The last retry could only revisit a rejected budget/format pair.
-  throw lastError ?? new AppError(t('homework.contentIncomplete'), 'INVALID_RESPONSE')
+      : {}),
+  })
+  const hasMap = hasProfessorAnswer && Boolean(answerOptions.professorMap?.length)
+  const messages: ChatMessage[] = [
+    {
+      role: 'system',
+      content: prompts.subjectProfile.withSubject(
+        prompts.homeworkQuestion.buildSystemPrompt(mode, false, hasProfessorAnswer, hasMap),
+        subject,
+      ),
+    },
+    { role: 'user', content: userPrompt },
+  ]
+  // Streaming uses an idle timeout, so a long but active solution can finish.
+  const { data } = await ai.streamJSON<unknown>(messages, undefined, signal ? { signal } : {})
+  return data
 }
 
 async function prepareHomeworkQuestion(
@@ -2618,7 +2699,6 @@ async function prepareHomeworkQuestion(
         language,
         subject,
         'combined',
-        6,
         undefined,
         signal,
       ),
@@ -2654,7 +2734,6 @@ async function prepareHomeworkQuestionInStages(
       language,
       subject,
       'hints',
-      professorAnswer ? 3 : 6,
       professorAnswer,
       signal,
     ),
@@ -2672,7 +2751,6 @@ async function prepareHomeworkQuestionInStages(
       language,
       subject,
       'solution',
-      professorAnswer ? 3 : 6,
       professorAnswer,
       signal,
     ),
@@ -2680,6 +2758,132 @@ async function prepareHomeworkQuestionInStages(
   const solution = asTrimmedString(solutionData?.solution)
   if (!solution) throw new AppError(t('homework.contentIncomplete'), 'INVALID_RESPONSE')
   return { hints, solution }
+}
+
+interface AnswerGroundedInput {
+  question: string
+  sourceText: string
+  language: 'zh' | 'en'
+  subject: SubjectInput
+  /** Cleaned of extraction artifacts (`cleanProfessorAnswerText`). */
+  professorAnswer: string
+  /** Some sub-parts are left to the student. */
+  partiallyDeferred: boolean
+  /** The checked 小题 ⇄ 教授答案 map (whole question, also sent with each sub-part). */
+  professorMap?: PromptMapEntry[]
+}
+
+/** Failures a smaller request (per sub-part / per stage) can get past. */
+function answerFailureCanSplit(err: unknown): boolean {
+  const kind = classifyHomeworkError(err)
+  return (
+    kind === 'truncated' ||
+    kind === 'output-limit' ||
+    kind === 'invalid-response' ||
+    // Our own deadline: a long reply still being written. (A provider's idle
+    // timeout is a stalled connection; asking again in pieces only waits more.)
+    err instanceof AnswerDeadlineError ||
+    (err instanceof AppError && err.code === 'INVALID_RESPONSE')
+  )
+}
+
+/**
+ * Hints + worked solution grounded in a professor answer.
+ *
+ * The whole question is asked first. When that reply cannot be completed
+ * (truncated at the output cap, rejected budget, unusable JSON, or the
+ * request group's deadline), a question with sub-parts is written one
+ * sub-part per request — each with the whole question and the whole
+ * professor answer as context, so a sub-part answered inside another one's
+ * solution is still found — and combined locally; a question without
+ * sub-parts is prepared in two stages (hints, then solution). Nothing is
+ * committed unless every piece succeeds. Each request group has its own
+ * deadline; the student's stop always wins.
+ */
+async function prepareAnswerGroundedContent(
+  ai: AIService,
+  input: AnswerGroundedInput,
+  signal?: AbortSignal,
+): Promise<{ hints: string[]; solution: string }> {
+  const parts = answerSubparts(input.question)
+  const request = (
+    mode: HomeworkQuestionMode,
+    part?: { label: string; text: string },
+  ): Promise<unknown> =>
+    withAnswerDeadline(signal, (linked) =>
+      requestHomeworkQuestionJSON(
+        ai,
+        input.question,
+        input.sourceText,
+        input.language,
+        input.subject,
+        mode,
+        input.professorAnswer,
+        linked,
+        {
+          ...(part ? { part } : {}),
+          ...(input.partiallyDeferred ? { partiallyDeferred: true } : {}),
+          ...(input.professorMap ? { professorMap: input.professorMap } : {}),
+        },
+      ),
+    )
+  const inStages = async (part?: { label: string; text: string }) => {
+    const hints = asStringArray(asRecord(await request('hints', part))?.hints)
+      .map((hint) => hint.trim())
+      .filter(Boolean)
+      .slice(0, HOMEWORK_MAX_HINTS)
+    if (hints.length === 0)
+      throw new AppError(t('homework.contentMissingHints'), 'INVALID_RESPONSE')
+    const solution = asTrimmedString(asRecord(await request('solution', part))?.solution)
+    if (!solution) throw new AppError(t('homework.contentMissingSolution'), 'INVALID_RESPONSE')
+    return { hints, solution }
+  }
+  const whole = async (part?: { label: string; text: string }) => {
+    try {
+      return normalizeQuestionContent(await request('combined', part))
+    } catch (err) {
+      if (isAbortError(err, signal) || !answerFailureCanSplit(err)) throw err
+      // Smaller one-field responses are more reliable when a model cannot
+      // finish the combined hints + worked solution.
+      return inStages(part)
+    }
+  }
+  try {
+    return normalizeQuestionContent(await request('combined'))
+  } catch (err) {
+    if (isAbortError(err, signal) || !answerFailureCanSplit(err)) throw err
+    if (parts.length < 2) return inStages()
+    const results: Array<{ label: string; hints: string[]; solution: string }> = []
+    for (const part of parts) {
+      if (signal?.aborted) throw new DOMException('Generation stopped', 'AbortError')
+      try {
+        results.push({ label: part.label, ...(await whole(part)) })
+      } catch (partErr) {
+        if (isAbortError(partErr, signal)) throw partErr
+        throw new AnswerPartError(part.label, partErr)
+      }
+    }
+    return combinePartContent(results)
+  }
+}
+
+/** Per-sub-part hints and solutions as one question's help (≤4 hint levels). */
+function combinePartContent(
+  results: ReadonlyArray<{ label: string; hints: string[]; solution: string }>,
+): { hints: string[]; solution: string } {
+  const tag = (label: string) => (/^\d+$/.test(label) ? `${label}.` : `(${label})`)
+  const hintGroups: string[][] = Array.from({ length: HOMEWORK_MAX_HINTS }, () => [])
+  results.forEach((result, index) => {
+    hintGroups[
+      Math.min(HOMEWORK_MAX_HINTS - 1, Math.floor((index * HOMEWORK_MAX_HINTS) / results.length))
+    ]!.push(`${tag(result.label)} ${result.hints[0]}`)
+  })
+  return {
+    hints: hintGroups.filter((group) => group.length > 0).map((group) => group.join('\n')),
+    solution: results
+      .map((result) => `### ${tag(result.label)}\n\n${result.solution}`)
+      .join('\n\n'),
+  }
 }
 
 function delay(ms: number): Promise<void> {
@@ -2864,8 +3068,11 @@ export function normalizeQuestionContent(raw: unknown): { hints: string[]; solut
     .filter(Boolean)
     .slice(0, HOMEWORK_MAX_HINTS)
   const solution = asTrimmedString(record?.solution)
-  if (hints.length === 0 || !solution) {
+  if (hints.length === 0 && !solution) {
     throw new AppError(t('homework.contentIncomplete'), 'INVALID_RESPONSE')
   }
+  // Say which half was missing, so the failure is specific.
+  if (hints.length === 0) throw new AppError(t('homework.contentMissingHints'), 'INVALID_RESPONSE')
+  if (!solution) throw new AppError(t('homework.contentMissingSolution'), 'INVALID_RESPONSE')
   return { hints, solution }
 }

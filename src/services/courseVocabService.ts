@@ -11,7 +11,8 @@ import { prompts } from '@/infrastructure/ai/prompts'
 import { logger } from '@/infrastructure/logger/logger'
 import { AppError } from '@/infrastructure/errors/AppError'
 import { AIProviderError, type AIErrorCode } from '@/infrastructure/ai/errors'
-import { withLightModel, type AIService } from './aiService'
+import { aiConcurrency, withLightModel, type AIService } from './aiService'
+import { createAdaptivePool, isOverloadError } from '@/shared/lib/concurrency'
 import type { ProjectService } from './projectService'
 import { loadProjectSubject } from './projectSubject'
 import { projectTargetLanguage } from './projectTargetLanguage'
@@ -241,72 +242,94 @@ export class CourseVocabService {
     let glossed = 0
     let error: unknown
     const missing = entries.filter((entry) => entry.meanings.length === 0)
-    if (!this.ai || missing.length === 0) return { glossed, dropped, paused: false }
+    const ai = this.ai
+    if (!ai || missing.length === 0) return { glossed, dropped, paused: false }
     const total = Math.ceil(missing.length / GLOSS_BATCH)
     let done = 0
     onProgress?.({ done, total })
-    for (let i = 0; i < missing.length; i += GLOSS_BATCH) {
-      // Paused or stopped: the batches already glossed are saved.
-      if (!control.shouldContinue()) return { glossed, dropped, paused: true }
-      const batch = missing.slice(i, i + GLOSS_BATCH)
-      try {
-        const { data } = await withLightModel(this.ai).chatJSON<unknown>(
-          [
-            {
-              role: 'system',
-              content: prompts.vocabGloss.buildSystemPrompt(
-                language ? { targetLanguage: language } : {},
-              ),
-            },
-            {
-              role: 'user',
-              content: prompts.vocabGloss.buildUserPrompt({
-                ...(subject ? { subject } : {}),
-                ...(language ? { targetLanguage: language } : {}),
-                terms: batch.map((entry) => ({
-                  word: entry.word,
-                  sentence: entry.context?.text ?? '',
-                })),
-              }),
-            },
-          ],
-          { maxTokens: 2048, signal: control.signal },
-        )
-        const glosses = prompts.vocabGloss.readGlosses(
-          data,
-          batch.map((entry) => entry.word),
-        )
-        const changed: VocabEntry[] = []
-        const removed: string[] = []
-        for (const entry of batch) {
-          const gloss = glosses.get(entry.word)
-          if (gloss === null) {
-            dropped.add(entry.id)
-            removed.push(entry.id)
-          } else if (gloss) {
-            entry.meanings = [gloss.meaning]
-            if (gloss.phonetic && !entry.phonetic) entry.phonetic = gloss.phonetic
-            entry.glossBy = 'ai'
-            glossed++
-            changed.push(entry)
+    const batches: VocabEntry[][] = []
+    for (let i = 0; i < missing.length; i += GLOSS_BATCH)
+      batches.push(missing.slice(i, i + GLOSS_BATCH))
+    let paused = false
+    let halted = false
+    // 同时进行的 AI 请求数 batches at once (halved on a rate limit, which is
+    // tried again after a back-off).
+    const outcomes = await createAdaptivePool({ max: aiConcurrency(ai), control }).run(
+      batches,
+      async (batch, ctx): Promise<void> => {
+        try {
+          const { data } = await withLightModel(ai).chatJSON<unknown>(
+            [
+              {
+                role: 'system',
+                content: prompts.vocabGloss.buildSystemPrompt(
+                  language ? { targetLanguage: language } : {},
+                ),
+              },
+              {
+                role: 'user',
+                content: prompts.vocabGloss.buildUserPrompt({
+                  ...(subject ? { subject } : {}),
+                  ...(language ? { targetLanguage: language } : {}),
+                  terms: batch.map((entry) => ({
+                    word: entry.word,
+                    sentence: entry.context?.text ?? '',
+                  })),
+                }),
+              },
+            ],
+            { signal: control.signal, reasoning: 'low' },
+          )
+          const glosses = prompts.vocabGloss.readGlosses(
+            data,
+            batch.map((entry) => entry.word),
+          )
+          const changed: VocabEntry[] = []
+          const removed: string[] = []
+          for (const entry of batch) {
+            const gloss = glosses.get(entry.word)
+            if (gloss === null) {
+              dropped.add(entry.id)
+              removed.push(entry.id)
+            } else if (gloss) {
+              entry.meanings = [gloss.meaning]
+              if (gloss.phonetic && !entry.phonetic) entry.phonetic = gloss.phonetic
+              entry.glossBy = 'ai'
+              glossed++
+              changed.push(entry)
+            }
+          }
+          // Saved per batch: a later pause or stop keeps it.
+          if (changed.length > 0) await this.repo.putEntries(changed)
+          for (const id of removed) await this.repo.deleteEntry(id)
+        } catch (err) {
+          // A stopped request is an interruption, not a failure.
+          if (isAbortError(err, control.signal)) {
+            paused = true
+            return
+          }
+          // A rate limit: the pool slows down and sends this batch again.
+          if (isOverloadError(err)) throw err
+          // The words stay, without a meaning; the next extraction tries again.
+          logger.warn('Course vocabulary gloss failed', { error: (err as Error)?.message })
+          error ??= err
+          // A bad key, an empty balance or a wrong model fails every batch the
+          // same way: stop instead of sending the rest.
+          if (err instanceof AIProviderError && ACCOUNT_ERRORS.has(err.code)) {
+            halted = true
+            ctx.halt()
           }
         }
-        // Saved per batch: a later pause or stop keeps it.
-        if (changed.length > 0) await this.repo.putEntries(changed)
-        for (const id of removed) await this.repo.deleteEntry(id)
-      } catch (err) {
-        // A stopped request is an interruption, not a failure.
-        if (isAbortError(err, control.signal)) return { glossed, dropped, paused: true }
-        // The words stay, without a meaning; the next extraction tries again.
-        logger.warn('Course vocabulary gloss failed', { error: (err as Error)?.message })
-        error ??= err
-        // A bad key, an empty balance or a wrong model fails every batch the
-        // same way: stop instead of sending the rest.
-        if (err instanceof AIProviderError && ACCOUNT_ERRORS.has(err.code)) break
-      }
-      done += 1
-      onProgress?.({ done, total })
+        done += 1
+        onProgress?.({ done, total })
+      },
+    )
+    for (const outcome of outcomes) {
+      if (outcome.status === 'rejected') error ??= outcome.reason
+      // Paused or stopped: the batches already glossed are saved.
+      else if (outcome.status === 'skipped' && !halted) paused = true
     }
+    if (paused) return { glossed, dropped, paused: true }
     return { glossed, dropped, paused: false, ...(error !== undefined ? { error } : {}) }
   }
 }

@@ -57,7 +57,13 @@ function stubAI(handler: Handler) {
   return {
     calls,
     ids: () => calls.map((call) => call.id),
-    ai: { streamJSON, chatJSON: streamJSON, maxOutputTokens: 8192 } as unknown as AIService,
+    // Two requests at once: these tests pin down pause / resume order.
+    ai: {
+      streamJSON,
+      chatJSON: streamJSON,
+      maxOutputTokens: 8192,
+      concurrency: 2,
+    } as unknown as AIService,
   }
 }
 
@@ -180,7 +186,7 @@ describe('homework-walkthrough/v2 prompts', () => {
     }
     expect(V2.buildFrameUserPrompt(frame)).toBe(V1.buildFrameUserPrompt(frame))
     expect(V2.buildFrameSystemPrompt()).toBe(V1.buildFrameSystemPrompt())
-    expect(prompts.homeworkWalkthrough.VERSION).toBe('v7')
+    expect(prompts.homeworkWalkthrough.VERSION).toBe('v9')
     expect(prompts.homeworkWalkthrough.CACHE_VERSION).toBe('v1')
 
     await setup('calculus', ['Differentiate x^2.'])
@@ -236,9 +242,11 @@ describe('splitting long multipart questions', () => {
     expect(await service(ai).resume(setId, { control: run })).toEqual({ generated: 3, failed: 0 })
     // Only the unfinished sub-parts, then the frame.
     expect(ids()).toEqual(['1b', '1c', 'frame', 'frame'])
-    // Later sub-parts see the earlier ones.
+    // Sub-parts after the first are written at the same time: each sees the
+    // first one, not its siblings.
+    expect(calls[0]!.user).toContain('ALREADY WRITTEN (a)')
     expect(calls[1]!.user).toContain('ALREADY WRITTEN (a)')
-    expect(calls[1]!.user).toContain('ALREADY WRITTEN (b)')
+    expect(calls[1]!.user).not.toContain('ALREADY WRITTEN (b)')
     const done = (await section('q:q1')).section!
     expect(done.status).toBe('ready')
     expect(done.draft).toBeUndefined()

@@ -12,6 +12,7 @@ import { securityFooter, untrustedContentWrapper } from '../security'
 import {
   languageRule,
   NOTATION_RULES,
+  readRawLinearSystem,
   type RawLinearSystem,
   type WalkthroughPromptLanguage,
 } from '../homework-walkthrough/v1'
@@ -138,17 +139,8 @@ function readLinearSystems(value: unknown): RawLinearSystem[] {
   if (!Array.isArray(value)) return []
   const systems: RawLinearSystem[] = []
   for (const item of value.slice(0, 12)) {
-    if (!item || typeof item !== 'object') continue
-    const system = item as Record<string, unknown>
-    const solution = system.solution
-    systems.push({
-      label: text(system.label, 40) || `#${systems.length + 1}`,
-      augmented: system.augmented,
-      rref: system.rref,
-      ...(solution === 'none' || solution === 'unique' || solution === 'infinite'
-        ? { solution }
-        : {}),
-    })
+    const system = readRawLinearSystem(item, systems.length)
+    if (system) systems.push(system)
   }
   return systems
 }

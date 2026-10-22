@@ -538,6 +538,8 @@ export const zhCN: Record<TranslationKey, string> = {
     'AI 提出了 {count} 组题目，但来源无法对应到文档内容，已全部不予保存——请重试，或改用更小的文件。',
   'homework.partialNote': '已识别 {recognized} 题，另有 {ranges} 个范围未能读取。可重试补齐。',
   'homework.contentIncomplete': 'AI 针对该题返回的内容不完整。',
+  'homework.contentMissingHints': 'AI 的回复缺少本题的提示。',
+  'homework.contentMissingSolution': 'AI 的回复缺少本题的解法。',
   'homework.emptyMessage': '请先输入你的问题。',
   'homework.emptyReply': 'AI 没有返回内容，请重试。',
   'homework.reanalysis.title': '重新识别完成',
@@ -601,6 +603,56 @@ export const zhCN: Record<TranslationKey, string> = {
     '教授将本题留给学生完成，没有提供解法，无法据此生成讲解。请对照原文件（包括图示）继续作答；已有草稿和对话会保留。',
   'homework.answer.deferredTitle': '教授未提供本题解法',
   'homework.answer.retryQuestion': '重试本题',
+  'homework.answer.failureListTitle': '失败原因',
+  'homework.answer.failureItem': '第 {number} 题：{reason}',
+  'homework.answer.partFailed': '第 {label} 小题：{reason}',
+  'homework.answer.deadline':
+    '讲解在 {minutes} 分钟内未完成，已停止。请重试本题；如果持续出现，可换用更快或支持更长输出的模型。',
+  'homework.answer.partialDeferred':
+    '教授把本题的一部分留给学生完成；这些部分由 AI 讲解，并标明不是教授的解答。',
+  'homework.answer.map.title': '小题对应',
+  'homework.answer.map.originAi': '已按内容对应（AI 判断，引文均已在答案中核对）',
+  'homework.answer.map.originLocal':
+    '按答案中的标号初步对应；生成讲解前会由 AI 按内容核对，也可点「按内容对应」。',
+  'homework.answer.map.toConfirm': '{count} 个小题请确认',
+  'homework.answer.map.confirmBadge': '请确认',
+  'homework.answer.map.edited': '你的选择',
+  'homework.answer.map.coverage.direct': '直接',
+  'homework.answer.map.coverage.indirect': '间接',
+  'homework.answer.map.coverage.none': '未给出',
+  'homework.answer.map.coverage.unlocated': '未定位',
+  'homework.answer.map.from.misplaced': '写在 {heading} 的解答下面',
+  'homework.answer.map.from.shared': '与 {labels} 合写',
+  'homework.answer.map.from.other': '来自 {where}',
+  'homework.answer.map.from.general': '来自总解答',
+  'homework.answer.map.from.method': '方法{n}',
+  'homework.answer.map.flag.misplaced': '教授把这一小题的解答写在了另一小题下面。',
+  'homework.answer.map.flag.shared': '教授把几个小题写在同一段解答里。',
+  'homework.answer.map.flag.indirect': '教授没有单独解这一小题，由其它小题的内容推出，请确认。',
+  'homework.answer.map.flag.reference': '这一小题的解答引用了另一小题。',
+  'homework.answer.map.flag.bad-reference':
+    '这一小题引用了题目中没有的小题（可能是笔误），请确认。',
+  'homework.answer.map.flag.deferred': '教授答案说明这一小题留给学生。',
+  'homework.answer.map.flag.corrected': '本地核对修正了 AI 的判断，请确认。',
+  'homework.answer.map.flag.quotes-dropped': 'AI 给出的部分引文在答案中找不到，已丢弃，请确认。',
+  'homework.answer.map.flag.unlocated': '答案中没有找到这一小题的标号，请确认它是否被写在别处。',
+  'homework.answer.map.flag.conflict': '答案中的标号与 AI 的判断不一致，请确认。',
+  'homework.answer.map.flag.several-ways': '教授给出了不止一种解法。',
+  'homework.answer.map.confirm': '确认',
+  'homework.answer.map.edit': '修改',
+  'homework.answer.map.reset': '恢复自动对应',
+  'homework.answer.map.remap': '按内容对应',
+  'homework.answer.map.remapping': '正在对应…',
+  'homework.answer.map.stop': '停止',
+  'homework.answer.map.pick': '选择覆盖这一小题的答案片段：',
+  'homework.answer.map.coverageLabel': '这一小题在教授答案中：',
+  'homework.answer.map.save': '保存',
+  'homework.answer.map.noSegments': '答案中没有可选的片段。',
+  'homework.answer.map.segment.general': '未标号 / 总解答',
+  'homework.answer.map.segment.restated': '（只是题目）',
+  'homework.answer.map.unavailable': '这道题没有已对上的教授答案或没有小题，无需对应。',
+  'homework.answer.map.needExcerpt': '请至少选择一个答案片段，或选「未给出」。',
+  'homework.answer.map.invalid': 'AI 的对应结果无法使用（小题或引文都对不上），请重试。',
   'homework.answer.replace': '替换答案文件',
   'homework.answer.unlink': '解除答案关联',
   'homework.answer.unlinkHint': '解除关联会清除答案对应，但保留文件与你的全部学习记录。',
@@ -770,6 +822,17 @@ export const zhCN: Record<TranslationKey, string> = {
   'homework.walkthrough.generate': '生成完整讲解',
   'homework.walkthrough.lastFailed': '上次生成没有成功，可以再试一次。',
   'homework.walkthrough.progress': '正在编写讲解（{done} / {total} 部分）…',
+  'homework.walkthrough.progressRunning': '正在编写 {running} 部分（已完成 {done} / {total}）',
+  'homework.walkthrough.progressRunningQuestions':
+    '正在编写 {running} 题（已完成 {done} / {total}）',
+  'homework.walkthrough.variantProgressRunning':
+    '正在生成 {running} 节详细版（已完成 {done} / {total}）',
+  'homework.walkthrough.compareProgressRunning':
+    '正在与教授答案对照 {running} 题（已完成 {done} / {total}）',
+  'homework.walkthrough.inFlight': '进行中：{list}',
+  'homework.walkthrough.inFlightSeparator': '、',
+  'homework.walkthrough.change.split': '，改为按小题分别生成',
+  'homework.walkthrough.change.wait': '，{seconds} 秒后重试',
   'homework.walkthrough.progressHint': '完成的部分会立刻显示并保存在本机，离开这个页面也不会丢失。',
   'homework.walkthrough.needsWork': '{count} 部分需要更新',
   'homework.walkthrough.update': '更新这些部分',
@@ -790,6 +853,14 @@ export const zhCN: Record<TranslationKey, string> = {
   'homework.translation.stop': '停止',
   'homework.translation.retry': '重新翻译',
   'homework.translation.invalid': 'AI 没有给出翻译。请点「重新翻译」，或在设置中换一个模型。',
+  'homework.translation.truncated':
+    '翻译这道题时回复被截断：已加倍输出空间重试（有小题时也已按小题分开翻译），仍未写完。请点「重新翻译」；如果反复出现，可在设置中换用支持更长输出的模型，或先看原文。',
+  'homework.translation.truncatedModel':
+    '翻译这道题时回复被截断：当前模型单次最多输出约 {limit} token，这道题的译文仍然太长（有小题时已按小题分开翻译）。可在设置中换用支持更长输出的模型，或先看原文。',
+  'homework.translation.truncatedSetting':
+    '翻译这道题时回复被截断：已达到设置中的单次输出上限（约 {limit} token），这道题的译文仍然太长。可在设置中调高最大 Token 数或选择「使用模型允许的最大值」，再点「重新翻译」。',
+  'homework.translation.truncatedUnknown':
+    '翻译这道题时回复被截断：当前模型的单次输出上限未知（已按约 {limit} token 请求），这道题的译文仍然太长（有小题时已按小题分开翻译）。可在设置中换用支持更长输出的模型，或先看原文。',
   'homework.translation.changed':
     '翻译改动了原题的公式、小题编号或数字（{items}），已舍弃。请点「重新翻译」；如果反复出现，可在设置中换一个模型。',
   'homework.walkthrough.showQuestion': '查看原题',
@@ -813,10 +884,14 @@ export const zhCN: Record<TranslationKey, string> = {
   'homework.walkthrough.checkRref':
     '{label}：讲解里的 RREF 与本地按增广矩阵重新计算的结果不一致，计算中可能有错误，请对照核对。',
   'homework.walkthrough.checkKind':
-    '{label}：讲解的结论是「{claimed}」，按本地计算应为「{computed}」。',
+    '{label}：按讲解给出的增广矩阵本地计算，该方程组应为「{computed}」，而讲解的结论是「{claimed}」。',
+  'homework.walkthrough.checkKindHomogeneous':
+    '{label}：按讲解给出的系数矩阵（齐次方程组 Ax = 0）本地计算，应为「{computed}」，而讲解的结论是「{claimed}」。',
+  'homework.walkthrough.checkMatrix': '本地核对所用的增广矩阵：',
+  'homework.walkthrough.checkMatrixHomogeneous': '本地核对所用的方程组（齐次，右端为 0）：',
   'homework.walkthrough.checkComputed': '本地计算的 RREF（{kind}）：',
   'homework.walkthrough.checkScope':
-    '核对的是讲解中写出的增广矩阵化到 RREF 的计算，不检查增广矩阵本身是否列对。',
+    '核对的是讲解中写出的矩阵化到 RREF 的计算与解的情况，不检查矩阵本身是否按题目列对；右端含字母的方程组不核对。',
   'homework.walkthrough.kind.none': '无解',
   'homework.walkthrough.kind.unique': '唯一解',
   'homework.walkthrough.kind.infinite': '无穷多解',
@@ -1904,6 +1979,10 @@ export const zhCN: Record<TranslationKey, string> = {
     '同一服务商（同一密钥与 Base URL）下更便宜的模型，只用于简单任务：单词释义、填空与简答题按得分点核对、题目翻译、考点匹配、提取得分点。讲解、课时、出题与课程分析始终使用上面的模型。',
   'settings.baseUrlHint':
     '必须以 http:// 或 https:// 开头。浏览器的 CORS 策略必须允许来自该域名的请求。',
+  'settings.region.label': '地区',
+  'settings.region.intl': '国际',
+  'settings.region.cn': '中国大陆',
+  'settings.region.hint': '两个地区的账号与 API Key 不通用。',
   'settings.models.fetch': '获取模型',
   'settings.models.fetching': '正在获取…',
   'settings.models.count': '服务商提供 {count} 个模型。可从列表选择，也可直接输入任意名称。',
@@ -1987,9 +2066,9 @@ export const zhCN: Record<TranslationKey, string> = {
   'settings.sampling.temperatureHint': '0 = 确定性输出，2 = 高度发散。学习内容建议 0.3–0.8。',
   'settings.sampling.maxTokens': '最大 Token 数',
   'settings.sampling.maxTokensHint':
-    '单次回复最多输出的 Token 数，范围 64 – 128000；已知模型上限时不会超过模型上限。',
+    '单次回复最多输出的 Token 数，范围 64 – 128000；已知模型上限时不会超过模型上限。每个请求都直接按这个上限发送（按实际生成计费，不会先小后大反复重试）；少数服务商把上限计入每分钟 token 限额，限流时会自动放慢。',
   'settings.sampling.maxTokensHintModel':
-    '按模型允许的最大值请求：优先读取模型列表里的输出上限，其次是官方文档写明的值；都不知道时使用上面的数字。始终会发送这个上限——不发送时部分服务商会改用很小的默认值（如 DeepSeek 为 4096），长讲解会被截断。',
+    '按模型允许的最大值请求：优先使用自动探测到的上限，其次是模型列表里的输出上限、官方文档写明的值；都不知道时先按较大的上限请求，服务商拒绝时自动改小并记住（不使用上面的数字）。始终会发送这个上限——不发送时部分服务商会改用很小的默认值（如 DeepSeek 为 4096），长讲解会被截断。少数服务商把上限计入每分钟 token 限额，限流时会自动放慢。',
   'settings.sampling.modeModel': '使用模型允许的最大值',
   'settings.sampling.modeManual': '手动设置',
   'settings.sampling.modelMaxKnown':
@@ -2000,6 +2079,12 @@ export const zhCN: Record<TranslationKey, string> = {
     '不知道当前模型的输出上限，请求上限：{tokens}（上面的数字）。',
   'settings.sampling.sourceMetadata': '来自模型列表',
   'settings.sampling.sourceTable': '来自官方文档',
+  'settings.sampling.sourceLearned': '自动探测',
+  'settings.sampling.modelMaxProbe':
+    '模型上限未知，将自动探测：先按 {tokens} token 请求，服务商拒绝时按其提示（或减半）改小并记住。',
+  'settings.sampling.concurrency': '同时进行的 AI 请求数',
+  'settings.sampling.concurrencyHint':
+    '完整讲解、作业识别、课程分析等多部分生成同时发出的请求数（1–8）。越大越快，但部分服务商会限流；遇到限流时自动减半并稍后重试，之后逐步恢复。',
   'settings.webImages.title': '联网参考图片',
   'settings.webImages.description':
     '化学、生物讲解可以显示来自 PubChem 和 Wikimedia Commons 的参考图片。默认关闭。',
@@ -2279,6 +2364,7 @@ export const zhCN: Record<TranslationKey, string> = {
   'errors.baseUrlInvalid': 'Base URL 必须以 http:// 或 https:// 开头',
   'errors.temperatureRange': '温度必须介于 0 到 2 之间',
   'errors.maxTokensRange': '最大 Token 数必须是 64 到 128000 之间的整数',
+  'errors.concurrencyRange': '同时进行的 AI 请求数必须是 {min} 到 {max} 之间的整数',
   'errors.failedToLoadProfile': '加载用户资料失败',
   'errors.failedToLoadProjects': '加载项目失败',
   'errors.failedToLoadProject': '加载项目失败',
@@ -2308,6 +2394,11 @@ export const zhCN: Record<TranslationKey, string> = {
   'errors.aiNetwork': '网络错误',
   'errors.aiOutputTruncated': 'AI 回复在达到 {limit} token 输出上限时被截断。',
   'errors.aiOutputTruncatedGeneric': 'AI 回复在完成前被截断。',
+  'errors.aiReasoningExhausted':
+    '模型把全部输出额度（约 {limit} token）都用在了思考上，没有余量写答案。请在设置中调大「最大 Token 数」或选择「使用模型允许的最大值」；也可以换用思考较少的模型（MiniMax 可选 MiniMax-M3，排版类任务会关闭思考）。',
+  'errors.aiInvalidParams':
+    'AI 服务商拒绝了请求参数（{detail}）。请检查模型名称是否适用于当前服务商与 Base URL，或在设置中换一个模型。',
+  'errors.aiProviderCode': 'AI 服务商返回错误码 {code}',
   'errors.aiNoTranslation': 'AI 没有返回翻译结果。',
   'errors.aiNoAnswer': 'AI 没有返回回答。',
   'errors.aiNoQuestion': 'AI 没有返回可用的题目。',
@@ -2439,6 +2530,8 @@ export const zhCN: Record<TranslationKey, string> = {
     '当前模型单次最多输出约 {limit} token，这一部分仍然太长。可换用支持更长输出的模型后重试。',
   'friendlyError.outputTruncatedSettingMax':
     '已达到设置中的单次输出上限（约 {limit} token），这一部分仍然太长。可在设置中调高最大 Token 数或选择「使用模型允许的最大值」，或换用支持更长输出的模型。',
+  'friendlyError.outputTruncatedUnknownMax':
+    '当前模型的单次输出上限未知（服务商未提供），已按约 {limit} token 请求，这一部分仍然太长。可换用支持更长输出的模型后重试。',
   'friendlyError.outputTruncated':
     '模型尚未完成回复就停止了。请重试本题；如果持续出现，可换用支持更长输出的模型。',
   'homework.originalPages': '原文页面与图示',
@@ -3288,6 +3381,8 @@ export const zhCN: Record<TranslationKey, string> = {
   'walkthroughImport.retry': '继续导入',
   'walkthroughImport.errors.partTooLongModel':
     '导入的讲解第 {part} / {total} 部分太长：当前模型单次最多输出约 {limit} token，拆成小段后仍放不下。可换用支持更长输出的模型，再点「继续导入」（已读完的部分会保留）。',
+  'walkthroughImport.errors.partTooLongUnknown':
+    '导入的讲解第 {part} / {total} 部分太长：当前模型的单次输出上限未知（服务商未提供），按约 {limit} token 请求仍放不下。可换用支持更长输出的模型，再点「继续导入」（已读完的部分会保留）。',
   'walkthroughImport.errors.partTooLongSetting':
     '导入的讲解第 {part} / {total} 部分太长：已达到设置中的单次输出上限（约 {limit} token）。可在设置中调高最大 Token 数或选择「使用模型允许的最大值」，再点「继续导入」（已读完的部分会保留）。',
   'walkthroughImport.errors.partTruncated':
@@ -3295,6 +3390,24 @@ export const zhCN: Record<TranslationKey, string> = {
   'walkthroughImport.errors.partFailed':
     '读取导入的讲解第 {part} / {total} 部分失败：{reason} 点「继续导入」从这一部分接着读，已读完的部分会保留。',
   'walkthroughImport.errors.confirm': '请先确认替换已有的节。',
+  'walkthroughImport.template.title': '用模板让其它 AI 写讲解',
+  'walkthroughImport.template.hint':
+    '把模板和作业（可附教授答案）一起发给任意 AI，生成后保存为 .md 导入——按模板导入不需要 AI 排版。',
+  'walkthroughImport.template.copy': '复制模板',
+  'walkthroughImport.template.download': '下载模板 .md',
+  'walkthroughImport.template.copied': '模板已复制',
+  'walkthroughImport.template.copyFallback': '无法写入剪贴板，请在下方文本框中全选复制',
+  'walkthroughImport.template.manual': '讲解模板（全选后复制）',
+  'walkthroughImport.template.detected': '按模板导入，无需 AI 排版。',
+  'walkthroughImport.template.problems': '有 {count} 道题没有按模板读出：',
+  'walkthroughImport.template.reason.empty': '第 {label} 题：没有写讲解',
+  'walkthroughImport.template.reason.unstructured': '第 {label} 题：找不到「讲解」等部分的标记',
+  'walkthroughImport.template.reason.no-id': '第 {label} 题：题目标记缺少 id',
+  'walkthroughImport.template.reason.unknown-id': '{label}：题号不在本作业中，已舍弃',
+  'walkthroughImport.template.reason.invalid-check':
+    '第 {label} 题：线性方程组核对的数据读不出，已导入但未做本地核对',
+  'walkthroughImport.template.rest': '用 AI 整理剩下的',
+  'walkthroughImport.template.restHint': '只把读不出的题目发给 AI，其余按模板导入。',
   'usage.readout.toggle': '在侧栏 / 顶栏显示用量与余额',
   'usage.readout.toggleHint': '默认关闭。关闭时不会为它查询余额；用量仍会统计，并在这里显示。',
   'settings.noteMark.title': '问答标记样式',
@@ -3304,9 +3417,21 @@ export const zhCN: Record<TranslationKey, string> = {
   'settings.noteMark.link': '链接样式',
   'settings.noteMark.linkHint': '强调色文字 + 下划线',
   'settings.noteMark.highlighter': '荧光笔样式',
-  'settings.noteMark.highlighterHint': '半透明底色，像荧光笔划过',
+  'settings.noteMark.highlighterHint': '彩色底色，像荧光笔划过，不加下划线',
   'settings.noteMark.previewSaved': '已保存的问答',
   'settings.noteMark.previewUnsaved': '未保存的问答',
+  'settings.noteMark.colorLabel': '荧光笔颜色',
+  'settings.noteMark.color.yellow': '黄',
+  'settings.noteMark.color.green': '绿',
+  'settings.noteMark.color.pink': '粉',
+  'settings.noteMark.color.blue': '蓝',
+  'settings.noteMark.color.orange': '橙',
+  'settings.noteMark.color.purple': '紫',
+  'settings.noteMark.color.theme': '跟随主题色',
+  'settings.noteMark.previewLabel': '预览',
+  'settings.noteMark.previewLead': '在完整讲解中，',
+  'settings.noteMark.previewJoin': '是这样标记的，',
+  'settings.noteMark.previewEnd': '是这样的。',
   'materialType.syllabusHint':
     '课程手册、教学大纲或考试题目清单。系统会从中读出考点放进「考点清单」，但它不作为课程内容使用（请另外上传教材、图谱或讲课幻灯片）。',
   'projectDetail.tab.exams': '考点清单',

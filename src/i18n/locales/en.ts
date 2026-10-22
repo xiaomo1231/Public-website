@@ -578,6 +578,8 @@ export const en = {
   'homework.partialNote':
     'Recognized {recognized} question(s); {ranges} range(s) could not be read. Retry to finish those.',
   'homework.contentIncomplete': 'The AI returned incomplete help for this question.',
+  'homework.contentMissingHints': 'The AI reply had no hints for this question.',
+  'homework.contentMissingSolution': 'The AI reply had no worked solution for this question.',
   'homework.emptyMessage': 'Type your question first.',
   'homework.emptyReply': 'The AI returned an empty reply. Please try again.',
   'homework.reanalysis.title': 'Re-analysis complete',
@@ -651,6 +653,64 @@ export const en = {
     'The professor leaves this problem to the student and provides no worked answer, so an answer-based explanation cannot be generated. Continue with the original file, including any diagram; your draft and conversation are preserved.',
   'homework.answer.deferredTitle': 'No professor solution for this question',
   'homework.answer.retryQuestion': 'Retry this question',
+  'homework.answer.failureListTitle': 'Why these questions failed',
+  'homework.answer.failureItem': 'Question {number}: {reason}',
+  'homework.answer.partFailed': 'Part {label}: {reason}',
+  'homework.answer.deadline':
+    'The explanation was not finished within {minutes} minutes and was stopped. Retry this question; if it keeps happening, try a faster model or one that supports longer output.',
+  'homework.answer.partialDeferred':
+    'The professor leaves part of this problem to the student; those parts are explained by the AI and marked as not from the professor.',
+  'homework.answer.map.title': 'Sub-part mapping',
+  'homework.answer.map.originAi':
+    'Mapped by content (AI; every excerpt checked against the answer)',
+  'homework.answer.map.originLocal':
+    'Preliminary mapping from the answer’s own labels; the AI checks it by content before writing, or click “Map by content”.',
+  'homework.answer.map.toConfirm': '{count} sub-parts to confirm',
+  'homework.answer.map.confirmBadge': 'Please confirm',
+  'homework.answer.map.edited': 'Your choice',
+  'homework.answer.map.coverage.direct': 'Direct',
+  'homework.answer.map.coverage.indirect': 'Indirect',
+  'homework.answer.map.coverage.none': 'Not given',
+  'homework.answer.map.coverage.unlocated': 'Not located',
+  'homework.answer.map.from.misplaced': 'written under {heading}',
+  'homework.answer.map.from.shared': 'answered together with {labels}',
+  'homework.answer.map.from.other': 'from {where}',
+  'homework.answer.map.from.general': 'from the general solution',
+  'homework.answer.map.from.method': 'method {n}',
+  'homework.answer.map.flag.misplaced':
+    'The professor wrote this sub-part’s solution under another sub-part.',
+  'homework.answer.map.flag.shared': 'The professor answered several sub-parts in one block.',
+  'homework.answer.map.flag.indirect':
+    'Not solved on its own; it follows from another sub-part’s work. Please confirm.',
+  'homework.answer.map.flag.reference': 'This sub-part’s answer refers to another sub-part.',
+  'homework.answer.map.flag.bad-reference':
+    'This sub-part refers to a part the question does not have (likely a typo). Please confirm.',
+  'homework.answer.map.flag.deferred': 'The professor leaves this sub-part to the student.',
+  'homework.answer.map.flag.corrected': 'The local check changed the AI’s reading. Please confirm.',
+  'homework.answer.map.flag.quotes-dropped':
+    'Some AI excerpts were not found in the answer and were dropped. Please confirm.',
+  'homework.answer.map.flag.unlocated':
+    'No label for this sub-part was found in the answer. Please check whether it is written elsewhere.',
+  'homework.answer.map.flag.conflict':
+    'The answer’s labels and the AI’s reading disagree. Please confirm.',
+  'homework.answer.map.flag.several-ways': 'The professor gives more than one way.',
+  'homework.answer.map.confirm': 'Confirm',
+  'homework.answer.map.edit': 'Change',
+  'homework.answer.map.reset': 'Back to automatic',
+  'homework.answer.map.remap': 'Map by content',
+  'homework.answer.map.remapping': 'Mapping…',
+  'homework.answer.map.stop': 'Stop',
+  'homework.answer.map.pick': 'Pick the answer excerpts that cover this sub-part:',
+  'homework.answer.map.coverageLabel': 'In the professor answer this sub-part is:',
+  'homework.answer.map.save': 'Save',
+  'homework.answer.map.noSegments': 'No excerpts to choose from.',
+  'homework.answer.map.segment.general': 'Unlabelled / general solution',
+  'homework.answer.map.segment.restated': '(question only)',
+  'homework.answer.map.unavailable':
+    'This question has no matched professor answer or no sub-parts, so there is nothing to map.',
+  'homework.answer.map.needExcerpt': 'Pick at least one excerpt, or choose “Not given”.',
+  'homework.answer.map.invalid':
+    'The AI’s mapping could not be used (neither sub-parts nor excerpts matched). Please retry.',
   'homework.answer.replace': 'Replace answer file',
   'homework.answer.unlink': 'Unlink answer file',
   'homework.answer.unlinkHint':
@@ -845,6 +905,17 @@ export const en = {
   'homework.walkthrough.generate': 'Write the walkthrough',
   'homework.walkthrough.lastFailed': 'The last attempt did not succeed; you can try again.',
   'homework.walkthrough.progress': 'Writing the walkthrough ({done} / {total} parts)…',
+  'homework.walkthrough.progressRunning': 'Writing {running} parts ({done} / {total} done)',
+  'homework.walkthrough.progressRunningQuestions':
+    'Writing {running} questions ({done} / {total} done)',
+  'homework.walkthrough.variantProgressRunning':
+    'Writing {running} detailed versions ({done} / {total} done)',
+  'homework.walkthrough.compareProgressRunning':
+    'Comparing {running} questions with professor answers ({done} / {total} done)',
+  'homework.walkthrough.inFlight': 'In progress: {list}',
+  'homework.walkthrough.inFlightSeparator': ', ',
+  'homework.walkthrough.change.split': '; now written sub-part by sub-part',
+  'homework.walkthrough.change.wait': '; retrying in {seconds} s',
   'homework.walkthrough.progressHint':
     'Finished parts appear right away and are saved on this device, even if you leave this page.',
   'homework.walkthrough.needsWork': '{count} parts need updating',
@@ -867,6 +938,14 @@ export const en = {
   'homework.translation.retry': 'Translate again',
   'homework.translation.invalid':
     'The AI returned no translation. Press “Translate again”, or choose another model in Settings.',
+  'homework.translation.truncated':
+    'The reply was cut off while translating this question, even after a retry with twice the room (and part by part when it has sub-parts). Press “Translate again”; if it keeps happening, choose a model with longer output in Settings, or read the original for now.',
+  'homework.translation.truncatedModel':
+    'The reply was cut off while translating this question: the current model writes at most about {limit} tokens per reply, and the translation was still too long (split by sub-part where possible). Choose a model with longer output in Settings, or read the original for now.',
+  'homework.translation.truncatedSetting':
+    'The reply was cut off while translating this question at the output limit in Settings (about {limit} tokens). Raise “Max tokens” or choose “Use the model’s maximum” in Settings, then press “Translate again”.',
+  'homework.translation.truncatedUnknown':
+    'The reply was cut off while translating this question: the model’s output limit is unknown (tried about {limit} tokens), and the translation was still too long (split by sub-part where possible). Choose a model with longer output in Settings, or read the original for now.',
   'homework.translation.changed':
     'The translation changed a formula, sub-part label or number of the question ({items}), so it was discarded. Press “Translate again”; if it keeps happening, choose another model in Settings.',
   'homework.walkthrough.showQuestion': 'Show the question',
@@ -892,10 +971,15 @@ export const en = {
   'homework.walkthrough.checkRref':
     '{label}: the RREF in the walkthrough differs from the one recomputed locally from its augmented matrix. There may be an arithmetic slip; please compare.',
   'homework.walkthrough.checkKind':
-    '{label}: the walkthrough says "{claimed}", but the local computation gives "{computed}".',
+    '{label}: computed locally from the augmented matrix in the walkthrough, the system has {computed}, but the walkthrough says "{claimed}".',
+  'homework.walkthrough.checkKindHomogeneous':
+    '{label}: computed locally from the coefficient matrix in the walkthrough (the homogeneous system Ax = 0), it has {computed}, but the walkthrough says "{claimed}".',
+  'homework.walkthrough.checkMatrix': 'Augmented matrix used for the local check:',
+  'homework.walkthrough.checkMatrixHomogeneous':
+    'System used for the local check (homogeneous, right-hand side 0):',
   'homework.walkthrough.checkComputed': 'RREF computed locally ({kind}):',
   'homework.walkthrough.checkScope':
-    'This checks the reduction from the augmented matrix written in the walkthrough to its RREF, not whether that augmented matrix was set up correctly.',
+    'This checks the reduction from the matrix written in the walkthrough to its RREF and the kind of solution, not whether that matrix was set up correctly from the question; systems with a symbolic right-hand side are not checked.',
   'homework.walkthrough.kind.none': 'no solution',
   'homework.walkthrough.kind.unique': 'a unique solution',
   'homework.walkthrough.kind.infinite': 'infinitely many solutions',
@@ -2069,6 +2153,10 @@ export const en = {
     'A cheaper model of the same provider (same key and base URL), used only for simple tasks: word meanings, checking fill-in blanks and short answers against their scoring points, translating a question, matching exam topics and extracting scoring points. Walkthroughs, lessons, quizzes and analysis always use the model above.',
   'settings.baseUrlHint':
     'Must start with http:// or https://. Browser CORS must permit requests from this domain.',
+  'settings.region.label': 'Region',
+  'settings.region.intl': 'International',
+  'settings.region.cn': 'Mainland China',
+  'settings.region.hint': 'Accounts and API keys of the two regions are separate.',
   'settings.models.fetch': 'Fetch models',
   'settings.models.fetching': 'Fetching…',
   'settings.models.count': '{count} models from the provider. Pick one or type any name.',
@@ -2158,9 +2246,9 @@ export const en = {
     '0 = deterministic, 2 = highly creative. Recommended 0.3–0.8 for study content.',
   'settings.sampling.maxTokens': 'Max tokens',
   'settings.sampling.maxTokensHint':
-    'Maximum tokens per response, 64 – 128000; never above the model’s own limit when it is known.',
+    'Maximum tokens per response, 64 – 128000; never above the model’s own limit when it is known. Every request is sent with this whole limit (billing follows what is generated; no small first try and larger retries). A few providers count it against a per-minute token limit; the app then slows down automatically.',
   'settings.sampling.maxTokensHintModel':
-    'Requests use the model’s own output limit: from the model list when the provider states it, else from the official docs; when neither is known, the number above. A limit is always sent — without one some providers fall back to a small default (DeepSeek: 4096) and long walkthroughs get cut off.',
+    'Requests use the model’s own output limit: an auto-detected one first, then the model list when the provider states it, then the official docs; when none is known, requests start with a generous limit and lower it automatically (and remember it) if the provider refuses — the number above is not used. A limit is always sent — without one some providers fall back to a small default (DeepSeek: 4096) and long walkthroughs get cut off. A few providers count it against a per-minute token limit; the app then slows down automatically.',
   'settings.sampling.modeModel': 'Use the model’s maximum',
   'settings.sampling.modeManual': 'Set manually',
   'settings.sampling.modelMaxKnown':
@@ -2171,6 +2259,12 @@ export const en = {
     'This model’s output limit is unknown. Request limit: {tokens} (the number above).',
   'settings.sampling.sourceMetadata': 'from the model list',
   'settings.sampling.sourceTable': 'from the official docs',
+  'settings.sampling.sourceLearned': 'auto-detected',
+  'settings.sampling.modelMaxProbe':
+    'This model’s limit is unknown and will be detected automatically: requests start at {tokens} tokens; if the provider refuses, the limit it states (or half) is used and remembered.',
+  'settings.sampling.concurrency': 'Simultaneous AI requests',
+  'settings.sampling.concurrencyHint':
+    'How many requests multi-part generations (walkthroughs, homework recognition, course analysis…) send at once (1–8). Higher is faster, but some providers rate-limit; on a rate limit it halves automatically, retries a little later and recovers step by step.',
   'settings.webImages.title': 'Web reference images',
   'settings.webImages.description':
     'Chemistry and biology lessons can show reference pictures from PubChem and Wikimedia Commons. Off by default.',
@@ -2464,6 +2558,7 @@ export const en = {
   'errors.baseUrlInvalid': 'Base URL must start with http:// or https://',
   'errors.temperatureRange': 'Temperature must be between 0 and 2',
   'errors.maxTokensRange': 'Max tokens must be an integer between 64 and 128000',
+  'errors.concurrencyRange': 'Simultaneous AI requests must be a whole number from {min} to {max}',
   'errors.failedToLoadProfile': 'Failed to load profile',
   'errors.failedToLoadProjects': 'Failed to load projects',
   'errors.failedToLoadProject': 'Failed to load project',
@@ -2493,6 +2588,11 @@ export const en = {
   'errors.aiNetwork': 'Network error',
   'errors.aiOutputTruncated': 'The AI response was cut off at the {limit}-token output limit.',
   'errors.aiOutputTruncatedGeneric': 'The AI response was cut off before it finished.',
+  'errors.aiReasoningExhausted':
+    'The model spent its whole output budget (about {limit} tokens) thinking and had no room left for the answer. In Settings, raise “Max tokens” or choose “Use the model’s maximum”; or use a model that thinks less (for MiniMax: MiniMax-M3, which turns thinking off for formatting tasks).',
+  'errors.aiInvalidParams':
+    'The AI provider rejected the request parameters ({detail}). Check that the model name is right for this provider and base URL, or pick another model in Settings.',
+  'errors.aiProviderCode': 'The AI provider returned error code {code}',
   'errors.aiNoTranslation': 'The AI did not return a translation.',
   'errors.aiNoAnswer': 'The AI did not return an answer.',
   'errors.aiNoQuestion': 'The AI did not return a usable question.',
@@ -2640,6 +2740,8 @@ export const en = {
     'This model returns at most about {limit} tokens per reply, and this part is still too long. Try a model that supports longer output.',
   'friendlyError.outputTruncatedSettingMax':
     'The reply reached your output limit (about {limit} tokens) and this part is still too long. Raise Max tokens in Settings or choose “Use the model’s maximum”, or try a model with longer output.',
+  'friendlyError.outputTruncatedUnknownMax':
+    'This model’s output limit is unknown (the provider does not state it); the request allowed about {limit} tokens and this part is still too long. Try a model that supports longer output.',
   'friendlyError.outputTruncated':
     'The model stopped before finishing its reply. Retry this question; if it keeps happening, try a model with a larger output window.',
   'homework.originalPages': 'Original PDF pages and diagrams',
@@ -3539,6 +3641,8 @@ export const en = {
   'walkthroughImport.retry': 'Continue import',
   'walkthroughImport.errors.partTooLongModel':
     'Part {part} of {total} of the imported walkthrough is too long: this model writes at most about {limit} tokens per reply, even in smaller pieces. Choose a model with longer output, then press “Continue import” (parts already read are kept).',
+  'walkthroughImport.errors.partTooLongUnknown':
+    'Part {part} of {total} of the imported walkthrough is too long: this model’s output limit is unknown (the provider does not state it), and about {limit} tokens per reply were not enough. Choose a model with longer output, then press “Continue import” (parts already read are kept).',
   'walkthroughImport.errors.partTooLongSetting':
     'Part {part} of {total} of the imported walkthrough is too long for the output limit in Settings (about {limit} tokens). Raise “Max tokens” or choose “Use the model’s maximum”, then press “Continue import” (parts already read are kept).',
   'walkthroughImport.errors.partTruncated':
@@ -3546,6 +3650,29 @@ export const en = {
   'walkthroughImport.errors.partFailed':
     'Reading part {part} of {total} of the imported walkthrough failed: {reason} Press “Continue import” to carry on from this part; parts already read are kept.',
   'walkthroughImport.errors.confirm': 'Confirm replacing the existing sections first.',
+  'walkthroughImport.template.title': 'Have another AI write it from a template',
+  'walkthroughImport.template.hint':
+    'Send the template with the homework (and the professor’s answer if you like) to any AI, save the result as .md and import it — a template import needs no AI re-typesetting.',
+  'walkthroughImport.template.copy': 'Copy template',
+  'walkthroughImport.template.download': 'Download template .md',
+  'walkthroughImport.template.copied': 'Template copied',
+  'walkthroughImport.template.copyFallback':
+    'Could not write to the clipboard — select all in the box below and copy',
+  'walkthroughImport.template.manual': 'Walkthrough template (select all and copy)',
+  'walkthroughImport.template.detected':
+    'Imported from the template — no AI re-typesetting needed.',
+  'walkthroughImport.template.problems': '{count} question(s) could not be read from the template:',
+  'walkthroughImport.template.reason.empty': 'Question {label}: no walkthrough written',
+  'walkthroughImport.template.reason.unstructured':
+    'Question {label}: the markers of its parts (walkthrough, conclusion…) are missing',
+  'walkthroughImport.template.reason.no-id': 'Question {label}: the question marker has no id',
+  'walkthroughImport.template.reason.unknown-id':
+    '{label}: not a question of this assignment, dropped',
+  'walkthroughImport.template.reason.invalid-check':
+    'Question {label}: the linear system check could not be read; imported without the local check',
+  'walkthroughImport.template.rest': 'Let the AI tidy the rest',
+  'walkthroughImport.template.restHint':
+    'Only the questions that could not be read are sent to the AI; the rest is imported from the template.',
   'usage.readout.toggle': 'Show usage and balance in the sidebar / header',
   'usage.readout.toggleHint':
     'Off by default. When off, no balance is requested for it; usage is still counted and shown here.',
@@ -3556,9 +3683,21 @@ export const en = {
   'settings.noteMark.link': 'Link',
   'settings.noteMark.linkHint': 'Accent-coloured text with an underline',
   'settings.noteMark.highlighter': 'Highlighter',
-  'settings.noteMark.highlighterHint': 'A translucent background, like a highlighter pen',
+  'settings.noteMark.highlighterHint': 'A coloured background like a highlighter pen, no underline',
   'settings.noteMark.previewSaved': 'a saved question',
   'settings.noteMark.previewUnsaved': 'an unsaved one',
+  'settings.noteMark.colorLabel': 'Highlighter colour',
+  'settings.noteMark.color.yellow': 'Yellow',
+  'settings.noteMark.color.green': 'Green',
+  'settings.noteMark.color.pink': 'Pink',
+  'settings.noteMark.color.blue': 'Blue',
+  'settings.noteMark.color.orange': 'Orange',
+  'settings.noteMark.color.purple': 'Purple',
+  'settings.noteMark.color.theme': 'Theme colour',
+  'settings.noteMark.previewLabel': 'Preview',
+  'settings.noteMark.previewLead': 'In the walkthrough, ',
+  'settings.noteMark.previewJoin': ' looks like this, and ',
+  'settings.noteMark.previewEnd': ' like this.',
   'materialType.syllabusHint':
     'The course handbook, syllabus or list of exam topics. Its exam topics are read into the exam-topic list; it is not used as course content (upload the textbook, atlas or lecture slides for that).',
   'projectDetail.tab.exams': 'Exam topics',

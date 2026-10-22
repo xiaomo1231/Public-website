@@ -52,7 +52,13 @@ function stubAI(handler: Handler) {
   })
   return {
     calls,
-    ai: { streamJSON, chatJSON: streamJSON, maxOutputTokens: 8192 } as unknown as AIService,
+    // Two requests at once: these tests pin down pause / resume order.
+    ai: {
+      streamJSON,
+      chatJSON: streamJSON,
+      maxOutputTokens: 8192,
+      concurrency: 2,
+    } as unknown as AIService,
   }
 }
 

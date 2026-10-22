@@ -704,14 +704,17 @@
  * unsaved conversation tucked into the text (lighter). Colours come from the
  * theme tokens, so they follow the palette and the mode.
  *
+ * Each style uses one channel only: the link style never fills the background
+ * (so it never reads as a highlighter) and the highlighter style never draws a
+ * line (no underline on saved or unsaved marks, even where the two overlap).
+ *
  * Link style (the default): accent-coloured text with an underline. The text
  * uses `--primary-strong`, the text-safe accent (≥3.5:1 on the page in every
  * style × mode × palette, see tests/themeContrast.test.ts); the underline means
- * the mark never relies on colour alone.
+ * the mark never relies on colour alone. Saved = solid, unsaved = dashed.
  */
 :root:not([data-note-mark='highlighter']) ::highlight(walkthrough-note) {
   color: hsl(var(--primary-strong));
-  background-color: hsl(var(--primary) / 0.08);
   text-decoration: underline;
   text-decoration-color: hsl(var(--primary-strong));
   text-decoration-thickness: 2px;
@@ -725,26 +728,121 @@
   text-decoration-thickness: 1.5px;
 }
 
-/* Highlighter style: a translucent background, the text keeps its colour. */
+/*
+ * Highlighter colours (`<html data-note-color>`, user-selectable). Each block
+ * sets the fill hue (`--note-hl`, an HSL triplet) and the fill opacity for a
+ * saved (`--note-hl-saved-a`) and an unsaved (`--note-hl-unsaved-a`) mark.
+ * Light mode uses bright fills; dark mode uses darker, saturated fills (no
+ * pastel glare). Body text keeps ≥4.5:1 on every fill in every style × mode
+ * (tests/themeContrast.test.ts). The attribute also works on any element, so
+ * the settings swatches preview each colour. `theme` follows the accent.
+ */
+:root:not([data-note-color]),
+[data-note-color='yellow'] {
+  --note-hl: 52 100% 50%;
+  --note-hl-saved-a: 0.6;
+  --note-hl-unsaved-a: 0.3;
+}
+
+[data-note-color='green'] {
+  --note-hl: 125 65% 50%;
+  --note-hl-saved-a: 0.45;
+  --note-hl-unsaved-a: 0.22;
+}
+
+[data-note-color='pink'] {
+  --note-hl: 330 95% 65%;
+  --note-hl-saved-a: 0.45;
+  --note-hl-unsaved-a: 0.22;
+}
+
+[data-note-color='blue'] {
+  --note-hl: 205 95% 55%;
+  --note-hl-saved-a: 0.42;
+  --note-hl-unsaved-a: 0.2;
+}
+
+[data-note-color='orange'] {
+  --note-hl: 30 100% 55%;
+  --note-hl-saved-a: 0.5;
+  --note-hl-unsaved-a: 0.25;
+}
+
+[data-note-color='purple'] {
+  --note-hl: 270 85% 65%;
+  --note-hl-saved-a: 0.42;
+  --note-hl-unsaved-a: 0.2;
+}
+
+[data-note-color='theme'] {
+  --note-hl: var(--primary);
+  --note-hl-saved-a: 0.32;
+  --note-hl-unsaved-a: 0.16;
+}
+
+.dark:not([data-note-color]),
+.dark[data-note-color='yellow'],
+.dark [data-note-color='yellow'] {
+  --note-hl: 48 95% 33%;
+  --note-hl-saved-a: 0.6;
+  --note-hl-unsaved-a: 0.32;
+}
+
+.dark[data-note-color='green'],
+.dark [data-note-color='green'] {
+  --note-hl: 140 65% 30%;
+  --note-hl-saved-a: 0.6;
+  --note-hl-unsaved-a: 0.32;
+}
+
+.dark[data-note-color='pink'],
+.dark [data-note-color='pink'] {
+  --note-hl: 330 70% 40%;
+  --note-hl-saved-a: 0.6;
+  --note-hl-unsaved-a: 0.32;
+}
+
+.dark[data-note-color='blue'],
+.dark [data-note-color='blue'] {
+  --note-hl: 212 80% 42%;
+  --note-hl-saved-a: 0.6;
+  --note-hl-unsaved-a: 0.32;
+}
+
+.dark[data-note-color='orange'],
+.dark [data-note-color='orange'] {
+  --note-hl: 24 90% 40%;
+  --note-hl-saved-a: 0.6;
+  --note-hl-unsaved-a: 0.32;
+}
+
+.dark[data-note-color='purple'],
+.dark [data-note-color='purple'] {
+  --note-hl: 270 60% 48%;
+  --note-hl-saved-a: 0.6;
+  --note-hl-unsaved-a: 0.32;
+}
+
+/* Dark-mode accents are light tints, so the theme fill stays thinner. */
+.dark[data-note-color='theme'],
+.dark [data-note-color='theme'] {
+  --note-hl: var(--primary);
+  --note-hl-saved-a: 0.3;
+  --note-hl-unsaved-a: 0.15;
+}
+
+/*
+ * Highlighter style: a fill only, the text keeps its colour and no line is
+ * drawn. Saved marks get the strong fill, unsaved (tucked) ones the light fill.
+ */
 :root[data-note-mark='highlighter'] ::highlight(walkthrough-note) {
-  background-color: hsl(var(--primary) / 0.28);
+  background-color: hsl(var(--note-hl) / var(--note-hl-saved-a));
+  text-decoration: none;
 }
 
-/* A faint fill plus a dashed rule: a tucked conversation never looks like a saved note. */
 :root[data-note-mark='highlighter'] ::highlight(walkthrough-link) {
-  background-color: hsl(var(--primary) / 0.06);
-  text-decoration: underline dashed;
-  text-decoration-color: hsl(var(--primary));
-  text-decoration-thickness: 1.5px;
-}
-
-/* On dark pages a translucent accent needs a little more weight to show. */
-:root.dark[data-note-mark='highlighter'] ::highlight(walkthrough-note) {
-  background-color: hsl(var(--primary) / 0.36);
-}
-
-:root.dark[data-note-mark='highlighter'] ::highlight(walkthrough-link) {
-  background-color: hsl(var(--primary) / 0.1);
+  background-color: hsl(var(--note-hl) / var(--note-hl-unsaved-a));
+  text-decoration: none;
 }
 
 ::highlight(walkthrough-flash) {

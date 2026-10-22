@@ -4,15 +4,23 @@ import { AIProviderError } from '@/infrastructure/ai/errors'
  * Classify a homework AI failure into the action it actually needs.
  *
  * The analyzer and per-question generation must react differently to the same
- * thrown error: a context overflow means "split the batch", a rejected output
- * cap means "retry with a smaller budget", a truncation means "retry with a
- * larger budget", while a rate limit is retried once and an exhausted account
+ * thrown error: a context overflow means "split the batch", a truncation
+ * (always at the output cap: every request is sent with the whole cap) means
+ * "split into smaller requests" where the task can be split, a rejected
+ * output cap is answered inside `AIService` (it probes and remembers the
+ * model's limit), while a rate limit is retried once and an exhausted account
  * stops all further requests.
  */
 export type HomeworkErrorKind =
   | 'context-too-long'
   | 'output-limit'
   | 'truncated'
+  /**
+   * The model's thinking used up the output budget. Never split into smaller
+   * requests (each would think as much); the request already had the whole
+   * output cap, so the message tells the student what to change.
+   */
+  | 'reasoning-exhausted'
   | 'quota'
   | 'rate-limited'
   | 'timeout'
@@ -32,6 +40,8 @@ export function classifyHomeworkError(err: unknown): HomeworkErrorKind {
         return 'output-limit'
       case 'OUTPUT_TRUNCATED':
         return 'truncated'
+      case 'REASONING_EXHAUSTED':
+        return 'reasoning-exhausted'
       case 'QUOTA_EXCEEDED':
         return 'quota'
       case 'RATE_LIMITED':

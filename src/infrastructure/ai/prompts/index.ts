@@ -17,13 +17,14 @@ import * as MistakeAnalyzerV2 from './mistake-analyzer/v2'
 import * as QuizGeneratorV9 from './quiz-generator/v9'
 import * as VisualizationGeneratorV10 from './visualization-generator/v10'
 import * as HomeworkAnalyzerV2 from './homework-analyzer/v2'
-import * as HomeworkQuestionV3 from './homework-question/v3'
+import * as HomeworkQuestionV5 from './homework-question/v5'
 import * as HomeworkQaV1 from './homework-qa/v1'
 import * as HomeworkReviewV1 from './homework-review/v1'
-import * as HomeworkWalkthroughV7 from './homework-walkthrough/v7'
+import * as HomeworkWalkthroughV9 from './homework-walkthrough/v9'
 import * as HomeworkAnswerCheckV1 from './homework-answer-check/v1'
-import * as WalkthroughImportV1 from './walkthrough-import/v1'
-import * as WalkthroughCompareV1 from './walkthrough-compare/v1'
+import * as WalkthroughImportV2 from './walkthrough-import/v2'
+import * as WalkthroughCompareV2 from './walkthrough-compare/v2'
+import * as ProfessorAnswerMapV1 from './professor-answer-map/v1'
 import * as SlideLessonV1 from './slide-lesson/v1'
 import * as SubjectProfileV1 from './subject-profile/v1'
 import * as ShortAnswerCheckV1 from './short-answer-check/v1'
@@ -44,7 +45,7 @@ import * as PracticeGenerateV3 from './practice-generate/v3'
 import * as PracticeReviewV1 from './practice-review/v1'
 import * as GuidedStepsV1 from './guided-steps/v1'
 import * as QuestionStyleV2 from './question-style/v2'
-import * as QuestionTranslateV1 from './question-translate/v1'
+import * as QuestionTranslateV2 from './question-translate/v2'
 
 export const PROMPT_VERSIONS = {
   documentAnalyzer: 'v3',
@@ -60,13 +61,14 @@ export const PROMPT_VERSIONS = {
   quizGenerator: 'v9',
   visualizationGenerator: 'v10',
   homeworkAnalyzer: 'v2',
-  homeworkQuestion: 'v3',
+  homeworkQuestion: 'v5',
   homeworkQa: 'v1',
   homeworkReview: 'v1',
-  homeworkWalkthrough: 'v7',
+  homeworkWalkthrough: 'v9',
   homeworkAnswerCheck: 'v1',
-  walkthroughImport: 'v1',
-  walkthroughCompare: 'v1',
+  walkthroughImport: 'v2',
+  walkthroughCompare: 'v2',
+  professorAnswerMap: 'v1',
   slideLesson: 'v1',
   subjectProfile: 'v1',
   shortAnswerCheck: 'v1',
@@ -87,7 +89,7 @@ export const PROMPT_VERSIONS = {
   practiceReview: 'v1',
   guidedSteps: 'v1',
   questionStyle: 'v2',
-  questionTranslate: 'v1',
+  questionTranslate: 'v2',
 } as const
 
 export const prompts = {
@@ -104,13 +106,14 @@ export const prompts = {
   quizGenerator: QuizGeneratorV9,
   visualizationGenerator: VisualizationGeneratorV10,
   homeworkAnalyzer: HomeworkAnalyzerV2,
-  homeworkQuestion: HomeworkQuestionV3,
+  homeworkQuestion: HomeworkQuestionV5,
   homeworkQa: HomeworkQaV1,
   homeworkReview: HomeworkReviewV1,
-  homeworkWalkthrough: HomeworkWalkthroughV7,
+  homeworkWalkthrough: HomeworkWalkthroughV9,
   homeworkAnswerCheck: HomeworkAnswerCheckV1,
-  walkthroughImport: WalkthroughImportV1,
-  walkthroughCompare: WalkthroughCompareV1,
+  walkthroughImport: WalkthroughImportV2,
+  walkthroughCompare: WalkthroughCompareV2,
+  professorAnswerMap: ProfessorAnswerMapV1,
   slideLesson: SlideLessonV1,
   /** Appended to other prompts; see `withSubject` / `subjectPromptVersion`. */
   subjectProfile: SubjectProfileV1,
@@ -132,7 +135,7 @@ export const prompts = {
   practiceReview: PracticeReviewV1,
   guidedSteps: GuidedStepsV1,
   questionStyle: QuestionStyleV2,
-  questionTranslate: QuestionTranslateV1,
+  questionTranslate: QuestionTranslateV2,
 } as const
 
 export type { DocumentAnalyzerInput, DocumentAnalysisOutput } from './document-analyzer/v3'
@@ -152,6 +155,6 @@ export type {
 } from './quiz-generator/v9'
 export type { VisualizationInput, VisualizationOutput } from './visualization-generator/v10'
 export type { HomeworkAnalyzerInput, HomeworkAnalyzerOutput } from './homework-analyzer/v1'
-export type { HomeworkQuestionInput, HomeworkQuestionOutput } from './homework-question/v3'
+export type { HomeworkQuestionInput, HomeworkQuestionOutput } from './homework-question/v5'
 export type { HomeworkQaInput, HomeworkQaHistoryItem } from './homework-qa/v1'
 export type { SlideLessonInput, SlideLessonOutput } from './slide-lesson/v1'

@@ -27,9 +27,6 @@ export interface TutorVisualizationInput {
   signal?: AbortSignal
 }
 
-/** Graphs are small; a modest cap keeps the call cheap and bounded. */
-const MAX_VISUALIZATION_TOKENS = 2048
-
 export class TutorVisualizationService {
   private ai: AIService
 
@@ -60,16 +57,10 @@ export class TutorVisualizationService {
     ]
 
     try {
-      // Never ask for more tokens than the provider is configured to allow.
-      const configured = this.ai.maxOutputTokens
-      const maxTokens =
-        Number.isFinite(configured) && configured > 0
-          ? Math.min(MAX_VISUALIZATION_TOKENS, configured)
-          : MAX_VISUALIZATION_TOKENS
-      const { data } = await this.ai.chatJSON<VisualizationDraftOutput>(messages, {
-        maxTokens,
-        ...(input.signal ? { signal: input.signal } : {}),
-      })
+      const { data } = await this.ai.chatJSON<VisualizationDraftOutput>(
+        messages,
+        input.signal ? { signal: input.signal } : {},
+      )
       const { visualizations, rejected } = normalizeVisualizations(data)
       if (rejected.length > 0) {
         logger.debug('Tutor visualizations rejected during validation', {

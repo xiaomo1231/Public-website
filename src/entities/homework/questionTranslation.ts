@@ -112,3 +112,53 @@ export function checkTranslation(original: string, translation: string): Transla
     missingNumbers,
   }
 }
+
+/** One block of a question translated on its own; `separator` is the original whitespace after it. */
+export interface TranslationBlock {
+  text: string
+  separator: string
+}
+
+/** A line that starts with a sub-part label: (a), （b）, **(c)**, (iv). */
+const SUBPART_LINE = /^[ \t]*(?:\*\*)?[(（](?:[a-z]|[ivx]{1,4})[)）]/gm
+const FORMULA_SPANS = /\$\$[\s\S]+?\$\$|\\[[\s\S]+?\\]|\\([\s\S]+?\\)|\$[^$\n]+?\$/g
+
+/**
+ * A long question split into its stem and one block per sub-part (lines that
+ * start with a label, never inside a formula), so that each can be translated
+ * on its own; joining the translations with each block's `separator` gives the
+ * original layout. One block when the question has fewer than two sub-parts.
+ */
+export function splitTranslationBlocks(prompt: string): TranslationBlock[] {
+  const formulas = [...prompt.matchAll(FORMULA_SPANS)].map((m) => [
+    m.index!,
+    m.index! + m[0].length,
+  ])
+  const starts = [...prompt.matchAll(SUBPART_LINE)]
+    .map((m) => m.index!)
+    .filter((at) => !formulas.some(([from, to]) => at > from! && at < to!))
+  if (starts.length < 2) return [{ text: prompt.trim(), separator: '' }]
+  const cuts = starts[0]! > 0 && prompt.slice(0, starts[0]).trim() ? [0, ...starts] : starts
+  const blocks: TranslationBlock[] = []
+  for (let i = 0; i < cuts.length; i++) {
+    const segment = prompt.slice(cuts[i], cuts[i + 1] ?? prompt.length)
+    const text = segment.trim()
+    if (!text) continue
+    blocks.push({ text, separator: i + 1 < cuts.length ? (/\s*$/.exec(segment)?.[0] ?? '\n') : '' })
+  }
+  return blocks
+}
+
+/** The block translations joined in the original layout. */
+export function joinTranslationBlocks(
+  blocks: readonly TranslationBlock[],
+  texts: readonly string[],
+): string {
+  return blocks
+    .map(
+      (block, i) =>
+        `${(texts[i] ?? '').trim()}${block.separator || (i + 1 < blocks.length ? '\n' : '')}`,
+    )
+    .join('')
+    .trim()
+}

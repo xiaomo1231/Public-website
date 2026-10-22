@@ -47,8 +47,10 @@ import { fetchModelList, type ModelListResult } from '@/infrastructure/ai/models
 import {
   MANUAL_MAX_TOKENS_MAX,
   MANUAL_MAX_TOKENS_MIN,
+  learnedOutputLimit,
   resolveOutputLimit,
 } from '@/infrastructure/ai/outputLimit'
+import { MAX_AI_CONCURRENCY, MIN_AI_CONCURRENCY } from '@/shared/lib/concurrency'
 import { APP_VERSION } from '@/shared/config/config'
 import { LANGUAGE_LABELS, UI_LANGUAGES, useTranslation, type UILanguage } from '@/i18n'
 
@@ -391,6 +393,38 @@ export function SettingsPage(): JSX.Element {
                     onBlur={() => void loadModels(true)}
                     placeholder="https://api.example.com/v1"
                   />
+                  {preset?.regions && preset.regions.length > 1 && (
+                    <div
+                      role="group"
+                      aria-label={t('settings.region.label')}
+                      className="flex flex-wrap items-center gap-2"
+                    >
+                      <span className="text-xs text-muted-foreground">
+                        {t('settings.region.label')}
+                      </span>
+                      {preset.regions.map((region) => (
+                        <Button
+                          key={region.id}
+                          type="button"
+                          size="sm"
+                          variant={draft.baseURL.trim() === region.baseURL ? 'default' : 'outline'}
+                          aria-pressed={draft.baseURL.trim() === region.baseURL}
+                          className="h-7 px-2 text-xs"
+                          onClick={() => {
+                            patch('baseURL', region.baseURL)
+                            // The fetched list belongs to the other region.
+                            setModelList(null)
+                            fetchedFor.current = ''
+                          }}
+                        >
+                          {t(region.id === 'cn' ? 'settings.region.cn' : 'settings.region.intl')}
+                        </Button>
+                      ))}
+                      <span className="text-xs text-muted-foreground">
+                        {t('settings.region.hint')}
+                      </span>
+                    </div>
+                  )}
                   <p className="text-xs text-muted-foreground">{t('settings.baseUrlHint')}</p>
                 </div>
 
@@ -500,6 +534,30 @@ export function SettingsPage(): JSX.Element {
                 </div>
 
                 <MaxTokensSetting draft={draft} patch={patch} />
+
+                <div className="space-y-3">
+                  <div className="flex items-baseline justify-between">
+                    <Label htmlFor="maxConcurrency">{t('settings.sampling.concurrency')}</Label>
+                    <span
+                      className="text-sm tabular-nums text-muted-foreground lab:font-mono"
+                      data-testid="concurrency-value"
+                    >
+                      {draft.maxConcurrency}
+                    </span>
+                  </div>
+                  <Slider
+                    id="maxConcurrency"
+                    aria-label={t('settings.sampling.concurrency')}
+                    min={MIN_AI_CONCURRENCY}
+                    max={MAX_AI_CONCURRENCY}
+                    step={1}
+                    value={[draft.maxConcurrency]}
+                    onValueChange={(v) => patch('maxConcurrency', v[0] ?? draft.maxConcurrency)}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    {t('settings.sampling.concurrencyHint')}
+                  </p>
+                </div>
               </CardContent>
             </Card>
 
@@ -608,16 +666,26 @@ function MaxTokensSetting({
   patch: <K extends keyof AISettings>(key: K, value: AISettings[K]) => void
 }) {
   const { t } = useTranslation()
+  const id = draft.model.trim()
+  // Learned this visit (not re-read from the settings yet) counts too.
+  const visit = learnedOutputLimit(draft.baseURL, id)
+  const learned = {
+    ...draft.learnedOutputLimits,
+    ...(visit !== undefined ? { [id]: visit } : {}),
+  }
   const resolved = resolveOutputLimit({
     mode: draft.maxTokensMode,
     manualMaxTokens: draft.maxTokens,
     model: draft.model,
     metadata: draft.modelOutputLimits,
+    learned,
   })
   const known = resolved.modelMax
   const readout =
     known === undefined
-      ? t('settings.sampling.modelMaxUnknown', { tokens: resolved.maxTokens })
+      ? resolved.source === 'probe'
+        ? t('settings.sampling.modelMaxProbe', { tokens: resolved.maxTokens })
+        : t('settings.sampling.modelMaxUnknown', { tokens: resolved.maxTokens })
       : t(
           draft.maxTokensMode === 'model' || resolved.maxTokens === known
             ? 'settings.sampling.modelMaxKnown'
@@ -626,9 +694,11 @@ function MaxTokensSetting({
             tokens: resolved.maxTokens,
             max: known,
             source: t(
-              draft.modelOutputLimits[draft.model.trim()]
-                ? 'settings.sampling.sourceMetadata'
-                : 'settings.sampling.sourceTable',
+              learned[id]
+                ? 'settings.sampling.sourceLearned'
+                : draft.modelOutputLimits[id]
+                  ? 'settings.sampling.sourceMetadata'
+                  : 'settings.sampling.sourceTable',
             ),
           },
         )

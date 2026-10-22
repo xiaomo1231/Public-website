@@ -16,6 +16,51 @@ export function splitHomeworkSubparts(prompt: string): Array<{ label: string; pr
     .filter((part) => part.prompt.length > stem.length + 6)
 }
 
+/**
+ * The sub-parts of a question for professor-answer generation split per
+ * sub-part. More tolerant than `walkthroughSubparts`: lettered parts are kept
+ * in printed order even when a letter is skipped or out of sequence
+ * (`(a) (b) (c) (d) (l) (e)`), and numbered parts on their own lines
+ * (`1. … 2. …`, from 1 in sequence) are recognised too. Fewer than two → none.
+ */
+export function answerSubparts(prompt: string): WalkthroughSubpart[] {
+  const lettered = [...prompt.matchAll(/(?:^|[\s：:；;。])[(（]([a-z])[)）]\s+/gi)]
+  const seen = new Set<string>()
+  const letters = lettered.filter((marker) => {
+    const letter = marker[1]!.toLowerCase()
+    if (seen.has(letter)) return false
+    seen.add(letter)
+    return true
+  })
+  const markers =
+    letters.length >= 2 && letters[0]![1]!.toLowerCase() === 'a'
+      ? letters.map((marker) => ({
+          index: marker.index!,
+          length: marker[0].length,
+          label: marker[1]!.toLowerCase(),
+        }))
+      : numberedMarkers(prompt)
+  if (markers.length < 2 || markers.length > 20) return []
+  return markers
+    .map((marker, index) => ({
+      label: marker.label,
+      text: prompt
+        .slice(marker.index + marker.length, markers[index + 1]?.index ?? prompt.length)
+        .trim(),
+    }))
+    .filter((part) => part.text.length > 0)
+}
+
+function numberedMarkers(prompt: string): Array<{ index: number; length: number; label: string }> {
+  const out: Array<{ index: number; length: number; label: string }> = []
+  for (const match of prompt.matchAll(/(^|\n)[ \t]*(\d{1,2})[.)．][ \t]+/g)) {
+    if (Number(match[2]) !== out.length + 1) continue
+    const lead = match[1]!.length
+    out.push({ index: match.index! + lead, length: match[0].length - lead, label: match[2]! })
+  }
+  return out
+}
+
 export interface WalkthroughSubpart {
   /** `a`, `b`, … */
   label: string

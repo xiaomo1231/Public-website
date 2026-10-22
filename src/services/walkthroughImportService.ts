@@ -1,4 +1,4 @@
-import { AIService } from './aiService'
+import { AIService, asTruncatedAtCap } from './aiService'
 import type { AppDatabase } from '@/infrastructure/db/database'
 import { getDb } from '@/infrastructure/db/database'
 import type { ChatMessage } from '@/infrastructure/ai/types'
@@ -12,7 +12,6 @@ import { ChunkRepository } from '@/entities/chunk/repository'
 import type { Document } from '@/entities/document/types'
 import { planAnalysisSegments } from '@/entities/courseContent/analysisInput'
 import { classifyHomeworkError, isRetryableHomeworkError } from '@/entities/homework/errorKind'
-import { MIN_OUTPUT_TOKENS } from '@/entities/homework/tokenBudget'
 import { formatHomeworkReviewText } from '@/entities/homework/reviewFormatting'
 import { checkLinearSystems, involvesRowReduction } from '@/entities/homework/walkthroughChecks'
 import {
@@ -20,12 +19,22 @@ import {
   checkDerivedFromSource,
   issueQuoteFound,
   type DerivationCheck,
+  type SourceIndex,
 } from '@/entities/homework/walkthroughImport'
+import {
+  buildWalkthroughTemplate,
+  hasTemplateMarkers,
+  parseTemplateImport,
+  templateFileName,
+  type TemplateProblem,
+} from '@/entities/homework/walkthroughTemplate'
+import type { DocumentChunk } from '@/entities/chunk/types'
 import {
   generatedSource,
   IMPORTED_OTHER_SECTION_ID,
   mergeSectionWrite,
   normalizeSectionSources,
+  professorAnswerOf,
   sourceOf,
   questionSectionId,
   walkthroughId,
@@ -63,10 +72,6 @@ const IMPORT_MIN_SEGMENT_CHARS = 2_000
 const IMPORT_MAX_SEGMENT_CHARS = 12_000
 /** A piece shorter than this is not split further (it should fit any model). */
 export const IMPORT_MIN_PIECE_CHARS = 600
-/** First budget of a piece is never below this (unless the cap is lower). */
-const IMPORT_MIN_BUDGET = 2_048
-/** Hard cap on paid requests for one piece (budget changes + transient retries). */
-const IMPORT_MAX_ATTEMPTS = 6
 
 /**
  * Characters of the imported file planned per request, so that the whole
@@ -84,12 +89,6 @@ export function importSegmentChars(outputCap: number): number {
 /** Part size with the default output cap (8 192 tokens). */
 export const IMPORT_SEGMENT_CHARS = importSegmentChars(FALLBACK_OUTPUT_TOKENS)
 
-/** First output budget of a piece of `chars` characters, never above the cap. */
-export function importOutputBudget(chars: number, outputCap: number): number {
-  const cap = Number.isFinite(outputCap) && outputCap > 0 ? outputCap : Infinity
-  const estimate = Math.ceil(chars * IMPORT_OUTPUT_TOKENS_PER_CHAR) + IMPORT_OUTPUT_OVERHEAD
-  return Math.min(cap, Math.max(IMPORT_MIN_BUDGET, estimate))
-}
 /** Question text shown to the model next to each id. */
 const QUESTION_PROMPT_CHARS = 400
 const MAX_TRANSIENT_RETRIES = 2
@@ -104,6 +103,11 @@ export interface WalkthroughImportOptions {
   onProgress?: (progress: { done: number; total: number }) => void
   /** A paused preparation to continue with the parts that are left. */
   resume?: WalkthroughImportPreview
+  /**
+   * 「用 AI 整理剩下的」: `resume` is a template import (or a paused / failed
+   * run of this) — only its unreadable question blocks go through the AI.
+   */
+  rest?: boolean
 }
 
 /**
@@ -131,7 +135,9 @@ export function importPartMessage(part: number, total: number, cause: unknown): 
       return t(
         cause.atCap.by === 'model'
           ? 'walkthroughImport.errors.partTooLongModel'
-          : 'walkthroughImport.errors.partTooLongSetting',
+          : cause.atCap.by === 'unknown'
+            ? 'walkthroughImport.errors.partTooLongUnknown'
+            : 'walkthroughImport.errors.partTooLongSetting',
         { ...params, limit: cause.atCap.limit },
       )
     return t('walkthroughImport.errors.partTruncated', params)
@@ -184,7 +190,18 @@ export interface WalkthroughImportPreview {
   uncovered: string[]
   /** Reported issues whose quote is in neither the section nor the file. */
   droppedIssues: number
+  /** The file is a filled-in 讲解模板: read locally, no AI request. */
+  mode?: 'template'
+  /** Sections read from the template (kept when the rest goes through the AI). */
+  templateSections?: WalkthroughSection[]
+  /** Question blocks of the template that could not be used as they are. */
+  templateProblems?: TemplateProblem[]
+  /** The unreadable blocks, as written — what 「用 AI 整理剩下的」 sends. */
+  restText?: string
 }
+
+/** Between two unreadable template blocks in `restText`. */
+const REST_SEPARATOR = '\n\n<!-- walkthrough-rest -->\n\n'
 
 export interface ImportableDocument {
   id: string
@@ -247,9 +264,62 @@ export class WalkthroughImportService {
    * parts: a paused result has `complete: false` and is passed back as
    * `resume` to continue.
    */
+  /**
+   * 复制模板: the Markdown template of the assignment for an external AI, in
+   * the walkthrough language (local, no request).
+   */
+  async template(setId: string): Promise<{ text: string; fileName: string }> {
+    const state = await this.walkthroughs.state(setId)
+    if (state.questions.length === 0)
+      throw new AppError(t('homework.walkthrough.noQuestions'), 'VALIDATION_ERROR')
+    const subject = await loadProjectSubjectContext(state.set.projectId, this.db)
+    const linearSystems =
+      subject?.subject === 'linear_algebra' ||
+      state.questions.some((question) => involvesRowReduction(question.prompt))
+    const title = state.set.title || state.set.documentName
+    return {
+      text: buildWalkthroughTemplate({
+        title,
+        language: state.language,
+        linearSystems,
+        questions: state.questions.map((question, index) => ({
+          id: question.id,
+          label: questionLabel(question, index),
+          prompt: question.prompt,
+          ...(professorAnswerOf(question) ? { hasProfessorAnswer: true } : {}),
+        })),
+      }),
+      fileName: templateFileName(title, state.language),
+    }
+  }
+
+  /** Whether a file is a filled-in 讲解模板 (imported locally, without the AI). */
+  async isTemplateDocument(documentId: string): Promise<boolean> {
+    const document = await this.documents.get(documentId).catch(() => undefined)
+    if (!document || document.status !== 'ready') return false
+    return (await this.templateText(document)) !== null
+  }
+
+  /**
+   * The text of a filled-in template, or null. A text / Markdown file is read
+   * from its stored bytes (processing trims lines and drops blank ones, which
+   * would lose the paragraphs); any other file from its extracted text.
+   */
+  private async templateText(document: Document, chunks?: DocumentChunk[]): Promise<string | null> {
+    if (document.type === 'text') {
+      const stored = await this.documents.getBytes(document.id).catch(() => null)
+      if (stored) {
+        // TextDecoder drops a byte-order mark by default.
+        const raw = new TextDecoder('utf-8').decode(stored.bytes)
+        if (hasTemplateMarkers(raw)) return raw
+      }
+    }
+    const list = chunks ?? (await this.chunks.listByDocument(document.id))
+    const joined = list.map((chunk) => chunk.text).join('\n\n')
+    return hasTemplateMarkers(joined) ? joined : null
+  }
+
   async prepare(options: WalkthroughImportOptions): Promise<WalkthroughImportPreview> {
-    const ai = this.requireAI()
-    const control = options.control ?? createGenerationRun()
     const state = await this.walkthroughs.state(options.setId)
     if (state.questions.length === 0)
       throw new AppError(t('homework.walkthrough.noQuestions'), 'VALIDATION_ERROR')
@@ -258,10 +328,42 @@ export class WalkthroughImportService {
       throw new NotFoundError('Document', options.documentId)
     if (document.status !== 'ready')
       throw new AppError(t('walkthroughImport.errors.notReady'), 'VALIDATION_ERROR')
-    const chunks = await this.chunks.listByDocument(document.id)
+    const documentChunks = await this.chunks.listByDocument(document.id)
+    const subject = await loadProjectSubjectContext(state.set.projectId, this.db)
+    const questions = state.questions.map((question, index) => ({
+      id: question.id,
+      label: questionLabel(question, index),
+      prompt: clip(question.prompt.replace(/\s+/g, ' '), QUESTION_PROMPT_CHARS),
+    }))
+
+    const rest =
+      options.rest && options.resume?.mode === 'template' && options.resume.restText
+        ? options.resume
+        : undefined
+    if (options.rest && !rest)
+      throw new AppError(t('walkthroughImport.errors.nothing'), 'VALIDATION_ERROR')
+    if (!rest) {
+      const templateText = await this.templateText(document, documentChunks)
+      if (templateText !== null) {
+        const linearSystems =
+          subject?.subject === 'linear_algebra' ||
+          state.questions.some((question) => involvesRowReduction(question.prompt)) ||
+          involvesRowReduction(templateText.slice(0, 20_000))
+        return this.prepareFromTemplate(options, state, document, templateText, linearSystems)
+      }
+    }
+
+    // 「用 AI 整理剩下的」 reads only the template blocks that could not be used.
+    const chunks: DocumentChunk[] = rest
+      ? rest
+          .restText!.split(REST_SEPARATOR)
+          .map((text, order) => ({ ...documentChunks[0]!, id: `rest-${order}`, text, order }))
+      : documentChunks
     const sourceText = chunks.map((chunk) => chunk.text).join('\n\n')
     if (!sourceText.trim())
       throw new AppError(t('walkthroughImport.errors.noText'), 'VALIDATION_ERROR')
+    const ai = this.requireAI()
+    const control = options.control ?? createGenerationRun()
 
     // A resumed import keeps its parts even when the output cap changed since.
     const sameImport =
@@ -275,17 +377,17 @@ export class WalkthroughImportService {
       (chunk) => chunk.text,
       segmentChars,
     )
-    const subject = await loadProjectSubjectContext(state.set.projectId, this.db)
     const linearSystems =
       subject?.subject === 'linear_algebra' ||
       state.questions.some((question) => involvesRowReduction(question.prompt)) ||
       involvesRowReduction(sourceText.slice(0, 20_000))
-    const questions = state.questions.map((question, index) => ({
-      id: question.id,
-      label: questionLabel(question, index),
-      prompt: clip(question.prompt.replace(/\s+/g, ' '), QUESTION_PROMPT_CHARS),
-    }))
-    const allowed = new Set(questions.map((question) => question.id))
+    // The rest may only fill questions the template did not already cover.
+    const covered = new Set(
+      (rest?.templateSections ?? []).map((section) => section.questionId).filter(Boolean),
+    )
+    const allowed = new Set(
+      questions.map((question) => question.id).filter((id) => !covered.has(id)),
+    )
     const system = prompts.subjectProfile.withSubject(
       prompts.walkthroughImport.buildSystemPrompt({
         checkIssues: options.checkIssues,
@@ -317,6 +419,14 @@ export class WalkthroughImportService {
       unknownIds: [],
       uncovered: [],
       droppedIssues: 0,
+      ...(rest
+        ? {
+            mode: 'template' as const,
+            templateSections: rest.templateSections ?? [],
+            templateProblems: rest.templateProblems ?? [],
+            restText: rest.restText!,
+          }
+        : {}),
     }
     const snapshot = (): WalkthroughImportPreview => ({
       ...base,
@@ -344,7 +454,7 @@ export class WalkthroughImportService {
             role: 'user',
             content: prompts.walkthroughImport.buildUserPrompt({
               language: state.language,
-              questions,
+              questions: questions.filter((question) => allowed.has(question.id)),
               sourceText,
               ...(part ? { part } : {}),
               ...(fragment ? { fragment: true } : {}),
@@ -353,7 +463,7 @@ export class WalkthroughImportService {
         ]
         let raw: unknown
         try {
-          raw = await requestImportJSON(ai, messages, sourceText.length, control.signal)
+          raw = await requestImportJSON(ai, messages, control.signal)
         } catch (err) {
           if (control.signal.aborted) throw new ImportInterrupted()
           // Too long even at the cap: read it in halves (never mid-formula).
@@ -386,18 +496,76 @@ export class WalkthroughImportService {
       options.onProgress?.({ done: parts.length, total: segments.length })
     }
     const { pieces: _read, ...finished } = snapshot()
-    return this.buildPreview(finished, state, sourceText, linearSystems)
+    return this.buildPreview(
+      finished,
+      state,
+      mergeImportParts(finished.parts),
+      buildSourceIndex(sourceText),
+      linearSystems,
+    )
   }
 
-  /** Turn the merged replies into sections, keeping only what the file supports. */
+  /**
+   * A filled-in 讲解模板: parsed locally, no AI request. Blocks that cannot be
+   * used are listed; those an AI could still read are kept in `restText`.
+   */
+  private prepareFromTemplate(
+    options: WalkthroughImportOptions,
+    state: Awaited<ReturnType<HomeworkWalkthroughService['state']>>,
+    document: Document,
+    text: string,
+    linearSystems: boolean,
+  ): WalkthroughImportPreview {
+    const allowed = new Set(state.questions.map((question) => question.id))
+    const parsed = parseTemplateImport(text, allowed)
+    const normalized = prompts.walkthroughImport.normalizeImport(parsed.reply, allowed, {
+      checkIssues: false,
+    })!
+    const preview: WalkthroughImportPreview = {
+      setId: options.setId,
+      documentId: document.id,
+      documentName: document.name,
+      language: state.language,
+      checkIssues: options.checkIssues,
+      complete: true,
+      partsTotal: 0,
+      parts: [],
+      sections: [],
+      conflicts: [],
+      keptGenerated: [],
+      rejected: [],
+      unknownIds: parsed.unknownIds,
+      uncovered: [],
+      droppedIssues: 0,
+      mode: 'template',
+      templateProblems: parsed.problems,
+      ...(parsed.rest.length > 0 ? { restText: parsed.rest.join(REST_SEPARATOR) } : {}),
+    }
+    // The file is the walkthrough itself: nothing to check it against.
+    const built = this.buildPreview(
+      preview,
+      state,
+      mergeImportParts([normalized]),
+      null,
+      linearSystems,
+    )
+    return { ...built, templateSections: built.sections }
+  }
+
+  /**
+   * Turn the merged replies into sections, keeping only what the file supports
+   * (`index`; null for a template, which is the walkthrough itself). Sections
+   * already read from a template are kept and not filled again.
+   */
   private buildPreview(
     preview: WalkthroughImportPreview,
     state: Awaited<ReturnType<HomeworkWalkthroughService['state']>>,
-    sourceText: string,
+    merged: NormalizedImport,
+    index: SourceIndex | null,
     linearSystems: boolean,
   ): WalkthroughImportPreview {
-    const merged = mergeImportParts(preview.parts)
-    const index = buildSourceIndex(sourceText)
+    const base = preview.templateSections ?? []
+    const taken = new Set(base.map((section) => section.id))
     const plan = new Map(state.plan.map((entry) => [entry.id, entry]))
     const stored = new Map(
       (state.walkthrough?.sections ?? []).map((section) => [section.id, section]),
@@ -411,22 +579,24 @@ export class WalkthroughImportService {
       sourceDocumentId: preview.documentId,
       generatedAt: now,
     }
-    const sections: WalkthroughSection[] = []
-    const rejected: RejectedImportSection[] = []
-    let droppedIssues = 0
+    const sections: WalkthroughSection[] = [...base]
+    const rejected: RejectedImportSection[] = [...preview.rejected]
+    let droppedIssues = preview.droppedIssues
 
     for (const question of merged.questions) {
       const sectionId = questionSectionId(question.questionId)
       const entry = plan.get(sectionId)
-      if (!entry) continue
-      const check = checkDerivedFromSource(question.body, index)
+      if (!entry || taken.has(sectionId)) continue
+      const check = index
+        ? checkDerivedFromSource(question.body, index)
+        : ({ ok: true } as Pick<DerivationCheck, 'ok' | 'reason'>)
       if (!check.ok) {
         rejected.push({ sectionId, questionId: question.questionId, reason: check.reason! })
         continue
       }
       const issues: WalkthroughImportIssue[] = []
       for (const issue of question.issues) {
-        if (issueQuoteFound(issue.quote, question.body, index)) issues.push(issue)
+        if (index && issueQuoteFound(issue.quote, question.body, index)) issues.push(issue)
         else droppedIssues += 1
       }
       const checks = linearSystems ? checkLinearSystems(question.linearSystems) : []
@@ -455,8 +625,10 @@ export class WalkthroughImportService {
       body: string,
       suggestions: string[] = [],
     ): void => {
-      if (!body.trim() && suggestions.length === 0) return
-      const check = checkDerivedFromSource([body, ...suggestions].join('\n'), index)
+      if ((!body.trim() && suggestions.length === 0) || taken.has(id)) return
+      const check = index
+        ? checkDerivedFromSource([body, ...suggestions].join('\n'), index)
+        : ({ ok: true } as Pick<DerivationCheck, 'ok' | 'reason'>)
       if (!check.ok) {
         rejected.push({ sectionId: id, reason: check.reason! })
         return
@@ -481,8 +653,19 @@ export class WalkthroughImportService {
     const covered = new Set(
       sections.map((section) => section.questionId).filter((id): id is string => Boolean(id)),
     )
+    const known = new Set(state.questions.map((question) => question.id))
+    // After 「用 AI 整理剩下的」 only the problems that are still open remain.
+    const restDone = preview.templateSections !== undefined
+    const templateProblems = preview.templateProblems?.filter(
+      (problem) =>
+        !restDone ||
+        (problem.reason !== 'no-id' &&
+          !(problem.reason === 'unstructured' && covered.has(problem.questionId ?? ''))),
+    )
+    const { restText: _sent, ...rest } = preview
     return {
-      ...preview,
+      ...(restDone ? rest : preview),
+      ...(templateProblems ? { templateProblems } : {}),
       complete: true,
       sections,
       conflicts: sections
@@ -492,7 +675,9 @@ export class WalkthroughImportService {
         .filter((section) => generatedSource(stored.get(section.id))?.status === 'ready')
         .map((section) => section.id),
       rejected,
-      unknownIds: merged.unknownIds,
+      unknownIds: [
+        ...new Set([...preview.unknownIds, ...merged.unknownIds.filter((id) => !known.has(id))]),
+      ],
       uncovered: state.questions
         .filter((question) => !covered.has(question.id))
         .map((question) => question.id),
@@ -611,55 +796,33 @@ export function mergeImportParts(parts: readonly NormalizedImport[]): Normalized
 }
 
 /**
- * One import request. The first budget follows the piece's size; a reply cut
- * off doubles it up to the resolved output cap (`ai.maxOutputTokens`); cut off
- * at the cap it throws `OutputTruncatedError.atCap` (the caller then reads the
- * piece in halves). A provider that rejects the size gets half; brief outages
- * are retried twice.
+ * One import request, sent at the resolved output cap (AIService). Cut off
+ * there it throws `OutputTruncatedError.atCap` at once — the same request
+ * would be cut off again — and the caller reads the piece in halves. Brief
+ * outages are retried twice.
  */
 async function requestImportJSON(
   ai: AIService,
   messages: ChatMessage[],
-  sourceChars: number,
   signal: AbortSignal,
 ): Promise<unknown> {
-  const cap =
-    Number.isFinite(ai.maxOutputTokens) && ai.maxOutputTokens > 0 ? ai.maxOutputTokens : Infinity
-  let budget = importOutputBudget(sourceChars, ai.maxOutputTokens)
-  let rejectedBudget = Infinity
   let retries = 0
-  const tried = new Set<number>()
-  for (let attempts = 1; ; attempts++) {
-    tried.add(budget)
+  for (;;) {
     if (signal.aborted) throw new AbortedError()
     try {
       const { data } = await ai.streamJSON<unknown>(messages, undefined, {
-        maxTokens: budget,
         signal,
+        // Formatting an existing explanation: little thinking needed.
+        reasoning: 'low',
       })
       return data
     } catch (err) {
       if (signal.aborted) throw new AbortedError()
       const kind = classifyHomeworkError(err)
-      if (kind === 'truncated') {
-        const next = Math.min(cap, budget * 2, rejectedBudget - 1)
-        if (next <= budget || tried.has(next) || attempts >= IMPORT_MAX_ATTEMPTS) {
-          // Cut off at the largest budget allowed: more room is impossible.
-          const modelMax = ai.modelMaxOutputTokens
-          throw new OutputTruncatedError(budget, {
-            limit: budget,
-            by: modelMax !== undefined && budget >= modelMax ? 'model' : 'setting',
-          })
-        }
-        budget = next
-      } else if (attempts >= IMPORT_MAX_ATTEMPTS) {
-        throw err
-      } else if (kind === 'output-limit') {
-        rejectedBudget = Math.min(rejectedBudget, budget)
-        const next = Math.max(Math.min(MIN_OUTPUT_TOKENS, cap), Math.floor(budget / 2))
-        if (next >= budget || tried.has(next)) throw err
-        budget = next
-      } else if (isRetryableHomeworkError(kind) && retries < MAX_TRANSIENT_RETRIES) {
+      // Cut off at the cap: more room is impossible. Whose limit: the
+      // model's, the setting's, or unknown (自动探测).
+      if (kind === 'truncated') throw asTruncatedAtCap(ai, err)
+      if (isRetryableHomeworkError(kind) && retries < MAX_TRANSIENT_RETRIES) {
         retries += 1
         await new Promise((resolve) => setTimeout(resolve, RETRY_BASE_DELAY_MS * 2 ** retries))
       } else {

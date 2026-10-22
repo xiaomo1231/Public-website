@@ -380,7 +380,6 @@ export class MistakeFollowUpService {
       },
     ]
     const { data } = await ai.streamJSON<unknown>(messages, undefined, {
-      maxTokens: 1500,
       ...(options.signal ? { signal: options.signal } : {}),
     })
     const assessed = prompts.homeworkAnswerCheck.normalizeAssessment(data)
@@ -464,7 +463,6 @@ export class MistakeFollowUpService {
       },
     ]
     const { data } = await ai.streamJSON<unknown>(messages, undefined, {
-      maxTokens: 2_400,
       signal: control.signal,
     })
     const [written] = prompts.practiceGenerate.normalizeOutput(data, new Set(['s1']))
@@ -537,7 +535,6 @@ export class MistakeFollowUpService {
       },
     ]
     const { data } = await ai.streamJSON<unknown>(messages, undefined, {
-      maxTokens: 400,
       signal: control.signal,
     })
     const verdict = prompts.practiceReview

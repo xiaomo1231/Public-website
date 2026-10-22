@@ -24,7 +24,7 @@ import {
   type GenerationControl,
 } from '@/shared/lib/generationControl'
 import { t } from '@/i18n'
-import type { AIService } from './aiService'
+import { exhaustedOutputCap, type AIService } from './aiService'
 import { loadProfessorHabits } from './questionHabitsService'
 import { loadProjectSubjectContext } from './projectSubject'
 import {
@@ -58,7 +58,6 @@ const MAX_POINT_LENGTH = 220
 const MAX_SOURCES = 3
 const SNIPPETS_PER_TOPIC = 6
 const POINTS_PER_TOPIC = 6
-const ORAL_OUTPUT_TOKENS = 3500
 const MAX_ATTEMPTS = 2
 
 /** One drawn topic: what it is called, which course topics teach it. */
@@ -507,15 +506,14 @@ export class OralExamService {
     let lastError: unknown = null
     for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
       try {
-        const { data } = await this.ai.chatJSON<OralExamOutput>(messages, {
-          maxTokens: Math.min(8192, Math.max(this.ai.maxOutputTokens ?? 0, ORAL_OUTPUT_TOKENS)),
-          ...(signal ? { signal } : {}),
-        })
+        const { data } = await this.ai.chatJSON<OralExamOutput>(messages, signal ? { signal } : {})
         const item = validateOralItem(data, snippets, options)
         if (item) return item
         lastError = new AppError(t('oral.errors.invalidItem'), 'MALFORMED_QUIZ')
       } catch (err) {
         if (isAbortError(err, signal)) throw err
+        // Out of the whole output cap: the same request would end the same way.
+        if (exhaustedOutputCap(err)) throw err
         lastError = err
       }
       logger.warn('Oral exam generation attempt failed', {

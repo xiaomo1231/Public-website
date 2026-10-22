@@ -186,7 +186,7 @@ export class SyllabusService {
           }),
         },
       ],
-      { maxTokens: 4096, ...(signal ? { signal } : {}) },
+      signal ? { signal } : {},
     )
     signal?.throwIfAborted()
     const { scopes, dropped } = readAiSyllabus(output, chunks)
@@ -413,7 +413,7 @@ export class SyllabusService {
               }),
             },
           ],
-          { maxTokens: 2048, signal: control.signal },
+          { signal: control.signal },
         ))
       } catch (err) {
         // A stopped batch is an interruption, not a failure: earlier batches stay saved.

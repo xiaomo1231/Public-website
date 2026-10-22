@@ -1,5 +1,6 @@
 import { SettingsRepository } from '@/entities/settings/repository'
 import {
+  LEGACY_MINIMAX_BASE_URL,
   PROVIDER_PRESETS,
   type AISettings,
   type AISettingsRow,
@@ -11,6 +12,7 @@ import { logger } from '@/infrastructure/logger/logger'
 import { ValidationError } from '@/infrastructure/errors/AppError'
 import { normalizePrices } from '@/entities/aiUsage/types'
 import { MANUAL_MAX_TOKENS_MAX, MANUAL_MAX_TOKENS_MIN } from '@/infrastructure/ai/outputLimit'
+import { clampConcurrency, MAX_AI_CONCURRENCY, MIN_AI_CONCURRENCY } from '@/shared/lib/concurrency'
 import { t } from '@/i18n'
 
 /**
@@ -49,6 +51,12 @@ export class SettingsService {
         row.modelOutputLimits && row.modelOutputLimits.baseURL === row.baseURL
           ? { ...row.modelOutputLimits.limits }
           : {},
+      learnedOutputLimits:
+        row.learnedOutputLimits && row.learnedOutputLimits.baseURL === row.baseURL
+          ? { ...row.learnedOutputLimits.limits }
+          : {},
+      // Rows from before the option: the default.
+      maxConcurrency: clampConcurrency(row.maxConcurrency),
       webImagesEnabled: row.webImagesEnabled === true,
       webImagesVisionCheck: row.webImagesVisionCheck === true,
       adminApiKey: await this.decryptSecret(row.adminApiKeyEncrypted),
@@ -91,6 +99,15 @@ export class SettingsService {
     }
     if (patch.maxTokensMode !== undefined) {
       next.maxTokensMode = patch.maxTokensMode === 'model' ? 'model' : 'manual'
+    }
+    if (patch.maxConcurrency !== undefined) {
+      const n = Number(patch.maxConcurrency)
+      if (!Number.isInteger(n) || n < MIN_AI_CONCURRENCY || n > MAX_AI_CONCURRENCY) {
+        throw new ValidationError(
+          t('errors.concurrencyRange', { min: MIN_AI_CONCURRENCY, max: MAX_AI_CONCURRENCY }),
+        )
+      }
+      next.maxConcurrency = n
     }
 
     if (patch.webImagesEnabled !== undefined)
@@ -154,6 +171,25 @@ export class SettingsService {
   }
 
   /**
+   * Remember a model's output limit learned from a provider rejection (自动探测)
+   * for `baseURL`, next to what was learned before for that base URL.
+   */
+  async rememberLearnedOutputLimit(baseURL: string, model: string, limit: number): Promise<void> {
+    const id = model.trim()
+    const value = Math.floor(limit)
+    if (!id || !Number.isFinite(value) || value <= 0) return
+    const url = baseURL.trim()
+    const current = await this.getMigratedRow()
+    const before =
+      current.learnedOutputLimits?.baseURL === url ? current.learnedOutputLimits.limits : {}
+    if (before[id] === value) return
+    await this.repo.putRow({
+      ...current,
+      learnedOutputLimits: { baseURL: url, limits: { ...before, [id]: value } },
+    })
+  }
+
+  /**
    * When the user picks a provider preset, copy its default baseURL + model
    * only if the current values still match the previous preset's defaults.
    */
@@ -163,8 +199,12 @@ export class SettingsService {
 
     const current = await this.getMigratedRow()
     const currentPreset = PROVIDER_PRESETS.find((p) => p.id === current.provider)
+    // Any regional endpoint of the preset counts as its default.
     const isUsingCurrentPresetDefaults =
-      Boolean(currentPreset) && currentPreset!.baseURL === current.baseURL
+      Boolean(currentPreset) &&
+      [currentPreset!.baseURL, ...(currentPreset!.regions ?? []).map((r) => r.baseURL)].includes(
+        current.baseURL,
+      )
 
     const patch: UpdateAISettingsInput = { provider: providerId }
     if (isUsingCurrentPresetDefaults) {
@@ -188,7 +228,7 @@ export class SettingsService {
    * keeps their configuration and never sees it disappear.
    */
   private async getMigratedRow(): Promise<AISettingsRow> {
-    const row = await this.repo.getRow()
+    const row = await this.migrateLegacyBaseURL(await this.repo.getRow())
     const legacy = row.apiKey?.trim()
     if (!legacy) return row
 
@@ -211,6 +251,25 @@ export class SettingsService {
       logger.error('API key migration failed', undefined, err)
       throw err
     }
+  }
+
+  /**
+   * The MiniMax preset used to point at `https://api.MiniMax.com/v1`, which is
+   * not a MiniMax endpoint. A row still holding exactly that preset default
+   * is moved to the international endpoint (mainland users pick theirs in
+   * Settings). A base URL the user typed is never touched, nor is the key.
+   */
+  private async migrateLegacyBaseURL(row: AISettingsRow): Promise<AISettingsRow> {
+    if (
+      row.provider !== 'MiniMax' ||
+      row.baseURL.toLowerCase() !== LEGACY_MINIMAX_BASE_URL.toLowerCase()
+    ) {
+      return row
+    }
+    const intl = PROVIDER_PRESETS.find((p) => p.id === 'MiniMax')?.baseURL
+    if (!intl) return row
+    logger.info('Moved the MiniMax base URL from the old preset default to the current endpoint')
+    return this.repo.putRow({ ...row, baseURL: intl })
   }
 
   private async decryptApiKey(row: AISettingsRow): Promise<string> {

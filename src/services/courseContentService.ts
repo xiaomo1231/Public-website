@@ -41,10 +41,7 @@ import { normalizeTopicAnalysis } from '@/infrastructure/ai/prompts/topic-analyz
 import { normalizeMathNotation } from '@/infrastructure/files/mathNotation'
 import { buildAIServices } from './aiServices'
 import { type AIService, withUsageKind } from './aiService'
-import {
-  ANALYSIS_MIN_OUTPUT_TOKENS,
-  type DocumentAnalysisProgress,
-} from './documentAnalysisService'
+import { type DocumentAnalysisProgress } from './documentAnalysisService'
 import { AppError, isAppError } from '@/infrastructure/errors/AppError'
 import { logger } from '@/infrastructure/logger/logger'
 import { t } from '@/i18n'
@@ -790,11 +787,7 @@ export class CourseContentService {
     ]
 
     try {
-      const { data } = await ai.chatJSON<unknown>(messages, {
-        // A structured topic needs the same head-room as a full analysis.
-        maxTokens: Math.max(ai.maxOutputTokens, ANALYSIS_MIN_OUTPUT_TOKENS),
-        ...(signal ? { signal } : {}),
-      })
+      const { data } = await ai.chatJSON<unknown>(messages, signal ? { signal } : {})
       const output = normalizeTopicAnalysis(data)
       const dependency = validateTopicSourceChunks(
         resolveChunkAliases(output.topic.sourceChunkIds, aliases),

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { ANALYSIS_MIN_OUTPUT_TOKENS } from '@/services/documentAnalysisService'
+import { DEFAULT_AI_SETTINGS } from '@/entities/settings/types'
 
 /**
  * Regression guard for "file uploads fine but analysis always fails".
@@ -142,7 +142,7 @@ describe('document-analyzer output budget', () => {
     expect(estimateTokens(minimal)).toBeGreaterThan(OLD_CHAT_DEFAULT)
   })
 
-  it('the minimal useful analysis fits in the analysis budget', () => {
+  it('the minimal useful analysis fits in the default output cap', () => {
     const minimal = build({
       topics: 3,
       concepts: 3,
@@ -152,10 +152,10 @@ describe('document-analyzer output budget', () => {
       exercises: 2,
       prerequisites: 1,
     })
-    expect(estimateTokens(minimal)).toBeLessThan(ANALYSIS_MIN_OUTPUT_TOKENS)
+    expect(estimateTokens(minimal)).toBeLessThan(DEFAULT_AI_SETTINGS.maxTokens)
   })
 
-  it('a typical analysis fits in the analysis budget', () => {
+  it('a typical analysis fits in the default output cap', () => {
     const typical = build({
       topics: 8,
       concepts: 14,
@@ -165,10 +165,10 @@ describe('document-analyzer output budget', () => {
       exercises: 8,
       prerequisites: 4,
     })
-    expect(estimateTokens(typical)).toBeLessThan(ANALYSIS_MIN_OUTPUT_TOKENS)
+    expect(estimateTokens(typical)).toBeLessThan(DEFAULT_AI_SETTINGS.maxTokens)
   })
 
-  it('the analysis budget is comfortably above the old chat default', () => {
-    expect(ANALYSIS_MIN_OUTPUT_TOKENS).toBeGreaterThan(OLD_CHAT_DEFAULT * 2)
+  it('the default output cap is comfortably above the old chat default', () => {
+    expect(DEFAULT_AI_SETTINGS.maxTokens).toBeGreaterThan(OLD_CHAT_DEFAULT * 2)
   })
 })

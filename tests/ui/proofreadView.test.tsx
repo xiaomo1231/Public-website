@@ -136,6 +136,8 @@ describe('ProofreadView', () => {
       </MemoryRouter>,
     )
     const editor = (await screen.findByLabelText('题目文字')) as HTMLTextAreaElement
+    // The editor can mount before the question text is filled in.
+    await waitFor(() => expect(editor.value).toContain('two'))
     editor.setSelectionRange(editor.value.indexOf('two'), editor.value.indexOf('two'))
     fireEvent.click(screen.getByRole('button', { name: '在光标处开始新小题' }))
     expect(editor.value).toContain('(b) two')

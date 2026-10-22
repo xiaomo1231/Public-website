@@ -58,7 +58,6 @@ import { loadProjectSubjectContext } from './projectSubject'
  */
 
 export const QUESTION_STYLE_PROMPT_VERSION = `${prompts.questionStyle.PROMPT_KIND}/${prompts.questionStyle.VERSION}`
-const OUTPUT_TOKENS = 3_000
 
 export interface HabitsPendingDocument {
   documentId: string
@@ -317,10 +316,7 @@ export class QuestionHabitsService {
       ]
       let data: unknown
       try {
-        ;({ data } = await ai.chatJSON<unknown>(messages, {
-          maxTokens: Math.max(ai.maxOutputTokens ?? 0, OUTPUT_TOKENS),
-          signal: control.signal,
-        }))
+        ;({ data } = await ai.chatJSON<unknown>(messages, { signal: control.signal }))
       } catch (err) {
         if (isAbortError(err, control.signal)) return { ...result, paused: true }
         throw err
