@@ -34,6 +34,7 @@ import { DocumentUploadDialog } from '@/widgets/documents/DocumentUploadDialog'
 import { TextPromptDialog } from './TextPromptDialog'
 import { Button } from '@/shared/ui/Button'
 import { ConfirmDialog } from '@/shared/ui/ConfirmDialog'
+import { ErrorState } from '@/shared/ui/ErrorState'
 import { Input } from '@/shared/ui/Input'
 import { LoadingState } from '@/shared/ui/LoadingState'
 import { SectionHeading } from '@/shared/ui/Section'
@@ -76,7 +77,7 @@ export function ExamTopicsPanel({ projectId }: { projectId: string }): JSX.Eleme
     () => documents.map((doc) => `${doc.id}:${doc.status}:${doc.materialType}`).join('|'),
     [documents],
   )
-  const { overview, loading, reload } = useSyllabusOverview(projectId, version)
+  const { overview, loading, error, reload } = useSyllabusOverview(projectId, version)
   const [uploadOpen, setUploadOpen] = useState(false)
   const [selectedKey, setSelectedKey] = useState<string | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
@@ -224,6 +225,18 @@ export function ExamTopicsPanel({ projectId }: { projectId: string }): JSX.Eleme
     })
 
   if (loading && !overview) return <LoadingState label={t('syllabus.loading')} />
+  // A failed read must not look like "this course has no syllabus".
+  if (error && !overview)
+    return (
+      <ErrorState
+        description={error}
+        action={
+          <Button variant="outline" onClick={() => void reload()}>
+            {t('common.retry')}
+          </Button>
+        }
+      />
+    )
 
   const syllabi = overview?.syllabi ?? []
   const uploadButton = (

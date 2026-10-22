@@ -42,6 +42,8 @@ export function useGuidedQuestion(
   const preparing = useGenerationRun({ abortOnUnmount: true })
   const pending = useRef<GuidedProgress | null>(null)
   const timer = useRef<number | null>(null)
+  /** The save in flight, so 重新开始 can wait for it instead of racing it. */
+  const saving = useRef<Promise<unknown>>(Promise.resolve())
 
   useEffect(() => {
     if (serviceOverride) return
@@ -59,7 +61,8 @@ export function useGuidedQuestion(
     timer.current = null
     const next = pending.current
     pending.current = null
-    if (next && service) void service.saveProgress(questionId, next).catch(() => undefined)
+    if (next && service)
+      saving.current = service.saveProgress(questionId, next).catch(() => undefined)
   }, [questionId, service])
 
   // Save what is pending when the question changes or the page closes.
@@ -123,6 +126,9 @@ export function useGuidedQuestion(
     if (timer.current !== null) window.clearTimeout(timer.current)
     timer.current = null
     pending.current = null
+    // A save already sent would otherwise land after the reset and bring the
+    // progress back.
+    await saving.current
     await service.resetProgress(questionId)
     await reload()
   }, [service, questionId, reload])

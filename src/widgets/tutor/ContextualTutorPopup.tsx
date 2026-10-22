@@ -73,9 +73,16 @@ export function ContextualTutorPopup({
       setMessages((prev) => [...prev, { role: 'user', content: trimmed }])
       setInput('')
       const run = startRun()
+      // A question that got no answer goes back into the box, so it can be
+      // sent again instead of being lost.
+      const takeBack = () => {
+        setMessages((prev) => prev.slice(0, -1))
+        setInput(trimmed)
+      }
       try {
         const services = await buildAIServices()
         if (!services) {
+          takeBack()
           setError(t('translate.noProvider'))
           return
         }
@@ -93,13 +100,9 @@ export function ContextualTutorPopup({
         })
         setMessages((prev) => [...prev, { role: 'assistant', content: answer }])
       } catch (err) {
-        if (isAbortError(err, run.signal)) {
-          // Stopped: take the question back so it can be edited or re-sent.
-          setMessages((prev) => prev.slice(0, -1))
-          setInput(trimmed)
-        } else {
-          setError(friendlyAIError(err))
-        }
+        // Stopped or failed: take the question back so it can be edited or re-sent.
+        takeBack()
+        if (!isAbortError(err, run.signal)) setError(friendlyAIError(err))
       } finally {
         run.finish()
         setBusy(false)
@@ -218,7 +221,13 @@ export function ContextualTutorPopup({
               disabled={busy}
               onChange={(event) => setInput(event.target.value)}
               onKeyDown={(event) => {
-                if (event.key === 'Enter' && !event.shiftKey) {
+                // Enter that confirms an IME candidate (Chinese input) is not a send.
+                if (
+                  event.key === 'Enter' &&
+                  !event.shiftKey &&
+                  !event.nativeEvent.isComposing &&
+                  event.keyCode !== 229
+                ) {
                   event.preventDefault()
                   void send(input)
                 }

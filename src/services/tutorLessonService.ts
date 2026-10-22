@@ -260,7 +260,9 @@ export class TutorLessonService {
     options: TutorLessonOptions,
   ): Promise<TutorLessonResult> {
     const topic = await this.analyses.getTopic(input.topicId)
-    if (!topic) throw new AppError(t('errors.topicNotFound'), 'NOT_FOUND')
+    // A topic id from another course never yields a lesson for this one.
+    if (!topic || topic.projectId !== input.projectId)
+      throw new AppError(t('errors.topicNotFound'), 'NOT_FOUND')
 
     // The lesson prompt plus the course's subject profile: changing either
     // (including the project's subject) invalidates the cached lesson.
@@ -327,7 +329,9 @@ export class TutorLessonService {
     options: TutorLessonOptions,
   ): Promise<TutorLessonResult> {
     const topic = await this.analyses.getTopic(input.topicId)
-    if (!topic) throw new AppError(t('errors.topicNotFound'), 'NOT_FOUND')
+    // A topic id from another course never yields a lesson for this one.
+    if (!topic || topic.projectId !== input.projectId)
+      throw new AppError(t('errors.topicNotFound'), 'NOT_FOUND')
     const subjectContext = await loadProjectSubjectContext(input.projectId, this.db)
     const subject = subjectContext?.subject
     const promptVersion = prompts.subjectProfile.subjectPromptVersion(

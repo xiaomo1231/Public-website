@@ -35,7 +35,9 @@ const KIND_KEYS: Record<GuidedBlankKind, TranslationKey> = {
   exact: 'guided.kind.exact',
 }
 
-const gap = (index: number) => `$\\boxed{\\,${index + 1}\\,}$`
+// Inside a formula the gap is plain LaTeX (another `$…$` would end it).
+const gap = (index: number, insideMath: boolean) =>
+  insideMath ? `\\boxed{\\,${index + 1}\\,}` : `$\\boxed{\\,${index + 1}\\,}$`
 
 export interface GuidedBlankPracticeProps {
   steps: GuidedTextStep[]

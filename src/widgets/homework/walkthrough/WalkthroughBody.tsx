@@ -271,7 +271,7 @@ export function StepCard({ step }: { step: WalkthroughStep }): JSX.Element {
               parts.push(
                 t('homework.walkthrough.step.expected', { value: entryText(wrong.expected) }),
               )
-            return parts.join('；')
+            return parts.join(t('homework.walkthrough.listSeparator'))
           }}
           wrongCell={(row, col) => Boolean(mismatchAt(row, col))}
           idPrefix={id}

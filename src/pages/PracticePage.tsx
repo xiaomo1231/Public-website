@@ -34,6 +34,7 @@ import { optionKeyClass, optionListClass, optionRowClass } from '@/widgets/quiz/
 import { useTranslation } from '@/i18n'
 import { toast } from '@/features/toast/toastStore'
 import { isAbortError } from '@/shared/lib/generationControl'
+import { friendlyAIError } from '@/shared/lib/aiErrors'
 import { useGenerationRun } from '@/shared/lib/useGenerationRun'
 import { GenerationControls } from '@/shared/ui/GenerationControls'
 
@@ -60,6 +61,12 @@ function QuestionCard({
       setFeedback((current) =>
         current && updated.evaluation ? { ...current, evaluation: updated.evaluation } : current,
       )
+    } catch (err) {
+      toast({
+        variant: 'error',
+        title: t('shortAnswer.disputeFailed'),
+        description: (err as Error)?.message,
+      })
     } finally {
       setDisputing(false)
     }
@@ -105,8 +112,12 @@ function QuestionCard({
       onChecked()
     } catch (err) {
       // Stopped: nothing was stored; the answer stays for another try.
-      if (!run || !isAbortError(err, run.signal)) throw err
-      toast({ variant: 'info', title: t('quiz.checkStopped') })
+      if (run && isAbortError(err, run.signal)) {
+        toast({ variant: 'info', title: t('quiz.checkStopped') })
+      } else {
+        // A failure is reported (it used to surface as an unhandled rejection).
+        toast({ variant: 'error', title: t('quiz.gradeFailed'), description: friendlyAIError(err) })
+      }
     } finally {
       run?.finish()
       checkRun.reset()

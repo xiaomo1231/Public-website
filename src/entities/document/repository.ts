@@ -35,7 +35,11 @@ export class DocumentRepository {
 
   async listByProject(projectId: string): Promise<Document[]> {
     try {
-      return this.db.documents.where('projectId').equals(projectId).reverse().sortBy('uploadedAt')
+      return await this.db.documents
+        .where('projectId')
+        .equals(projectId)
+        .reverse()
+        .sortBy('uploadedAt')
     } catch (err) {
       logger.error('DocumentRepository.listByProject failed', { projectId }, err)
       throw new StorageError(t('storage.failedToListDocuments'), err)
@@ -44,7 +48,7 @@ export class DocumentRepository {
 
   async listAll(): Promise<Document[]> {
     try {
-      return this.db.documents.orderBy('uploadedAt').reverse().toArray()
+      return await this.db.documents.orderBy('uploadedAt').reverse().toArray()
     } catch (err) {
       throw new StorageError(t('storage.failedToListDocuments'), err)
     }

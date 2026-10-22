@@ -195,6 +195,17 @@ describe('ReviewCardService', () => {
     expect(await service.list('p1')).toHaveLength(0)
     await expect(service.review(c.id, 'good')).rejects.toThrow()
   })
+
+  it('refuses to rename a card onto another card of the course', async () => {
+    const a = await service.addManual('p1', 'A', '1')
+    await service.addManual('p1', 'B', '2')
+    await expect(service.update(a.id, ' b ', '1')).rejects.toThrow()
+    // Changing only the case or spacing of its own front is fine.
+    expect(await service.update(a.id, ' a ', '3')).toMatchObject({ front: 'a', back: '3' })
+    // Another course may use the same front.
+    await service.addManual('p2', 'C', '3')
+    expect(await service.update(a.id, 'C', '1')).toMatchObject({ front: 'C' })
+  })
 })
 
 describe('first review of a new card', () => {

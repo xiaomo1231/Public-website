@@ -159,7 +159,8 @@ function InterviewLanding({ projectId }: { projectId: string }): JSX.Element {
     const run = generateRun.start()
     setPhase('generating')
     try {
-      const required = scenarios?.[0]?.questions
+      // The checklist comes from a textbook scenario (generated ones go first in the list).
+      const required = scenarios?.find((s) => s.source === 'textbook')?.questions
       const scenario = await (
         await service()
       ).generateScenario(projectId, {

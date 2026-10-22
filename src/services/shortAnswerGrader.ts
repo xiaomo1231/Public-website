@@ -7,6 +7,7 @@ import type { ChatMessage } from '@/infrastructure/ai/types'
 import { logger } from '@/infrastructure/logger/logger'
 import { getUILanguage, t } from '@/i18n'
 import { isAbortError } from '@/shared/lib/generationControl'
+import { friendlyAIError } from '@/shared/lib/aiErrors'
 import { withLightModel, type AIService } from './aiService'
 
 /**
@@ -241,7 +242,12 @@ export class ShortAnswerGrader {
         questionId: question.id,
         error: (err as Error)?.message,
       })
-      return unverifiedShortAnswer(question, answer, t('shortAnswer.checkFailed'))
+      // Say why (key, quota, network…), so the student knows what to fix.
+      return unverifiedShortAnswer(
+        question,
+        answer,
+        `${t('shortAnswer.checkFailed')} ${friendlyAIError(err)}`,
+      )
     }
   }
 }

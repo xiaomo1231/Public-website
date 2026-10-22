@@ -155,6 +155,9 @@ describe('pausing quiz generation', () => {
     // The continuation was told what was already asked.
     expect((chatJSON.mock.calls[1]![0] as ChatMessage[])[1]!.content).toContain('Avoid repeating')
     await expect(service.startQuiz(ready.id)).resolves.toMatchObject({ status: 'in_progress' })
+    // A finished quiz is never reopened by starting it again.
+    await service.completeQuiz(ready.id)
+    await expect(service.startQuiz(ready.id)).resolves.toMatchObject({ status: 'completed' })
   })
 
   it('stopNow aborts the batch in flight: a paused quiz, never a failed one', async () => {

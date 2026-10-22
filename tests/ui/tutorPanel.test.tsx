@@ -248,3 +248,45 @@ describe('TutorPanel', () => {
     expect(seen?.aborted).toBe(true)
   })
 })
+
+describe('TutorPanel resume', () => {
+  it('offers the next question when the resumed conversation has nothing open', async () => {
+    vi.mocked(buildAIServices).mockResolvedValue({
+      tutor: {
+        findOrStartSession: vi
+          .fn()
+          .mockResolvedValue({ session: sessionWith(INTRO), resumed: true }),
+      },
+    } as never)
+
+    renderPanel()
+
+    expect(await screen.findByRole('button', { name: /Next question/ })).toBeInTheDocument()
+    // The difficulty is a label, not the raw enum value.
+    expect(screen.getByText('Intermediate')).toBeInTheDocument()
+  })
+
+  it('keeps the hints already revealed for the open question', async () => {
+    const session = sessionWith(INTRO)
+    session.hintsRevealed = 1
+    session.pendingQuestion = {
+      id: 'q1',
+      prompt: 'What is a derivative?',
+      type: 'numeric',
+      expectedAnswer: '1',
+      explanation: '',
+      knowledgePoint: 'Derivatives',
+      difficulty: 'basic',
+      sourceRefs: [],
+      hints: ['Think of slopes.', 'Use the limit definition.'],
+    }
+    vi.mocked(buildAIServices).mockResolvedValue({
+      tutor: { findOrStartSession: vi.fn().mockResolvedValue({ session, resumed: true }) },
+    } as never)
+
+    renderPanel()
+
+    expect(await screen.findByText('Think of slopes.')).toBeInTheDocument()
+    expect(screen.queryByText('Use the limit definition.')).not.toBeInTheDocument()
+  })
+})

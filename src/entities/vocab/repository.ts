@@ -63,6 +63,8 @@ export class VocabRepository {
   async deleteByProject(projectId: string): Promise<void> {
     const books = await this.db.vocabBooks.where('projectId').equals(projectId).primaryKeys()
     for (const id of books) await this.deleteBook(id)
+    // Entries tagged with the course whose book is already gone (orphans).
+    await this.db.vocabEntries.where('projectId').equals(projectId).delete()
   }
 
   // Review log

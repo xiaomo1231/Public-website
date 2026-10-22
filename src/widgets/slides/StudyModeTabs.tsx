@@ -54,7 +54,7 @@ export function StudyModeTabs({ projectId, active, className }: StudyModeTabsPro
             to={to}
             aria-current={isActive ? 'page' : undefined}
             className={cn(
-              'focus-ring inline-flex min-h-8 items-center gap-1.5 rounded-full px-3 py-1.5 text-[13px] font-medium transition-colors',
+              'focus-ring inline-flex min-h-8 items-center gap-1.5 rounded-full px-3 py-1.5 text-[13px] font-medium transition-colors coarse:min-h-11',
               isActive
                 ? 'bg-card text-foreground shadow-sm'
                 : 'text-muted-foreground hover:text-foreground',

@@ -78,6 +78,7 @@ beforeEach(() => {
     getSet: vi.fn(async () => SET),
     listQuestions: vi.fn(async () => rows.filter((row) => !row.retired)),
     listRetiredQuestions: vi.fn(async () => rows.filter((row) => row.retired)),
+    getQuestion: vi.fn(async (id: string) => rows.find((row) => row.id === id)),
     restoreQuestion: vi.fn(async (id: string) => {
       rows = rows.map((row) => (row.id === id ? { ...row, retired: false } : row))
       return rows.find((row) => row.id === id)
@@ -175,6 +176,23 @@ describe('HomeworkPage archive and re-analysis summary', () => {
     expect(chips[1]).toHaveAttribute('aria-current', 'true')
     expect(screen.getByRole('button', { name: 'Next' })).toBeDisabled()
     expect(screen.getByRole('button', { name: 'Previous' })).toBeEnabled()
+  })
+
+  it('re-reads a question before showing it again (its own saves do not update the list)', async () => {
+    const user = userEvent.setup()
+    rows = [
+      question({ id: 'q1', order: 0, prompt: 'First question.' }),
+      question({ id: 'q2', order: 1, prompt: 'Second question.' }),
+    ]
+    renderPage()
+    expect(await screen.findByText('First question.')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Next' }))
+    expect(await screen.findByText('Second question.')).toBeInTheDocument()
+    // Saved while the question was shown (draft, hints, chat …).
+    rows = rows.map((row) => (row.id === 'q1' ? { ...row, prompt: 'First question, saved.' } : row))
+    await user.click(screen.getByRole('button', { name: 'Previous' }))
+    expect(await screen.findByText('First question, saved.')).toBeInTheDocument()
+    expect(holder.service.getQuestion).toHaveBeenCalledWith('q1')
   })
 })
 

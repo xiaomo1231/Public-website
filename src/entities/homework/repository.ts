@@ -81,6 +81,25 @@ export class HomeworkRepository {
     return question
   }
 
+  /** Append chat turns to the CURRENT row (read and written in one transaction). */
+  async appendMessages(
+    id: string,
+    messages: HomeworkQuestion['messages'],
+    limit: number,
+  ): Promise<HomeworkQuestion | undefined> {
+    return this.db.transaction('rw', this.questions(), async () => {
+      const existing = await this.questions().get(id)
+      if (!existing) return undefined
+      const next: HomeworkQuestion = {
+        ...existing,
+        messages: [...existing.messages, ...messages].slice(-limit),
+        updatedAt: Date.now(),
+      }
+      await this.questions().put(next)
+      return next
+    })
+  }
+
   async updateQuestion(
     id: string,
     patch: Partial<HomeworkQuestion>,
@@ -149,16 +168,23 @@ export class HomeworkRepository {
    * student field on the CURRENT row and clamping the revealed-hint progress
    * to the new hint count. Reading inside the transaction means a draft or
    * message saved while the AI was running can never be overwritten.
+   *
+   * `expectPrompt` is the question text the help was written for: when a
+   * re-recognition changed it meanwhile, nothing is written and `null` is
+   * returned (the caller generates again for the new text). Plain AI help is
+   * not grounded in the professor answer, so the answer-based markers clear.
    */
   async applyGeneratedContent(
     id: string,
     hints: string[],
     solution: string,
     promptVersion: string,
-  ): Promise<HomeworkQuestion | undefined> {
+    expectPrompt?: string,
+  ): Promise<HomeworkQuestion | undefined | null> {
     return this.db.transaction('rw', this.questions(), async () => {
       const existing = await this.questions().get(id)
       if (!existing) return undefined
+      if (expectPrompt !== undefined && existing.prompt !== expectPrompt) return null
       const next: HomeworkQuestion = {
         ...existing,
         hints,
@@ -166,6 +192,8 @@ export class HomeworkRepository {
         generationStatus: 'ready',
         generationError: undefined,
         promptVersion,
+        answerBased: false,
+        previousSolution: undefined,
         revealedHints: Math.min(existing.revealedHints, hints.length),
         updatedAt: Date.now(),
       }
@@ -187,10 +215,19 @@ export class HomeworkRepository {
     solution: string,
     promptVersion: string,
     previousSolution?: string,
-  ): Promise<HomeworkQuestion | undefined> {
+    expect?: { prompt: string; answerText: string },
+  ): Promise<HomeworkQuestion | undefined | null> {
     return this.db.transaction('rw', this.questions(), async () => {
       const existing = await this.questions().get(id)
       if (!existing) return undefined
+      // The question or its answer changed while the AI was writing: the help
+      // would be grounded in stale input, so nothing is written (see above).
+      if (
+        expect &&
+        (existing.prompt !== expect.prompt ||
+          (existing.answerText ?? '').trim() !== expect.answerText)
+      )
+        return null
       const next: HomeworkQuestion = {
         ...existing,
         hints,
@@ -298,12 +335,18 @@ export class HomeworkRepository {
   async deleteSet(setId: string): Promise<void> {
     await this.db.transaction(
       'rw',
-      this.sets(),
-      this.questions(),
-      this.db.homeworkAnswerImages,
+      [
+        this.sets(),
+        this.questions(),
+        this.db.homeworkAnswerImages,
+        this.db.homeworkWalkthroughs,
+        this.db.walkthroughNotes,
+      ],
       async () => {
         await new AnswerImageRepository(this.db).deleteBySet(setId)
         await this.questions().where('setId').equals(setId).delete()
+        // The set's walkthrough and saved Q&A would otherwise be orphaned.
+        await new WalkthroughRepository(this.db).deleteBySet(setId)
         await this.sets().delete(setId)
       },
     )

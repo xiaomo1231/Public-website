@@ -380,6 +380,30 @@ export function routePosition(chain: GuidedChain, matrix: Matrix): number | null
 }
 
 /**
+ * `applyOps`, but when the two readings of several operations (together /
+ * one after another) give different matrices, the one that lands further on
+ * the walkthrough's route wins — the walkthrough may have meant them in
+ * order, and the same operations typed by the student (or replayed from 看这一
+ * 步答案) must follow it.
+ */
+export function applyOpsOnRoute(
+  chain: GuidedChain,
+  current: Matrix,
+  ops: readonly RowOp[],
+): Applied | null {
+  const first = applyOps(current, ops)
+  if (!first || ops.length < 2) return first
+  const otherMode: OpMode = first.mode === 'together' ? 'sequence' : 'together'
+  const other = applyRowOps(current, ops, otherMode)
+  if (!other || sameMatrix(other.matrix, first.matrix)) return first
+  const from = routePosition(chain, current) ?? -1
+  const at = (matrix: Matrix) => routePosition(chain, matrix) ?? -1
+  const firstAt = at(first.matrix)
+  const otherAt = at(other.matrix)
+  return otherAt > from && otherAt > firstAt ? { ...other, mode: otherMode } : first
+}
+
+/**
  * Judge the operations a student typed for the next step from `current`:
  * the walkthrough's step (or a later point of its route), or any other
  * elementary operation that moves towards the RREF.
@@ -394,7 +418,7 @@ export function judgeOps(chain: GuidedChain, current: Matrix, typed: string): Op
       : op.target < height && op.terms.every((term) => term.row < height),
   )
   if (!inRange) return { ok: false, reason: 'out-of-range', ops }
-  const applied = applyOps(current, ops)
+  const applied = applyOpsOnRoute(chain, current, ops)
   if (!applied) return { ok: false, reason: 'unreadable', ops }
   if (!isInvertible(ops, height, applied.mode)) return { ok: false, reason: 'not-invertible', ops }
   if (sameMatrix(applied.matrix, current)) return { ok: false, reason: 'no-change', ops }

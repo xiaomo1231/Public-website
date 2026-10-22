@@ -164,4 +164,29 @@ describe('OpenAICompatibleProvider', () => {
     expect(test.model).toBe('gpt-test')
     expect(test.latencyMs).toBeGreaterThanOrEqual(0)
   })
+
+  it('testConnection fails on a 200 response that carries an error payload', async () => {
+    mockFetch.mockResolvedValueOnce(
+      jsonResponse(200, { error: { message: 'Model gpt-x does not exist', code: 404 } }),
+    )
+    const provider = new OpenAICompatibleProvider('openai', 'OpenAI', config, {
+      defaultModel: 'gpt-test',
+      supportsJsonMode: true,
+    })
+    const test = await provider.testConnection()
+    expect(test.ok).toBe(false)
+    expect(test.error).toBeTruthy()
+  })
+
+  it('testConnection shows an actionable message for a dropped connection', async () => {
+    mockFetch.mockRejectedValueOnce(new TypeError('Failed to fetch'))
+    const provider = new OpenAICompatibleProvider('openai', 'OpenAI', config, {
+      defaultModel: 'gpt-test',
+      supportsJsonMode: true,
+    })
+    const test = await provider.testConnection()
+    expect(test.ok).toBe(false)
+    expect(test.error).not.toMatch(/Failed to fetch/)
+    expect(test.error).toMatch(/base URL/i)
+  })
 })

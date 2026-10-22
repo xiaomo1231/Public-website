@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { Suspense, lazy, useEffect } from 'react'
 import { RouterProvider, createBrowserRouter } from 'react-router-dom'
 import { AppProviders } from './app/providers'
 import { routes } from './app/router'
@@ -11,9 +11,13 @@ import { isUiStyleSavePending } from '@/features/theme/useAppearance'
 import { applyNoteMarkStyle } from '@/features/theme/noteMarkStyle'
 import { useI18nStore, initUILanguage } from '@/i18n'
 import { Toaster } from '@/shared/ui/Toast'
-import { SelectionTranslator } from '@/widgets/translation/SelectionTranslator'
 
 const router = createBrowserRouter(routes)
+
+// Loaded after first paint: it pulls in the AI services and KaTeX.
+const SelectionTranslator = lazy(async () => ({
+  default: (await import('@/widgets/translation/SelectionTranslator')).SelectionTranslator,
+}))
 
 export function App(): JSX.Element {
   const loadAuth = useAuthStore((s) => s.load)
@@ -70,7 +74,9 @@ export function App(): JSX.Element {
     <AppProviders>
       <RouterProvider router={router} />
       <Toaster />
-      <SelectionTranslator />
+      <Suspense fallback={null}>
+        <SelectionTranslator />
+      </Suspense>
     </AppProviders>
   )
 }

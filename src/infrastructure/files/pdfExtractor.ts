@@ -108,6 +108,19 @@ function imageOperators(): ReadonlySet<number> {
  * returns `null` in environments without one (including jsdom) and callers must
  * treat that as "no image available", never as an error.
  */
+/**
+ * Free a loaded PDF. `cleanup()` only drops page caches; `destroy()` also
+ * releases the document in the worker, so a long upload session does not keep
+ * every parsed file alive.
+ */
+async function releasePdf(pdf: { cleanup(): unknown; destroy?: () => unknown }): Promise<void> {
+  try {
+    await (typeof pdf.destroy === 'function' ? pdf.destroy() : pdf.cleanup())
+  } catch {
+    /* already released */
+  }
+}
+
 export async function renderPdfPageImage(
   blob: Blob,
   pageNumber: number,
@@ -214,7 +227,7 @@ export async function renderPdfPageImage(
         height: output.height,
       }
     } finally {
-      await pdf.cleanup()
+      await releasePdf(pdf)
     }
   } catch {
     return null
@@ -400,6 +413,16 @@ export async function extractPdf(blob: Blob): Promise<PdfExtractionResult> {
     ...(isTestEnvironment() ? { disableWorker: true } : {}),
   })
   const pdf = await loadingTask.promise
+  try {
+    return await readPdf(pdf)
+  } finally {
+    await releasePdf(pdf)
+  }
+}
+
+async function readPdf(
+  pdf: Awaited<ReturnType<typeof pdfjsLib.getDocument>['promise']>,
+): Promise<PdfExtractionResult> {
   const pageCount = pdf.numPages
   const pages: ExtractedPage[] = []
   const warnings: string[] = []
@@ -490,8 +513,6 @@ export async function extractPdf(blob: Blob): Promise<PdfExtractionResult> {
   } catch (err) {
     warnings.push(`Metadata extraction failed: ${(err as Error).message}`)
   }
-
-  await pdf.cleanup()
 
   const language: 'zh' | 'en' | 'mixed' | 'unknown' =
     zhChars === 0 && enChars === 0

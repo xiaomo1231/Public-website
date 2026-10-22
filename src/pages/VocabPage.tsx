@@ -101,7 +101,11 @@ export function VocabPage(): JSX.Element {
   }, [refresh, reloadKey])
 
   const refreshStats = useCallback(() => {
-    void service.stats().then(setStats)
+    // A failed read keeps the last numbers on screen.
+    void service
+      .stats()
+      .then(setStats)
+      .catch(() => undefined)
   }, [service])
 
   const chooseBook = async (bookId: string) => {
@@ -214,7 +218,12 @@ export function VocabPage(): JSX.Element {
               starting={starting}
               onStart={() => void start('today')}
               onSettings={async (patch) => {
-                setSettings(await service.updateSettings(patch))
+                try {
+                  setSettings(await service.updateSettings(patch))
+                } catch {
+                  toast({ variant: 'error', title: t('settings.saveFailed') })
+                  return
+                }
                 refreshStats()
               }}
               service={service}
@@ -752,7 +761,9 @@ function CourseVocabPanel({
         description: !bundle
           ? t('vocab.course.noAi', { count: result.unglossed })
           : result.unglossed
-            ? t('vocab.course.unglossed', { count: result.unglossed })
+            ? result.glossError !== undefined
+              ? `${t('vocab.course.unglossed', { count: result.unglossed })} ${friendlyAIError(result.glossError)}`
+              : t('vocab.course.unglossed', { count: result.unglossed })
             : t('vocab.course.glossed', { count: result.glossed }),
       })
       onChanged()
@@ -888,7 +899,21 @@ function MistakePanel({
   t: T
 }): JSX.Element {
   const [items, setItems] = useState<Array<{ view: WordView; card: VocabCard }> | null>(null)
-  const load = useCallback(() => void service.mistakes().then(setItems), [service])
+  const load = useCallback(
+    () =>
+      void service
+        .mistakes()
+        .then(setItems)
+        .catch(() => {
+          setItems([])
+          toast({
+            variant: 'error',
+            title: t('vocab.loadFailed'),
+            description: t('vocab.loadFailedHint'),
+          })
+        }),
+    [service, t],
+  )
   useEffect(load, [load])
   if (!items) return <LoadingState label={t('vocab.loading')} />
   if (items.length === 0) {
@@ -946,7 +971,11 @@ function MistakePanel({
               size="icon"
               aria-label={t('vocab.clearMistake')}
               onClick={async () => {
-                await service.clearMistakes(view.word)
+                try {
+                  await service.clearMistakes(view.word)
+                } catch {
+                  toast({ variant: 'error', title: t('vocab.deleteFailed') })
+                }
                 load()
               }}
             >

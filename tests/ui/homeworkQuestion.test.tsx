@@ -116,6 +116,15 @@ describe('HomeworkQuestionView', () => {
     expect(screen.getByLabelText('Your working')).toHaveValue('my partial working')
   })
 
+  it('saves a draft typed just before switching question (the view unmounts)', async () => {
+    const user = userEvent.setup()
+    const service = stubService()
+    const { unmount } = render(<HomeworkQuestionView question={QUESTION} service={service} />)
+    await user.type(screen.getByLabelText('Your working'), ' more')
+    unmount()
+    expect(service.saveDraft).toHaveBeenCalledWith('q1', 'my partial working more')
+  })
+
   it('checks the current draft and shows an AI similarity estimate with its disclaimer', async () => {
     const user = userEvent.setup()
     const service = stubService()

@@ -135,7 +135,12 @@ export function HomeworkLandingPage(): JSX.Element {
   // While any assignment is being analysed (or a document is still being
   // extracted), re-read local state so each card's progress stays live. This
   // polls IndexedDB only — it never triggers an AI call.
-  const hasActiveWork = busyDocumentId !== null || sets.some((set) => set.status === 'analyzing')
+  const hasActiveWork =
+    busyDocumentId !== null ||
+    sets.some(
+      // Practice sets report their own build; a stranded one must not poll forever.
+      (set) => set.status === 'analyzing' && !isPracticeSet(set),
+    )
   useEffect(() => {
     if (!hasActiveWork) return
     const timer = window.setInterval(() => {

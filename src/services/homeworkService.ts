@@ -30,6 +30,7 @@ import {
 import { getUILanguage, t } from '@/i18n'
 import { HomeworkRepository } from '@/entities/homework/repository'
 import { AnswerImageRepository } from '@/entities/homework/answerImageRepository'
+import { WalkthroughRepository } from '@/entities/homework/walkthroughRepository'
 import { answerImageKey } from '@/entities/homework/answerImages'
 import { answerImageNote, answerImageUrls, withAnswerImages } from './answerImagesAI'
 import { HomeworkAnswerImageService } from './homeworkAnswerImageService'
@@ -642,7 +643,13 @@ export class HomeworkService {
     const questions = await this.homework.listQuestions(setId)
     if (questions.some((question) => hasStudentWork(question))) return true
     // Attached answer images are the learner's own work too.
-    return (await new AnswerImageRepository(this.db).countBySet(setId)) > 0
+    if ((await new AnswerImageRepository(this.db).countBySet(setId)) > 0) return true
+    // So are saved walkthrough Q&A and practice sets built from this assignment.
+    if ((await new WalkthroughRepository(this.db).countNotes(setId)) > 0) return true
+    const set = await this.homework.getSet(setId)
+    if (!set) return false
+    const siblings = await this.homework.listSets(set.projectId)
+    return siblings.some((other) => isPracticeSet(other) && other.parentSetId === setId)
   }
 
   /**
@@ -1343,10 +1350,9 @@ export class HomeworkService {
       ...(imagesIgnored ? { imagesIgnored: true } : {}),
       createdAt: now + 1,
     }
-    // Merge from the latest row so a concurrent regeneration can't drop turns.
-    const latest = (await this.homework.getQuestion(questionId)) ?? question
-    const next = [...latest.messages, student, assistant].slice(-HOMEWORK_MESSAGE_LIMIT)
-    await this.homework.updateQuestion(questionId, { messages: next })
+    // Appended to the latest row inside one transaction, so a concurrent
+    // regeneration or another window's question can't drop turns.
+    await this.homework.appendMessages(questionId, [student, assistant], HOMEWORK_MESSAGE_LIMIT)
     return assistant
   }
 
@@ -1450,10 +1456,10 @@ export class HomeworkService {
         paused: true,
       }
     }
-    forgetRecognizedBatches(document.id)
 
     const incoming = analysis.questions
     if (incoming.length === 0) {
+      forgetRecognizedBatches(document.id)
       // Zero usable questions has several distinct causes; report the real one.
       if (analysis.firstError !== undefined) {
         return {
@@ -1486,7 +1492,21 @@ export class HomeworkService {
           })
         : undefined
 
-    const { summary, pendingIds } = await this.commitReanalysis(set, document, incoming, note)
+    let commit: ReanalysisCommit
+    try {
+      commit = await this.commitReanalysis(set, document, incoming, note)
+    } catch (err) {
+      // A deleted assignment stays deleted; any other commit failure (storage
+      // full, …) must not leave the card `analyzing`. The batches already read
+      // stay in memory so a retry does not pay for them again.
+      if (err instanceof AppError && err.code === 'HOMEWORK_SET_GONE') throw err
+      return {
+        set: await this.failSet(set, friendlyAIError(err)),
+        summary: EMPTY_REANALYSIS_SUMMARY,
+      }
+    }
+    forgetRecognizedBatches(document.id)
+    const { summary, pendingIds } = commit
 
     // Generate the content the commit marked pending, with a bounded number in
     // flight at once (a long sequential chain is the main source of the wait).
@@ -1826,7 +1846,8 @@ export class HomeworkService {
       async () => {
         // If the assignment was deleted while the AI was running, drop the whole
         // result instead of resurrecting the card.
-        if (!(await this.homework.getSet(set.id))) {
+        const currentSet = await this.homework.getSet(set.id)
+        if (!currentSet) {
           throw new AppError(t('homework.setRemoved'), 'HOMEWORK_SET_GONE')
         }
         const all = await this.homework.listQuestions(set.id)
@@ -1898,7 +1919,9 @@ export class HomeworkService {
               answerStatus: answerKeptForMatch(prior, question.number),
               updatedAt: now,
             }
-            if (!unchanged) {
+            // A row left `pending` / `failed` by an earlier paused or interrupted
+            // run is queued too, or it would stay without help (and spinning).
+            if (!unchanged || needsGeneration(prior)) {
               next.generationStatus = 'pending'
               pendingIds.push(prior.id)
             }
@@ -1920,7 +1943,7 @@ export class HomeworkService {
               answerStatus: answerKeptForMatch(prior, question.number),
               updatedAt: now,
             }
-            if (unchanged) {
+            if (unchanged && !needsGeneration(prior)) {
               summary.matched += 1
             } else {
               // Keep the old hints/solution until the new ones are ready; the row
@@ -1995,8 +2018,11 @@ export class HomeworkService {
         // atomically with the questions so a refresh right after the commit still
         // shows the correct stage.
         const pending = pendingIds.length > 0
+        // Spread the row as it is now (not the snapshot from when the run
+        // started): fields changed meanwhile — attached answer file, manual
+        // answer split, notices — must not be reverted.
         await this.homework.upsertSet({
-          ...set,
+          ...currentSet,
           status: pending ? 'analyzing' : 'ready',
           questionCount: rows.length,
           errorMessage: undefined,
@@ -2104,7 +2130,10 @@ export class HomeworkService {
         hints,
         solution,
         HOMEWORK_QUESTION_PROMPT_VERSION,
+        question.prompt,
       )
+      // Re-recognized meanwhile: write help for the question as it is now.
+      if (updated === null) return this.runGenerateContent(questionId, signal)
       return { question: updated }
     } catch (err) {
       // Stopped by the student: back to how it was (pending stays pending, a
@@ -2210,7 +2239,10 @@ export class HomeworkService {
         content.solution,
         HOMEWORK_QUESTION_PROMPT_VERSION,
         previousSolution,
+        { prompt: question.prompt, answerText: answer },
       )
+      // The question or its answer changed meanwhile: generate for the new one.
+      if (updated === null) return this.runGenerateContent(questionId, signal)
       return { question: updated }
     } catch (err) {
       if (signal?.aborted) {
@@ -2239,16 +2271,16 @@ export class HomeworkService {
     if (!(await this.homework.getSet(set.id))) return set
     // Never touch the questions here: on a failed re-analysis the existing
     // questions and every student record must stay exactly as they were.
-    const failed: HomeworkSet = {
-      ...set,
+    // Patch the stored row rather than writing back the snapshot taken when the
+    // run started, so fields changed meanwhile (answer file, notices) survive.
+    const patch: Partial<HomeworkSet> = {
       status: 'failed',
       errorMessage: message,
       analysisNote: undefined,
       progress: undefined,
       updatedAt: Date.now(),
     }
-    await this.homework.upsertSet(failed)
-    return failed
+    return (await this.homework.updateSet(set.id, patch)) ?? { ...set, ...patch }
   }
 
   private requireAI(): AIService {
@@ -2538,6 +2570,11 @@ function answerKeptForMatch(
   const before = prior.number ? normalizeAnswerNumber(prior.number) : ''
   const after = incomingNumber ? normalizeAnswerNumber(incomingNumber) : ''
   return before === after ? 'matched' : 'needs_review'
+}
+
+/** Help that never finished (paused, interrupted or failed) is redone on a re-read. */
+function needsGeneration(question: HomeworkQuestion): boolean {
+  return question.generationStatus === 'pending' || question.generationStatus === 'failed'
 }
 
 function groundedChunkIds(question: {

@@ -5,6 +5,7 @@ import { DocumentList } from '@/widgets/documents/DocumentList'
 import { DocumentUploadDialog } from '@/widgets/documents/DocumentUploadDialog'
 import { materialGroupStatus } from '@/widgets/documents/materialGroupStatus'
 import { Button } from '@/shared/ui/Button'
+import { ErrorState } from '@/shared/ui/ErrorState'
 import { cn } from '@/shared/lib/utils'
 import { useUiStyle } from '@/features/theme/useAppearance'
 import { useDocuments } from '@/features/documents/useDocuments'
@@ -60,7 +61,7 @@ const GROUPS: readonly MaterialGroupSpec[] = [
  */
 export function ProjectDocumentsTab({ projectId }: { projectId: string }): JSX.Element {
   const { t } = useTranslation()
-  const { documents, loading, remove, rename } = useDocuments(projectId)
+  const { documents, loading, error, refresh, remove, rename } = useDocuments(projectId)
   const lab = useUiStyle().uiStyle === 'lab'
   const [openType, setOpenType] = useState<LearningMaterialType | null>(null)
 
@@ -110,6 +111,18 @@ export function ProjectDocumentsTab({ projectId }: { projectId: string }): JSX.E
           </Link>
         </Button>
       </div>
+
+      {/* A failed read must not look like "no files yet". */}
+      {error && documents.length === 0 && (
+        <ErrorState
+          description={error}
+          action={
+            <Button variant="outline" onClick={() => void refresh().catch(() => undefined)}>
+              {t('common.retry')}
+            </Button>
+          }
+        />
+      )}
 
       <div className="stagger-in grid gap-x-8 gap-y-8 lab:gap-4 lg:lecture:grid-cols-3">
         {GROUPS.map((group) => {

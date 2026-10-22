@@ -120,6 +120,27 @@ export function HomeworkPage(): JSX.Element {
     )
   }, [service, assignmentId, projectId])
 
+  // The question view seeds its state from the list entry once, and its own
+  // saves (draft, hints, chat) do not update this list — so re-read the row
+  // before showing a question again, or it would show (and later overwrite)
+  // stale data.
+  const selectQuestion = useCallback(
+    (id: string | null) => {
+      if (!id || !service) {
+        setActiveId(id)
+        return
+      }
+      void service
+        .getQuestion(id)
+        .catch(() => undefined)
+        .then((fresh) => {
+          if (fresh) setQuestions((list) => list.map((q) => (q.id === fresh.id ? fresh : q)))
+          setActiveId(id)
+        })
+    },
+    [service],
+  )
+
   useEffect(() => {
     let alive = true
     void load()
@@ -433,7 +454,7 @@ export function HomeworkPage(): JSX.Element {
                       variant="outline"
                       size="sm"
                       className="shrink-0"
-                      onClick={() => setActiveId(questions[Math.max(0, index - 1)]?.id ?? null)}
+                      onClick={() => selectQuestion(questions[Math.max(0, index - 1)]?.id ?? null)}
                       disabled={index <= 0}
                     >
                       <ArrowLeft className="h-4 w-4" />
@@ -455,7 +476,7 @@ export function HomeworkPage(): JSX.Element {
                               <button
                                 type="button"
                                 ref={isActive ? activeChipRef : undefined}
-                                onClick={() => setActiveId(question.id)}
+                                onClick={() => selectQuestion(question.id)}
                                 aria-current={isActive ? 'true' : undefined}
                                 aria-label={`${position + 1}. ${question.number ?? question.prompt}`}
                                 title={question.number ?? question.prompt}
@@ -489,7 +510,7 @@ export function HomeworkPage(): JSX.Element {
                       size="sm"
                       className="shrink-0"
                       onClick={() =>
-                        setActiveId(
+                        selectQuestion(
                           questions[Math.min(questions.length - 1, index + 1)]?.id ?? null,
                         )
                       }

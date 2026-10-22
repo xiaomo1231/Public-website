@@ -291,10 +291,30 @@ export class OpenAICompatibleProvider implements AIProvider {
           error: errorFromStatus(res.status, message).message,
         }
       }
+      // Some providers answer 200 with `{"error": …}` (bad model, no balance).
+      const json: unknown = await res.json().catch(() => null)
+      if (hasErrorPayload(json)) {
+        return {
+          ok: false,
+          latencyMs,
+          model: this.config.model,
+          error: errorFromPayload(json, res.status).message,
+        }
+      }
       return { ok: true, latencyMs, model: this.config.model }
     } catch (err) {
       const latencyMs = Date.now() - start
-      const message = err instanceof Error ? err.message : t('errors.aiConnectionFailed')
+      // Timeouts and dropped connections carry developer wording ("timed out
+      // after 70000ms", "Failed to fetch"); show the actionable message instead.
+      const code = err instanceof AIProviderError ? err.code : undefined
+      const message =
+        code === 'TIMEOUT'
+          ? t('friendlyError.timeout')
+          : code === 'PROVIDER_UNAVAILABLE'
+            ? t('friendlyError.providerUnavailable')
+            : err instanceof Error
+              ? err.message
+              : t('errors.aiConnectionFailed')
       return { ok: false, latencyMs, model: this.config.model, error: message }
     } finally {
       budget.dispose()

@@ -521,7 +521,13 @@ export class SyllabusService {
         out.push(document)
         continue
       }
-      const chunks = await this.chunks.listByDocument(document.id)
+      // Only the first few chunks are read: loading a whole textbook on every
+      // panel reload would be wasted work.
+      const chunks = await this.db.chunks
+        .where('[documentId+order]')
+        .between([document.id, -Infinity], [document.id, Infinity])
+        .limit(FIRST_PAGE_CHUNKS)
+        .toArray()
       const firstPage = chunks[0]?.pageNumber
       const head = chunks
         .slice(0, FIRST_PAGE_CHUNKS)

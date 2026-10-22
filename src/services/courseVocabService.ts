@@ -10,6 +10,7 @@ import { loadCommonWords } from '@/infrastructure/vocab/wordData'
 import { prompts } from '@/infrastructure/ai/prompts'
 import { logger } from '@/infrastructure/logger/logger'
 import { AppError } from '@/infrastructure/errors/AppError'
+import { AIProviderError, type AIErrorCode } from '@/infrastructure/ai/errors'
 import { withLightModel, type AIService } from './aiService'
 import type { ProjectService } from './projectService'
 import { loadProjectSubject } from './projectSubject'
@@ -28,6 +29,16 @@ export const COURSE_TERM_LIMIT = 150
 /** Terms glossed per AI request. */
 const GLOSS_BATCH = 40
 
+/** Errors every later batch would hit too: glossing stops at the first one. */
+const ACCOUNT_ERRORS = new Set<AIErrorCode>([
+  'MISSING_API_KEY',
+  'MISSING_BASE_URL',
+  'MISSING_MODEL',
+  'AUTH_FAILED',
+  'QUOTA_EXCEEDED',
+  'ENDPOINT_NOT_FOUND',
+])
+
 export interface CourseVocabResult {
   book: VocabBook
   added: number
@@ -38,6 +49,8 @@ export interface CourseVocabResult {
   total: number
   /** The glossing was paused / stopped before every batch ran (finished batches are saved). */
   paused: boolean
+  /** The first AI error while glossing (the words were still saved). */
+  glossError?: unknown
 }
 
 /** Gloss progress: AI batches finished / planned in this run. */
@@ -194,7 +207,7 @@ export class CourseVocabService {
     const entries = [...byTerm.values()]
     await this.repo.putBook(book)
     await this.repo.putEntries(entries)
-    const { glossed, dropped, paused } = await this.gloss(
+    const { glossed, dropped, paused, error } = await this.gloss(
       entries,
       await loadProjectSubject(projectId),
       language,
@@ -209,6 +222,7 @@ export class CourseVocabService {
       unglossed: kept.filter((entry) => entry.meanings.length === 0).length,
       total: kept.length,
       paused,
+      ...(error !== undefined ? { glossError: error } : {}),
     }
   }
 
@@ -222,9 +236,10 @@ export class CourseVocabService {
     language: string | undefined,
     control: GenerationControl,
     onProgress?: (progress: CourseVocabProgress) => void,
-  ): Promise<{ glossed: number; dropped: Set<string>; paused: boolean }> {
+  ): Promise<{ glossed: number; dropped: Set<string>; paused: boolean; error?: unknown }> {
     const dropped = new Set<string>()
     let glossed = 0
+    let error: unknown
     const missing = entries.filter((entry) => entry.meanings.length === 0)
     if (!this.ai || missing.length === 0) return { glossed, dropped, paused: false }
     const total = Math.ceil(missing.length / GLOSS_BATCH)
@@ -284,10 +299,14 @@ export class CourseVocabService {
         if (isAbortError(err, control.signal)) return { glossed, dropped, paused: true }
         // The words stay, without a meaning; the next extraction tries again.
         logger.warn('Course vocabulary gloss failed', { error: (err as Error)?.message })
+        error ??= err
+        // A bad key, an empty balance or a wrong model fails every batch the
+        // same way: stop instead of sending the rest.
+        if (err instanceof AIProviderError && ACCOUNT_ERRORS.has(err.code)) break
       }
       done += 1
       onProgress?.({ done, total })
     }
-    return { glossed, dropped, paused: false }
+    return { glossed, dropped, paused: false, ...(error !== undefined ? { error } : {}) }
   }
 }

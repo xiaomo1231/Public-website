@@ -44,6 +44,7 @@ import {
 } from '@/entities/homework/splitQuestion'
 import {
   detailedVariant,
+  generatedSource,
   normalizeSectionSources,
   planWalkthrough,
   switchSectionSource,
@@ -223,6 +224,23 @@ export function notifyWalkthroughChanged(): void {
 export function walkthroughRunControl(setId: string): GenerationRun | undefined {
   const control = runs.get(setId)?.control
   return control && 'requestPause' in control ? (control as GenerationRun) : undefined
+}
+
+/**
+ * A paused 全部重新生成 outlives a compare / detailed-version run started in
+ * between: its `forceSince` is carried along and restored afterwards, so the
+ * forced rewrite can still be continued without redoing what it wrote.
+ */
+function heldForcedRun(setId: string): WalkthroughPausedRun | undefined {
+  const paused = pausedRuns.get(setId)
+  return paused?.forceSince !== undefined
+    ? {
+        stopped: paused.stopped,
+        done: paused.done,
+        total: paused.total,
+        forceSince: paused.forceSince,
+      }
+    : undefined
 }
 
 /** The run that was paused during this page visit, if any. */
@@ -471,9 +489,26 @@ export class HomeworkWalkthroughService {
             },
             onAttempt: (attempt) => setAttempt(progress, [entry.id], attempt),
           })
-          // "Not enough information" is a finished answer, not a failure.
-          // The student's 普通 / 详细 choice outlives a rewrite.
-          await save(withLevel(section, entry.section))
+          // "Not enough information" is a finished answer, not a failure —
+          // but it never replaces a section that is ready (a rewrite whose
+          // model answered "not enough" keeps the good text, and counts as
+          // not done).
+          const latest = await this.storedSection(base.id, entry.id)
+          // (A ready section for inputs that have since changed is about
+          // another question text, so "not enough" may replace that one.)
+          const kept = generatedSource(latest)
+          if (
+            section.status === 'insufficient' &&
+            kept?.status === 'ready' &&
+            kept.inputHash === entry.inputHash
+          ) {
+            result.failed += 1
+            progress.failed += 1
+            continue
+          }
+          // The student's 普通 / 详细 choice outlives a rewrite (read now: it
+          // may have been switched while the section was being written).
+          await save(withLevel(section, latest ?? entry.section))
           result.generated += 1
         } catch (err) {
           if (isAbortError(err, control.signal)) {
@@ -896,6 +931,7 @@ export class HomeworkWalkthroughService {
   ): Promise<WalkthroughRunResult> {
     if (runs.has(setId))
       return Promise.reject(new AppError(t('homework.walkthrough.busy'), 'VALIDATION_ERROR'))
+    const held = heldForcedRun(setId)
     pausedRuns.delete(setId)
     const single = sectionIds?.length === 1 ? sectionIds[0] : undefined
     const progress: WalkthroughProgress = {
@@ -913,7 +949,9 @@ export class HomeworkWalkthroughService {
             done: progress.done,
             total: progress.total,
             compare: true,
+            ...(held ? { forceSince: held.forceSince } : {}),
           })
+        else if (held) pausedRuns.set(setId, held)
         return result
       })
       .finally(() => {
@@ -1461,6 +1499,7 @@ export class HomeworkWalkthroughService {
         body: formatHomeworkReviewText(renderOverview(merged)),
         status: 'ready',
         inputHash: entry.inputHash,
+        builtFrom: ids,
         generatedAt: now,
       }
     }
@@ -1475,6 +1514,7 @@ export class HomeworkWalkthroughService {
         : {}),
       status: 'ready',
       inputHash: entry.inputHash,
+      builtFrom: ids,
       generatedAt: now,
     }
   }
@@ -1514,6 +1554,7 @@ export class HomeworkWalkthroughService {
     if (runs.has(setId))
       return Promise.reject(new AppError(t('homework.walkthrough.busy'), 'VALIDATION_ERROR'))
     const control = options.control ?? createGenerationRun()
+    const held = heldForcedRun(setId)
     pausedRuns.delete(setId)
     const single = options.sectionIds?.length === 1 ? options.sectionIds[0] : undefined
     const progress: WalkthroughProgress = {
@@ -1531,7 +1572,9 @@ export class HomeworkWalkthroughService {
             done: progress.done,
             total: progress.total,
             variant: options.sectionIds ? { sectionIds: options.sectionIds } : {},
+            ...(held ? { forceSince: held.forceSince } : {}),
           })
+        else if (held) pausedRuns.set(setId, held)
         return result
       })
       .finally(() => {

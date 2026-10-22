@@ -614,9 +614,15 @@ export class PracticeService {
   /** Practice attempts on one knowledge point, as quiz attempts (for a mastery rebuild). */
   async practiceHistory(projectId: string, knowledgePoint: string): Promise<QuestionAttempt[]> {
     const questions = await this.practice.listQuestionsByProject(projectId)
+    // Topic names read once, not one lookup per practice question.
+    const topicNames = new Map(
+      (await this.analyses.listTopics(projectId)).map((topic) => [topic.id, topic.name]),
+    )
     const history: QuestionAttempt[] = []
     for (const question of questions) {
-      if ((await this.knowledgePointFor(question)) !== knowledgePoint) continue
+      const point =
+        (question.topicId ? topicNames.get(question.topicId) : undefined) ?? question.documentName
+      if (point !== knowledgePoint) continue
       const quizQuestion = { ...this.asQuizQuestion(question, question.rubric), knowledgePoint }
       for (const attempt of await this.practice.listAttemptsByQuestion(question.id)) {
         if (attempt.isCorrect === undefined) continue

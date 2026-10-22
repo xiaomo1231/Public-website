@@ -164,18 +164,71 @@ export function validateGuidedSteps(
   return { steps, droppedBlanks }
 }
 
-/** The step text with each blank shown as a numbered gap (for display). */
-export function stepTextWithGaps(step: GuidedTextStep, gap: (index: number) => string): string {
-  return step.text.replace(PLACEHOLDER, (whole, id: string) => {
+/**
+ * The math spans ($…$, $$…$$, \(…\), \[…\]) of a Markdown text, as
+ * [start, end) offsets. A placeholder inside one must be replaced by LaTeX,
+ * not by Markdown or another `$…$`, or the formula breaks.
+ */
+export function mathSpans(text: string): Array<[number, number]> {
+  const spans: Array<[number, number]> = []
+  let index = 0
+  while (index < text.length) {
+    const char = text[index]!
+    if (char === '\\' && (text[index + 1] === '(' || text[index + 1] === '[')) {
+      const close = text.indexOf(text[index + 1] === '(' ? '\\)' : '\\]', index + 2)
+      if (close < 0) break
+      spans.push([index, close + 2])
+      index = close + 2
+      continue
+    }
+    if (char === '\\') {
+      index += 2
+      continue
+    }
+    if (char === '$') {
+      const fence = text[index + 1] === '$' ? '$$' : '$'
+      let close = index + fence.length
+      for (;;) {
+        close = text.indexOf(fence, close)
+        if (close < 0 || text[close - 1] !== '\\') break
+        close += 1
+      }
+      if (close < 0) break
+      spans.push([index, close + fence.length])
+      index = close + fence.length
+      continue
+    }
+    index += 1
+  }
+  return spans
+}
+
+function inMath(spans: ReadonlyArray<[number, number]>, offset: number): boolean {
+  return spans.some(([start, end]) => offset > start && offset < end)
+}
+
+/**
+ * The step text with each blank shown as a numbered gap (for display).
+ * `gap` gets whether the placeholder sits inside a formula.
+ */
+export function stepTextWithGaps(
+  step: GuidedTextStep,
+  gap: (index: number, insideMath: boolean) => string,
+): string {
+  const spans = mathSpans(step.text)
+  return step.text.replace(PLACEHOLDER, (whole, id: string, offset: number) => {
     const index = step.blanks.findIndex((blank) => blank.id === id)
-    return index >= 0 ? gap(index) : whole
+    return index >= 0 ? gap(index, inMath(spans, offset)) : whole
   })
 }
 
 /** The step text with the answers filled in (看这一步答案 / completed steps). */
 export function stepTextWithAnswers(step: GuidedTextStep): string {
-  return step.text.replace(PLACEHOLDER, (whole, id: string) => {
+  const spans = mathSpans(step.text)
+  return step.text.replace(PLACEHOLDER, (whole, id: string, offset: number) => {
     const blank = step.blanks.find((item) => item.id === id)
-    return blank ? `**${blank.answer}**` : whole
+    if (!blank) return whole
+    // Bold is Markdown; inside a formula the answer is written as is.
+    return inMath(spans, offset) ? `{${blank.answer}}` : `**${blank.answer}**`
   })
 }

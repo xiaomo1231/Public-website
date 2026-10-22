@@ -429,8 +429,10 @@ describe('oral grading, follow-ups and results', () => {
     // Main: 1/7, follow-up 1: 1/1, follow-up 2: 1/2 → topic 3/10.
     const [topic] = oralTopicScores(questions, attempts)
     expect(topic).toMatchObject({ earned: 3, total: 10, percentage: 30, unscored: 0 })
-    // Quiz percentage: (1/7 + 1 + 1/2) / 3 graded questions.
-    expect(completed.score!.percentage).toBe(Math.round(((1 / 7 + 1 + 0.5) / 3) * 100))
+    // The headline uses the same pooled points as the topic (3/10 = 30%), not
+    // the per-question average (1/7 + 1 + 1/2) / 3 = 55% it used to show.
+    expect(completed.score!.percentage).toBe(30)
+    expect(completed.score!.rubricPoints).toEqual({ earned: 3, total: 10 })
     // Short-answer mastery: half weight.
     const main = attempts.find((a) => a.questionId === groups[0]!.main.id)!
     expect(observationFromAttempt(main).weight).toBe(0.5)
@@ -439,6 +441,10 @@ describe('oral grading, follow-ups and results', () => {
     await service.disputeAttempt(main.id)
     const after = oralTopicScores(questions, await service.getAttempts(quiz.id))[0]!
     expect(after).toMatchObject({ earned: 2, total: 3, unscored: 1 })
+    // …and out of the headline, which still agrees with the topic.
+    const rescored = await service.getQuiz(quiz.id)
+    expect(rescored.score!.percentage).toBe(after.percentage)
+    expect(rescored.score!.rubricPoints).toEqual({ earned: 2, total: 3 })
   })
 
   it('scores a blank answer after the countdown as timed out, without asking the AI', async () => {

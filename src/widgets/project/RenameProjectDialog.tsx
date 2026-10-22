@@ -15,7 +15,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { SUBJECT_LABEL_KEYS, type Project, type Subject } from '@/entities/project/types'
 import { useTranslation, type TranslationKey } from '@/i18n'
 import { SubjectDetailsFields } from './SubjectDetailsFields'
-import { subjectDetailsFor, type ExamStyleChoice, type SubjectDetails } from './subjectDetails'
+import {
+  subjectDetailsFor,
+  targetLanguageInvalid,
+  type ExamStyleChoice,
+  type SubjectDetails,
+} from './subjectDetails'
 
 const SUBJECT_OPTIONS = Object.entries(SUBJECT_LABEL_KEYS) as [Subject, TranslationKey][]
 
@@ -74,7 +79,11 @@ export function RenameProjectDialog({
       details.targetLanguage !==
         (subject === 'language' ? (project.targetLanguage ?? null) : null) ||
       details.examStyle !== (subject === 'medicine' ? (project.examStyle ?? null) : null))
-  const canSubmit = trimmed.length > 0 && (nameChanged || subjectChanged) && !busy
+  const canSubmit =
+    trimmed.length > 0 &&
+    (nameChanged || subjectChanged) &&
+    !busy &&
+    !targetLanguageInvalid(subject, targetLanguage)
 
   async function submit(e: React.FormEvent) {
     e.preventDefault()

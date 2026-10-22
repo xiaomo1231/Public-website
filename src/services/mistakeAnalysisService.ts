@@ -9,6 +9,7 @@ import type { Mistake, MistakeAnalysis, MistakeType } from '@/entities/mistake/t
 import { MISTAKE_TYPES } from '@/entities/mistake/types'
 import { collectSourceSnippets } from './sourceContext'
 import { isAbortError } from '@/shared/lib/generationControl'
+import { friendlyAIError } from '@/shared/lib/aiErrors'
 import { AppError } from '@/infrastructure/errors/AppError'
 import { t } from '@/i18n'
 import { loadProjectSubjectContext } from './projectSubject'
@@ -72,8 +73,8 @@ export class MistakeAnalysisService {
         await this.mistakes.restoreAnalysisState(mistakeId, mistake)
         throw err
       }
-      const message = err instanceof Error ? err.message : t('errors.analysisFailed')
-      await this.mistakes.markAnalysisFailed(mistakeId, message)
+      // Stored for the card: an actionable reason (key, quota, network…), not a raw error.
+      await this.mistakes.markAnalysisFailed(mistakeId, friendlyAIError(err))
       throw err
     }
   }
@@ -149,8 +150,22 @@ export class MistakeAnalysisService {
       ...(opts.signal ? { signal: opts.signal } : {}),
     })
 
+    // A reply with none of the analysis fields is unusable: fail (nothing is
+    // saved) rather than store an analysis made only of placeholders.
+    if (!hasAnalysisContent(data)) {
+      throw new AppError(t('friendlyError.invalidResponse'), 'INVALID_RESPONSE')
+    }
     return normalizeAnalysis(data)
   }
+}
+
+/** True when the model said something about the mistake itself. */
+export function hasAnalysisContent(raw: unknown): boolean {
+  if (!raw || typeof raw !== 'object') return false
+  const fields = raw as Record<string, unknown>
+  return ['whereWrong', 'firstError', 'whyWrong', 'correctApproach', 'possibleCause'].some(
+    (key) => typeof fields[key] === 'string' && (fields[key] as string).trim().length > 0,
+  )
 }
 
 /**

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Loader2, Play, Trash2 } from 'lucide-react'
 import type { HomeworkSet } from '@/entities/homework/types'
@@ -53,7 +53,27 @@ function PracticeSetRow({
   const [confirm, setConfirm] = useState(false)
   const { run, state, start, finish } = useGenerationRun()
   const running = state === 'running' || state === 'pausing'
-  const unfinished = set.status === 'paused' || set.status === 'failed'
+  // 继续 needs a draft to continue from (a build where every question was
+  // dropped is `failed` with nothing left to do).
+  const unfinished =
+    (set.status === 'paused' || set.status === 'failed') && Boolean(set.practice?.draft)
+  const stranded =
+    set.status === 'analyzing' && !running && Boolean(service) && !service!.isRunning(set.id)
+
+  // Building, but no run behind it (the page was reloaded mid-build).
+  useEffect(() => {
+    if (!stranded || !service) return
+    let alive = true
+    void service
+      .recoverInterrupted(set.id)
+      .then((next) => {
+        if (alive && next && next.status !== 'analyzing') onChanged()
+      })
+      .catch(() => undefined)
+    return () => {
+      alive = false
+    }
+  }, [stranded, service, set.id, onChanged])
 
   const resume = async (): Promise<void> => {
     if (!service) return
@@ -132,7 +152,8 @@ function PracticeSetRow({
         className="ml-auto text-destructive hover:text-destructive"
         aria-label={t('practiceSet.delete')}
         onClick={() => setConfirm(true)}
-        disabled={running || !service}
+        // A build started from the launcher dialog runs without this row's control.
+        disabled={running || !service || service.isRunning(set.id)}
       >
         <Trash2 className="h-3.5 w-3.5" aria-hidden />
       </Button>

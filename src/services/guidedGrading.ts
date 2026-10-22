@@ -9,9 +9,16 @@
  *   text       → `blankAccepted` (accepted answers; width / case / punctuation ignored)
  *   exact      → program-output comparison (line endings / trailing spaces only)
  *
- * `unverified` means the grader could not decide; it is never counted wrong.
+ * `unverified` means the grader could not decide (the reference itself could
+ * not be read); it is never counted wrong. A student answer that cannot be
+ * read while the reference can is `wrong` with reason `unreadable` — otherwise
+ * typing anything unparsable would pass the step.
  */
-import { compareMath, numericEquivalent } from '@/infrastructure/math/expressionEvaluator'
+import {
+  compareMath,
+  numericEquivalent,
+  previewExpression,
+} from '@/infrastructure/math/expressionEvaluator'
 import { compareQuantity, splitQuantity } from '@/infrastructure/math/quantityAnswer'
 import { compareEquations, parseEquation } from '@/infrastructure/chemistry/equation'
 import type { GuidedBlank } from '@/entities/homework/guided'
@@ -34,24 +41,32 @@ export function gradeBlank(blank: GuidedBlank, given: string): BlankGrade {
   switch (blank.kind) {
     case 'expression': {
       const result = compareMath(answer, blank.answer).equivalent
-      return result === null ? { verdict: 'unverified' } : { verdict: result ? 'correct' : 'wrong' }
+      if (result !== null) return { verdict: result ? 'correct' : 'wrong' }
+      return readableMath(blank.answer) && !readableMath(answer)
+        ? { verdict: 'wrong', reason: 'unreadable' }
+        : { verdict: 'unverified' }
     }
     case 'number': {
       const result = numericEquivalent(answer, blank.answer, blank.tolerance ?? 1e-2)
-      return result === null
-        ? { verdict: 'unverified', reason: 'unreadable' }
-        : { verdict: result ? 'correct' : 'wrong' }
+      if (result !== null) return { verdict: result ? 'correct' : 'wrong' }
+      return readableNumber(blank.answer) && !readableNumber(answer)
+        ? { verdict: 'wrong', reason: 'unreadable' }
+        : { verdict: 'unverified', reason: 'unreadable' }
     }
     case 'quantity': {
       const reference = splitQuantity(blank.answer)
       if (!reference || !reference.unitText) {
         const result = numericEquivalent(answer, blank.answer)
-        return result === null
-          ? { verdict: 'unverified' }
-          : { verdict: result ? 'correct' : 'wrong' }
+        if (result !== null) return { verdict: result ? 'correct' : 'wrong' }
+        return readableNumber(blank.answer) && !readableNumber(answer)
+          ? { verdict: 'wrong', reason: 'unreadable' }
+          : { verdict: 'unverified' }
       }
       const result = compareQuantity(answer, String(reference.value), reference.unitText)
-      if (result.isCorrect === null) return { verdict: 'unverified', reason: 'unreadable' }
+      if (result.isCorrect === null)
+        return splitQuantity(answer) === null && !readableNumber(answer)
+          ? { verdict: 'wrong', reason: 'unreadable' }
+          : { verdict: 'unverified', reason: 'unreadable' }
       if (result.isCorrect) return { verdict: 'correct' }
       if (result.outcome === 'missing-unit') return { verdict: 'wrong', reason: 'missing-unit' }
       if (result.outcome === 'wrong-dimension')
@@ -69,6 +84,10 @@ export function gradeBlank(blank: GuidedBlank, given: string): BlankGrade {
         case 'correct':
           return { verdict: 'correct' }
         case 'unreadable':
+          // The reference parses (above), so it is the student's text.
+          return parseEquation(answer).ok
+            ? { verdict: 'unverified', reason: 'unreadable' }
+            : { verdict: 'wrong', reason: 'unreadable' }
         case 'isomers':
           return { verdict: 'unverified', reason: 'unreadable' }
         case 'unbalanced':
@@ -93,6 +112,16 @@ export function gradeBlank(blank: GuidedBlank, given: string): BlankGrade {
           : 'wrong',
       }
   }
+}
+
+/** The text parses as a number (compared with itself). */
+function readableNumber(text: string): boolean {
+  return numericEquivalent(text, text) !== null
+}
+
+/** The text parses as a math expression (exactly as the grader reads it). */
+function readableMath(text: string): boolean {
+  return previewExpression(text).status === 'ok'
 }
 
 /** A step is complete when no blank is wrong or empty (undecidable ones pass). */

@@ -38,6 +38,7 @@ import { QuestionSource } from './QuestionSource'
 import { ShortAnswerFeedback } from './ShortAnswerFeedback'
 import { useTranslation } from '@/i18n'
 import { isAbortError } from '@/shared/lib/generationControl'
+import { friendlyAIError } from '@/shared/lib/aiErrors'
 import { useGenerationRun } from '@/shared/lib/useGenerationRun'
 import { GenerationControls } from '@/shared/ui/GenerationControls'
 
@@ -167,7 +168,7 @@ export function OralExamSession({
       if (next === 'feedback') setStage('feedback')
       else setPosition(next)
     } catch (err) {
-      toast({ variant: 'error', title: t('quiz.gradeFailed'), description: (err as Error).message })
+      toast({ variant: 'error', title: t('quiz.gradeFailed'), description: friendlyAIError(err) })
     } finally {
       setBusy(false)
     }

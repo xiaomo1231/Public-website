@@ -200,6 +200,7 @@ export function FloatingQALayer({
                   className="h-6 w-6"
                   aria-label={t('common.close')}
                   onClick={() => {
+                    if (!window.noteId) stopInWindow(window.id)
                     close(window.id)
                     returnFocusAfterClose(window.id, window.passage.setId)
                   }}
@@ -431,7 +432,7 @@ const FloatingQAWindowView = memo(function FloatingQAWindowView({
       // Commit before dropping the transform, so the window never jumps back.
       flushSync(() => setRect(win.id, latest))
       if (rootRef.current) rootRef.current.style.transform = ''
-      void persistWindowRect(win.id)
+      void persistWindowRect(win.id).catch(() => undefined)
     }
     window.addEventListener('pointermove', onMove)
     window.addEventListener('pointerup', onUp)
@@ -488,6 +489,9 @@ const FloatingQAWindowView = memo(function FloatingQAWindowView({
   }
 
   function closeNow(): void {
+    // An unsaved conversation's answer would be thrown away: stop paying for
+    // it. A saved note keeps receiving its turn (it is written to the note).
+    if (!win.noteId) stopInWindow(win.id)
     close(win.id)
     returnFocusAfterClose(win.id, win.passage.setId)
   }
@@ -1040,7 +1044,7 @@ const CompactCardView = memo(function CompactCardView({
           .windows.find((window) => window.id === win.id)?.compact
         if (current) setCard(win.id, clampCard(current, bounds(current.pinned)))
       })
-      void persistCardSize(win.id)
+      void persistCardSize(win.id).catch(() => undefined)
     }
     window.addEventListener('pointermove', onMove)
     window.addEventListener('pointerup', finish)

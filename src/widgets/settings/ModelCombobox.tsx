@@ -1,4 +1,4 @@
-import { useId, useMemo, useState, type KeyboardEvent } from 'react'
+import { useEffect, useId, useMemo, useState, type KeyboardEvent } from 'react'
 import { ChevronDown } from 'lucide-react'
 import { Input } from '@/shared/ui/Input'
 import { cn } from '@/shared/lib/utils'
@@ -40,6 +40,13 @@ export function ModelCombobox({
   )
   const hasList = models.length > 0
   const expanded = open && hasList
+
+  // Keep the keyboard-highlighted option visible in the scrolling list.
+  useEffect(() => {
+    if (!expanded || active < 0) return
+    const option = document.getElementById(`${listId}-${active}`)
+    option?.scrollIntoView?.({ block: 'nearest' })
+  }, [expanded, active, listId])
 
   function choose(model: string): void {
     onChange(model)

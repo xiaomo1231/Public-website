@@ -361,7 +361,13 @@ export const useFloatingQA = create<FloatingQAState>((set) => ({
     })),
   setCard: (id, card) =>
     set((state) => ({
-      cardPinned: card.pinned,
+      // Only a pin toggle is a choice to remember; moves and re-fits of a card
+      // (possibly another one than the last toggled) keep it.
+      cardPinned: state.windows.some(
+        (window) => window.id === id && window.compact && window.compact.pinned !== card.pinned,
+      )
+        ? card.pinned
+        : state.cardPinned,
       windows: state.windows.map((window) =>
         window.id === id && window.compact ? { ...window, compact: card } : window,
       ),

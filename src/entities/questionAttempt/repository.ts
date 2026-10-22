@@ -41,12 +41,23 @@ export class QuestionAttemptRepository {
       .sortBy('createdAt')
   }
 
+  /**
+   * Every attempt on one knowledge point of a project, newest first. Uses the
+   * `knowledgePoint` index: going through `listByProject` capped the history
+   * at the project's latest 500 attempts, so a mastery rebuild could miss an
+   * older point's attempts entirely.
+   */
   async listByKnowledgePoint(
     projectId: string,
     knowledgePoint: string,
   ): Promise<QuestionAttempt[]> {
-    const rows = await this.listByProject(projectId)
-    return rows.filter((a) => a.knowledgePoint === knowledgePoint)
+    const rows = await this.db
+      .table<QuestionAttempt, string>('questionAttempts')
+      .where('knowledgePoint')
+      .equals(knowledgePoint)
+      .filter((a) => a.projectId === projectId)
+      .toArray()
+    return rows.sort((a, b) => b.createdAt - a.createdAt)
   }
 
   async deleteByProject(projectId: string): Promise<number> {

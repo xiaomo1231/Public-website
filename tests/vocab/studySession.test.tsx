@@ -72,6 +72,23 @@ describe('study session', () => {
     expect(await screen.findByText('Session finished')).toBeInTheDocument()
   })
 
+  it('Enter on a focused button activates that button, not the spelling check', async () => {
+    const { service } = fakeService()
+    const items: SessionItem[] = [
+      { view: view('tendon', 'n. 肌腱'), kind: 'review', mode: 'spell' },
+    ]
+    render(<StudySession items={items} bookId={null} service={service} onExit={() => undefined} />)
+    fireEvent.change(screen.getByLabelText('Type the English word'), {
+      target: { value: 'tendon' },
+    })
+    const check = screen.getByRole('button', { name: 'Check' })
+    fireEvent.keyDown(check, { key: 'Enter' })
+    expect(screen.queryByText('Correct')).toBeNull()
+    // Enter outside a control still checks the spelling.
+    fireEvent.keyDown(window, { key: 'Enter' })
+    expect(await screen.findByText('Correct')).toBeInTheDocument()
+  })
+
   it('brings a forgotten word back in the same session', async () => {
     const { service, grade } = fakeService()
     render(

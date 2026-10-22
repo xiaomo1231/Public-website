@@ -242,10 +242,9 @@ export class GuidedStepsService {
 
   /** 重新开始: forget this question's guided progress. */
   async resetProgress(questionId: string): Promise<void> {
-    const question = await this.homework.getQuestion(questionId)
-    if (!question) return
-    const { guidedProgress: _dropped, ...rest } = question
-    await this.homework.upsertQuestion({ ...rest, updatedAt: Date.now() })
+    // Patched inside the repository's transaction: only this field changes,
+    // so a draft or chat saved meanwhile is never overwritten by a stale row.
+    await this.homework.updateQuestion(questionId, { guidedProgress: undefined })
   }
 
   private requireAI(): AIService {

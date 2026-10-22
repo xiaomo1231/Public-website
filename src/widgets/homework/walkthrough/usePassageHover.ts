@@ -151,6 +151,21 @@ export function usePassageHover(
     return () => document.removeEventListener('pointerdown', onDown)
   }, [hover, close])
 
+  // The card is placed at the passage's screen position: once the page
+  // scrolls (wheel scrolling fires no pointermove; a finger scroll is not a
+  // tap outside) it would float detached, so it closes. Scrolling inside the
+  // card itself keeps it.
+  useEffect(() => {
+    if (!hover) return
+    const onScroll = (event: Event): void => {
+      const target = event.target
+      if (target instanceof Element && target.closest('[data-passage-hover-card]')) return
+      close()
+    }
+    document.addEventListener('scroll', onScroll, { capture: true, passive: true })
+    return () => document.removeEventListener('scroll', onScroll, { capture: true })
+  }, [hover, close])
+
   const onPointerDown = useCallback((event: PointerEvent) => {
     lastPointerType.current = event.pointerType
     article.current = event.currentTarget

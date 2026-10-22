@@ -2,7 +2,7 @@ import { useCallback, useMemo, useRef, useState } from 'react'
 import { DocumentRepository } from '@/entities/document/repository'
 import type { LearningMaterialType } from '@/entities/document/types'
 import { getDb } from '@/infrastructure/db/database'
-import { CourseContentService } from '@/services/courseContentService'
+import { CourseContentService, pausedCourseAnalysis } from '@/services/courseContentService'
 import { logger } from '@/infrastructure/logger/logger'
 import { toast } from '@/features/toast/toastStore'
 import { t } from '@/i18n'
@@ -11,6 +11,7 @@ import {
   createFileQueueItems,
   createTextQueueItem,
   identityOfDocument,
+  identityOfFile,
   MAX_BATCH_FILES,
   retryableItems,
   runBatchQueue,
@@ -85,9 +86,14 @@ export function useBatchUpload(projectId: string): UseBatchUploadResult {
       }
 
       const documents = await new DocumentRepository(getDb()).listByProject(projectId)
+      // Files already waiting in this dialog count as present too, so the same
+      // file dropped twice is not uploaded (and analysed) twice.
+      const queued = itemsRef.current
+        .filter((item) => item.kind === 'file' && item.status !== 'skipped' && item.file)
+        .map((item) => identityOfFile(item.file!))
       const created = createFileQueueItems(
         accepted,
-        documents.map(identityOfDocument),
+        [...documents.map(identityOfDocument), ...queued],
         materialType,
       )
       setItems((prev) => [...prev, ...created])
@@ -128,9 +134,13 @@ export function useBatchUpload(projectId: string): UseBatchUploadResult {
 
       cancelledRef.current = false
       setRunning(true)
+      let completed = 0
       try {
         await runBatchQueue(snapshot, {
-          onUpdate: update,
+          onUpdate: (id, patch) => {
+            if (patch.status === 'completed') completed += 1
+            update(id, patch)
+          },
           isCancelled: () => cancelledRef.current,
           worker: async (item, { report, setDocumentId }) => {
             const isCancelled = () => cancelledRef.current
@@ -145,9 +155,10 @@ export function useBatchUpload(projectId: string): UseBatchUploadResult {
                 ...(stage.message !== undefined ? { message: stage.message } : {}),
               })
 
-            // A retry of a file whose document row already exists re-processes
-            // that document instead of creating a second one.
-            if (item.kind === 'file' && item.documentId) {
+            // A retry of an item whose document row already exists (a file or
+            // pasted text) re-processes that document instead of creating a
+            // second one.
+            if (item.documentId) {
               await reprocessDocument(item.documentId, { onStage, isCancelled })
               return
             }
@@ -178,15 +189,22 @@ export function useBatchUpload(projectId: string): UseBatchUploadResult {
         })
       } finally {
         setRunning(false)
-        // Reuse the existing document store as the single source of truth.
-        await refresh(projectId)
+        // Reuse the existing document store as the single source of truth. A
+        // failed list refresh must not skip the analysis below.
+        await refresh(projectId).catch((err: unknown) => {
+          logger.warn('Document list refresh after upload failed', { error: String(err) })
+        })
         // Persist the course analysis once the upload has produced ready
         // material. This is the *processing* flow's job: opening a Tutor page
         // only ever reads what is already stored. A no-op when the content is
         // fresh, when no AI provider is configured, or when nothing is ready.
-        void new CourseContentService().ensureAnalyzed(projectId).catch((err: unknown) => {
-          logger.debug('Automatic course analysis skipped', { error: String(err) })
-        })
+        // Nothing new was processed, or the student paused / stopped the
+        // analysis: an upload must not silently restart it.
+        if (completed > 0 && !pausedCourseAnalysis(projectId)) {
+          void new CourseContentService().ensureAnalyzed(projectId).catch((err: unknown) => {
+            logger.debug('Automatic course analysis skipped', { error: String(err) })
+          })
+        }
       }
     },
     [projectId, refresh, update],

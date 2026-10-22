@@ -201,19 +201,34 @@ export function HomeworkQuestionView({
     }
   }, [question, service])
 
-  // Debounced draft persistence; also flush when the question unmounts.
+  // Debounced draft persistence; also flush when the question unmounts
+  // (switching question remounts this view, so a pending save must not be
+  // dropped).
+  const pendingDraft = useRef<string | null>(null)
   useEffect(() => {
     if (draft === question.draftText) return
     if (saveTimer.current !== null) window.clearTimeout(saveTimer.current)
     setSaved(false)
     const value = draft
+    pendingDraft.current = value
     saveTimer.current = window.setTimeout(() => {
+      saveTimer.current = null
+      pendingDraft.current = null
       void service.saveDraft(question.id, value).then(() => setSaved(true))
     }, 600)
     return () => {
       if (saveTimer.current !== null) window.clearTimeout(saveTimer.current)
+      saveTimer.current = null
     }
   }, [draft, question.draftText, question.id, service])
+  useEffect(
+    () => () => {
+      const value = pendingDraft.current
+      pendingDraft.current = null
+      if (value !== null) void service.saveDraft(question.id, value).catch(() => undefined)
+    },
+    [question.id, service],
+  )
 
   async function showNextHint(): Promise<void> {
     setActionError(null)

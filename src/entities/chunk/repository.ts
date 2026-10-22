@@ -22,7 +22,7 @@ export class ChunkRepository {
 
   async listByDocument(documentId: string): Promise<DocumentChunk[]> {
     try {
-      return this.db.chunks.where('documentId').equals(documentId).sortBy('order')
+      return await this.db.chunks.where('documentId').equals(documentId).sortBy('order')
     } catch (err) {
       throw new StorageError(t('storage.failedToListChunks'), err)
     }
@@ -30,7 +30,7 @@ export class ChunkRepository {
 
   async listByProject(projectId: string): Promise<DocumentChunk[]> {
     try {
-      return this.db.chunks.where('projectId').equals(projectId).sortBy('order')
+      return await this.db.chunks.where('projectId').equals(projectId).sortBy('order')
     } catch (err) {
       throw new StorageError(t('storage.failedToListChunks'), err)
     }

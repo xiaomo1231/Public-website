@@ -3,6 +3,9 @@ import { DEFAULT_WALKTHROUGH_LEVEL, type WalkthroughLevel } from '@/entities/hom
 import { useAuth } from '@/features/auth/useAuth'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/shared/ui/Card'
 import { cn } from '@/shared/lib/utils'
+import { onRadioKeyDown } from '@/shared/lib/radioGroupKeys'
+import { toast } from '@/features/toast/toastStore'
+import { logger } from '@/infrastructure/logger/logger'
 import { useTranslation, type TranslationKey } from '@/i18n'
 
 const OPTIONS: readonly WalkthroughLevel[] = ['standard', 'detailed']
@@ -26,6 +29,16 @@ export function WalkthroughLevelSetting({
   const { t } = useTranslation()
   const { profile, setWalkthroughLevel } = useAuth()
   const level = profile?.walkthroughLevel ?? DEFAULT_WALKTHROUGH_LEVEL
+  const choose = (option: WalkthroughLevel) => {
+    setWalkthroughLevel(option).catch((err: unknown) => {
+      logger.warn('Saving the walkthrough level failed', { error: (err as Error)?.message })
+      toast({
+        variant: 'error',
+        title: t('settings.saveFailedTitle'),
+        description: t('settings.saveFailed'),
+      })
+    })
+  }
   return (
     <Card className={className} data-walkthrough-level-setting>
       <CardHeader className={headerClassName}>
@@ -38,7 +51,7 @@ export function WalkthroughLevelSetting({
           aria-label={t('settings.walkthrough.level')}
           className="grid gap-2 sm:grid-cols-2"
         >
-          {OPTIONS.map((option) => {
+          {OPTIONS.map((option, index) => {
             const Icon = ICONS[option]
             const selected = option === level
             return (
@@ -48,7 +61,9 @@ export function WalkthroughLevelSetting({
                 role="radio"
                 aria-checked={selected}
                 data-walkthrough-level-option={option}
-                onClick={() => void setWalkthroughLevel(option)}
+                tabIndex={selected ? 0 : -1}
+                onClick={() => choose(option)}
+                onKeyDown={(event) => onRadioKeyDown(event, OPTIONS, index, choose)}
                 className={cn(
                   'focus-ring flex flex-col items-start gap-1.5 rounded-lg border p-3 text-left text-sm transition-colors duration-150 hover:bg-muted lecture:rounded-none lab:rounded-none',
                   selected && 'border-primary ring-1 ring-primary',

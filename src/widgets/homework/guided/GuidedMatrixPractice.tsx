@@ -3,7 +3,7 @@ import { CheckCircle2, Eye, Lightbulb, Wand2 } from 'lucide-react'
 import {
   agreesWithWalkthrough,
   allCorrect,
-  applyOps,
+  applyOpsOnRoute,
   chainFinished,
   checkCells,
   emptyCells,
@@ -105,7 +105,7 @@ function ChainWorkspace({ chain, progress, active, onChange }: ChainWorkspacePro
   const { current, matrices } = route
   const pending: GuidedPendingStep = progress.pending ?? {}
   const acceptedOps = pending.op ? parseTypedOps(pending.op) : null
-  const applied: Applied | null = acceptedOps ? applyOps(current, acceptedOps) : null
+  const applied: Applied | null = acceptedOps ? applyOpsOnRoute(chain, current, acceptedOps) : null
   const reference = nextReferenceStep(chain, current)
   const stepNumber = progress.records.length + 1
   // R1 … Rn of this matrix, the arrows and the three elementary templates.
@@ -167,7 +167,7 @@ function ChainWorkspace({ chain, progress, active, onChange }: ChainWorkspacePro
       return
     }
     if (!reference) return
-    const result = applyOps(current, reference.ops)
+    const result = applyOpsOnRoute(chain, current, reference.ops)
     if (!result) return
     complete({ ...pending, op: reference.opLatex, answerViewed: true }, result.matrix)
   }

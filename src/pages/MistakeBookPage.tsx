@@ -114,22 +114,38 @@ export function MistakeBookPage(): JSX.Element {
     }
   }
 
+  /**
+   * A status change on one card. A failure (e.g. the card was removed in
+   * another tab) is reported and the list reloaded, never left unhandled.
+   */
+  async function act(change: () => Promise<unknown>): Promise<boolean> {
+    try {
+      await change()
+      return true
+    } catch (err) {
+      toast({
+        variant: 'error',
+        title: t('mistakes.actionFailed'),
+        description: (err as Error)?.message,
+      })
+      return false
+    } finally {
+      await reloadAll().catch(() => undefined)
+    }
+  }
   async function handleMarkUnderstood(id: string) {
-    await mistakes.markUnderstood(id)
-    await reloadAll()
+    await act(() => mistakes.markUnderstood(id))
   }
   async function handleArchive(id: string) {
-    await mistakes.archive(id)
-    await reloadAll()
+    await act(() => mistakes.archive(id))
   }
   async function handleRestore(id: string) {
-    await mistakes.restore(id)
-    await reloadAll()
+    await act(() => mistakes.restore(id))
   }
   async function handleRemove(id: string) {
-    await mistakes.remove(id)
-    await reloadAll()
-    toast({ variant: 'success', title: t('mistakes.removed') })
+    if (await act(() => mistakes.remove(id))) {
+      toast({ variant: 'success', title: t('mistakes.removed') })
+    }
   }
 
   async function handlePractice(

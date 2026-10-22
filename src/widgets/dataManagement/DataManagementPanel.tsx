@@ -18,6 +18,7 @@ import { useAuthStore } from '@/features/auth/authStore'
 import { toast } from '@/features/toast/toastStore'
 import { isAppError } from '@/infrastructure/errors/AppError'
 import { formatBytes } from '@/shared/lib/format'
+import { downloadBlob } from '@/shared/lib/download'
 import { useTranslation } from '@/i18n'
 
 type ConfirmAction = 'delete-all' | 'clear-key' | null
@@ -62,27 +63,27 @@ export function DataManagementPanel({
     void svc
       .inventory()
       .then(setInventory)
+      .catch(() => toast({ variant: 'error', title: t('data.inventoryFailed') }))
       .finally(() => setLoading(false))
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- read once on mount
   }, [])
 
   async function refreshInventory() {
     setLoading(true)
-    setInventory(await new DataManagementService().inventory())
-    setLoading(false)
+    try {
+      setInventory(await new DataManagementService().inventory())
+    } catch {
+      toast({ variant: 'error', title: t('data.inventoryFailed') })
+    } finally {
+      setLoading(false)
+    }
   }
 
   async function handleExport() {
     setExporting(true)
     try {
       const blob = await new DataManagementService().exportFile()
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = `ai-learning-export-${new Date().toISOString().slice(0, 10)}.json`
-      document.body.appendChild(a)
-      a.click()
-      a.remove()
-      URL.revokeObjectURL(url)
+      downloadBlob(`ai-learning-export-${new Date().toISOString().slice(0, 10)}.json`, blob)
       toast({
         variant: 'success',
         title: t('data.exportReady'),

@@ -64,7 +64,8 @@ export async function collectTopicSources(
   const analysis = await deps.analyses.getByProject(projectId)
   if (!analysis) return []
   const topic = await deps.analyses.getTopic(topicId)
-  if (!topic) return []
+  // Never ground one course in another course's topic.
+  if (!topic || topic.projectId !== projectId) return []
 
   const out: TopicSource[] = []
   const seen = new Set<string>()

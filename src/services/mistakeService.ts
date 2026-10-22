@@ -81,7 +81,6 @@ export class MistakeService {
     })
   }
 
-  /** Add a mistake the student enters by hand. */
   /**
    * Take one attempt back out of the mistake book (a disputed judgement): the
    * mistake is removed when that attempt was its only occurrence, otherwise
@@ -89,8 +88,9 @@ export class MistakeService {
    * wrong answer again (not the disputed one).
    */
   async removeAttempt(projectId: string, questionId: string, attemptId: string): Promise<void> {
-    const existing = await this.repo.findByQuestion(projectId, questionId)
-    if (!existing || !existing.attemptIds.includes(attemptId)) return
+    // Whatever its status: an archived card holding the occurrence loses it too.
+    const existing = await this.repo.findByAttempt(projectId, questionId, attemptId)
+    if (!existing) return
     const remaining = existing.attemptIds.filter((id) => id !== attemptId)
     if (remaining.length === 0) {
       await this.repo.delete(existing.id)
@@ -152,6 +152,7 @@ export class MistakeService {
     }
   }
 
+  /** Add a mistake the student enters by hand. */
   async addManual(input: {
     projectId: string
     question: string

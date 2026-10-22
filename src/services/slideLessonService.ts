@@ -266,7 +266,11 @@ export class SlideLessonService {
   }
 
   /** One follow-up question answered against this slide. */
-  async ask(lessonId: string, message: string): Promise<SlideLesson> {
+  async ask(
+    lessonId: string,
+    message: string,
+    options: { signal?: AbortSignal } = {},
+  ): Promise<SlideLesson> {
     const lesson = await this.lessons.get(lessonId)
     if (!lesson) throw new NotFoundError('SlideLesson', lessonId)
     const trimmed = message.trim()
@@ -293,7 +297,9 @@ export class SlideLessonService {
         }),
       },
     ]
-    const reply = await this.requireAI().chat(messages)
+    const reply = await this.requireAI().chat(messages, {
+      ...(options.signal ? { signal: options.signal } : {}),
+    })
     const answer = normalizeMathNotation(normalizeExtractedText(reply.content ?? '')).text.trim()
     if (!answer) throw new AppError(t('slides.emptyReply'), 'EMPTY_TUTOR_RESPONSE')
 
@@ -323,6 +329,10 @@ export class SlideLessonService {
     force = false,
   ): Promise<SlideLessonResult> {
     const content = await this.getSlideContent(input.documentId, input.slideNumber)
+    // A presentation of another course is never explained (or stored) under this one.
+    if (content.document.projectId !== input.projectId) {
+      throw new NotFoundError('Document', input.documentId)
+    }
     if (isEmptySlide(content)) {
       throw new AppError(t('slides.emptySlide'), 'SLIDE_EMPTY')
     }

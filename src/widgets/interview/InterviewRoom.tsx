@@ -625,6 +625,8 @@ function InterviewResultsCard({
   const missedQuestions = session.scenario.questions.filter(
     (q) => !results.questions.askedIds.includes(q.id),
   )
+  // Same rule as the service: a question with no target-language wording makes no card.
+  const cardable = missedQuestions.some((q) => q.label.trim() && q.label !== q.englishGloss)
 
   const addCards = async () => {
     setAdding(true)
@@ -767,10 +769,12 @@ function InterviewResultsCard({
             <p className="text-sm text-muted-foreground">
               {t('interview.missedQuestions', { count: missedQuestions.length })}
             </p>
-            <Button variant="outline" size="sm" onClick={() => void addCards()} disabled={adding}>
-              {adding ? <Loader2 className="animate-spin" aria-hidden /> : <Layers aria-hidden />}
-              {t('interview.addMissedCards')}
-            </Button>
+            {cardable && (
+              <Button variant="outline" size="sm" onClick={() => void addCards()} disabled={adding}>
+                {adding ? <Loader2 className="animate-spin" aria-hidden /> : <Layers aria-hidden />}
+                {t('interview.addMissedCards')}
+              </Button>
+            )}
           </div>
         )}
       </CardContent>

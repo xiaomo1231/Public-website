@@ -85,7 +85,14 @@ export function DocumentDetailPage(): JSX.Element {
     return () => {
       cancelled = true
     }
-  }, [did])
+    // Re-read once the file finishes (re)processing: its chunks changed.
+  }, [did, document?.processedAt, document?.status])
+
+  /** Chunk number by id: `indexOf` per row would be quadratic on a long book. */
+  const chunkNumbers = useMemo(
+    () => new Map(chunks.map((chunk, index) => [chunk.id, index + 1])),
+    [chunks],
+  )
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()
@@ -293,7 +300,7 @@ export function DocumentDetailPage(): JSX.Element {
                     key={chunk.id}
                     chunk={chunk}
                     documentName={document.name}
-                    index={chunks.indexOf(chunk) + 1}
+                    index={chunkNumbers.get(chunk.id) ?? 0}
                     documentHref={`/projects/${projectId}/documents/${document.id}`}
                   />
                 )}

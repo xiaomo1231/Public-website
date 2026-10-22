@@ -24,6 +24,7 @@ import type {
   QuizScore,
 } from '@/entities/quiz/types'
 import { knowledgeStatPercent } from '@/entities/quiz/types'
+import { scoredOralPoints } from '@/entities/question/oral'
 import {
   isAbortError,
   resolveControl,
@@ -1556,6 +1557,8 @@ export class QuizService {
     if (quiz.status === 'paused' || quiz.status === 'generating') {
       throw new AppError(t('quiz.paused.notTakeable'), 'QUIZ_PAUSED')
     }
+    // Starting again never reopens a finished quiz (its score stays).
+    if (quiz.status === 'completed' || quiz.status === 'in_progress') return quiz
     const next: Quiz = { ...quiz, status: 'in_progress' }
     await this.quizzes.upsert(next)
     return next
@@ -1706,8 +1709,10 @@ export class QuizService {
         feedback?: string
         confidence?: number
       }>(messages, signal ? { signal } : undefined)
+      // A reply without a real verdict grades nothing (never a silent "wrong").
+      if (typeof data?.isCorrect !== 'boolean') return fallback
       return {
-        isCorrect: Boolean(data.isCorrect),
+        isCorrect: data.isCorrect,
         method: 'ai',
         confidence: typeof data.confidence === 'number' ? data.confidence : 0.7,
         ...(fallback.expected ? { expected: fallback.expected } : {}),
@@ -1845,7 +1850,17 @@ export function scoreQuiz(quiz: Quiz, attempts: QuestionAttempt[]): QuizScore {
   /** Graded credit: 1 per correct answer, `earned / total` for a short answer. */
   let points = 0
 
-  const attemptByQuestion = new Map(attempts.map((a) => [a.questionId, a]))
+  // The latest attempt per question (a resumed quiz may have re-answered one),
+  // whatever order the attempts arrive in.
+  const attemptByQuestion = new Map<string, QuestionAttempt>()
+  for (const attempt of attempts) {
+    const seen = attemptByQuestion.get(attempt.questionId)
+    if (!seen || seen.createdAt <= attempt.createdAt)
+      attemptByQuestion.set(attempt.questionId, attempt)
+  }
+  /** Oral quizzes: scoring points pooled over the scored questions. */
+  let rubricEarned = 0
+  let rubricTotal = 0
 
   for (const questionId of quiz.questionIds) {
     const attempt = attemptByQuestion.get(questionId)
@@ -1877,6 +1892,11 @@ export function scoreQuiz(quiz: Quiz, attempts: QuestionAttempt[]): QuizScore {
       continue
     }
     const evaluation = attempt.evaluation
+    const rubric = scoredOralPoints(evaluation)
+    if (rubric) {
+      rubricEarned += rubric.earned
+      rubricTotal += rubric.total
+    }
     // A disputed AI judgement is kept for reference but never scored.
     const isCorrect = evaluation.disputed ? null : evaluation.isCorrect
     if (isCorrect === true) {
@@ -1903,7 +1923,17 @@ export function scoreQuiz(quiz: Quiz, attempts: QuestionAttempt[]): QuizScore {
   }
 
   const gradable = correct + wrong
-  const percentage = gradable > 0 ? Math.round((points / gradable) * 100) : 0
+  // An oral quiz is scored like its per-topic results: a main question with
+  // 8 points weighs more than a follow-up with 2. Averaging per question made
+  // the headline disagree with the topic scores shown below it.
+  const oral = quiz.config?.mode === 'oral'
+  const percentage = oral
+    ? rubricTotal > 0
+      ? Math.round((rubricEarned / rubricTotal) * 100)
+      : 0
+    : gradable > 0
+      ? Math.round((points / gradable) * 100)
+      : 0
 
   // Per knowledge point on the same basis as the overall percentage: a short
   // answer covering 4 of 5 points counts 0.8, not 0 (it is still a mistake).
@@ -1924,6 +1954,7 @@ export function scoreQuiz(quiz: Quiz, attempts: QuestionAttempt[]): QuizScore {
     total: quiz.questionIds.length,
     points: Math.round(points * 100) / 100,
     percentage,
+    ...(oral ? { rubricPoints: { earned: rubricEarned, total: rubricTotal } } : {}),
     byDifficulty,
     byKnowledgePoint,
     weakKnowledgePoints,

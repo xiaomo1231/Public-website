@@ -287,11 +287,19 @@ export function WordListDialog({
         setViews(words)
         setEntries(stored)
       })
+      .catch(() => {
+        if (!cancelled)
+          toast({
+            variant: 'error',
+            title: t('vocab.loadFailed'),
+            description: t('vocab.loadFailedHint'),
+          })
+      })
       .finally(() => !cancelled && setLoading(false))
     return () => {
       cancelled = true
     }
-  }, [bookId, editable, service])
+  }, [bookId, editable, service, t])
 
   // Filter against a deferred copy so typing stays responsive on 15k-word
   // books; a new query starts again from the first page.
@@ -302,7 +310,10 @@ export function WordListDialog({
     () =>
       needle
         ? views.filter(
-            (view) => view.word.includes(needle) || view.meanings.some((m) => m.includes(needle)),
+            // Words of other languages keep their case (German nouns): compare lower-cased.
+            (view) =>
+              view.word.toLowerCase().includes(needle) ||
+              view.meanings.some((m) => m.toLowerCase().includes(needle)),
           )
         : views,
     [views, needle],
@@ -312,7 +323,12 @@ export function WordListDialog({
   const remove = async (word: string) => {
     const entry = entryOf(word)
     if (!entry) return
-    await service.removeEntry(entry.id)
+    try {
+      await service.removeEntry(entry.id)
+    } catch {
+      toast({ variant: 'error', title: t('vocab.deleteFailed') })
+      return
+    }
     setViews((list) => list.filter((view) => view.word !== word))
     onChanged()
   }

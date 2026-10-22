@@ -10,6 +10,7 @@ import {
   ListPlus,
   MoreHorizontal,
   Pencil,
+  RotateCcw,
   Search,
   Trash2,
 } from 'lucide-react'
@@ -49,6 +50,11 @@ import { formatBytes } from '@/shared/lib/format'
 import { targetLanguageOf } from '@/shared/lib/language'
 import { useProject } from '@/features/project/useProjects'
 import { WordListImportDialog } from '@/widgets/vocab/WordListImportDialog'
+import { reprocessDocument } from '@/features/documents/uploadPipeline'
+import { useDocumentsStore } from '@/features/documents/documentsStore'
+import { CourseContentService, pausedCourseAnalysis } from '@/services/courseContentService'
+import { toast } from '@/features/toast/toastStore'
+import { logger } from '@/infrastructure/logger/logger'
 import { useTranslation, type TranslationKey } from '@/i18n'
 
 const TYPE_LABEL_KEY: Record<DocumentType, TranslationKey> = {
@@ -134,6 +140,8 @@ export function DocumentList({
   const [renaming, setRenaming] = useState<Document | null>(null)
   const [renameValue, setRenameValue] = useState('')
   const [deleting, setDeleting] = useState<Document | null>(null)
+  /** A delete is running: a second click must not delete twice. */
+  const [deleteBusy, setDeleteBusy] = useState(false)
   // A language course can read a textbook's word list into its vocabulary book.
   const { project } = useProject(projectId)
   const languageCourse = Boolean(targetLanguageOf(project))
@@ -500,10 +508,16 @@ export function DocumentList({
               </Button>
               <Button
                 variant="destructive"
+                disabled={deleteBusy}
                 onClick={async () => {
-                  if (!deleting) return
-                  await onDelete(deleting.id)
-                  setDeleting(null)
+                  if (!deleting || deleteBusy) return
+                  setDeleteBusy(true)
+                  try {
+                    await onDelete(deleting.id)
+                  } finally {
+                    setDeleteBusy(false)
+                    setDeleting(null)
+                  }
                 }}
               >
                 {t('common.delete')}
@@ -559,6 +573,32 @@ function RowMenu({
   onImportWordList?: () => void
 }): JSX.Element {
   const { t } = useTranslation()
+  const refresh = useDocumentsStore((s) => s.refresh)
+  // A failed file, or one whose processing was interrupted, can be read again
+  // from its stored bytes instead of being deleted and uploaded once more.
+  const canReprocess =
+    doc.hasBlob !== false &&
+    (doc.status === 'failed' || (doc.status === 'ready' && Boolean(doc.errorMessage)))
+  async function reprocess(): Promise<void> {
+    toast({ variant: 'info', title: t('documents.reprocessing', { name: doc.name }) })
+    try {
+      await reprocessDocument(doc.id)
+      toast({ variant: 'success', title: t('documents.reprocessDone', { name: doc.name }) })
+      if (!pausedCourseAnalysis(projectId)) {
+        void new CourseContentService().ensureAnalyzed(projectId).catch((err: unknown) => {
+          logger.debug('Automatic course analysis skipped', { error: String(err) })
+        })
+      }
+    } catch (err) {
+      toast({
+        variant: 'error',
+        title: t('documents.reprocessFailed'),
+        description: err instanceof Error ? err.message : String(err),
+      })
+    } finally {
+      await refresh(projectId).catch(() => undefined)
+    }
+  }
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -579,6 +619,12 @@ function RowMenu({
           <Pencil className="h-4 w-4" />
           {t('documents.rename')}
         </DropdownMenuItem>
+        {canReprocess && (
+          <DropdownMenuItem onSelect={() => void reprocess()}>
+            <RotateCcw className="h-4 w-4" />
+            {t('documents.reprocess')}
+          </DropdownMenuItem>
+        )}
         {onImportWordList && (
           <DropdownMenuItem onSelect={onImportWordList}>
             <ListPlus className="h-4 w-4" />

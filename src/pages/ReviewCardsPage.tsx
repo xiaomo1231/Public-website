@@ -138,7 +138,17 @@ export function ReviewCardsPage(): JSX.Element {
 
   const startReview = async () => {
     if (!projectId) return
-    const due = await service.due(projectId)
+    let due: Awaited<ReturnType<typeof service.due>>
+    try {
+      due = await service.due(projectId)
+    } catch (err) {
+      toast({
+        variant: 'error',
+        title: t('cards.reviewFailed'),
+        description: (err as Error).message,
+      })
+      return
+    }
     repeatsRef.current = new Map()
     setQueue(due.sort((a, b) => a.due - b.due))
     setReviewed(0)
@@ -181,7 +191,11 @@ export function ReviewCardsPage(): JSX.Element {
         (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)
       )
         return
-      if (!revealed && (event.key === ' ' || event.key === 'Enter')) {
+      // Inside a dialog, or on a focused button / link, Space and Enter keep
+      // their own meaning (activating that control) instead of revealing.
+      if (target?.closest?.('[role="dialog"], [role="alertdialog"], [role="menu"]')) return
+      const onControl = Boolean(target?.closest?.('button, a[href], select, [role="button"]'))
+      if (!revealed && !onControl && (event.key === ' ' || event.key === 'Enter')) {
         event.preventDefault()
         setRevealed(true)
       } else if (revealed && ['1', '2', '3', '4'].includes(event.key)) {
@@ -221,11 +235,20 @@ export function ReviewCardsPage(): JSX.Element {
 
   const confirmDelete = async () => {
     if (!deleting) return
-    await service.remove(deleting.id)
-    setQueue((q) => q?.filter((card) => card.id !== deleting.id) ?? null)
-    setDeleting(null)
-    toast({ variant: 'success', title: t('cards.deleted') })
-    await refresh()
+    try {
+      await service.remove(deleting.id)
+      setQueue((q) => q?.filter((card) => card.id !== deleting.id) ?? null)
+      toast({ variant: 'success', title: t('cards.deleted') })
+    } catch (err) {
+      toast({
+        variant: 'error',
+        title: t('mistakes.actionFailed'),
+        description: (err as Error).message,
+      })
+    } finally {
+      setDeleting(null)
+      await refresh()
+    }
   }
 
   if (!projectId) return <div />

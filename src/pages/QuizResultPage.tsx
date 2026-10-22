@@ -23,6 +23,7 @@ import { LoadingState } from '@/shared/ui/LoadingState'
 import { Progress } from '@/shared/ui/Progress'
 import { PageContainer, PageContent, PageHeader } from '@/shared/ui/Page'
 import { buildOfflineQuizService, buildAIServices } from '@/services/aiServices'
+import { scoreQuiz } from '@/services/quizService'
 import { QuestionSource } from '@/widgets/quiz/QuestionSource'
 import { OralTopicScores } from '@/widgets/quiz/OralTopicScores'
 import { ProjectFlowNav } from '@/widgets/project/ProjectFlowNav'
@@ -159,7 +160,9 @@ export function QuizResultPage(): JSX.Element {
     )
   }
 
-  const score = quiz.score
+  // Recomputed from the attempts (pure, cheap): a score saved by an older
+  // version — e.g. an oral quiz averaged per question — matches the details.
+  const score = scoreQuiz(quiz, attempts)
   const attemptByQuestion = new Map(attempts.map((a) => [a.questionId, a]))
   // A disputed short answer is not scored: it is listed with the unverified ones.
   const mistakes = questions.filter((q) => {
@@ -241,17 +244,29 @@ export function QuizResultPage(): JSX.Element {
                     label: t('question.unverified'),
                     value: score.unverified,
                   },
-                  {
-                    key: 'points',
-                    icon: null,
-                    tone: 'text-muted-foreground',
-                    label: t('quizResult.pointsLabel'),
-                    value: t('quizResult.scoreLine', {
-                      // Partial credit from short answers (3 of 5 points → 0.6).
-                      correct: Math.round((score.points ?? score.correct) * 100) / 100,
-                      total: score.total,
-                    }),
-                  },
+                  score.rubricPoints
+                    ? {
+                        // Oral: the same pooled points as the per-topic scores.
+                        key: 'points',
+                        icon: null,
+                        tone: 'text-muted-foreground',
+                        label: t('quizResult.oralPointsLabel'),
+                        value: t('quizResult.scoreLine', {
+                          correct: score.rubricPoints.earned,
+                          total: score.rubricPoints.total,
+                        }),
+                      }
+                    : {
+                        key: 'points',
+                        icon: null,
+                        tone: 'text-muted-foreground',
+                        label: t('quizResult.pointsLabel'),
+                        value: t('quizResult.scoreLine', {
+                          // Partial credit from short answers (3 of 5 points → 0.6).
+                          correct: Math.round((score.points ?? score.correct) * 100) / 100,
+                          total: score.total,
+                        }),
+                      },
                 ].map((row) => (
                   <div
                     key={row.key}

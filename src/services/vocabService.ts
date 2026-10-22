@@ -131,8 +131,10 @@ function viewOfEntry(entry: DictEntry): WordView {
 export class VocabService {
   private repo: VocabRepository
   private users: UserRepository
+  private db: AppDatabase
 
   constructor(db: AppDatabase = getDb()) {
+    this.db = db
     this.repo = new VocabRepository(db)
     this.users = new UserRepository(db)
   }
@@ -445,14 +447,17 @@ export class VocabService {
     if (options.correct === false && rating === 1) {
       next = { ...next, mistakes: next.mistakes + 1, lastMistakeAt: now }
     }
-    await this.repo.putCard(next)
-    await this.repo.addReview({
-      id: crypto.randomUUID(),
-      word: key,
-      rating,
-      mode,
-      ...(options.correct !== undefined ? { correct: options.correct } : {}),
-      at: now,
+    // Card and review log together: today's counts and the streak read the log.
+    await this.db.transaction('rw', this.db.vocabCards, this.db.vocabReviews, async () => {
+      await this.repo.putCard(next)
+      await this.repo.addReview({
+        id: crypto.randomUUID(),
+        word: key,
+        rating,
+        mode,
+        ...(options.correct !== undefined ? { correct: options.correct } : {}),
+        at: now,
+      })
     })
     return next
   }

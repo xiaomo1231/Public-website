@@ -45,6 +45,27 @@ export interface OralTopicScore {
 }
 
 /**
+ * The scoring points of one graded answer, or null when it does not count:
+ * disputed, not checked, or without scoring points. Shared by the per-topic
+ * scores and the quiz headline so both use the same basis.
+ */
+export function scoredOralPoints(
+  evaluation: QuestionAttempt['evaluation'] | undefined,
+): { earned: number; total: number } | null {
+  const score = evaluation?.score
+  if (
+    !evaluation ||
+    evaluation.disputed ||
+    evaluation.isCorrect === null ||
+    !score ||
+    score.total <= 0
+  ) {
+    return null
+  }
+  return { earned: score.earned, total: score.total }
+}
+
+/**
  * Per drawn topic: points covered / total points, main question and
  * follow-ups together. A disputed or unverified answer is not scored.
  */
@@ -63,15 +84,8 @@ export function oralTopicScores(
     let total = 0
     let unscored = 0
     for (const question of [main, ...followUps]) {
-      const evaluation = latest.get(question.id)?.evaluation
-      const score = evaluation?.score
-      if (
-        !evaluation ||
-        evaluation.disputed ||
-        evaluation.isCorrect === null ||
-        !score ||
-        score.total <= 0
-      ) {
+      const score = scoredOralPoints(latest.get(question.id)?.evaluation)
+      if (!score) {
         unscored++
         continue
       }

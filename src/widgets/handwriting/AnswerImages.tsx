@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { ArrowLeft, ArrowRight, ImagePlus, Loader2, PenLine, X } from 'lucide-react'
 import type { HomeworkAnswerImage } from '@/entities/homework/answerImages'
 import { MAX_ANSWER_IMAGES_PER_QUESTION } from '@/entities/homework/answerImages'
@@ -62,12 +62,16 @@ export function AnswerImages({
     void reload().catch(() => undefined)
   }, [reload])
 
-  const urls = useMemo(
-    () =>
-      images.map((image) => URL.createObjectURL(new Blob([image.bytes], { type: image.mimeType }))),
-    [images],
-  )
-  useEffect(() => () => urls.forEach((url) => URL.revokeObjectURL(url)), [urls])
+  // Created and revoked by the same effect (a memo + cleanup pair would hand
+  // out revoked URLs after StrictMode's simulated unmount).
+  const [urls, setUrls] = useState<string[]>([])
+  useEffect(() => {
+    const next = images.map((image) =>
+      URL.createObjectURL(new Blob([image.bytes], { type: image.mimeType })),
+    )
+    setUrls(next)
+    return () => next.forEach((url) => URL.revokeObjectURL(url))
+  }, [images])
 
   async function run(task: () => Promise<void>): Promise<void> {
     setBusy(true)
@@ -165,7 +169,7 @@ export function AnswerImages({
             >
               <button
                 type="button"
-                className="focus-ring block w-full overflow-hidden rounded-md bg-white lab:rounded-none"
+                className="focus-ring block w-full overflow-hidden rounded-md bg-card lab:rounded-none"
                 aria-label={t('homework.images.enlarge', { n: index + 1 })}
                 onClick={() => setViewing(index)}
               >
@@ -265,7 +269,7 @@ export function AnswerImages({
           </DialogTitle>
           {shown && viewing !== null && (
             <>
-              <div className="max-h-[75vh] overflow-auto rounded-lg bg-white">
+              <div className="max-h-[75vh] overflow-auto rounded-lg bg-card">
                 <img
                   src={urls[viewing]}
                   alt={t('homework.images.alt', { n: viewing + 1 })}

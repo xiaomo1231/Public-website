@@ -1,5 +1,5 @@
 import { targetLanguageOf } from '@/shared/lib/language'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import {
   CheckCircle2,
   ChevronRight,
@@ -15,7 +15,6 @@ import { MathField } from '@/widgets/mathInput/MathField'
 import { ShortAnswerFeedback } from '@/widgets/quiz/ShortAnswerFeedback'
 import { useProject } from '@/features/project/useProjects'
 import { LoadingState } from '@/shared/ui/LoadingState'
-import { EmptyState } from '@/shared/ui/EmptyState'
 import { TruncatedText } from '@/shared/ui/TruncatedText'
 import { RichText } from '@/shared/ui/RichText'
 import { toast } from '@/features/toast/toastStore'
@@ -23,7 +22,11 @@ import { cn } from '@/shared/lib/utils'
 import { LESSON_PROSE_CLASS } from '@/widgets/tutor/lessonStyle'
 import { useTranslation } from '@/i18n'
 import { buildAIServices } from '@/services/aiServices'
-import type { DifficultyLevel, TutorEvaluation } from '@/infrastructure/ai/prompts/types'
+import {
+  difficultyLabelKey,
+  type DifficultyLevel,
+  type TutorEvaluation,
+} from '@/infrastructure/ai/prompts/types'
 import {
   TURN_KIND_LABEL_KEYS,
   type TutorQuestion,
@@ -85,6 +88,21 @@ export function TutorPanel(props: TutorPanelProps): JSX.Element {
   // Every tutor turn is one request: Stop aborts it, leaving the page aborts it.
   const generation = useGenerationRun({ abortOnUnmount: true })
 
+  /**
+   * One action at a time. Set synchronously, before the first await, so a
+   * double click or a double Enter cannot start a second grading / question.
+   */
+  const actionInFlight = useRef(false)
+  async function exclusive(action: () => Promise<void>): Promise<void> {
+    if (actionInFlight.current) return
+    actionInFlight.current = true
+    try {
+      await action()
+    } finally {
+      actionInFlight.current = false
+    }
+  }
+
   function setActionError(info: TutorErrorInfo | null, retry?: () => void): void {
     setActionErrorState(info)
     setRetryAction(() => (info && retry ? retry : null))
@@ -129,6 +147,7 @@ export function TutorPanel(props: TutorPanelProps): JSX.Element {
           setEarlierTurns(previousTurns(earlier))
           setIntro(earlier.turns.find((turn) => turn.kind === 'introduction')?.content ?? '')
           setLastQuestion(earlier.pendingQuestion)
+          setRevealedHints(earlier.pendingQuestion ? earlier.hintsRevealed : 0)
           return
         }
         setNoProvider(false)
@@ -149,6 +168,8 @@ export function TutorPanel(props: TutorPanelProps): JSX.Element {
           setEarlierTurns(previousTurns(s))
           setIntro(s.turns.find((turn) => turn.kind === 'introduction')?.content ?? '')
           setLastQuestion(s.pendingQuestion)
+          // Hints already shown for the open question stay counted (and shown).
+          setRevealedHints(s.pendingQuestion ? s.hintsRevealed : 0)
           return
         }
 
@@ -191,7 +212,11 @@ export function TutorPanel(props: TutorPanelProps): JSX.Element {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [attempt])
 
-  async function nextQuestion() {
+  function nextQuestion(): Promise<void> {
+    return exclusive(nextQuestionNow)
+  }
+
+  async function nextQuestionNow() {
     if (!session) return
     const bundle = await requireBundle()
     if (!bundle) return
@@ -216,7 +241,11 @@ export function TutorPanel(props: TutorPanelProps): JSX.Element {
   }
 
   /** Redo a stopped introduction (nothing of it was saved). */
-  async function beginAgain() {
+  function beginAgain(): Promise<void> {
+    return exclusive(beginAgainNow)
+  }
+
+  async function beginAgainNow() {
     if (!session) return
     const bundle = await requireBundle()
     if (!bundle) return
@@ -247,7 +276,11 @@ export function TutorPanel(props: TutorPanelProps): JSX.Element {
     }
   }
 
-  async function revealHint() {
+  function revealHint(): Promise<void> {
+    return exclusive(revealHintNow)
+  }
+
+  async function revealHintNow() {
     if (!session) return
     const bundle = await requireBundle()
     if (!bundle) return
@@ -265,7 +298,11 @@ export function TutorPanel(props: TutorPanelProps): JSX.Element {
     }
   }
 
-  async function submit() {
+  function submit(): Promise<void> {
+    return exclusive(submitNow)
+  }
+
+  async function submitNow() {
     if (!session || !lastQuestion) return
     if (!answer.trim()) {
       toast({ variant: 'warning', title: t('tutor.enterAnswer') })
@@ -332,7 +369,7 @@ export function TutorPanel(props: TutorPanelProps): JSX.Element {
             <GraduationCap className="h-4 w-4 shrink-0" />
             <TruncatedText text={props.topicName} className="min-w-0 max-w-full" />
             <Badge variant="outline" className="shrink-0 lab:font-mono lab:text-[11px]">
-              {session.currentDifficulty}
+              {t(difficultyLabelKey(session.currentDifficulty))}
             </Badge>
             <Badge
               variant="outline"
@@ -402,6 +439,19 @@ export function TutorPanel(props: TutorPanelProps): JSX.Element {
                 ))}
               </ul>
             )}
+            {revealedHints > 0 && (lastQuestion.hints?.length ?? 0) > 0 && (
+              // Hints stay with the question instead of vanishing with a toast.
+              <ol className="space-y-1.5 rounded-lg border border-border/70 bg-muted/30 px-4 py-3 text-[15px] leading-[1.7] lab:rounded-none">
+                {lastQuestion.hints.slice(0, revealedHints).map((hint, index) => (
+                  <li key={index} className="min-w-0">
+                    <span className="mr-1.5 text-xs font-medium text-muted-foreground">
+                      {t('tutor.hintLabel', { number: index + 1 })}
+                    </span>
+                    <RichText text={hint} format="markdown" className="inline min-w-0" />
+                  </li>
+                ))}
+              </ol>
+            )}
             <MathField
               // An expression answer gets the maths keyboard and a "read as"
               // preview; everything else is free working with Unicode symbols.
@@ -446,7 +496,7 @@ export function TutorPanel(props: TutorPanelProps): JSX.Element {
               </Button>
               <span className="text-xs text-muted-foreground lab:ml-auto lab:font-mono lab:text-[11px]">
                 {t('tutor.hintsAvailable', {
-                  count: lastQuestion.hints?.length ?? 0,
+                  count: Math.max(0, (lastQuestion.hints?.length ?? 0) - revealedHints),
                   point: lastQuestion.knowledgePoint,
                 })}
               </span>
@@ -492,9 +542,26 @@ export function TutorPanel(props: TutorPanelProps): JSX.Element {
         </Card>
       )}
 
-      {!lastQuestion && !lastEvaluation && !busy && introText && !actionError && !stopped && (
-        <EmptyState title={t('tutor.thinking')} description={t('tutor.generatingFirst')} />
-      )}
+      {/* Nothing open and nothing running (e.g. a resumed conversation whose
+          last question was answered, or whose first question never came):
+          offer the next question instead of a "thinking" message that never ends. */}
+      {!lastQuestion &&
+        !lastEvaluation &&
+        !busy &&
+        introText &&
+        !actionError &&
+        !stopped &&
+        !noProvider && (
+          <Card>
+            <CardContent className="flex items-center justify-between gap-2 p-4">
+              <div className="text-[15px] text-muted-foreground">{t('tutor.readyNext')}</div>
+              <Button onClick={() => void nextQuestion()} disabled={busy}>
+                {t('tutor.nextQuestion')}
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+            </CardContent>
+          </Card>
+        )}
     </div>
   )
 }

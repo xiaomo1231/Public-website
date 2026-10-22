@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Loader2 } from 'lucide-react'
 import { useTranslation } from '@/i18n'
-import { recoverInterruptedAnalyses } from '@/services/courseContentService'
 import { installKeyboardAvoidance } from '@/shared/lib/keyboardInset'
 
 /**
@@ -20,7 +19,15 @@ export function Bootstrap({ children }: { children: React.ReactNode }): JSX.Elem
 
   // Course analyses cut off by a closed tab would otherwise read "processing" forever.
   useEffect(() => {
-    void recoverInterruptedAnalyses().catch(() => undefined)
+    // Imported on demand: these services pull in the AI layer, mathjs, pdf.js
+    // and the file extractors, which must stay out of the first-paint bundle.
+    void import('@/services/courseContentService')
+      .then((m) => m.recoverInterruptedAnalyses())
+      .catch(() => undefined)
+    // Same for a file whose processing was cut off: it would read 处理中 forever.
+    void import('@/services/processingRecovery')
+      .then((m) => m.recoverInterruptedProcessing())
+      .catch(() => undefined)
   }, [])
 
   // iPad: keep the focused field (and sticky footers) above the on-screen keyboard.

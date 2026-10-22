@@ -150,6 +150,7 @@ export function MistakeCard({
           variant="ghost"
           size="icon"
           aria-label={t('common.expand')}
+          aria-expanded={expanded}
           onClick={() => setExpanded((e) => !e)}
         >
           {expanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}

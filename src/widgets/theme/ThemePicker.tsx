@@ -208,9 +208,7 @@ function StyleThumbnail({ style }: { style: UserUiStyle }): JSX.Element {
       >
         <span className="border-b" />
         <span className="mx-auto mt-2 flex w-1/2 flex-col gap-1.5">
-          <span className="font-serif text-[11px] font-bold leading-none text-foreground">
-            Aa 讲义
-          </span>
+          <span className="font-serif text-[11px] font-bold leading-none text-foreground">Aa</span>
           <span className="h-1 rounded-full bg-muted-foreground/30" />
           <span className="h-1 w-5/6 rounded-full bg-muted-foreground/30" />
           <span className="h-1 rounded-full bg-muted-foreground/30" />

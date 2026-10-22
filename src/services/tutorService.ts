@@ -318,7 +318,9 @@ export class TutorService {
       ? await this.ai.streamChat(introMessages, opts.onDelta, {
           ...(opts.signal ? { signal: opts.signal } : {}),
         })
-      : await this.ai.chat(introMessages)
+      : await this.ai.chat(introMessages, {
+          ...(opts.signal ? { signal: opts.signal } : {}),
+        })
 
     // Canonical maths: recover/convert Unicode maths to LaTeX and make sure no
     // Private Use Area glyph survives into the stored explanation.
@@ -525,6 +527,8 @@ export class TutorService {
       throw new AppError(t('errors.noActiveQuestion'), 'NO_ACTIVE_QUESTION')
     }
     const question = session.pendingQuestion
+    // Read before the session is reset below: the mistake record keeps it.
+    const hintsUsed = session.hintsRevealed
     // Short answers are graded by their scoring points (verified evidence,
     // local score), never by the model's own right/wrong verdict.
     let scored: QuestionEvaluation | null = null
@@ -534,6 +538,7 @@ export class TutorService {
         tutorQuestionAsQuiz(session, question),
         studentAnswer,
         await loadProjectSubjectContext(session.projectId, this.db),
+        signal ? { signal } : {},
       )
       // Stopped while the scoring points were checked: record nothing.
       signal?.throwIfAborted()
@@ -623,7 +628,7 @@ export class TutorService {
       (scored === null || scored.isCorrect === false) &&
       this.mistakes
     ) {
-      await this.recordMistake(session, question, studentAnswer, evaluationTyped, scored)
+      await this.recordMistake(session, question, studentAnswer, evaluationTyped, scored, hintsUsed)
     }
 
     return {
@@ -646,6 +651,7 @@ export class TutorService {
     studentAnswer: string,
     evaluation: TutorEvaluation,
     scored: QuestionEvaluation | null = null,
+    hintsUsed = 0,
   ): Promise<void> {
     try {
       const evaluationForAttempt: QuestionEvaluation = scored ?? {
@@ -668,7 +674,7 @@ export class TutorService {
         difficulty: question.difficulty,
         userAnswer: studentAnswer,
         evaluation: evaluationForAttempt,
-        hintsUsed: session.hintsRevealed,
+        hintsUsed,
         createdAt: Date.now(),
       }
       await this.attempts.add(attempt)

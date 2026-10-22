@@ -114,8 +114,14 @@ export interface QuizScore {
    * answers (3 of 5 points → 0.6). Absent on scores saved before short answers.
    */
   points?: number
-  /** Share of graded credit over graded questions, as a percentage. */
+  /**
+   * Share of graded credit over graded questions, as a percentage. An oral
+   * quiz pools its scoring points instead (Σ covered / Σ points of the scored
+   * questions), the same basis as its per-topic scores.
+   */
   percentage: number
+  /** Oral quizzes: scoring points covered / total over the scored questions. */
+  rubricPoints?: { earned: number; total: number }
   byDifficulty: Record<string, QuizDifficultyStat>
   byKnowledgePoint: QuizKnowledgeStat[]
   weakKnowledgePoints: string[]

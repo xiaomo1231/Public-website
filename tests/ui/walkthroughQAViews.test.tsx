@@ -158,6 +158,18 @@ describe('window modes in the store', () => {
     expect(store().cardPinned).toBe(false)
   })
 
+  it('keeps the remembered pin choice when another card is only moved or re-fitted', () => {
+    const a = openWindow()
+    const b = openWindow()
+    store().compact(a, { x: 10, y: 10, pinned: true })
+    store().compact(b, { x: 10, y: 10, pinned: true })
+    store().setCard(b, { x: 10, y: 10, pinned: false })
+    expect(store().cardPinned).toBe(false)
+    // Card A re-fits its height (a new answer arrived): not a pin choice.
+    store().setCard(a, { x: 10, y: 10, pinned: true, height: 200 })
+    expect(store().cardPinned).toBe(false)
+  })
+
   it('converts a card between screen and page coordinates without moving it', () => {
     const layer = { left: 120, top: -300 }
     const pinned = { x: 400, y: 200, pinned: true }

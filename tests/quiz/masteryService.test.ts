@@ -5,6 +5,7 @@ import { MasteryService } from '@/services/masteryService'
 import { KnowledgeMasteryRepository } from '@/entities/knowledgeMastery/repository'
 import { ProjectService } from '@/services/projectService'
 import type { QuestionAttempt } from '@/entities/questionAttempt/types'
+import { QuestionAttemptRepository } from '@/entities/questionAttempt/repository'
 
 function attempt(
   projectId: string,
@@ -152,5 +153,23 @@ describe('MasteryService review fixes', () => {
     )
     const row = await svc.get(p.id, 'Series')
     expect(row!.observations).toHaveLength(6)
+  })
+
+  it('lists a knowledge point history beyond the project latest 500 attempts', async () => {
+    const p = await new ProjectService(db).create({ name: 'P', subject: 'cs' })
+    const other = await new ProjectService(db).create({ name: 'Q', subject: 'cs' })
+    const old = Array.from({ length: 3 }, (_, i) =>
+      attempt(p.id, 'Old point', true, { createdAt: i + 1 }),
+    )
+    const recent = Array.from({ length: 520 }, (_, i) =>
+      attempt(p.id, 'Busy point', true, { createdAt: 1000 + i }),
+    )
+    await db.questionAttempts.bulkAdd([
+      ...old,
+      ...recent,
+      attempt(other.id, 'Old point', false, { createdAt: 5 }),
+    ])
+    const rows = await new QuestionAttemptRepository(db).listByKnowledgePoint(p.id, 'Old point')
+    expect(rows.map((row) => row.createdAt)).toEqual([3, 2, 1])
   })
 })

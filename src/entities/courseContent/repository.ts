@@ -354,18 +354,29 @@ export class CourseContentRepository {
    * nothing stored.
    */
   async markStale(projectId: string, reason: string): Promise<void> {
-    const analysis = await this.analyses.getByProject(projectId)
-    if (!analysis) return
-    await this.analyses.upsert({ ...analysis, staleReason: reason, staleAt: Date.now() })
+    // Modified in place (read + write in one step): a read-then-put could
+    // write an older copy of the row back over an analysis that finished in
+    // between, reverting its counts and hashes.
+    const staleAt = Date.now()
+    await this.db
+      .table<CourseAnalysis, string>('courseAnalyses')
+      .where('projectId')
+      .equals(projectId)
+      .modify((row) => {
+        row.staleReason = reason
+        row.staleAt = staleAt
+      })
   }
 
   /** Drop a stale annotation once it no longer applies. */
   async clearStale(projectId: string): Promise<void> {
-    const analysis = await this.analyses.getByProject(projectId)
-    if (!analysis || (analysis.staleReason === undefined && analysis.staleAt === undefined)) return
-    const next: CourseAnalysis = { ...analysis }
-    delete next.staleReason
-    delete next.staleAt
-    await this.analyses.upsert(next)
+    await this.db
+      .table<CourseAnalysis, string>('courseAnalyses')
+      .where('projectId')
+      .equals(projectId)
+      .modify((row) => {
+        delete row.staleReason
+        delete row.staleAt
+      })
   }
 }

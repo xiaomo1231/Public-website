@@ -6,7 +6,11 @@ import { useProjects } from '@/features/project/useProjects'
 import { SUBJECT_LABEL_KEYS, type Project, type Subject } from '@/entities/project/types'
 import { inferCourse } from '@/entities/project/subjectInference'
 import { SubjectDetailsFields } from '@/widgets/project/SubjectDetailsFields'
-import { subjectDetailsFor, type ExamStyleChoice } from '@/widgets/project/subjectDetails'
+import {
+  subjectDetailsFor,
+  targetLanguageInvalid,
+  type ExamStyleChoice,
+} from '@/widgets/project/subjectDetails'
 import {
   Dialog,
   DialogContent,
@@ -49,6 +53,9 @@ export function ProjectsPage(): JSX.Element {
   // Until the student picks a subject, it follows the name ("线性代数" →
   // Linear Algebra); unrecognised names stay "Other", never a guess.
   const [subjectTouched, setSubjectTouched] = useState(false)
+  /** The student picked the target language: the name no longer overrides it. */
+  const [languageTouched, setLanguageTouched] = useState(false)
+  const [deleting, setDeleting] = useState(false)
   const [targetLanguage, setTargetLanguage] = useState('')
   const [examStyle, setExamStyle] = useState<ExamStyleChoice>('auto')
   const [description, setDescription] = useState('')
@@ -75,6 +82,7 @@ export function ProjectsPage(): JSX.Element {
     setName('')
     setSubject('other')
     setSubjectTouched(false)
+    setLanguageTouched(false)
     setTargetLanguage('')
     setExamStyle('auto')
     setDescription('')
@@ -85,8 +93,13 @@ export function ProjectsPage(): JSX.Element {
     setName(currentName)
   }
 
+  const canSubmit =
+    !submitting &&
+    name.trim().length > 0 &&
+    !(dialog?.mode === 'create' && targetLanguageInvalid(subject, targetLanguage))
+
   async function submit() {
-    if (!dialog) return
+    if (!dialog || !canSubmit) return
     setSubmitting(true)
     try {
       if (dialog.mode === 'create') {
@@ -117,7 +130,9 @@ export function ProjectsPage(): JSX.Element {
   }
 
   async function confirmDelete() {
-    if (!deleteCandidate) return
+    // A second click while a large course is being deleted must not delete twice.
+    if (!deleteCandidate || deleting) return
+    setDeleting(true)
     try {
       await remove(deleteCandidate.id)
       toast({ variant: 'success', title: t('projects.deleted') })
@@ -125,6 +140,7 @@ export function ProjectsPage(): JSX.Element {
       const msg = err instanceof Error ? err.message : t('projects.deleteFailed')
       toast({ variant: 'error', title: t('projects.deleteFailedTitle'), description: msg })
     } finally {
+      setDeleting(false)
       setDeleteCandidate(null)
     }
   }
@@ -213,7 +229,14 @@ export function ProjectsPage(): JSX.Element {
                   if (dialog?.mode === 'create' && !subjectTouched) {
                     const inferred = inferCourse(e.target.value)
                     setSubject(inferred?.subject ?? 'other')
-                    setTargetLanguage(inferred?.targetLanguage ?? '')
+                    if (!languageTouched) setTargetLanguage(inferred?.targetLanguage ?? '')
+                  }
+                }}
+                onKeyDown={(e) => {
+                  // Enter saves, like the other dialogs (not while composing IME text).
+                  if (e.key === 'Enter' && !e.nativeEvent.isComposing && e.keyCode !== 229) {
+                    e.preventDefault()
+                    void submit()
                   }
                 }}
                 placeholder={t('projects.namePlaceholder')}
@@ -247,7 +270,10 @@ export function ProjectsPage(): JSX.Element {
                 <SubjectDetailsFields
                   subject={subject}
                   targetLanguage={targetLanguage}
-                  onTargetLanguageChange={setTargetLanguage}
+                  onTargetLanguageChange={(value) => {
+                    setTargetLanguage(value)
+                    setLanguageTouched(true)
+                  }}
                   examStyle={examStyle}
                   onExamStyleChange={setExamStyle}
                 />
@@ -268,7 +294,7 @@ export function ProjectsPage(): JSX.Element {
             <Button variant="outline" onClick={() => setDialog(null)} disabled={submitting}>
               {t('common.cancel')}
             </Button>
-            <Button onClick={submit} disabled={submitting || !name.trim()}>
+            <Button onClick={submit} disabled={!canSubmit}>
               {submitting
                 ? t('projects.saving')
                 : dialog?.mode === 'create'
@@ -297,7 +323,7 @@ export function ProjectsPage(): JSX.Element {
             <Button variant="outline" onClick={() => setDeleteCandidate(null)}>
               {t('common.cancel')}
             </Button>
-            <Button variant="destructive" onClick={confirmDelete}>
+            <Button variant="destructive" onClick={confirmDelete} disabled={deleting}>
               {t('projects.deleteAction')}
             </Button>
           </DialogFooter>

@@ -43,6 +43,29 @@ export function formatValue(value: number): string {
   return String(Number(value.toPrecision(6)))
 }
 
+/** The first number written in a text (sign, decimals, exponent, a fraction). */
+function firstNumber(text: string): string {
+  const match = /[-+−]?\d+(?:\.\d+)?(?:[eE][-+]?\d+)?(?:\s*\/\s*\d+(?:\.\d+)?)?/.exec(text)
+  return match ? match[0].replace('−', '-').replace(/\s+/g, '') : ''
+}
+
+/**
+ * Whether a prompt writes the system of `matrix`: every integer entry other
+ * than 0 and ±1 (often left implicit, "x + y") appears as a number in it.
+ */
+function promptShowsMatrix(prompt: string, matrix: readonly { n: bigint; d: bigint }[][]): boolean {
+  const written = new Set((prompt.match(/\d+/g) ?? []).map((token) => String(Number(token))))
+  for (const row of matrix) {
+    for (const entry of row) {
+      if (entry.d !== 1n) continue
+      const value = entry.n < 0n ? -entry.n : entry.n
+      if (value <= 1n) continue
+      if (!written.has(value.toString())) return false
+    }
+  }
+  return true
+}
+
 export function verifyAiPart(
   raw: RawPart,
   requirement: PracticeSlotPart | undefined,
@@ -73,9 +96,13 @@ export function verifyAiPart(
       },
       { language, asMatrix: true },
     )
+    // The answer is computed from `augmented`: the student must see that
+    // system. A prompt whose numbers do not match it (a typo by the model)
+    // is replaced by the system built from the matrix.
+    const prompt = raw.prompt && promptShowsMatrix(raw.prompt, matrix) ? raw.prompt : local.prompt
     return {
       ok: true,
-      part: { ...local, ...label, prompt: raw.prompt || local.prompt },
+      part: { ...local, ...label, prompt },
     }
   }
 
@@ -83,12 +110,9 @@ export function verifyAiPart(
     const value = typeof check?.expression === 'string' ? parseNumeric(check.expression) : null
     if (value === null) return { ok: false, reason: 'unreadable-expression' }
     const unit = typeof check?.unit === 'string' ? check.unit.trim() : ''
-    const stated = parseNumeric(
-      raw.answer
-        .replace(/[^\d.eE+\-/*^()\s]/g, ' ')
-        .trim()
-        .split(/\s+/)[0] ?? '',
-    )
+    // The first number of the stated answer ("The speed is 5 m/s" → 5); the
+    // letters e / E of the words around it are not part of it.
+    const stated = parseNumeric(firstNumber(raw.answer))
     if (
       stated === null ||
       numericEquivalent(String(stated), String(value), NUMERIC_TOLERANCE) !== true

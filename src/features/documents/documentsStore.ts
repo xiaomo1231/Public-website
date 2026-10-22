@@ -183,7 +183,18 @@ export const useDocumentsStore = create<DocumentsStore>((set, get) => ({
 
   async refresh(projectId) {
     const docs = await getService().listByProject(projectId)
-    set((s) => ({ byProject: { ...s.byProject, [projectId]: docs } }))
+    set((s) => {
+      // Keep single-document copies in step (status / processedAt after a
+      // reprocess), and clear an earlier load error now that the read worked.
+      const byId = { ...s.byId }
+      for (const doc of docs) if (byId[doc.id]) byId[doc.id] = doc
+      return {
+        byProject: { ...s.byProject, [projectId]: docs },
+        byId,
+        loaded: { ...s.loaded, [projectId]: true },
+        error: { ...s.error, [projectId]: null },
+      }
+    })
   },
 
   async remove(id, projectId) {

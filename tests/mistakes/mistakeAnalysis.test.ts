@@ -179,6 +179,18 @@ describe('MistakeAnalysisService', () => {
       .fn()
       .mockResolvedValue({ data: { junk: true }, raw: { content: '{}', model: 'm' } })
     const svc = new MistakeAnalysisService({ ai: fakeAI(chatJSON), mistakes })
+    // Nothing usable: no placeholder-only analysis is saved, the card says why.
+    await expect(svc.analyze(mistake.id)).rejects.toThrow()
+    const failed = await mistakes.get(mistake.id)
+    expect(failed?.analysisStatus).toBe('failed')
+    expect(failed?.analysis).toBeUndefined()
+    expect(failed?.analysisError).toBeTruthy()
+
+    // A partial reply is completed with neutral defaults.
+    chatJSON.mockResolvedValue({
+      data: { whyWrong: 'The sign of the derivative was dropped.', mistakeType: 'bogus' },
+      raw: { content: '{}', model: 'm' },
+    })
     const updated = await svc.analyze(mistake.id)
     expect(updated.analysisStatus).toBe('ready')
     expect(updated.analysis?.mistakeType).toBe('unknown')

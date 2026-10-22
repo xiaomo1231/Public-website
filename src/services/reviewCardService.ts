@@ -104,13 +104,13 @@ export class ReviewCardService {
     return cards.find((card) => key(card.front) === key(front))!
   }
 
-  /** One card per course concept with a definition ("名词解释"). */
   /** How many course concepts have a definition, i.e. could become cards. */
   async conceptCount(projectId: string): Promise<number> {
     const concepts = await this.analyses.listConcepts(projectId)
     return concepts.filter((concept) => concept.definition.trim()).length
   }
 
+  /** One card per course concept with a definition ("名词解释"). */
   async generateFromConcepts(projectId: string): Promise<number> {
     const concepts = await this.analyses.listConcepts(projectId)
     return this.addMany(
@@ -148,6 +148,14 @@ export class ReviewCardService {
     const card = await this.repo.get(id)
     if (!card) throw new ValidationError(t('cards.notFound'))
     if (!clean(front) || !back.trim()) throw new ValidationError(t('cards.emptyFields'))
+    // Renaming onto another card's front would make two cards the dedupe
+    // treats as one (fronts are unique per project everywhere else).
+    if (key(front) !== key(card.front)) {
+      const others = await this.repo.listByProject(card.projectId)
+      if (others.some((other) => other.id !== id && key(other.front) === key(front))) {
+        throw new ValidationError(t('cards.duplicate'))
+      }
+    }
     return this.repo.put({
       ...card,
       front: clean(front).slice(0, MAX_FIELD),

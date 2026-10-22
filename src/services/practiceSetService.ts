@@ -132,6 +132,23 @@ export class PracticeSetService {
     return runs.has(setId)
   }
 
+  /**
+   * A build cut off by a reload or a closed tab stays `analyzing` with no run
+   * behind it: turn it into `paused` (its draft is intact, 继续 picks it up),
+   * or `failed` when nothing is left to continue. No-op while a run is live.
+   */
+  async recoverInterrupted(setId: string): Promise<HomeworkSet | undefined> {
+    if (runs.has(setId)) return undefined
+    const set = await this.homework.getSet(setId)
+    if (!set || !isPracticeSet(set) || set.status !== 'analyzing' || runs.has(setId)) return set
+    return this.homework.updateSet(
+      setId,
+      set.practice?.draft
+        ? { status: 'paused', progress: undefined }
+        : { status: 'failed', progress: undefined, errorMessage: t('practiceSet.interrupted') },
+    )
+  }
+
   /** Practice sets made from one assignment, newest first. */
   async listPracticeSets(parentSetId: string): Promise<HomeworkSet[]> {
     const parent = await this.homework.getSet(parentSetId)
@@ -325,7 +342,7 @@ export class PracticeSetService {
       if (!part.system) return null
       const spec = compact ? applyLinearHints(part.system, hints) : part.system
       const built =
-        (hints.integerOnly ? buildLinearSystem(spec, rng, { maxFractions: 0 }) : null) ??
+        (compact && hints.integerOnly ? buildLinearSystem(spec, rng, { maxFractions: 0 }) : null) ??
         buildLinearSystem(spec, rng)
       if (!built) return null
       parts.push(

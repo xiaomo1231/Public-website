@@ -81,18 +81,27 @@ export function useAIUsage(): AIUsageState {
       })
   }, [])
 
+  /** Only the latest balance request may update the readout. */
+  const balanceSeq = useRef(0)
   const refreshBalance = useCallback((force: boolean) => {
+    const seq = ++balanceSeq.current
     const current = settingsRef.current
     if (!current?.apiKey.trim()) {
       setBalance(null)
+      setBalanceLoading(false)
       return
     }
     setBalanceLoading(true)
-    void loadBalance(current, force).then((result) => {
-      if (!alive.current) return
-      setBalance(result)
-      setBalanceLoading(false)
-    })
+    void loadBalance(current, force)
+      .then((result) => {
+        if (alive.current && seq === balanceSeq.current) setBalance(result)
+      })
+      .catch(() => {
+        /* the readout falls back to local counts */
+      })
+      .finally(() => {
+        if (alive.current && seq === balanceSeq.current) setBalanceLoading(false)
+      })
   }, [])
 
   useEffect(() => {

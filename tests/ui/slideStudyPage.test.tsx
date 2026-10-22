@@ -190,3 +190,24 @@ describe('SlideStudyPage', () => {
     expect(await screen.findByText('No presentations yet')).toBeInTheDocument()
   })
 })
+
+describe('SlideStudyPage failures', () => {
+  it('shows an error instead of a spinner when the slide list cannot be read', async () => {
+    holder.service = stubService({
+      buildIndex: vi.fn(async () => {
+        throw new Error('index exploded')
+      }),
+    })
+    renderPage('/projects/p1/slides/d1')
+    expect(await screen.findByText(/index exploded/)).toBeInTheDocument()
+  })
+
+  it('does not show a presentation of another course', async () => {
+    holder.service = stubService({
+      buildIndex: vi.fn(async () => ({ ...index(), document: { ...DOCUMENT, projectId: 'p2' } })),
+    })
+    renderPage('/projects/p1/slides/d1')
+    expect(await screen.findByText('Document not found')).toBeInTheDocument()
+    expect(holder.service.resumeSlideNumber).not.toHaveBeenCalled()
+  })
+})

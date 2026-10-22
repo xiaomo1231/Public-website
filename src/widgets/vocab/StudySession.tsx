@@ -181,10 +181,13 @@ export function StudySession({
       lang
         ? service.previewIntervals(current.view.word, undefined, lang)
         : service.previewIntervals(current.view.word)
-    ).then((value) => !cancelled && setIntervals(value))
-    void (
-      lang ? service.details(current.view.word, lang) : service.details(current.view.word)
-    ).then((value) => !cancelled && setRoots(value.roots))
+    )
+      .then((value) => !cancelled && setIntervals(value))
+      // Previews and root hints are extras: the word can be studied without them.
+      .catch(() => undefined)
+    void (lang ? service.details(current.view.word, lang) : service.details(current.view.word))
+      .then((value) => !cancelled && setRoots(value.roots))
+      .catch(() => undefined)
     if (mode === 'dictation') speakWord(current.view.word, lang)
     if (typing) setTimeout(() => inputRef.current?.focus(), 0)
     return () => {
@@ -251,7 +254,13 @@ export function StudySession({
   useEffect(() => {
     if (!current) return
     const onKey = (event: KeyboardEvent) => {
-      const inField = (event.target as HTMLElement | null)?.tagName === 'INPUT'
+      const target = event.target as HTMLElement | null
+      const inField = target?.tagName === 'INPUT'
+      // Inside a dialog, or on a focused button / link, Enter and Space keep
+      // their own meaning (activating that control).
+      if (target?.closest?.('[role="dialog"], [role="alertdialog"], [role="menu"]')) return
+      const activates = event.key === 'Enter' || event.key === ' '
+      if (activates && target?.closest?.('button, a[href], select, [role="button"]')) return
       if (typing) {
         if (event.key !== 'Enter') return
         event.preventDefault()

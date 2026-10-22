@@ -55,6 +55,16 @@ export async function recordPracticeCheck(
       method: check.method === 'local' ? 'exact' : 'ai',
       confidence: check.method === 'local' ? 1 : 0.8,
       expected: correctAnswer,
+      // A partly right answer is partial credit for mastery (the AI's coverage
+      // estimate, else half), not a full miss.
+      ...(check.verdict === 'partial'
+        ? {
+            score: {
+              earned: Math.min(99, Math.max(1, Math.round(check.similarityPercent ?? 50))),
+              total: 100,
+            },
+          }
+        : {}),
     },
     hintsUsed: question.revealedHints,
     createdAt: Date.now(),

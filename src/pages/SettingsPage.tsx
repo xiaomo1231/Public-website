@@ -29,6 +29,7 @@ import { Slider } from '@/shared/ui/Slider'
 import { cn } from '@/shared/lib/utils'
 import { toast } from '@/features/toast/toastStore'
 import { isAppError } from '@/infrastructure/errors/AppError'
+import { friendlyAIError } from '@/shared/lib/aiErrors'
 import { AIService } from '@/services/aiService'
 import { DataManagementPanel } from '@/widgets/dataManagement/DataManagementPanel'
 import { ModelCombobox } from '@/widgets/settings/ModelCombobox'
@@ -127,6 +128,8 @@ export function SettingsPage(): JSX.Element {
     setFetchingModels(true)
     try {
       const result = await fetchModelList({ baseURL, apiKey })
+      // A later fetch (other base URL / key, or a provider switch) wins.
+      if (fetchedFor.current !== signature) return
       setModelList(result)
       if (result.ok) {
         // Output limits from the metadata, when the provider states them. Kept
@@ -149,6 +152,9 @@ export function SettingsPage(): JSX.Element {
   async function onProviderChange(providerId: string) {
     const id = providerId as AIProviderId
     patch('provider', id)
+    // The fetched list belongs to the previous provider's base URL.
+    setModelList(null)
+    fetchedFor.current = ''
     const preset = PROVIDER_PRESETS.find((p) => p.id === id)
     if (preset) {
       patch('baseURL', preset.baseURL || draft!.baseURL)
@@ -228,7 +234,8 @@ export function SettingsPage(): JSX.Element {
         })
       }
     } catch (err) {
-      const msg = err instanceof Error ? err.message : t('settings.testFailed')
+      // e.g. a missing base URL / model: the typed error maps to what to fix.
+      const msg = friendlyAIError(err)
       toast({ variant: 'error', title: t('settings.testFailed'), description: msg })
       setTestResult({ ok: false, latencyMs: 0, model: draft.model, error: msg })
     } finally {

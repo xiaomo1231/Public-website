@@ -94,6 +94,8 @@ export function HeaderControls(): JSX.Element {
             return (
               <DropdownMenuItem
                 key={opt.value}
+                role="menuitemradio"
+                aria-checked={preference === opt.value}
                 onSelect={() => setPreference(opt.value)}
                 className={cn(preference === opt.value && 'bg-accent')}
               >
@@ -117,6 +119,8 @@ export function HeaderControls(): JSX.Element {
           {UI_LANGUAGES.map((lang) => (
             <DropdownMenuItem
               key={lang}
+              role="menuitemradio"
+              aria-checked={language === lang}
               onSelect={() => setLanguage(lang)}
               className={cn(language === lang && 'bg-accent')}
             >

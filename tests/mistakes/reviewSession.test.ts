@@ -221,6 +221,29 @@ describe('ReviewSessionService', () => {
     })
   })
 
+  it('does not focus a review on points that only have archived mistakes', async () => {
+    for (const question of ['A1', 'A2', 'A3']) {
+      const m = await ctx.mistakes.addManual({
+        projectId: ctx.project.id,
+        question,
+        studentAnswer: 'a',
+        correctAnswer: 'b',
+        knowledgePoint: 'Archived point',
+      })
+      await ctx.mistakes.archive(m.id)
+    }
+    await ctx.mistakes.addManual({
+      projectId: ctx.project.id,
+      question: 'Live',
+      studentAnswer: 'a',
+      correctAnswer: 'b',
+      knowledgePoint: 'Chain Rule',
+    })
+    const generate = vi.spyOn(ctx.quiz, 'generateQuiz').mockResolvedValue({} as never)
+    await ctx.review.createReviewSession(ctx.project.id)
+    expect(generate.mock.calls[0]![1].focusKnowledgePoints).toEqual(['Chain Rule'])
+  })
+
   it('generates practice for a single mistake — same concept', async () => {
     const m = await ctx.mistakes.addManual({
       projectId: ctx.project.id,

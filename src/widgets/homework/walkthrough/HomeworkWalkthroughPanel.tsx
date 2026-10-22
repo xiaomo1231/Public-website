@@ -527,31 +527,34 @@ export function HomeworkWalkthroughPanel({
       />
     ) : null
 
-  const printable: PrintableSection[] = entries
-    .filter((entry) => entry.section?.status === 'ready')
-    .map((entry) => ({
-      id: entry.id,
-      title: sectionTitle(entry, labels, t),
-      ...(entry.section!.analysis
-        ? { analysis: tidyBoxedPunctuation(entry.section!.analysis) }
-        : {}),
-      ...((sectionContent(entry.section!, shownLevel(entry)) ?? entry.section!).conclusion
-        ? {
-            conclusion: formatWalkthroughText(
-              (sectionContent(entry.section!, shownLevel(entry)) ?? entry.section!).conclusion!,
-            ),
-          }
-        : {}),
-      body: formatWalkthroughText(
-        (sectionContent(entry.section!, shownLevel(entry)) ?? entry.section!).body,
-      ),
-      ...(entry.section!.suggestions
-        ? { suggestions: entry.section!.suggestions.map(tidyBoxedPunctuation) }
-        : {}),
-      ...(entry.question && isAlignedWith(entry.section, professorAnswerOf(entry.question))
-        ? { aligned: true }
-        : {}),
-    }))
+  // Formatting every section is only needed for printing; the panel
+  // re-renders often (hover, scroll spy, progress, floating windows).
+  const printable = (): PrintableSection[] =>
+    entries
+      .filter((entry) => entry.section?.status === 'ready')
+      .map((entry) => ({
+        id: entry.id,
+        title: sectionTitle(entry, labels, t),
+        ...(entry.section!.analysis
+          ? { analysis: tidyBoxedPunctuation(entry.section!.analysis) }
+          : {}),
+        ...((sectionContent(entry.section!, shownLevel(entry)) ?? entry.section!).conclusion
+          ? {
+              conclusion: formatWalkthroughText(
+                (sectionContent(entry.section!, shownLevel(entry)) ?? entry.section!).conclusion!,
+              ),
+            }
+          : {}),
+        body: formatWalkthroughText(
+          (sectionContent(entry.section!, shownLevel(entry)) ?? entry.section!).body,
+        ),
+        ...(entry.section!.suggestions
+          ? { suggestions: entry.section!.suggestions.map(tidyBoxedPunctuation) }
+          : {}),
+        ...(entry.question && isAlignedWith(entry.section, professorAnswerOf(entry.question))
+          ? { aligned: true }
+          : {}),
+      }))
 
   return (
     <div className="space-y-4">
@@ -1043,7 +1046,7 @@ export function HomeworkWalkthroughPanel({
       {printing && (
         <WalkthroughPrint
           title={set.title}
-          sections={printable}
+          sections={printable()}
           onDone={() => setPrinting(false)}
         />
       )}

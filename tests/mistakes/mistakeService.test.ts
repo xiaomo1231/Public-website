@@ -446,4 +446,27 @@ describe('MistakeService + QuizService integration', () => {
     expect(row!.attemptIds).toEqual([first.id])
     expect(row!.studentAnswer).toBe('first wrong')
   })
+
+  it('takes a disputed occurrence out of an archived card too', async () => {
+    const service = new MistakeService(db)
+    const p = await new ProjectService(db).create({ name: 'P', subject: 'calculus' })
+    const [q] = await new QuestionRepository(db).addMany([
+      {
+        projectId: p.id,
+        knowledgePoint: 'Chain Rule',
+        type: 'numeric',
+        difficulty: 'basic',
+        prompt: 'Q',
+        correctAnswer: '1',
+        hints: [],
+      },
+    ])
+    const only = makeAttempt(p.id, q!.id, false)
+    await db.questionAttempts.add(only)
+    const mistake = await service.recordFromAttempt(only, q!)
+    await service.archive(mistake!.id)
+
+    await service.removeAttempt(p.id, q!.id, only.id)
+    expect(await service.list(p.id, { status: 'all' })).toHaveLength(0)
+  })
 })

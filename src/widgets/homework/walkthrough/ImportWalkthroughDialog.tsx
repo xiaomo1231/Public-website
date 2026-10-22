@@ -71,11 +71,15 @@ export function ImportWalkthroughDialog({
   useEffect(() => {
     if (!open) return
     let alive = true
-    void buildWalkthroughImportService().then(async (svc) => {
-      if (!alive) return
-      setService(svc)
-      await loadDocuments(svc)
-    })
+    void buildWalkthroughImportService()
+      .then(async (svc) => {
+        if (!alive) return
+        setService(svc)
+        await loadDocuments(svc)
+      })
+      .catch((err) => {
+        if (alive) setError(friendlyAIError(err))
+      })
     return () => {
       alive = false
     }

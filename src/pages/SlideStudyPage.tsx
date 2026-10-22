@@ -94,8 +94,12 @@ export function SlideStudyPage(): JSX.Element {
   const [language, setLanguage] = useState<'zh' | 'en' | 'mixed'>('en')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  /** The slide list could not be read (kept apart from per-slide errors). */
+  const [indexError, setIndexError] = useState<string | null>(null)
   // Only the Stop button aborts: a slide left mid-request still gets cached.
   const generation = useGenerationRun()
+  /** A follow-up question is running (its Stop sits by the Send button). */
+  const [asking, setAsking] = useState(false)
   const { start: startRun } = generation
   const [askText, setAskText] = useState('')
 
@@ -134,28 +138,42 @@ export function SlideStudyPage(): JSX.Element {
       return
     }
     let alive = true
+    setIndexError(null)
     void service
       .buildIndex(documentId)
       .then((next) => {
-        if (alive) setIndex(next)
+        if (!alive) return
+        // A presentation of another course (stale or edited link) is not shown here.
+        if (next.document.projectId !== projectId) {
+          setIndex(null)
+          setIndexError(t('errors.documentNotFound'))
+          return
+        }
+        setIndex(next)
       })
-      .catch(() => {
-        if (alive) setIndex(null)
+      .catch((err: unknown) => {
+        if (!alive) return
+        setIndex(null)
+        // Without an error the page would show its spinner forever.
+        setIndexError(friendlyAIError(err))
       })
     return () => {
       alive = false
     }
-  }, [service, documentId])
+  }, [service, documentId, projectId, t])
 
   // Resume the last studied slide when no slide number is in the URL.
   useEffect(() => {
     if (!service || !documentId || validSlideNumber !== undefined || !index) return
     let alive = true
-    void service.resumeSlideNumber(documentId).then((resume) => {
-      if (!alive) return
-      const target = resume ?? 1
-      navigate(`/projects/${projectId}/slides/${documentId}/${target}`, { replace: true })
-    })
+    void service
+      .resumeSlideNumber(documentId)
+      .catch(() => undefined)
+      .then((resume) => {
+        if (!alive) return
+        const target = resume ?? 1
+        navigate(`/projects/${projectId}/slides/${documentId}/${target}`, { replace: true })
+      })
     return () => {
       alive = false
     }
@@ -251,22 +269,28 @@ export function SlideStudyPage(): JSX.Element {
   )
 
   const ask = useCallback(async () => {
-    if (!service || !lesson || !askText.trim()) return
+    // Enter bypasses the disabled Send button: never ask twice at once.
+    if (!service || !lesson || !askText.trim() || busy) return
     const key = slideKey
     const isCurrent = () => activeSlideKey.current === key
     setBusy(true)
+    setAsking(true)
     setError(null)
+    // A question is one request: Stop aborts it and keeps the text in the box.
+    const run = startRun()
     try {
-      const updated = await service.ask(lesson.id, askText)
+      const updated = await service.ask(lesson.id, askText, { signal: run.signal })
       if (!isCurrent()) return
       setLesson(updated)
       setAskText('')
     } catch (err) {
-      if (isCurrent()) setError(friendlyAIError(err))
+      if (isCurrent() && !isAbortError(err, run.signal)) setError(friendlyAIError(err))
     } finally {
+      run.finish()
+      setAsking(false)
       if (isCurrent()) setBusy(false)
     }
-  }, [service, lesson, askText, slideKey])
+  }, [service, lesson, askText, slideKey, busy, startRun])
 
   if (!projectId) return <div />
 
@@ -280,7 +304,25 @@ export function SlideStudyPage(): JSX.Element {
     />
   )
 
-  if (loadingDocs || (documentId && !index && !error)) {
+  if (documentId && !index && indexError) {
+    return (
+      <PageContainer>
+        {header}
+        <PageContent>
+          <ErrorState
+            description={indexError}
+            action={
+              <Button asChild variant="outline">
+                <Link to={`/projects/${projectId}/files`}>{t('slides.openFiles')}</Link>
+              </Button>
+            }
+          />
+        </PageContent>
+      </PageContainer>
+    )
+  }
+
+  if (loadingDocs || (documentId && !index)) {
     return (
       <PageContainer>
         {header}
@@ -628,7 +670,17 @@ export function SlideStudyPage(): JSX.Element {
                                 {message.role === 'student' ? t('slides.you') : t('slides.tutor')}
                                 :{' '}
                               </span>
-                              {message.content}
+                              {message.role === 'student' ? (
+                                message.content
+                              ) : (
+                                // Replies are Markdown + LaTeX, like the explanation.
+                                <RichText
+                                  text={message.content}
+                                  format="markdown"
+                                  className="min-w-0 space-y-2 break-words"
+                                  paragraphClassName="text-sm leading-relaxed"
+                                />
+                              )}
                             </li>
                           ))}
                         </ul>
@@ -641,7 +693,13 @@ export function SlideStudyPage(): JSX.Element {
                           rows={2}
                           aria-label={t('slides.askTitle')}
                           onKeyDown={(event) => {
-                            if (event.key === 'Enter' && !event.shiftKey) {
+                            // Enter that confirms an IME candidate is not a send.
+                            if (
+                              event.key === 'Enter' &&
+                              !event.shiftKey &&
+                              !event.nativeEvent.isComposing &&
+                              event.keyCode !== 229
+                            ) {
                               event.preventDefault()
                               void ask()
                             }
@@ -655,6 +713,13 @@ export function SlideStudyPage(): JSX.Element {
                           )}
                           {t('slides.send')}
                         </Button>
+                        {asking && (
+                          <GenerationControls
+                            kind="single"
+                            state={generation.state}
+                            onStopNow={generation.stopNow}
+                          />
+                        )}
                       </div>
                     </CardContent>
                   </Card>

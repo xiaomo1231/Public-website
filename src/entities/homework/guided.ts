@@ -14,7 +14,13 @@
  */
 import { fnv1a } from '@/shared/lib/hash'
 import type { WalkthroughLevel } from './walkthrough'
-import { applyOps, opsLatex, parseTypedOps, type GuidedChain, type Matrix } from './guidedMatrix'
+import {
+  applyOpsOnRoute,
+  opsLatex,
+  parseTypedOps,
+  type GuidedChain,
+  type Matrix,
+} from './guidedMatrix'
 
 /** How a blank is graded (see `services/guidedGrading.ts`). */
 export type GuidedBlankKind = 'expression' | 'number' | 'quantity' | 'chemistry' | 'text' | 'exact'
@@ -228,7 +234,7 @@ export function replayRoute(
   let current = chain.start
   for (const record of progress.records) {
     const ops = record.op ? parseTypedOps(record.op) : null
-    const applied = ops ? applyOps(current, ops) : null
+    const applied = ops ? applyOpsOnRoute(chain, current, ops) : null
     if (!applied) return null
     current = applied.matrix
     matrices.push(current)

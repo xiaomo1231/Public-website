@@ -170,4 +170,44 @@ describe('scoreQuiz', () => {
     expect(score.percentage).toBe(0)
     expect(score.byKnowledgePoint).toEqual([])
   })
+
+  it('uses the latest attempt per question whatever order the attempts arrive in', () => {
+    const quiz = makeQuiz(['q1'])
+    const older = { ...attempt('q1', false), id: 'old', createdAt: 1 }
+    const newer = { ...attempt('q1', true), id: 'new', createdAt: 2 }
+    expect(scoreQuiz(quiz, [newer, older]).correct).toBe(1)
+    expect(scoreQuiz(quiz, [older, newer]).correct).toBe(1)
+  })
+
+  it('scores an oral quiz by pooled scoring points, like its topic scores', () => {
+    const quiz: Quiz = {
+      ...makeQuiz(['m', 'f1', 'f2']),
+      config: { ...makeQuiz([]).config, mode: 'oral' },
+    }
+    const rubric = (id: string, earned: number, total: number, disputed = false) => ({
+      ...attempt(id, earned === total),
+      questionType: 'short_answer',
+      evaluation: {
+        isCorrect: earned === total,
+        method: 'rubric_ai' as const,
+        confidence: 0.8,
+        score: { earned, total },
+        ...(disputed ? { disputed: true } : {}),
+      },
+    })
+    // Main 6/8, follow-ups 1/2 and 0/1 → 7/11 = 64% (not the per-question mean 42%).
+    const score = scoreQuiz(quiz, [rubric('m', 6, 8), rubric('f1', 1, 2), rubric('f2', 0, 1)])
+    expect(score.percentage).toBe(64)
+    expect(score.rubricPoints).toEqual({ earned: 7, total: 11 })
+    // A disputed answer leaves both the points and the percentage.
+    const disputed = scoreQuiz(quiz, [
+      rubric('m', 6, 8, true),
+      rubric('f1', 1, 2),
+      rubric('f2', 0, 1),
+    ])
+    expect(disputed.rubricPoints).toEqual({ earned: 1, total: 3 })
+    expect(disputed.percentage).toBe(33)
+    // Other quizzes carry no rubric points.
+    expect(scoreQuiz(makeQuiz(['q1']), [attempt('q1', true)]).rubricPoints).toBeUndefined()
+  })
 })

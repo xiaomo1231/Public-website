@@ -85,15 +85,31 @@ export class MistakeRepository {
     return this.db.table<Mistake, string>('mistakes').where('projectId').equals(projectId).delete()
   }
 
-  /** Find an existing active mistake for the same question. */
+  /**
+   * Find an existing active mistake for the same question. Uses the
+   * `questionId` index instead of scanning the whole project.
+   */
   async findByQuestion(projectId: string, questionId: string): Promise<Mistake | undefined> {
-    const rows = await this.db
+    return this.db
       .table<Mistake, string>('mistakes')
-      .where('projectId')
-      .equals(projectId)
-      .filter((m) => m.questionId === questionId && m.status !== 'archived')
-      .toArray()
-    return rows[0]
+      .where('questionId')
+      .equals(questionId)
+      .filter((m) => m.projectId === projectId && m.status !== 'archived')
+      .first()
+  }
+
+  /** The mistake (any status) that recorded this attempt of the question. */
+  async findByAttempt(
+    projectId: string,
+    questionId: string,
+    attemptId: string,
+  ): Promise<Mistake | undefined> {
+    return this.db
+      .table<Mistake, string>('mistakes')
+      .where('questionId')
+      .equals(questionId)
+      .filter((m) => m.projectId === projectId && m.attemptIds.includes(attemptId))
+      .first()
   }
 
   async stats(projectId: string): Promise<MistakeStats> {

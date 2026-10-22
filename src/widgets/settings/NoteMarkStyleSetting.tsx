@@ -4,6 +4,7 @@ import { NOTE_MARK_STYLES, type NoteMarkStyle } from '@/entities/user/types'
 import { useNoteMarkStyle } from '@/features/theme/noteMarkStyle'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/shared/ui/Card'
 import { cn } from '@/shared/lib/utils'
+import { onRadioKeyDown } from '@/shared/lib/radioGroupKeys'
 import { useTranslation, type TranslationKey } from '@/i18n'
 
 const ICONS = { link: Link2, highlighter: Highlighter } as const
@@ -60,7 +61,7 @@ export function NoteMarkStyleSetting({
           aria-label={t('settings.noteMark.label')}
           className="grid gap-2 sm:grid-cols-2"
         >
-          {NOTE_MARK_STYLES.map((option) => {
+          {NOTE_MARK_STYLES.map((option, index) => {
             const Icon = ICONS[option]
             const selected = option === style
             return (
@@ -70,7 +71,9 @@ export function NoteMarkStyleSetting({
                 role="radio"
                 aria-checked={selected}
                 data-note-mark-option={option}
+                tabIndex={selected ? 0 : -1}
                 onClick={() => setStyle(option)}
+                onKeyDown={(event) => onRadioKeyDown(event, NOTE_MARK_STYLES, index, setStyle)}
                 className={cn(
                   'focus-ring flex flex-col items-start gap-1.5 rounded-lg border p-3 text-left text-sm transition-colors duration-150 hover:bg-muted lecture:rounded-none lab:rounded-none',
                   selected && 'border-primary ring-1 ring-primary',

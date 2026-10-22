@@ -15,7 +15,7 @@ import { PhraseCardService, clearPhrasePartCacheForTesting } from '@/services/ph
 import { DocumentRepository } from '@/entities/document/repository'
 import { ChunkRepository } from '@/entities/chunk/repository'
 import { VocabRepository } from '@/entities/vocab/repository'
-import { AbortedError } from '@/infrastructure/ai/errors'
+import { AbortedError, AuthFailedError } from '@/infrastructure/ai/errors'
 import { createGenerationRun, type GenerationRun } from '@/shared/lib/generationControl'
 import type { AIService } from '@/services/aiService'
 import type { ChatMessage } from '@/infrastructure/ai/types'
@@ -148,6 +148,22 @@ describe('course vocabulary glossing', () => {
     // The aborted batch's words stay, without a meaning, for the next run.
     expect(entries).toHaveLength(result.total)
     expect(entries.filter((entry) => entry.meanings.length === 0)).toHaveLength(result.unglossed)
+  })
+
+  it('stops at an account error and reports it instead of sending every batch', async () => {
+    const { projects, projectId } = await englishCourse(pseudoWords(90))
+    const chatJSON = vi.fn(async () => {
+      throw new AuthFailedError('Incorrect API key provided')
+    })
+    const result = await new CourseVocabService({
+      projects,
+      ai: { chatJSON } as unknown as AIService,
+      db,
+    }).extract(projectId, { control: createGenerationRun(), now: NOW })
+    expect(chatJSON).toHaveBeenCalledTimes(1)
+    expect(result.glossed).toBe(0)
+    expect(result.unglossed).toBeGreaterThan(0)
+    expect(result.glossError).toBeInstanceOf(AuthFailedError)
   })
 })
 

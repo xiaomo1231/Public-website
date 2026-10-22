@@ -16,6 +16,7 @@ import { quizGenerationProgress, quizLength, type Quiz } from '@/entities/quiz/t
 import type { QuestionEvaluation } from '@/entities/questionAttempt/types'
 import { toast } from '@/features/toast/toastStore'
 import { isAppError } from '@/infrastructure/errors/AppError'
+import { friendlyAIError } from '@/shared/lib/aiErrors'
 import { cn } from '@/shared/lib/utils'
 import { useTranslation } from '@/i18n'
 import { isAbortError } from '@/shared/lib/generationControl'
@@ -131,7 +132,7 @@ export function QuizPage(): JSX.Element {
         checkRun.reset()
       }
     } catch (err) {
-      toast({ variant: 'error', title: t('quiz.gradeFailed'), description: (err as Error).message })
+      toast({ variant: 'error', title: t('quiz.gradeFailed'), description: friendlyAIError(err) })
     } finally {
       setBusy(false)
     }

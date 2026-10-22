@@ -165,7 +165,17 @@ export function SelectionTranslator(): JSX.Element | null {
     translatingRef.current = translating
   }, [translating])
 
+  /** The running translation, aborted when the popup closes. */
+  const translationAbort = useRef<AbortController | null>(null)
+  useEffect(() => () => translationAbort.current?.abort(), [])
+
   const closeAll = useCallback((): void => {
+    // Closing stops the translation: otherwise it keeps running unseen and
+    // blocks every new selection until it settles.
+    translationAbort.current?.abort()
+    translationAbort.current = null
+    translatingRef.current = false
+    setTranslating(false)
     setSelection(null)
     setAction(null)
     setTranslation(null)
@@ -443,31 +453,41 @@ export function SelectionTranslator(): JSX.Element | null {
       return
     }
     const detected = detectLanguage(selection.text)
+    const source: 'zh' | 'en' = detected === 'zh' ? 'zh' : 'en'
+    const preferred: 'zh' | 'en' | null =
+      profile?.language && profile.language !== 'auto' ? profile.language : null
+    // Translating into the language the passage is already written in is
+    // useless: then the other language is the target.
     const targetLang: 'zh' | 'en' =
-      profile?.language && profile.language !== 'auto'
-        ? profile.language
-        : detected === 'zh'
-          ? 'en'
-          : 'zh'
+      preferred && preferred !== source ? preferred : source === 'zh' ? 'en' : 'zh'
+    const controller = new AbortController()
+    translationAbort.current = controller
     setTranslating(true)
     try {
       const entry = await bundle.translation.translate({
+        signal: controller.signal,
         projectId: currentProject.id,
         selectedText: selection.text,
         surroundingContext: selection.surrounding,
-        sourceLanguage: detected === 'zh' ? 'zh' : 'en',
+        sourceLanguage: source,
         targetLanguage: targetLang,
       })
+      if (controller.signal.aborted) return
       setTranslation({
         translation: entry.translation,
         contextNote: entry.contextNote,
         alternatives: entry.alternatives,
       })
     } catch (err) {
+      // Closed while translating: nothing to report.
+      if (controller.signal.aborted) return
       toast({ variant: 'error', title: t('translate.failed'), description: friendlyAIError(err) })
       setAction(null)
     } finally {
-      setTranslating(false)
+      if (translationAbort.current === controller) {
+        translationAbort.current = null
+        setTranslating(false)
+      }
     }
   }
 

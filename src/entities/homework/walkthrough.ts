@@ -203,6 +203,12 @@ export interface WalkthroughSection {
   draft?: WalkthroughDraft
   /** Opening / summary written in question groups, in progress (see `WalkthroughFrameDraft`). */
   frameDraft?: WalkthroughFrameDraft
+  /**
+   * Opening / summary: the question sections (ids) that were ready when it was
+   * written. A question section that is ready now but was not then makes it
+   * out of date. Absent on older sections (never judged by it).
+   */
+  builtFrom?: string[]
   /** The ready version a section regeneration replaced. */
   previous?: WalkthroughSectionVersion
   /** Absent means generated here; `imported` shows 「来自导入」. */
@@ -415,6 +421,10 @@ export function mergeSectionWrite(
   if (isFinished(next) || current.status !== 'ready') {
     const { alternate: older, ...shown } = current
     if (current.status === 'ready') return { ...next, alternate: shown }
+    // An unfinished write of the other source with finished sub-parts (a
+    // split question's draft) is kept too, so 继续生成 does not start over.
+    if (isFinished(next) && (shown.draft || shown.frameDraft || shown.variantDraft))
+      return { ...next, alternate: shown }
     // Nothing shown worth keeping: only an alternate of the other source stays.
     return older && sourceOf(older) !== sourceOf(next) ? { ...next, alternate: older } : next
   }
@@ -573,10 +583,24 @@ export function planWalkthrough(
     promptVersion,
   )
   const other = byId.get(IMPORTED_OTHER_SECTION_ID)
+  // A question that became ready after the opening / summary were written
+  // (it failed then, or a pause stopped the run before they were redone) is
+  // missing from them: they need writing again.
+  const readyQuestions = questionEntries
+    .filter((item) => item.section?.status === 'ready')
+    .map((item) => item.id)
+  const withMissing = (frame: WalkthroughPlanEntry): WalkthroughPlanEntry => {
+    const built = frame.generated?.builtFrom
+    if (!built || frame.needsWork) return frame
+    const known = new Set(built)
+    return readyQuestions.some((id) => !known.has(id))
+      ? { ...frame, needsWork: true, outdated: true }
+      : frame
+  }
   return [
-    entry('overview', 'overview', frameHash),
+    withMissing(entry('overview', 'overview', frameHash)),
     ...questionEntries,
-    entry('summary', 'summary', frameHash),
+    withMissing(entry('summary', 'summary', frameHash)),
     // Unmatched imported content: kept as imported, never written or redone here.
     ...(other?.status === 'ready'
       ? [

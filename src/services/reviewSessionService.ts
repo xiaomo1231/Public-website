@@ -65,8 +65,11 @@ export class ReviewSessionService {
     }
 
     const report = await this.weakness.analyze(projectId, { limit: 5 })
-    const weakPoints = report.areas.map((a) => a.knowledgePoint)
     const fromMistakes = rankKnowledgePointsByMistake(candidates)
+    // The weakness report also reads archived cards: a point the student only
+    // has archived mistakes for is not reviewed again.
+    const live = new Set(fromMistakes)
+    const weakPoints = report.areas.map((a) => a.knowledgePoint).filter((kp) => live.has(kp))
     // Weakness report first, then any remaining mistake-derived points.
     const focus = dedupe([...weakPoints, ...fromMistakes]).slice(0, 6)
 
