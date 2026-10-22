@@ -14,7 +14,6 @@ import {
   BookmarkCheck,
   GripHorizontal,
   Layers,
-  Link2,
   Loader2,
   Maximize2,
   MessageCircleQuestion,
@@ -49,7 +48,8 @@ import {
 import {
   addNoteToCards,
   askInWindow,
-  closeWindow,
+  closeIntoText,
+  closeLabel,
   deleteNote,
   installNoteDisplaySync,
   stopInWindow,
@@ -65,7 +65,7 @@ import { capturePointer, passedDragThreshold, releasePointer } from '@/shared/li
 import { KEYBOARD_INSET_EVENT, keyboardLift, readKeyboardInset } from '@/shared/lib/keyboardInset'
 import { useTranslation } from '@/i18n'
 import type { WalkthroughNoteTurn } from '@/entities/homework/walkthrough'
-import { revealPassage } from './passage'
+import { locatePassage, revealPassage } from './passage'
 
 function viewport(): { width: number; height: number } {
   return { width: window.innerWidth, height: window.innerHeight }
@@ -198,22 +198,15 @@ export function FloatingQALayer({
                 />
                 <span className="truncate">{windowTitle(window, t)}</span>
               </button>
-              {/* An unsaved conversation is closed from its window, which asks first. */}
-              {(window.noteId || window.turns.length === 0) && (
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-6 w-6"
-                  aria-label={t('common.close')}
-                  onClick={() => {
-                    if (!window.noteId) stopInWindow(window.id)
-                    closeWindow(window.id)
-                    returnFocusAfterClose(window.id, window.passage.setId)
-                  }}
-                >
-                  <X className="h-3 w-3" />
-                </Button>
-              )}
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-6 w-6"
+                aria-label={closeLabel(window, t)}
+                onClick={() => closeAndFocus(window)}
+              >
+                <X className="h-3 w-3" />
+              </Button>
             </div>
           ))}
         </div>
@@ -279,6 +272,54 @@ function returnFocusAfterClose(id: string, setId: string): void {
   focusArticle(setId)
 }
 
+/**
+ * × / Esc: an answered conversation is tucked into the text (no question
+ * asked), then focus goes to its chip; one whose passage is gone closes into
+ * 我的问答; an unanswered one is discarded. See `closeIntoText`.
+ */
+function closeAndFocus(win: FloatingQAWindow): void {
+  const passageFound =
+    !win.passageMissing && locatePassage(win.passage.sectionId, win.passage.anchor) !== null
+  let outcome = 'discarded'
+  flushSync(() => {
+    outcome = closeIntoText(win.id, passageFound)
+  })
+  if (outcome === 'tucked') focusTuckedChip(win)
+  else returnFocusAfterClose(win.id, win.passage.setId)
+}
+
+/** × of a window or card: 「关闭（收进原文）」 once answered, else plain close. */
+function CloseButton({
+  win,
+  className,
+  iconClassName,
+}: {
+  win: FloatingQAWindow
+  className: string
+  iconClassName: string
+}): JSX.Element {
+  const { t } = useTranslation()
+  const label = closeLabel(win, t)
+  const button = (
+    <Button
+      variant="ghost"
+      size="icon"
+      className={className}
+      aria-label={label}
+      data-close-window
+      onPointerDown={(event) => event.stopPropagation()}
+      onClick={() => closeAndFocus(win)}
+    >
+      <X className={iconClassName} />
+    </Button>
+  )
+  return win.turns.length > 0 ? (
+    <TooltipWrapper content={t('walkthroughQA.tuckHint')}>{button}</TooltipWrapper>
+  ) : (
+    button
+  )
+}
+
 /** The conversation so far; only re-renders when a turn is added. */
 const TurnList = memo(function TurnList({ turns }: { turns: WalkthroughNoteTurn[] }): JSX.Element {
   return (
@@ -312,9 +353,8 @@ const FloatingQAWindowView = memo(function FloatingQAWindowView({
   cardLayer: HTMLElement | null
 }): JSX.Element {
   const { t } = useTranslation()
-  const { focus, setMinimized, setRect, compact, tuck } = useFloatingQA.getState()
+  const { focus, setMinimized, setRect, compact } = useFloatingQA.getState()
   const [input, setInput] = useState('')
-  const [confirmClose, setConfirmClose] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [busyAction, setBusyAction] = useState<'save' | 'cards' | 'delete' | null>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
@@ -495,15 +535,6 @@ const FloatingQAWindowView = memo(function FloatingQAWindowView({
     }
   }
 
-  function closeNow(): void {
-    // An unsaved conversation's answer would be thrown away: stop paying for
-    // it. A saved note keeps receiving its turn (it is written to the note).
-    if (!win.noteId) stopInWindow(win.id)
-    // A saved note stays in 我的问答; it only stops coming back open.
-    closeWindow(win.id)
-    returnFocusAfterClose(win.id, win.passage.setId)
-  }
-
   /** 删除这条问答: the note itself (after confirming in the window). */
   async function deleteNow(): Promise<void> {
     if (!win.noteId) return
@@ -520,11 +551,6 @@ const FloatingQAWindowView = memo(function FloatingQAWindowView({
       })
       setBusyAction(null)
     }
-  }
-
-  function requestClose(): void {
-    if (!win.noteId && win.turns.length > 0) setConfirmClose(true)
-    else closeNow()
   }
 
   /** Minimise into the dock and move focus to this window's dock chip. */
@@ -561,12 +587,6 @@ const FloatingQAWindowView = memo(function FloatingQAWindowView({
       ?.focus({ preventScroll: true })
   }
 
-  /** Hide the window; the passage is marked and shows the answer on hover. */
-  function tuckIntoText(): void {
-    flushSync(() => tuck(win.id))
-    focusTuckedChip(win)
-  }
-
   const saved = Boolean(win.noteId)
   const title = windowTitle(win, t)
 
@@ -587,7 +607,7 @@ const FloatingQAWindowView = memo(function FloatingQAWindowView({
       onKeyDown={(event) => {
         if (event.key === 'Escape') {
           event.stopPropagation()
-          minimize()
+          closeAndFocus(win)
         }
       }}
       style={{
@@ -617,18 +637,6 @@ const FloatingQAWindowView = memo(function FloatingQAWindowView({
             {t('walkthroughQA.savedBadge')}
           </span>
         )}
-        <TooltipWrapper content={t('walkthroughQA.tuckHint')}>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-7 w-7"
-            aria-label={t('walkthroughQA.tuck')}
-            onPointerDown={(event) => event.stopPropagation()}
-            onClick={tuckIntoText}
-          >
-            <Link2 className="h-3.5 w-3.5" />
-          </Button>
-        </TooltipWrapper>
         <TooltipWrapper content={t('walkthroughQA.compactHint')}>
           <Button
             variant="ghost"
@@ -666,16 +674,7 @@ const FloatingQAWindowView = memo(function FloatingQAWindowView({
             </Button>
           </TooltipWrapper>
         )}
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-7 w-7"
-          aria-label={t('common.close')}
-          onPointerDown={(event) => event.stopPropagation()}
-          onClick={requestClose}
-        >
-          <X className="h-3.5 w-3.5" />
-        </Button>
+        <CloseButton win={win} className="h-7 w-7" iconClassName="h-3.5 w-3.5" />
       </div>
 
       <button
@@ -762,25 +761,6 @@ const FloatingQAWindowView = memo(function FloatingQAWindowView({
             >
               {busyAction === 'delete' && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
               {t('walkthroughQA.deleteNote')}
-            </Button>
-          </div>
-        </div>
-      ) : confirmClose ? (
-        <div className="space-y-2 border-t px-3 py-2">
-          <p className="text-[13px]">{t('walkthroughQA.closeUnsaved')}</p>
-          <div className="flex flex-wrap justify-end gap-2">
-            <Button size="sm" variant="ghost" onClick={() => setConfirmClose(false)}>
-              {t('common.cancel')}
-            </Button>
-            <Button size="sm" variant="outline" onClick={closeNow}>
-              {t('walkthroughQA.discard')}
-            </Button>
-            <Button
-              size="sm"
-              disabled={busyAction !== null}
-              onClick={() => void save().then((ok) => ok && closeNow())}
-            >
-              {t('walkthroughQA.saveAndClose')}
             </Button>
           </div>
         </div>
@@ -888,7 +868,7 @@ const CompactCardView = memo(function CompactCardView({
   attached: boolean
 }): JSX.Element {
   const { t } = useTranslation()
-  const { raise, setCard, resizeCard, expand, setMinimized, tuck } = useFloatingQA.getState()
+  const { raise, setCard, resizeCard, expand } = useFloatingQA.getState()
   const rootRef = useRef<HTMLDivElement>(null)
   const bodyRef = useRef<HTMLDivElement>(null)
   const contentRef = useRef<HTMLDivElement>(null)
@@ -979,16 +959,6 @@ const CompactCardView = memo(function CompactCardView({
     document
       .querySelector<HTMLElement>(`[data-qa-card="${CSS.escape(win.id)}"] [data-pin-toggle]`)
       ?.focus({ preventScroll: true })
-  }
-
-  function tuckIntoText(): void {
-    flushSync(() => tuck(win.id))
-    focusTuckedChip(win)
-  }
-
-  function minimize(): void {
-    flushSync(() => setMinimized(win.id, true))
-    focusDockChip(win.id)
   }
 
   /**
@@ -1133,7 +1103,7 @@ const CompactCardView = memo(function CompactCardView({
       onKeyDown={(event) => {
         if (event.key === 'Escape') {
           event.stopPropagation()
-          minimize()
+          closeAndFocus(win)
         }
       }}
       style={{
@@ -1185,21 +1155,11 @@ const CompactCardView = memo(function CompactCardView({
             </Button>
           </TooltipWrapper>
         )}
-        <TooltipWrapper content={t('walkthroughQA.tuckHint')}>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-6 w-6"
-            aria-label={t('walkthroughQA.tuck')}
-            onClick={tuckIntoText}
-          >
-            <Link2 className="h-3 w-3" />
-          </Button>
-        </TooltipWrapper>
         <Button variant="ghost" size="sm" className="h-6 gap-1 px-1.5 text-xs" onClick={expandNow}>
           <Maximize2 className="h-3 w-3" aria-hidden />
           {t('walkthroughQA.expand')}
         </Button>
+        <CloseButton win={win} className="h-6 w-6" iconClassName="h-3 w-3" />
       </div>
       <div
         ref={bodyRef}

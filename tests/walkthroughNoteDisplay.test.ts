@@ -15,10 +15,12 @@ vi.mock('@/services/aiServices', () => ({
 
 const {
   askInWindow,
+  closeIntoText,
   closeWindow,
   deleteNote,
   installNoteDisplaySync,
   openPassage,
+  removeNoteMark,
   restoreNotes,
   saveWindow,
   DISPLAY_WRITE_DELAY_MS,
@@ -156,6 +158,74 @@ describe('Q&A kept on the page survives a reload', () => {
 
     await deleteNote(noteId)
     expect(await stored()).toHaveLength(0)
+  })
+
+  it('closing (× / Esc) tucks an answered note into the text, and a reload keeps it tucked', async () => {
+    const id = await askNew()
+    expect(closeIntoText(id, true)).toBe('tucked')
+    expect(windowMode(win(id))).toBe('tucked')
+    await settle()
+    const [note] = await stored()
+    expect(note!.display).toEqual({ mode: 'tucked' })
+    await reload()
+    expect(useFloatingQA.getState().windows.map(windowMode)).toEqual(['tucked'])
+  })
+
+  it('closing saves an answered conversation the automatic save missed, then tucks it', async () => {
+    const id = openPassage(passage(), 'ask', { left: 0, top: 0, width: 10, height: 10 })
+    useFloatingQA.getState().update(id, { turns: [{ question: 'Q?', answer: 'A.', at: 1 }] })
+    expect(closeIntoText(id, true)).toBe('tucked')
+    await settle()
+    const [note] = await stored()
+    expect(note).toMatchObject({ display: { mode: 'tucked' } })
+  })
+
+  it('discards an unanswered window on close; nothing is saved', async () => {
+    const id = openPassage(passage(), 'ask', { left: 0, top: 0, width: 10, height: 10 })
+    expect(closeIntoText(id, true)).toBe('discarded')
+    expect(useFloatingQA.getState().windows).toHaveLength(0)
+    await settle()
+    expect(await stored()).toHaveLength(0)
+  })
+
+  it('closes into 我的问答 (saved, not shown) when the passage is no longer in the text', async () => {
+    const id = await askNew()
+    expect(closeIntoText(id, false)).toBe('closed')
+    expect(useFloatingQA.getState().windows).toHaveLength(0)
+    await settle()
+    const [note] = await stored()
+    expect(note!.display).toBeUndefined()
+    expect(note!.turns).toHaveLength(1)
+
+    // Not saved yet: saved first, then closed.
+    const unsaved = openPassage(passage('gone'), 'ask', { left: 0, top: 0, width: 10, height: 10 })
+    useFloatingQA.getState().update(unsaved, { turns: [{ question: 'Q?', answer: 'A.', at: 1 }] })
+    closeIntoText(unsaved, false)
+    await vi.waitFor(() => expect(useFloatingQA.getState().windows).toHaveLength(0))
+    await settle()
+    const notes = await stored()
+    expect(notes).toHaveLength(2)
+    expect(notes.every((item) => item.display === undefined)).toBe(true)
+  })
+
+  it('从原文中移除标记 hides the mark and closes the note; showing it again brings the mark back', async () => {
+    const id = await askNew()
+    const noteId = win(id).noteId!
+    closeIntoText(id, true)
+    await settle()
+    await removeNoteMark(noteId)
+    expect(useFloatingQA.getState().windows).toHaveLength(0)
+    await settle()
+    let [note] = await stored()
+    expect(note).toMatchObject({ markHidden: true })
+    expect(note!.display).toBeUndefined()
+    await reload()
+    expect(useFloatingQA.getState().windows).toHaveLength(0)
+
+    // Opened again from 我的问答 and closed into the text: marked again.
+    await new WalkthroughNoteService(db).saveDisplay(noteId, { mode: 'tucked' })
+    ;[note] = await stored()
+    expect(note!.markHidden).toBeUndefined()
   })
 
   it('leaves old notes (no display) closed', async () => {

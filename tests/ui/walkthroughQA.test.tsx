@@ -136,20 +136,21 @@ describe('questions about the walkthrough', () => {
     expect(await screen.findAllByText('Saved')).not.toHaveLength(0)
   })
 
-  it('closes a saved conversation without asking (it stays saved), and deletes it on request', async () => {
+  it('closing an answered conversation tucks it into the text without asking, and deletes it on request', async () => {
     const user = userEvent.setup()
     const text = renderWalkthrough()
     select(text, 9, 22)
     await user.click(await screen.findByRole('button', { name: 'Explain' }))
     await screen.findByText('It clears the entry below the pivot.')
     await screen.findByRole('button', { name: 'Delete this conversation' })
-    await user.click(screen.getByRole('button', { name: 'Close' }))
-    expect(screen.queryByText(/not saved and will be lost/)).toBeNull()
+    await user.click(screen.getByRole('button', { name: 'Close (tuck into the text)' }))
+    expect(screen.queryByRole('alert')).toBeNull()
     expect(screen.queryByRole('dialog')).toBeNull()
+    expect(useFloatingQA.getState().windows.map((window) => window.tucked)).toEqual([true])
     await waitFor(async () => {
       const [note] = await new WalkthroughRepository(db).listNotes('s1')
       expect(note).toBeDefined()
-      expect(note!.display).toBeUndefined()
+      expect(note!.display).toEqual({ mode: 'tucked' })
     })
 
     // Reopened and deleted from its window.
@@ -181,14 +182,68 @@ describe('questions about the walkthrough', () => {
     expect(screen.queryByRole('dialog')).toBeNull()
   })
 
-  it('minimises with Escape into the dock and focuses its chip; closing returns focus to the article', async () => {
+  it('Escape on an answered window tucks it into the text, like ×', async () => {
+    const user = userEvent.setup()
+    const text = renderWalkthrough()
+    select(text, 9, 22)
+    await user.click(await screen.findByRole('button', { name: 'Explain' }))
+    await screen.findByText('It clears the entry below the pivot.')
+    await waitFor(() => expect(useFloatingQA.getState().windows[0]?.noteId).toBeDefined())
+    screen.getByLabelText('Your question').focus()
+    await user.keyboard('{Escape}')
+    expect(screen.queryByRole('dialog')).toBeNull()
+    expect(screen.queryByRole('region')).toBeNull()
+    expect(useFloatingQA.getState().windows[0]?.tucked).toBe(true)
+    await waitFor(async () => {
+      const [note] = await new WalkthroughRepository(db).listNotes('s1')
+      expect(note!.display).toEqual({ mode: 'tucked' })
+    })
+  })
+
+  it('closes an unanswered window with Escape without asking; focus returns to the article', async () => {
     const user = userEvent.setup()
     const text = renderWalkthrough()
     select(text, 9, 22)
     await user.click(await screen.findByRole('button', { name: 'Ask AI' }))
     const input = await screen.findByLabelText('Your question')
-    input.focus()
+    await user.type(input, 'Typed but not sent')
     await user.keyboard('{Escape}')
+    expect(screen.queryByRole('dialog')).toBeNull()
+    expect(useFloatingQA.getState().windows).toEqual([])
+    expect(document.activeElement).toBe(
+      document.querySelector('[data-selection-context="walkthrough"]'),
+    )
+    expect(await new WalkthroughRepository(db).listNotes('s1')).toEqual([])
+  })
+
+  it('closing a window still waiting for its first answer stops the request, without asking', async () => {
+    const user = userEvent.setup()
+    let signal: AbortSignal | undefined
+    askMock.mockReset()
+    askMock.mockImplementation(
+      (input: { signal: AbortSignal }) =>
+        new Promise(() => {
+          signal = input.signal
+        }),
+    )
+    const text = renderWalkthrough()
+    select(text, 9, 22)
+    await user.click(await screen.findByRole('button', { name: 'Explain' }))
+    await waitFor(() => expect(signal).toBeDefined())
+    await user.click(screen.getByRole('button', { name: 'Close' }))
+    expect(signal!.aborted).toBe(true)
+    expect(screen.queryByRole('dialog')).toBeNull()
+    expect(useFloatingQA.getState().windows).toEqual([])
+    expect(await new WalkthroughRepository(db).listNotes('s1')).toEqual([])
+  })
+
+  it('minimises into the dock and focuses its chip; the chip closes it', async () => {
+    const user = userEvent.setup()
+    const text = renderWalkthrough()
+    select(text, 9, 22)
+    await user.click(await screen.findByRole('button', { name: 'Ask AI' }))
+    await screen.findByLabelText('Your question')
+    await user.click(screen.getByRole('button', { name: 'Minimise' }))
     expect(screen.queryByRole('dialog')).toBeNull()
     const dock = screen.getByRole('region', { name: /./ })
     const chip = dock.querySelector('[data-dock-chip]')

@@ -394,6 +394,26 @@
   }
 
   /*
+   * Fitted formulas (walkthrough, `FitWidthScope`): a display formula is made
+   * to fit its column (aligned lines, smaller type, wrapping — see
+   * `shared/lib/fitToWidth.ts`), so its box clips instead of scrolling while
+   * it is measured. In the wrap stage KaTeX's per-term pieces may break onto
+   * new lines. Only the last-resort stage (`data-fit-scroll`) scrolls.
+   */
+  .katex-host.katex-fit .katex-display {
+    overflow-x: hidden;
+  }
+
+  .katex-host.katex-fit[data-fit-wrap] .katex-display > .katex,
+  .katex-host.katex-fit[data-fit-wrap] .katex-display > .katex > .katex-html {
+    white-space: normal;
+  }
+
+  .katex-host.katex-fit[data-fit-scroll] .katex-display {
+    overflow-x: auto;
+  }
+
+  /*
    * Lesson reading: a formula wider than the column shows a soft edge shadow
    * on the side that has more to scroll to (pure CSS "scroll shadows": the
    * covers move with the content, the shadows stay with the box), so a cut-off

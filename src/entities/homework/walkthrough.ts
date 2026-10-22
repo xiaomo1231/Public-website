@@ -694,6 +694,11 @@ export interface WalkthroughNote {
    * way (absent: closed — opened from 我的问答 / its chip / its mark).
    */
   display?: NoteDisplay
+  /**
+   * 从原文中移除标记: the passage is not marked (the note stays in 我的问答).
+   * Showing the note again (window / card / tucked) clears it.
+   */
+  markHidden?: boolean
   createdAt: number
   updatedAt: number
 }

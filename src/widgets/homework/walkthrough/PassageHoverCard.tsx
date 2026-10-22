@@ -1,9 +1,14 @@
 import { useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { Bookmark, Layers, Link2, Loader2, Maximize2 } from 'lucide-react'
+import { Bookmark, EyeOff, Layers, Link2, Loader2, Maximize2 } from 'lucide-react'
 import type { WalkthroughNote } from '@/entities/homework/walkthrough'
 import { useFloatingQA } from '@/features/homework/floatingQAStore'
-import { addNoteToCards, saveWindow, windowTitle } from '@/features/homework/floatingQA'
+import {
+  addNoteToCards,
+  removeNoteMark,
+  saveWindow,
+  windowTitle,
+} from '@/features/homework/floatingQA'
 import { toast } from '@/features/toast/toastStore'
 import { Button } from '@/shared/ui/Button'
 import { RichText } from '@/shared/ui/RichText'
@@ -19,6 +24,8 @@ export interface PassageHoverCardProps {
   anchor: PopupAnchor
   /** Open the full window for this conversation. */
   onExpand: () => void
+  /** After 从原文中移除标记: the card closes. */
+  onClose?: () => void
   onPointerEnter: () => void
   onPointerLeave: () => void
 }
@@ -32,6 +39,7 @@ export function PassageHoverCard({
   subject,
   anchor,
   onExpand,
+  onClose,
   onPointerEnter,
   onPointerLeave,
 }: PassageHoverCardProps): JSX.Element | null {
@@ -124,6 +132,24 @@ export function PassageHoverCard({
     }
   }
 
+  /** 从原文中移除标记: no mark, no window; the note stays in 我的问答. */
+  async function removeMark(): Promise<void> {
+    if (!noteId) return
+    setBusy(true)
+    try {
+      await removeNoteMark(noteId)
+      toast({ variant: 'success', title: t('walkthroughQA.markRemoved') })
+      onClose?.()
+    } catch (err) {
+      toast({
+        variant: 'error',
+        title: t('walkthroughQA.removeMarkFailed'),
+        description: friendlyAIError(err),
+      })
+      setBusy(false)
+    }
+  }
+
   return createPortal(
     <div
       ref={ref}
@@ -188,7 +214,7 @@ export function PassageHoverCard({
           <p className="text-[13px] text-muted-foreground">{t('walkthroughQA.noAnswer')}</p>
         )}
       </div>
-      <div className="flex items-center gap-1.5 border-t px-2 py-1.5">
+      <div className="flex flex-wrap items-center gap-1.5 border-t px-2 py-1.5">
         <Button size="sm" variant="ghost" onClick={onExpand}>
           <Maximize2 className="h-3.5 w-3.5" aria-hidden />
           {t('walkthroughQA.expandWindow')}
@@ -220,6 +246,18 @@ export function PassageHoverCard({
               <Layers className="h-3.5 w-3.5" />
             )}
             {t('walkthroughQA.cardsShort')}
+          </Button>
+        )}
+        {noteId && (
+          <Button
+            size="sm"
+            variant="ghost"
+            data-remove-mark
+            disabled={busy}
+            onClick={() => void removeMark()}
+          >
+            <EyeOff className="h-3.5 w-3.5" aria-hidden />
+            {t('walkthroughQA.removeMark')}
           </Button>
         )}
       </div>

@@ -15,6 +15,7 @@ import { HomeworkWalkthroughPanel } from '@/widgets/homework/walkthrough/Homewor
 import { hitPassage, pointInPassage } from '@/widgets/homework/walkthrough/passage'
 import type { WalkthroughNote } from '@/entities/homework/walkthrough'
 import type { HomeworkSet } from '@/entities/homework/types'
+import { AppDatabase, setDbForTesting } from '@/infrastructure/db/database'
 import { installPointerEvent } from '../helpers/pointerEvent'
 
 const walkthrough = vi.hoisted(() => ({ notes: [] as unknown[] }))
@@ -298,11 +299,13 @@ describe('compact cards and passages tucked into the text', () => {
     expect(store().windows[0]!.rect).toMatchObject({ width: 400, height: 400 })
   })
 
-  it('tucks a window into the text; the chip opens it again from the keyboard', async () => {
+  it('× tucks an answered window into the text without asking; the chip opens it again from the keyboard', async () => {
     const user = userEvent.setup()
     renderPanel()
     act(() => void openWindow())
-    await user.click(screen.getByRole('button', { name: 'Tuck into the text' }))
+    await user.click(screen.getByRole('button', { name: 'Close (tuck into the text)' }))
+    expect(screen.queryByRole('alert')).toBeNull()
+    expect(windowMode(store().windows[0]!)).toBe('tucked')
     expect(screen.queryByRole('dialog')).toBeNull()
     const chip = document.querySelector<HTMLElement>('[data-tucked-chip]')!
     expect(document.activeElement).toBe(chip)
@@ -346,6 +349,51 @@ describe('compact cards and passages tucked into the text', () => {
     const card = await screen.findByRole('dialog', { name: 'Row step' })
     expect(within(card).getByText('The second row of the matrix.')).toBeInTheDocument()
     expect(within(card).getByRole('button', { name: 'Review cards' })).toBeInTheDocument()
+  })
+
+  it('removes the mark of a saved note from the hover card; the note stays saved', async () => {
+    const user = userEvent.setup()
+    const db = new AppDatabase()
+    setDbForTesting(db)
+    await db.walkthroughNotes.put({ ...savedNote, display: { mode: 'tucked' } })
+    walkthrough.notes = [savedNote]
+    const article = renderPanel()
+    hoverPassage(article)
+    const card = await screen.findByRole('dialog', { name: 'Row step' })
+    await user.click(within(card).getByRole('button', { name: 'Remove the mark from the text' }))
+    await waitFor(() => expect(document.querySelector('[data-passage-hover-card]')).toBeNull())
+    const stored = await db.walkthroughNotes.get('n1')
+    expect(stored).toMatchObject({ markHidden: true, turns: savedNote.turns })
+    expect(stored!.display).toBeUndefined()
+  })
+
+  it('a hidden mark is not hovered', async () => {
+    walkthrough.notes = [{ ...savedNote, markHidden: true }]
+    const article = renderPanel()
+    hoverPassage(article)
+    await new Promise((resolve) => setTimeout(resolve, 250))
+    expect(screen.queryByRole('dialog')).toBeNull()
+  })
+
+  it('a tucked note whose passage is gone closes into 我的问答 instead of showing a card', async () => {
+    const missing = {
+      ...savedNote,
+      anchor: { text: 'not in the text', prefix: '', suffix: '' },
+      quote: 'not in the text',
+    }
+    walkthrough.notes = [missing]
+    renderPanel()
+    act(() => {
+      const id = store().open({
+        passage: { ...passage, quote: missing.quote, anchor: missing.anchor },
+        turns: missing.turns,
+        noteId: missing.id,
+        rect,
+      })
+      store().tuck(id)
+    })
+    await waitFor(() => expect(store().windows).toHaveLength(0))
+    expect(screen.queryByRole('group', { name: /Question card/ })).toBeNull()
   })
 })
 

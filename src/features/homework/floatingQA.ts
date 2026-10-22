@@ -51,6 +51,16 @@ export function windowTitle(
     : translate('walkthroughQA.title')
 }
 
+/** The × button's name: an answered conversation closes into the text. */
+export function closeLabel(
+  window: Pick<FloatingQAWindow, 'turns'>,
+  translate: typeof t = t,
+): string {
+  return window.turns.length > 0
+    ? translate('walkthroughQA.closeToText')
+    : translate('common.close')
+}
+
 export function openPassage(
   passage: FloatingPassage,
   start: 'explain' | 'ask',
@@ -310,8 +320,9 @@ export function installNoteDisplaySync(): () => void {
 }
 
 /**
- * Close a window. A saved note stays in 我的问答 (and its chip / mark) but no
- * longer comes back open after a reload.
+ * Remove a window from the page. A saved note stays in 我的问答 (and its chip
+ * / mark) but no longer comes back open after a reload. The × button and Esc
+ * use `closeIntoText` instead.
  */
 export function closeWindow(id: string): void {
   const win = useFloatingQA.getState().windows.find((item) => item.id === id)
@@ -322,6 +333,52 @@ export function closeWindow(id: string): void {
   writtenDisplay.delete(noteId)
   // The page re-reads its notes, so a closed one is not brought back as open.
   notes().saveDisplay(noteId, undefined).then(notifyNoteChanges, reportWriteFailure)
+}
+
+/** What closing a window (× / Esc) did with it. */
+export type CloseOutcome = 'tucked' | 'closed' | 'discarded'
+
+/**
+ * Close a window or card (× / Esc / the dock chip's ×) without asking:
+ * - nothing answered yet: a question on its way is stopped and the window is
+ *   discarded (there is nothing to keep);
+ * - answered: tucked into the text — the passage is marked in the chosen
+ *   问答标记样式 and hovering / tapping it shows the answer; saved (if the
+ *   automatic save has not happened yet) and kept that way after a reload;
+ * - answered but its passage is no longer in the walkthrough (原文已更新,
+ *   `passageFound` false): closed into 我的问答 (saved, no mark).
+ */
+export function closeIntoText(id: string, passageFound: boolean): CloseOutcome {
+  const store = useFloatingQA.getState()
+  const win = store.windows.find((item) => item.id === id)
+  if (!win) return 'discarded'
+  if (win.turns.length === 0) {
+    stopInWindow(id)
+    closeWindow(id)
+    return 'discarded'
+  }
+  if (!passageFound) {
+    if (win.noteId) closeWindow(id)
+    // Kept open until it is saved: a failed save leaves the window (and a toast).
+    else void saveWindow(id).then(() => closeWindow(id), reportWriteFailure)
+    return 'closed'
+  }
+  store.tuck(id)
+  if (!win.noteId) void saveWindow(id).catch(reportWriteFailure)
+  return 'tucked'
+}
+
+/**
+ * 从原文中移除标记: the note leaves the page (no window, card or mark) but
+ * stays in 我的问答.
+ */
+export async function removeNoteMark(noteId: string): Promise<void> {
+  const store = useFloatingQA.getState()
+  for (const window of store.windows) if (window.noteId === noteId) store.close(window.id)
+  cancelDisplayWrite(noteId)
+  writtenDisplay.delete(noteId)
+  await notes().hideMark(noteId)
+  notifyNoteChanges()
 }
 
 /**

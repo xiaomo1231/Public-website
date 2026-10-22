@@ -149,12 +149,26 @@ export class WalkthroughNoteService {
     await this.db.transaction('rw', this.db.walkthroughNotes, async () => {
       const note = await this.repo.getNote(id)
       if (!note) return
-      const { display: _previous, ...rest } = note
+      // Shown again (window / card / tucked): its mark comes back too.
+      const { display: _previous, markHidden, ...rest } = note
       await this.repo.putNote({
         ...rest,
-        ...(display ? { display } : {}),
+        ...(display ? { display } : markHidden ? { markHidden } : {}),
         ...(rect ? { rect } : {}),
       })
+    })
+  }
+
+  /**
+   * 从原文中移除标记: the passage is no longer marked and the note no longer
+   * comes back on the page; it stays in 我的问答. Not an edit.
+   */
+  async hideMark(id: string): Promise<void> {
+    await this.db.transaction('rw', this.db.walkthroughNotes, async () => {
+      const note = await this.repo.getNote(id)
+      if (!note) return
+      const { display: _display, ...rest } = note
+      await this.repo.putNote({ ...rest, markHidden: true })
     })
   }
 

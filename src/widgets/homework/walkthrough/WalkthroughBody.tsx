@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useId, useMemo, useRef, useState } from 'react'
+import { Fragment, useEffect, useId, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { AlertTriangle } from 'lucide-react'
 import type { WalkthroughPart } from '@/entities/homework/walkthrough'
 import {
@@ -16,7 +16,16 @@ import {
 } from '@/entities/homework/walkthroughSteps'
 import { Math as TeX } from '@/shared/ui/Math'
 import { RichText } from '@/shared/ui/RichText'
+import { FitWidthScope } from '@/shared/ui/FitWidthScope'
 import { cn } from '@/shared/lib/utils'
+import {
+  INITIAL_STEP_PAIR_STAGE,
+  nextStepPairStage,
+  SCREEN_FIT,
+  type FitMeasurement,
+  type StepPairStage,
+} from '@/shared/lib/fitToWidth'
+import { useFitStage, useFitWidthSettings } from '@/shared/lib/useFitStage'
 import { EMULATED_MOUSE_WINDOW_MS, isTouchLike } from '@/shared/lib/pointerGesture'
 import { useTranslation } from '@/i18n'
 import { sharedColumnWidths } from './stepLayout'
@@ -85,47 +94,63 @@ export function WalkthroughBody({
     [parts, conclusion],
   )
   return (
-    <div data-walkthrough-body className={cn(WALKTHROUGH_PROSE, className)}>
-      {segments.map((segment, index) => {
-        const answer = segment.label ? answers.get(segment.label) : undefined
-        return (
-          <Fragment key={index}>
-            {segment.chunks.map((chunk, at) =>
-              chunk.kind === 'text' ? (
-                <RichText
-                  key={at}
-                  text={chunk.text}
-                  format="markdown"
-                  className="min-w-0 space-y-4"
-                  paragraphClassName={WALKTHROUGH_PARAGRAPH}
-                />
-              ) : (
-                <StepCard key={at} step={chunk.step} />
-              ),
-            )}
-            {segment.label && answer && !segment.text.includes('\\boxed') && (
-              <div
-                data-walkthrough-final={segment.label}
-                className="max-w-full rounded-md border-2 border-primary/70 px-4 py-2.5 lecture:rounded-none lab:rounded-none lab:border"
-              >
-                <span className="block text-[13px] text-muted-foreground lecture:tracking-[0.14em] lab:font-mono lab:text-[11px] lab:uppercase lab:tracking-wider">
-                  {t('homework.walkthrough.finalAnswer')} ({segment.label})
-                </span>
-                <RichText
-                  text={formatWalkthroughText(answer)}
-                  format="markdown"
-                  paragraphClassName="text-[15px] font-semibold leading-relaxed lecture:text-[17px]"
-                />
-              </div>
-            )}
-          </Fragment>
-        )
-      })}
-    </div>
+    // Nothing in the worked text scrolls sideways: formulas, matrices,
+    // tables and code are fitted to the column (see `FitWidthScope`).
+    <FitWidthScope>
+      <div data-walkthrough-body className={cn(WALKTHROUGH_PROSE, className)}>
+        {segments.map((segment, index) => {
+          const answer = segment.label ? answers.get(segment.label) : undefined
+          return (
+            <Fragment key={index}>
+              {segment.chunks.map((chunk, at) =>
+                chunk.kind === 'text' ? (
+                  <RichText
+                    key={at}
+                    text={chunk.text}
+                    format="markdown"
+                    className="min-w-0 space-y-4"
+                    paragraphClassName={WALKTHROUGH_PARAGRAPH}
+                  />
+                ) : (
+                  <StepCard key={at} step={chunk.step} />
+                ),
+              )}
+              {segment.label && answer && !segment.text.includes('\\boxed') && (
+                <div
+                  data-walkthrough-final={segment.label}
+                  className="max-w-full rounded-md border-2 border-primary/70 px-4 py-2.5 lecture:rounded-none lab:rounded-none lab:border"
+                >
+                  <span className="block text-[13px] text-muted-foreground lecture:tracking-[0.14em] lab:font-mono lab:text-[11px] lab:uppercase lab:tracking-wider">
+                    {t('homework.walkthrough.finalAnswer')} ({segment.label})
+                  </span>
+                  <RichText
+                    text={formatWalkthroughText(answer)}
+                    format="markdown"
+                    paragraphClassName="text-[15px] font-semibold leading-relaxed lecture:text-[17px]"
+                  />
+                </div>
+              )}
+            </Fragment>
+          )
+        })}
+      </div>
+    </FitWidthScope>
   )
 }
 
 type Active = { row: number; col?: number } | null
+
+/** What the matrices of a step show (entries are bigint fractions, so no JSON). */
+function stepPairKey(step: WalkthroughStep): string {
+  const matrix = (m: LatexMatrix) =>
+    `${m.bar ?? ''}|${m.rows.map((row) => row.map((v) => `${v.n}/${v.d}`).join(',')).join(';')}`
+  return `${matrix(step.before)}>${matrix(step.after)}>${step.ops.map((op) => op.latex).join(',')}`
+}
+
+function measureStepPair(element: HTMLElement): FitMeasurement | null {
+  if (element.clientWidth <= 0) return null
+  return { available: element.clientWidth, content: element.scrollWidth }
+}
 
 /** One row-reduction step: operation, matrix before → after, local arithmetic. */
 export function StepCard({ step }: { step: WalkthroughStep }): JSX.Element {
@@ -185,6 +210,15 @@ export function StepCard({ step }: { step: WalkthroughStep }): JSX.Element {
     () => sharedColumnWidths(step.before, step.after),
     [step.before, step.after],
   )
+  const settings = useFitWidthSettings() ?? SCREEN_FIT
+  const pairRef = useRef<HTMLDivElement>(null)
+  const pair = useFitStage<StepPairStage>(pairRef, {
+    enabled: true,
+    initial: INITIAL_STEP_PAIR_STAGE,
+    resetKey: stepPairKey(step),
+    measure: measureStepPair,
+    next: (current, measurement) => nextStepPairStage(current, measurement, settings),
+  })
   const mismatchAt = (row: number, col: number) =>
     step.mismatches.find((item) => item.row === row && item.col === col)
   const arithmetic = (row: number, col: number) => {
@@ -229,7 +263,27 @@ export function StepCard({ step }: { step: WalkthroughStep }): JSX.Element {
           paragraphClassName={WALKTHROUGH_PARAGRAPH}
         />
       )}
-      <div className="flex max-w-full flex-wrap items-center gap-x-3 gap-y-2 overflow-x-auto py-1">
+      {/* Side by side while the pair fits the column; otherwise stacked with
+          a downward arrow, then scaled down — never a sideways scroll unless
+          even the smallest size cannot fit. */}
+      <div
+        ref={pairRef}
+        data-step-pair={pair.layout}
+        data-fit-scroll={pair.scroll ? '' : undefined}
+        tabIndex={pair.scroll ? 0 : undefined}
+        style={
+          pair.scale < 1
+            ? ({ '--step-matrix-size': `${15 * pair.scale}px` } as CSSProperties)
+            : undefined
+        }
+        className={cn(
+          'flex max-w-full py-1',
+          pair.layout === 'row'
+            ? 'flex-nowrap items-center gap-x-3'
+            : 'flex-col items-start gap-y-1.5',
+          pair.scroll ? 'overflow-x-auto' : 'overflow-hidden',
+        )}
+      >
         <MatrixView
           matrix={step.before}
           label={t('homework.walkthrough.step.beforeMatrix', { number: step.number })}
@@ -237,14 +291,32 @@ export function StepCard({ step }: { step: WalkthroughStep }): JSX.Element {
         />
         {/* The operations over the arrow, at a readable size (the heading
             above already names them for assistive technology). */}
-        <div aria-hidden className="flex shrink-0 flex-col items-center gap-1 px-1">
-          {step.ops.map((op, index) => (
-            <TeX key={index} latex={op.latex} className="whitespace-nowrap text-[13px]" />
-          ))}
-          <span className="relative block h-px w-full min-w-12 bg-foreground/70">
-            <span className="absolute -right-px -top-[4px] h-0 w-0 border-y-[4.5px] border-l-[8px] border-y-transparent border-l-foreground/70" />
-          </span>
-        </div>
+        {pair.layout === 'row' ? (
+          <div aria-hidden className="flex shrink-0 flex-col items-center gap-1 px-1">
+            {step.ops.map((op, index) => (
+              <TeX
+                key={index}
+                latex={op.latex}
+                fit={false}
+                className="whitespace-nowrap text-[13px]"
+              />
+            ))}
+            <span className="relative block h-px w-full min-w-12 bg-foreground/70">
+              <span className="absolute -right-px -top-[4px] h-0 w-0 border-y-[4.5px] border-l-[8px] border-y-transparent border-l-foreground/70" />
+            </span>
+          </div>
+        ) : (
+          <div
+            aria-hidden
+            data-step-arrow="down"
+            className="flex shrink-0 items-center gap-2 pl-4 text-[13px]"
+          >
+            <span className="text-lg leading-none text-foreground/70">↓</span>
+            {step.ops.map((op, index) => (
+              <TeX key={index} latex={op.latex} fit={false} className="whitespace-nowrap" />
+            ))}
+          </div>
+        )}
         <MatrixView
           matrix={step.after}
           columnWidths={columnWidths}
@@ -277,6 +349,11 @@ export function StepCard({ step }: { step: WalkthroughStep }): JSX.Element {
           idPrefix={id}
         />
       </div>
+      {pair.scroll && (
+        <p className="text-xs text-muted-foreground" data-fit-hint>
+          {t('common.scrollForMore')}
+        </p>
+      )}
       <div
         aria-hidden
         className="min-h-[1.75rem] text-[13.5px] text-muted-foreground"
@@ -290,7 +367,7 @@ export function StepCard({ step }: { step: WalkthroughStep }): JSX.Element {
             {readout.map(({ col, math }) =>
               math ? (
                 <span key={col} className="whitespace-nowrap">
-                  <TeX latex={math.latex} />
+                  <TeX latex={math.latex} fit={false} />
                   {mismatchAt(active!.row, col) && (
                     <span className="ml-1 text-destructive">
                       {t('homework.walkthrough.step.expected', {
@@ -358,7 +435,7 @@ function MatrixView({
     <div className="relative inline-block shrink-0 px-2 py-0.5 before:absolute before:inset-y-0 before:left-0 before:w-1.5 before:border-y before:border-l before:border-foreground/70 after:absolute after:inset-y-0 after:right-0 after:w-1.5 after:border-y after:border-r after:border-foreground/70">
       <table
         aria-label={label}
-        className="border-separate border-spacing-0 text-[15px] tabular-nums"
+        className="border-separate border-spacing-0 text-[length:var(--step-matrix-size,15px)] tabular-nums"
       >
         <tbody>
           {matrix.rows.map((row, r) => {

@@ -52,13 +52,8 @@ import { useHomeworkService } from '@/features/homework/useHomeworkService'
 import { questionLabel, type SectionAttempt } from '@/services/homeworkWalkthroughService'
 import { formatWalkthroughText, tidyBoxedPunctuation } from '@/entities/homework/walkthroughFormat'
 import { useWalkthrough } from '@/features/homework/useWalkthrough'
-import { openNote, restoreNotes, windowTitle } from '@/features/homework/floatingQA'
-import {
-  clampCard,
-  defaultCardWidth,
-  useFloatingQA,
-  type FloatingQAWindow,
-} from '@/features/homework/floatingQAStore'
+import { closeWindow, openNote, restoreNotes, windowTitle } from '@/features/homework/floatingQA'
+import { useFloatingQA, type FloatingQAWindow } from '@/features/homework/floatingQAStore'
 import { toast } from '@/features/toast/toastStore'
 import { Badge } from '@/shared/ui/Badge'
 import { Button } from '@/shared/ui/Button'
@@ -79,6 +74,7 @@ import { Math as TeX } from '@/shared/ui/Math'
 import { Progress } from '@/shared/ui/Progress'
 import { GenerationControls } from '@/shared/ui/GenerationControls'
 import { RichText } from '@/shared/ui/RichText'
+import { FitWidthScope } from '@/shared/ui/FitWidthScope'
 import { cn } from '@/shared/lib/utils'
 import { prefersReducedMotion } from '@/shared/lib/motion'
 import { useTranslation, type TranslationKey } from '@/i18n'
@@ -239,12 +235,14 @@ export function HomeworkWalkthroughPanel({
     .join('|')
     .concat(`|${uiLanguage}`)
 
-  // Mark saved passages; remember which ones are still in the text.
+  // Mark saved passages (not those whose mark was removed: 从原文中移除标记);
+  // remember which ones are still in the text.
   useEffect(() => {
     if (!revealed) return
     const ranges = locatePassages(notes)
-    noteRanges.current = ranges
-    markPassages('walkthrough-note', [...ranges.values()])
+    const hidden = new Set(notes.filter((note) => note.markHidden).map((note) => note.id))
+    noteRanges.current = new Map([...ranges].filter(([id]) => !hidden.has(id)))
+    markPassages('walkthrough-note', [...noteRanges.current.values()])
     setLocated((previous) =>
       previous.size === ranges.size && [...ranges.keys()].every((id) => previous.has(id))
         ? previous
@@ -286,7 +284,7 @@ export function HomeworkWalkthroughPanel({
 
   // A saved note whose passage is gone (the walkthrough changed): its window /
   // card says 「原文已更新」, and one tucked into the text (nothing to mark)
-  // comes back as a pinned card.
+  // is closed into 我的问答, like closing it does.
   const noteWindowKey = allWindows
     .filter((window) => window.passage.setId === set.id && window.noteId)
     .map((window) => `${window.id}:${window.noteId}:${window.tucked ? 1 : 0}`)
@@ -303,21 +301,7 @@ export function HomeworkWalkthroughPanel({
       const missing = !found.has(window_.noteId!)
       if (Boolean(window_.passageMissing) !== missing)
         store.update(window_.id, { passageMissing: missing })
-      if (missing && window_.tucked) {
-        const viewport = { width: window.innerWidth, height: window.innerHeight }
-        store.compact(
-          window_.id,
-          clampCard(
-            {
-              x: window_.rect.x,
-              y: window_.rect.y,
-              pinned: true,
-              width: defaultCardWidth(viewport.width),
-            },
-            viewport,
-          ),
-        )
-      }
+      if (missing && window_.tucked) closeWindow(window_.id)
     }
   }, [noteWindowKey, notes, textKey, revealed, set.id])
 
@@ -1066,6 +1050,7 @@ export function HomeworkWalkthroughPanel({
             passageHover.close()
             if (key) openMarked(key)
           }}
+          onClose={passageHover.close}
           {...passageHover.cardHandlers}
         />
       )}
@@ -1459,11 +1444,13 @@ function WalkthroughSectionView({
               <ul className="list-outside list-disc space-y-1.5 pl-5">
                 {section.suggestions.map((item, index) => (
                   <li key={index}>
-                    <RichText
-                      text={formatWalkthroughText(item)}
-                      format="markdown"
-                      paragraphClassName={WALKTHROUGH_PARAGRAPH}
-                    />
+                    <FitWidthScope>
+                      <RichText
+                        text={formatWalkthroughText(item)}
+                        format="markdown"
+                        paragraphClassName={WALKTHROUGH_PARAGRAPH}
+                      />
+                    </FitWidthScope>
                   </li>
                 ))}
               </ul>
@@ -1476,11 +1463,13 @@ function WalkthroughSectionView({
               <span className="text-sm font-semibold lecture:block lecture:text-xs lecture:font-normal lecture:tracking-[0.14em] lecture:text-muted-foreground lab:font-mono lab:text-[11px] lab:uppercase lab:tracking-wider">
                 {t('homework.walkthrough.conclusion')}
               </span>
-              <RichText
-                text={formatWalkthroughText(content.conclusion)}
-                format="markdown"
-                paragraphClassName="text-[15px] font-semibold leading-relaxed lecture:text-[17px] lecture:text-foreground"
-              />
+              <FitWidthScope>
+                <RichText
+                  text={formatWalkthroughText(content.conclusion)}
+                  format="markdown"
+                  paragraphClassName="text-[15px] font-semibold leading-relaxed lecture:text-[17px] lecture:text-foreground"
+                />
+              </FitWidthScope>
             </div>
           )}
           {section.issues && section.issues.length > 0 && (
@@ -1660,11 +1649,13 @@ function PartialParts({ parts, total }: { parts: WalkthroughPart[]; total: numbe
           <h3 className="font-heading text-base font-semibold lecture:text-lg lecture:font-bold">
             {`(${part.label}) ${part.heading}`.trim()}
           </h3>
-          <RichText
-            text={tidyBoxedPunctuation(part.conclusion)}
-            format="markdown"
-            paragraphClassName="text-[15px] font-medium leading-relaxed"
-          />
+          <FitWidthScope>
+            <RichText
+              text={tidyBoxedPunctuation(part.conclusion)}
+              format="markdown"
+              paragraphClassName="text-[15px] font-medium leading-relaxed"
+            />
+          </FitWidthScope>
           <WalkthroughBody text={part.body} />
           {part.checks && part.checks.length > 0 && <ChecksView checks={part.checks} />}
         </div>
@@ -1703,12 +1694,14 @@ function QuestionAnalysis({ analysis }: { analysis: string }): JSX.Element {
       <summary className="cursor-pointer select-none font-medium text-muted-foreground lecture:text-xs lecture:font-normal lecture:tracking-[0.14em] lab:font-mono lab:text-[11px] lab:uppercase lab:tracking-wider">
         {t('homework.walkthrough.analysis')}
       </summary>
-      <RichText
-        text={tidyBoxedPunctuation(analysis)}
-        format="markdown"
-        className="mt-2 min-w-0 space-y-2"
-        paragraphClassName="text-[15px] leading-relaxed lecture:text-[16px]"
-      />
+      <FitWidthScope>
+        <RichText
+          text={tidyBoxedPunctuation(analysis)}
+          format="markdown"
+          className="mt-2 min-w-0 space-y-2"
+          paragraphClassName="text-[15px] leading-relaxed lecture:text-[16px]"
+        />
+      </FitWidthScope>
     </details>
   )
 }

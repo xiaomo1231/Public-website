@@ -1,5 +1,14 @@
-import { Fragment, useMemo, type ReactNode } from 'react'
+import { Fragment, useMemo, useRef, type ReactNode } from 'react'
 import { cn } from '@/shared/lib/utils'
+import {
+  INITIAL_SCALE_STAGE,
+  shrinkStep,
+  TABLE_MIN_SCALE,
+  type FitMeasurement,
+  type FitSettings,
+  type ScaleStage,
+} from '@/shared/lib/fitToWidth'
+import { useFitStage, useFitWidthSettings } from '@/shared/lib/useFitStage'
 import { splitMathSegments, splitParagraphs } from '@/shared/lib/mathText'
 import {
   splitInline,
@@ -130,22 +139,11 @@ function Block({
         </blockquote>
       )
     case 'code':
-      return (
-        <div className="max-w-full overflow-hidden rounded-lg bg-muted">
-          {block.language && (
-            <div className="border-b border-border/70 px-3 py-1 font-mono text-[11px] text-muted-foreground">
-              {block.language}
-            </div>
-          )}
-          <pre className="max-w-full overflow-x-auto p-3 text-[13px] leading-relaxed">
-            <code className="font-mono">{block.value}</code>
-          </pre>
-        </div>
-      )
+      return <CodeBlock language={block.language} value={block.value} />
     case 'math':
       return <Math latex={block.value} display />
     case 'table':
-      return <Table block={block} />
+      return <TableBlockView block={block} />
     default:
       return (
         <p
@@ -158,6 +156,133 @@ function Block({
         </p>
       )
   }
+}
+
+function CodeBlock({ language, value }: { language?: string; value: string }): JSX.Element {
+  // In fitted reading (the walkthrough) long lines wrap instead of scrolling.
+  const fit = useFitWidthSettings() !== null
+  return (
+    <div className="max-w-full overflow-hidden rounded-lg bg-muted">
+      {language && (
+        <div className="border-b border-border/70 px-3 py-1 font-mono text-[11px] text-muted-foreground">
+          {language}
+        </div>
+      )}
+      <pre
+        className={cn(
+          'max-w-full p-3 text-[13px] leading-relaxed',
+          fit ? 'whitespace-pre-wrap [overflow-wrap:anywhere]' : 'overflow-x-auto',
+        )}
+        data-fit-code={fit ? '' : undefined}
+      >
+        <code className="font-mono">{value}</code>
+      </pre>
+    </div>
+  )
+}
+
+function TableBlockView({ block }: { block: TableBlock }): JSX.Element {
+  const settings = useFitWidthSettings()
+  return settings ? <FitTable block={block} settings={settings} /> : <Table block={block} />
+}
+
+function measureTable(element: HTMLElement): FitMeasurement | null {
+  const table = element.querySelector('table')
+  if (!table || element.clientWidth <= 0) return null
+  return { available: element.clientWidth, content: table.scrollWidth }
+}
+
+/**
+ * A table fitted to the column: cell text wraps within the column's width,
+ * then the table's type shrinks down to a floor; only a table that still
+ * cannot fit (many numeric columns) keeps a scroll, with a visible hint.
+ */
+function FitTable({ block, settings }: { block: TableBlock; settings: FitSettings }): JSX.Element {
+  const { t } = useTranslation()
+  const ref = useRef<HTMLDivElement>(null)
+  const tableSettings = { ...settings, minScale: TABLE_MIN_SCALE }
+  const stage = useFitStage<ScaleStage>(ref, {
+    enabled: true,
+    initial: INITIAL_SCALE_STAGE,
+    resetKey: JSON.stringify([block.header, block.rows]),
+    measure: measureTable,
+    next: (current, measurement) => shrinkStep(current, measurement, tableSettings),
+  })
+  return (
+    <div className="max-w-full space-y-1">
+      <div
+        ref={ref}
+        role="region"
+        aria-label={t('common.table')}
+        tabIndex={stage.scroll ? 0 : undefined}
+        data-fit-table
+        data-fit-scroll={stage.scroll ? '' : undefined}
+        className={cn(
+          'max-w-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background',
+          stage.scroll ? 'overflow-x-auto' : 'overflow-hidden',
+        )}
+      >
+        {/* Auto width is already capped by the column; `anywhere` lets long
+            words break so cells wrap instead of widening the table. */}
+        <table className="border-collapse" style={{ fontSize: `${14 * stage.scale}px` }}>
+          <TableRows block={block} cellClassName="[overflow-wrap:anywhere] px-2 py-1.5" />
+        </table>
+      </div>
+      {stage.scroll && (
+        <p className="text-xs text-muted-foreground" data-fit-hint>
+          {t('common.scrollForMore')}
+        </p>
+      )}
+    </div>
+  )
+}
+
+function TableRows({
+  block,
+  cellClassName = 'px-3 py-2',
+}: {
+  block: TableBlock
+  cellClassName?: string
+}): JSX.Element {
+  return (
+    <>
+      <thead>
+        <tr>
+          {block.header.map((cell, column) => (
+            <th
+              key={column}
+              scope="col"
+              className={cn(
+                'border-b border-border align-top font-semibold text-foreground',
+                cellClassName,
+                ALIGN_CLASS[block.align[column] ?? 'left'],
+              )}
+            >
+              <Inline spans={cell} />
+            </th>
+          ))}
+        </tr>
+      </thead>
+      <tbody>
+        {block.rows.map((row, rowIndex) => (
+          <tr key={rowIndex} className="border-b border-border/60 last:border-0">
+            {row.map((cell, column) => (
+              <td
+                key={column}
+                className={cn(
+                  'break-words align-top',
+                  cellClassName,
+                  ALIGN_CLASS[block.align[column] ?? 'left'],
+                )}
+              >
+                <Inline spans={cell} />
+              </td>
+            ))}
+          </tr>
+        ))}
+      </tbody>
+    </>
+  )
 }
 
 function Table({ block }: { block: TableBlock }): JSX.Element {
@@ -173,39 +298,7 @@ function Table({ block }: { block: TableBlock }): JSX.Element {
       className="max-w-full overflow-x-auto focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
     >
       <table className="border-collapse text-[15px]">
-        <thead>
-          <tr>
-            {block.header.map((cell, column) => (
-              <th
-                key={column}
-                scope="col"
-                className={cn(
-                  'border-b border-border px-3 py-2 align-top font-semibold text-foreground',
-                  ALIGN_CLASS[block.align[column] ?? 'left'],
-                )}
-              >
-                <Inline spans={cell} />
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {block.rows.map((row, rowIndex) => (
-            <tr key={rowIndex} className="border-b border-border/60 last:border-0">
-              {row.map((cell, column) => (
-                <td
-                  key={column}
-                  className={cn(
-                    'break-words px-3 py-2 align-top',
-                    ALIGN_CLASS[block.align[column] ?? 'left'],
-                  )}
-                >
-                  <Inline spans={cell} />
-                </td>
-              ))}
-            </tr>
-          ))}
-        </tbody>
+        <TableRows block={block} />
       </table>
     </div>
   )

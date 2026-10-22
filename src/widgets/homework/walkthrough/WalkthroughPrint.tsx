@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { RichText } from '@/shared/ui/RichText'
+import { FitWidthScope } from '@/shared/ui/FitWidthScope'
 import { useTranslation } from '@/i18n'
 
 export interface PrintableSection {
@@ -44,8 +45,9 @@ export function WalkthroughPrint({
     }
     body.classList.add('printing-walkthrough')
     window.addEventListener('afterprint', finish)
-    // Let KaTeX lay out before the dialog snapshots the page.
-    const timer = window.setTimeout(() => window.print(), 150)
+    // Let KaTeX lay out, and wide formulas settle their fitted form (a few
+    // animation frames), before the dialog snapshots the page.
+    const timer = window.setTimeout(() => window.print(), 300)
     return () => {
       window.clearTimeout(timer)
       window.removeEventListener('afterprint', finish)
@@ -54,62 +56,68 @@ export function WalkthroughPrint({
   }, [])
 
   return createPortal(
-    <div id="walkthrough-print" className="mx-auto max-w-3xl space-y-8 p-8">
-      <h1 className="text-2xl font-semibold">{title}</h1>
-      {sections.map((section) => (
-        <section key={section.id} className="space-y-3">
-          <h2 className="border-b pb-1 text-xl font-semibold">{section.title}</h2>
-          {section.aligned && (
-            <p className="text-xs" data-professor-aligned>
-              {t('homework.walkthrough.alignedBadge')}
-            </p>
-          )}
-          {section.analysis && (
-            <div className="space-y-1">
-              <strong>{t('homework.walkthrough.analysis')}</strong>
-              <RichText
-                text={section.analysis}
-                format="markdown"
-                className="space-y-1"
-                paragraphClassName="text-[14px] leading-relaxed"
-              />
-            </div>
-          )}
-          <RichText
-            text={section.body}
-            format="markdown"
-            className="space-y-2"
-            paragraphClassName="text-[14px] leading-[1.7]"
-          />
-          {section.conclusion && (
-            <div className="border-l-4 pl-3">
-              <strong>{t('homework.walkthrough.conclusion')}</strong>
-              <RichText
-                text={section.conclusion}
-                format="markdown"
-                paragraphClassName="text-[14px] leading-relaxed"
-              />
-            </div>
-          )}
-          {section.suggestions && section.suggestions.length > 0 && (
-            <>
-              <h3 className="text-base font-semibold">{t('homework.walkthrough.suggestions')}</h3>
-              <ul className="list-disc space-y-1 pl-5">
-                {section.suggestions.map((item, index) => (
-                  <li key={index}>
-                    <RichText
-                      text={item}
-                      format="markdown"
-                      paragraphClassName="text-[14px] leading-relaxed"
-                    />
-                  </li>
-                ))}
-              </ul>
-            </>
-          )}
-        </section>
-      ))}
-    </div>,
+    // Fitted for paper: formulas, tables and code are fitted to the column
+    // before the dialog opens, and the column is as wide on screen as on the
+    // page (640px fits A4 and Letter at the default margins), so what fits
+    // here fits when printed — a page cannot scroll.
+    <FitWidthScope print>
+      <div id="walkthrough-print" className="mx-auto w-[640px] max-w-full space-y-8 py-8">
+        <h1 className="text-2xl font-semibold">{title}</h1>
+        {sections.map((section) => (
+          <section key={section.id} className="space-y-3">
+            <h2 className="border-b pb-1 text-xl font-semibold">{section.title}</h2>
+            {section.aligned && (
+              <p className="text-xs" data-professor-aligned>
+                {t('homework.walkthrough.alignedBadge')}
+              </p>
+            )}
+            {section.analysis && (
+              <div className="space-y-1">
+                <strong>{t('homework.walkthrough.analysis')}</strong>
+                <RichText
+                  text={section.analysis}
+                  format="markdown"
+                  className="space-y-1"
+                  paragraphClassName="text-[14px] leading-relaxed"
+                />
+              </div>
+            )}
+            <RichText
+              text={section.body}
+              format="markdown"
+              className="space-y-2"
+              paragraphClassName="text-[14px] leading-[1.7]"
+            />
+            {section.conclusion && (
+              <div className="border-l-4 pl-3">
+                <strong>{t('homework.walkthrough.conclusion')}</strong>
+                <RichText
+                  text={section.conclusion}
+                  format="markdown"
+                  paragraphClassName="text-[14px] leading-relaxed"
+                />
+              </div>
+            )}
+            {section.suggestions && section.suggestions.length > 0 && (
+              <>
+                <h3 className="text-base font-semibold">{t('homework.walkthrough.suggestions')}</h3>
+                <ul className="list-disc space-y-1 pl-5">
+                  {section.suggestions.map((item, index) => (
+                    <li key={index}>
+                      <RichText
+                        text={item}
+                        format="markdown"
+                        paragraphClassName="text-[14px] leading-relaxed"
+                      />
+                    </li>
+                  ))}
+                </ul>
+              </>
+            )}
+          </section>
+        ))}
+      </div>
+    </FitWidthScope>,
     document.body,
   )
 }
