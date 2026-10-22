@@ -536,7 +536,7 @@ function DocumentLink({ doc, projectId }: { doc: Document; projectId: string }):
       <Link
         to={`/projects/${projectId}/documents/${doc.id}`}
         aria-label={doc.name}
-        className="focus-ring block min-w-0 flex-1 truncate rounded-sm text-sm font-medium text-foreground transition-colors duration-150 hover:text-primary lecture:text-[15px]"
+        className="focus-ring block min-w-0 flex-1 truncate rounded-sm text-sm font-medium text-foreground transition-colors duration-150 hover:text-primary lecture:text-[15px] coarse:py-3"
       >
         {doc.name}
       </Link>

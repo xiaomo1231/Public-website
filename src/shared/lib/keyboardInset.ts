@@ -7,7 +7,11 @@
  * This module:
  *
  * - publishes how much of the layout viewport the keyboard covers as the CSS
- *   variable `--keyboard-inset` on <html> (sticky footers lift by it);
+ *   variable `--keyboard-inset` on <html> (sticky footers lift by it), and
+ *   tells listeners (`KEYBOARD_INSET_EVENT`) when it changes;
+ * - lets a sticky footer that sits on the keyboard (the settings save bar)
+ *   publish its own height as `--sticky-footer` (`publishStickyFooter`), so a
+ *   revealed field clears the footer as well as the keyboard;
  * - when a text field gains focus (or the keyboard resizes), scrolls the
  *   field's own scroll container just enough to keep it, plus a margin, in
  *   the visible area.
@@ -21,6 +25,43 @@ export const MIN_KEYBOARD_INSET = 80
 
 /** Space kept between the focused field and the keyboard / top edge. */
 export const REVEAL_MARGIN = 24
+
+/** Fired on the window whenever `--keyboard-inset` changes. */
+export const KEYBOARD_INSET_EVENT = 'keyboardinsetchange'
+
+/** Pixels read from a `--name: 123px` custom property set on <html>. */
+function rootPx(name: string, doc: Document): number {
+  const value = parseFloat(doc.documentElement.style.getPropertyValue(name))
+  return Number.isFinite(value) && value > 0 ? value : 0
+}
+
+/** The keyboard inset currently published on <html> (0 without a keyboard). */
+export function readKeyboardInset(doc: Document = document): number {
+  return rootPx('--keyboard-inset', doc)
+}
+
+/** The height of the sticky footer currently on screen (0 when none). */
+export function readStickyFooter(doc: Document = document): number {
+  return rootPx('--sticky-footer', doc)
+}
+
+/**
+ * Publish `el`'s height as `--sticky-footer` while it is mounted, following
+ * its size. Returns a cleanup that sets it back to 0.
+ */
+export function publishStickyFooter(el: HTMLElement, win: Window = window): () => void {
+  const root = win.document.documentElement
+  const write = (): void => {
+    root.style.setProperty('--sticky-footer', `${Math.round(el.getBoundingClientRect().height)}px`)
+  }
+  write()
+  const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(write)
+  observer?.observe(el)
+  return () => {
+    observer?.disconnect()
+    root.style.removeProperty('--sticky-footer')
+  }
+}
 
 export interface VisualViewportLike {
   height: number
@@ -69,6 +110,26 @@ export function revealScrollDelta(
   return 0
 }
 
+/** Space kept between a window lifted by the keyboard and the keyboard. */
+export const KEYBOARD_GAP = 12
+
+/**
+ * How far (negative = up) to lift a window so its bottom — the message box —
+ * sits above the on-screen keyboard. Zero without a keyboard or when it
+ * already clears it. A window taller than the space left keeps its bottom
+ * visible; the top may go off screen until the keyboard closes.
+ */
+export function keyboardLift(
+  rect: { y: number; height: number },
+  inset: number,
+  viewportHeight: number,
+  gap: number = KEYBOARD_GAP,
+): number {
+  if (inset <= 0) return 0
+  const limit = viewportHeight - inset - gap
+  return Math.min(0, limit - (rect.y + rect.height))
+}
+
 /** Elements the keyboard is for: text entry, not buttons or checkboxes. */
 export function isTextEntry(el: Element | null): el is HTMLElement {
   if (!el || !(el instanceof HTMLElement)) return false
@@ -109,12 +170,16 @@ function scrollParent(el: HTMLElement): HTMLElement | null {
 /**
  * Scroll `el` into the part of the screen the keyboard leaves visible. Uses
  * the field's own scroll container (dialogs, the page column), falling back to
- * the window.
+ * the window. A sticky footer lifted onto the keyboard (`--sticky-footer`)
+ * covers more of the bottom, unless the field is inside that footer.
  */
 export function revealAboveKeyboard(el: HTMLElement, win: Window = window): void {
+  // Fixed windows that move themselves above the keyboard (floating Q&A).
+  if (el.closest('[data-keyboard-managed]')) return
   const vv = win.visualViewport
   const visibleTop = vv ? vv.offsetTop : 0
-  const visibleBottom = vv ? vv.offsetTop + vv.height : win.innerHeight
+  const footer = el.closest('[data-sticky-footer]') ? 0 : readStickyFooter(win.document)
+  const visibleBottom = (vv ? vv.offsetTop + vv.height : win.innerHeight) - footer
   const container = scrollParent(el)
   const rect = el.getBoundingClientRect()
   let top = visibleTop
@@ -148,6 +213,7 @@ export function installKeyboardAvoidance(win: Window = window): () => void {
     if (next !== inset) {
       inset = next
       root.style.setProperty('--keyboard-inset', `${next}px`)
+      win.dispatchEvent(new Event(KEYBOARD_INSET_EVENT))
     }
     const active = win.document.activeElement
     if (opened && isTextEntry(active)) revealAboveKeyboard(active, win)

@@ -364,7 +364,7 @@ export function TutorPage(): JSX.Element {
                         <Link
                           to={`/projects/${projectId}/tutor/${nextTopic.id}`}
                           onClick={() => setActiveTopicId(nextTopic.id)}
-                          className="focus-ring ml-auto min-w-0 max-w-full rounded-md text-right text-foreground lab:inline-flex lab:items-center lab:gap-2 lab:border lab:bg-card lab:px-3.5 lab:py-1.5 lab:text-left lab:text-sm lab:transition-colors lab:hover:bg-muted"
+                          className="focus-ring ml-auto min-w-0 max-w-full rounded-md text-right text-foreground lab:inline-flex lab:items-center lab:gap-2 lab:border lab:bg-card lab:px-3.5 lab:py-1.5 lab:text-left lab:text-sm lab:transition-colors lab:hover:bg-muted coarse:min-h-11"
                         >
                           <small className="block text-[12.5px] text-muted-foreground lab:inline lab:shrink-0 lab:font-mono lab:text-[11px] lab:uppercase lab:tracking-[0.06em]">
                             {t('tutor.nextTopic')}

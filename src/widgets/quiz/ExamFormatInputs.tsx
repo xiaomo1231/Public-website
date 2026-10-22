@@ -196,7 +196,12 @@ export function FillBlankInput({
             {...answerFieldAttrs('term')}
             enterKeyHint={i === count - 1 ? 'go' : 'next'}
             onKeyDown={(event) => {
-              if (event.key === 'Enter' && onSubmit && i === count - 1) {
+              if (event.key !== 'Enter' || event.nativeEvent.isComposing) return
+              if (i < count - 1) {
+                // Like the keyboard's "next" key: on to the next blank.
+                event.preventDefault()
+                fields.current[i + 1]?.focus()
+              } else if (onSubmit) {
                 event.preventDefault()
                 onSubmit()
               }

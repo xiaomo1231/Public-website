@@ -736,7 +736,8 @@ export function HomeworkWalkthroughPanel({
                         jumpTo(entry.id)
                       }}
                       className={cn(
-                        'focus-ring block truncate rounded px-2 py-1 transition-colors duration-150 hover:bg-muted coarse:py-2.5',
+                        // `!` so the 44px touch height also beats `lecture:py-1.5`.
+                        'focus-ring block truncate rounded px-2 py-1 transition-colors duration-150 hover:bg-muted coarse:!py-3',
                         'lecture:rounded-none lecture:border-l lecture:py-1.5 lecture:pl-3 lecture:hover:border-primary lecture:hover:bg-transparent',
                         entry.section?.status === 'ready'
                           ? 'text-foreground'

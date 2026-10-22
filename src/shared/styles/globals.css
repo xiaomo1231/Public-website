@@ -857,15 +857,15 @@
  * - Buttons, tabs, menu items, options, <summary>, <select> and text inputs
  *   are at least 44×44px. `:where()` keeps specificity at zero for the
  *   selector list, but min-* wins over a smaller `h-7` anyway, so compact
- *   desktop controls grow only here. Opt out with `data-touch-compact` (on the
- *   control or an ancestor) where a control already sits inside a larger hit
- *   area.
+ *   desktop controls grow only here.
  * - `--keyboard-inset` (set by `shared/lib/keyboardInset.ts`) is how much of
  *   the layout viewport the on-screen keyboard covers; sticky footers lift by
- *   it, and focused fields keep a margin above it.
+ *   it, and focused fields keep a margin above it and above the sticky footer
+ *   on screen (`--sticky-footer`, its height; 0 when none).
  */
 :root {
   --keyboard-inset: 0px;
+  --sticky-footer: 0px;
 }
 
 @media (pointer: coarse) {
@@ -908,11 +908,11 @@
     [role='menuitemcheckbox'],
     [role='option'],
     input:not([type='checkbox'], [type='radio'], [type='range'], [type='hidden'], [type='file'])
-  ):not([data-touch-compact], [data-touch-compact] *) {
+  ) {
     min-height: 44px;
   }
 
-  :where(button, [role='button'], [role='tab']):not([data-touch-compact], [data-touch-compact] *) {
+  :where(button, [role='button'], [role='tab']) {
     min-width: 44px;
   }
 
@@ -922,6 +922,6 @@
   }
 
   :where(input, textarea, select, [contenteditable='true']) {
-    scroll-margin-block: 24px calc(var(--keyboard-inset) + 24px);
+    scroll-margin-block: 24px calc(var(--keyboard-inset) + var(--sticky-footer) + 24px);
   }
 }

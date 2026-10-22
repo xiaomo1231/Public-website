@@ -106,7 +106,8 @@ describe('HomeworkQuestionView professor answer', () => {
     expect(
       screen.getByText(/Professor answer \(verbatim\)/).closest('details'),
     ).not.toHaveAttribute('open')
-    expect(screen.getByText(/AI explanation based on the professor answer/)).toBeInTheDocument()
+    // Practice tools (working, hints, answer, chat) are not shown while reviewing.
+    expect(screen.queryByRole('button', { name: /Show answer/ })).not.toBeInTheDocument()
     await user.click(screen.getByText(/Professor answer \(verbatim\)/))
     expect(screen.getByRole('link', { name: /Open answer file/ })).toBeInTheDocument()
   })
@@ -151,7 +152,7 @@ describe('HomeworkQuestionView professor answer', () => {
 
   it('regenerates from the professor answer for a matched question', async () => {
     const user = userEvent.setup()
-    const { generateAnswerForQuestion, generateContent } = renderView('review')
+    const { generateAnswerForQuestion, generateContent } = renderView('practice')
     await user.click(screen.getByRole('button', { name: /Regenerate hints/ }))
     await waitFor(() =>
       expect(generateAnswerForQuestion).toHaveBeenCalledWith('q1', expect.anything()),
@@ -161,7 +162,7 @@ describe('HomeworkQuestionView professor answer', () => {
 
   it('keeps the replaced AI solution available instead of silently overwriting it', async () => {
     const user = userEvent.setup()
-    renderView('review')
+    renderView('practice')
     await user.click(screen.getByRole('button', { name: /Show answer/ }))
     expect(await screen.findByText(/Previous AI solution/)).toBeInTheDocument()
   })

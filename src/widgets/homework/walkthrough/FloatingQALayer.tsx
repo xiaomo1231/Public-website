@@ -52,12 +52,25 @@ import { friendlyAIError } from '@/shared/lib/aiErrors'
 import { cn } from '@/shared/lib/utils'
 import { EASE_OUT, prefersReducedMotion } from '@/shared/lib/motion'
 import { capturePointer, passedDragThreshold, releasePointer } from '@/shared/lib/pointerGesture'
+import { KEYBOARD_INSET_EVENT, keyboardLift, readKeyboardInset } from '@/shared/lib/keyboardInset'
 import { useTranslation } from '@/i18n'
 import type { WalkthroughNoteTurn } from '@/entities/homework/walkthrough'
 import { revealPassage } from './passage'
 
 function viewport(): { width: number; height: number } {
   return { width: window.innerWidth, height: window.innerHeight }
+}
+
+/** The keyboard inset published by `installKeyboardAvoidance`, kept current. */
+function useKeyboardInset(): number {
+  const [inset, setInset] = useState(() => readKeyboardInset())
+  useEffect(() => {
+    const update = (): void => setInset(readKeyboardInset())
+    window.addEventListener(KEYBOARD_INSET_EVENT, update)
+    update()
+    return () => window.removeEventListener(KEYBOARD_INSET_EVENT, update)
+  }, [])
+  return inset
 }
 
 function layerBounds(layer: HTMLElement): { width: number; height: number } {
@@ -293,6 +306,13 @@ const FloatingQAWindowView = memo(function FloatingQAWindowView({
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
   const rootRef = useRef<HTMLDivElement>(null)
+  // While the learner types here with the on-screen keyboard open, the window
+  // is lifted above it. Only the rendered position moves; the stored rect
+  // (and what is saved) stays, so it drops back when focus leaves or the
+  // keyboard closes.
+  const [focusWithin, setFocusWithin] = useState(false)
+  const keyboardInset = useKeyboardInset()
+  const lift = focusWithin ? keyboardLift(win.rect, keyboardInset, window.innerHeight) : 0
 
   // Opening: grow in from the side nearest the selection, once per window.
   useLayoutEffect(() => {
@@ -513,6 +533,12 @@ const FloatingQAWindowView = memo(function FloatingQAWindowView({
       tabIndex={-1}
       data-floating-qa
       onPointerDownCapture={() => focus(win.id)}
+      onFocus={() => setFocusWithin(true)}
+      onBlur={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setFocusWithin(false)
+      }}
+      data-keyboard-managed
+      data-keyboard-lift={lift ? '' : undefined}
       onKeyDown={(event) => {
         if (event.key === 'Escape') {
           event.stopPropagation()
@@ -521,7 +547,7 @@ const FloatingQAWindowView = memo(function FloatingQAWindowView({
       }}
       style={{
         left: win.rect.x,
-        top: win.rect.y,
+        top: win.rect.y + lift,
         width: win.rect.width,
         height: win.rect.height,
         zIndex: layer,
@@ -679,6 +705,7 @@ const FloatingQAWindowView = memo(function FloatingQAWindowView({
             disabled={Boolean(win.pending)}
             aria-label={t('contextual.questionLabel')}
             placeholder={t('walkthroughQA.placeholder')}
+            enterKeyHint="send"
             onChange={(event) => setInput(event.target.value)}
             onKeyDown={(event) => {
               if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) {
@@ -735,14 +762,14 @@ const FloatingQAWindowView = memo(function FloatingQAWindowView({
       )}
 
       {/* The grip is drawn 16px; on a touch screen the hit area grows to
-          32px (bottom-right corner) so a finger can take it. */}
+          44px (bottom-right corner) so a finger can take it. */}
       <div
         role="presentation"
         aria-hidden
         data-resize-handle
         onPointerDown={(event) => startGesture(event, 'resize')}
         className={cn(
-          'absolute bottom-0 right-0 h-4 w-4 cursor-se-resize touch-none bg-no-repeat [background-position:bottom_right] [background-size:1rem_1rem] [@media(pointer:coarse)]:h-8 [@media(pointer:coarse)]:w-8',
+          'absolute bottom-0 right-0 h-4 w-4 cursor-se-resize touch-none bg-no-repeat [background-position:bottom_right] [background-size:1rem_1rem] coarse:h-11 coarse:w-11',
           'bg-[linear-gradient(135deg,transparent_50%,hsl(var(--muted-foreground)/0.45)_50%,transparent_60%,transparent_70%,hsl(var(--muted-foreground)/0.45)_70%,transparent_80%)]',
         )}
       />

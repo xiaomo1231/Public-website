@@ -131,14 +131,22 @@ type Active = { row: number; col?: number } | null
 export function StepCard({ step }: { step: WalkthroughStep }): JSX.Element {
   const { t } = useTranslation()
   const [active, setActive] = useState<Active>(null)
-  // Set when a finger / pen tap chose the entry: it stays until another tap.
-  const [tapped, setTapped] = useState(false)
+  // Set when a finger / pen tap chose the entry: it stays until another tap,
+  // or until a real mouse moves / a key is pressed (tap mode ends then, so
+  // hover and keyboard focus work again at once). The ref mirrors the state
+  // for handlers that run before the next render.
+  const [tapped, setTappedState] = useState(false)
+  const tappedRef = useRef(false)
+  const setTapped = (next: boolean): void => {
+    tappedRef.current = next
+    setTappedState(next)
+  }
   const lastTouch = useRef(0)
   const cardRef = useRef<HTMLDivElement>(null)
   const id = useId()
   /** Mouse hover and keyboard focus, as before; ignored right after a tap. */
   const hoverActive = (next: Active): void => {
-    if (tapped || Date.now() - lastTouch.current < EMULATED_MOUSE_WINDOW_MS) return
+    if (tappedRef.current || Date.now() - lastTouch.current < EMULATED_MOUSE_WINDOW_MS) return
     setActive(next)
   }
   /** A tap on an entry shows its arithmetic; tapping it again hides it. */
@@ -147,7 +155,8 @@ export function StepCard({ step }: { step: WalkthroughStep }): JSX.Element {
     setTapped(!same)
     setActive(same ? null : next)
   }
-  // A tap outside the step card hides a tapped readout.
+  // While a tap chose the entry: a tap outside the step card hides it; a real
+  // mouse or the keyboard leaves tap mode.
   useEffect(() => {
     if (!tapped) return
     const onDown = (event: Event): void => {
@@ -155,8 +164,21 @@ export function StepCard({ step }: { step: WalkthroughStep }): JSX.Element {
       setTapped(false)
       setActive(null)
     }
+    const leaveTapMode = (): void => {
+      lastTouch.current = 0
+      setTapped(false)
+    }
+    const onMove = (event: PointerEvent): void => {
+      if (event.pointerType === 'mouse') leaveTapMode()
+    }
     document.addEventListener('pointerdown', onDown)
-    return () => document.removeEventListener('pointerdown', onDown)
+    document.addEventListener('pointermove', onMove)
+    document.addEventListener('keydown', leaveTapMode, true)
+    return () => {
+      document.removeEventListener('pointerdown', onDown)
+      document.removeEventListener('pointermove', onMove)
+      document.removeEventListener('keydown', leaveTapMode, true)
+    }
   }, [tapped])
   // Both matrices share column widths, so their entries line up identically.
   const columnWidths = useMemo(
@@ -373,7 +395,9 @@ function MatrixView({
                       onFocus={focusable ? () => onActive?.({ row: r, col: c }) : undefined}
                       onBlur={focusable ? () => onActive?.(null) : undefined}
                       className={cn(
-                        'px-2 py-1 text-center align-middle outline-none',
+                        // On touch every entry (both matrices, so their
+                        // columns still line up) is at least 44px.
+                        'px-2 py-1 text-center align-middle outline-none coarse:h-11 coarse:w-11 coarse:px-2.5',
                         matrix.bar !== undefined &&
                           c === matrix.bar - 1 &&
                           'border-r border-foreground/50',

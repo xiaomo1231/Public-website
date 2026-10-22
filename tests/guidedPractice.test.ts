@@ -95,6 +95,12 @@ describe('typed row operations', () => {
     ['R1 ↔ R2', { kind: 'swap', a: 0, b: 1 }],
     ['交换 R1 R2', { kind: 'swap', a: 0, b: 1 }],
     ['R1 与 R2 互换', { kind: 'swap', a: 0, b: 1 }],
+    // Spaces from Scribble / autocorrect, and spelled-out rows.
+    ['R 1<->R 2', { kind: 'swap', a: 0, b: 1 }],
+    ['R 2 -> R 2 - 2 R 1', { kind: 'combine', target: 1 }],
+    ['R _2 → R _2 − 2R _1', { kind: 'combine', target: 1 }],
+    ['row 1 <-> row 2', { kind: 'swap', a: 0, b: 1 }],
+    ['第1行 <-> 第2行', { kind: 'swap', a: 0, b: 1 }],
   ])('reads %s', (typed, shape) => {
     const ops = parseTypedOps(typed)
     expect(ops).toHaveLength(1)

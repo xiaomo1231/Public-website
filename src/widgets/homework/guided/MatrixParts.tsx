@@ -57,8 +57,10 @@ export interface MatrixInputGridProps {
 }
 
 /**
- * The result matrix with a blank for every entry. Tab moves between cells,
- * Enter checks. Cells are at least 44 px tall for touch.
+ * The result matrix with a blank for every entry. Tab moves between cells;
+ * Enter moves to the next blank cell (the on-screen keyboard shows "next"),
+ * and checks once none is left or from the last cell ("go"). Cells are at
+ * least 44 px tall for touch.
  */
 export function MatrixInputGrid({
   values,
@@ -73,11 +75,20 @@ export function MatrixInputGrid({
   const { t } = useTranslation()
   const id = useId()
   const width = values[0]?.length ?? 0
-  const onKeyDown = (event: KeyboardEvent<HTMLInputElement>): void => {
-    if (event.key === 'Enter' && !event.nativeEvent.isComposing) {
-      event.preventDefault()
-      onSubmit()
-    }
+  const height = values.length
+  const cellId = (r: number, c: number): string => `${id}-${r}-${c}`
+  const isLast = (r: number, c: number): boolean => r === height - 1 && c === width - 1
+  const onKeyDown = (event: KeyboardEvent<HTMLInputElement>, r: number, c: number): void => {
+    if (event.key !== 'Enter' || event.nativeEvent.isComposing) return
+    event.preventDefault()
+    // On to the next blank cell (reading order, then from the top); with
+    // none left, or from the last cell, check.
+    const order = values.flatMap((row, rr) => row.map((_, cc) => ({ r: rr, c: cc })))
+    const at = r * width + c
+    const rest = [...order.slice(at + 1), ...order.slice(0, at)]
+    const next = isLast(r, c) ? undefined : rest.find((cell) => !values[cell.r]![cell.c]!.trim())
+    if (next) document.getElementById(cellId(next.r, next.c))?.focus()
+    else onSubmit()
   }
   return (
     <div className="max-w-full overflow-x-auto overflow-y-hidden py-1">
@@ -104,19 +115,19 @@ export function MatrixInputGrid({
                       )}
                     >
                       <input
-                        id={`${id}-${r}-${c}`}
+                        id={cellId(r, c)}
                         type="text"
-                        // Exact numbers (−3/2): numbers-and-punctuation keyboard,
-                        // and Scribble writes straight into the cell.
+                        // Exact numbers (−3/2): a keyboard with − and / (see
+                        // answerFieldAttrs), and Scribble writes straight in.
                         {...answerFieldAttrs('fraction')}
-                        enterKeyHint="go"
+                        enterKeyHint={isLast(r, c) ? 'go' : 'next'}
                         value={value}
                         disabled={disabled}
                         aria-label={t('guided.cellLabel', { row: r + 1, col: c + 1 })}
                         aria-invalid={bad || undefined}
                         data-status={status}
                         onChange={(event) => onChange(r, c, event.target.value)}
-                        onKeyDown={onKeyDown}
+                        onKeyDown={(event) => onKeyDown(event, r, c)}
                         className={cn(
                           'focus-ring h-11 w-[4.5rem] rounded-md border border-input bg-background px-1.5 text-center font-mono text-[15px] tabular-nums text-foreground transition-colors lab:rounded-sm',
                           unchangedRows?.has(r) && 'bg-muted/40',

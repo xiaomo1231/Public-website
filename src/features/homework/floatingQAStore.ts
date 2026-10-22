@@ -225,10 +225,13 @@ function enforceLimit(windows: FloatingQAWindow[]): FloatingQAWindow[] {
   })
 }
 
-/** Shown as the full window. */
-function asFull(window: FloatingQAWindow): FloatingQAWindow {
+/**
+ * Shown as the full window, kept on screen: a card, a docked window or a
+ * tucked passage may come back where its old rect no longer fits.
+ */
+function asFull(window: FloatingQAWindow, rect: NoteWindowRect = window.rect): FloatingQAWindow {
   const { compact: _compact, ...rest } = window
-  return { ...rest, minimized: false, tucked: false }
+  return { ...rest, rect: clampRect(rect), minimized: false, tucked: false }
 }
 
 export const useFloatingQA = create<FloatingQAState>((set) => ({
@@ -295,9 +298,7 @@ export const useFloatingQA = create<FloatingQAState>((set) => ({
       nextZ: state.nextZ + 1,
       windows: enforceLimit(
         state.windows.map((window) =>
-          window.id === id
-            ? { ...asFull(window), ...(rect ? { rect } : {}), z: state.nextZ }
-            : window,
+          window.id === id ? { ...asFull(window, rect), z: state.nextZ } : window,
         ),
       ),
     })),

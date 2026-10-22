@@ -20,7 +20,7 @@ export function TopNav(): JSX.Element {
       <NavLink
         to="/dashboard"
         aria-label={t('app.name')}
-        className="focus-ring flex shrink-0 items-center gap-2.5 rounded-md"
+        className="focus-ring flex shrink-0 items-center gap-2.5 rounded-md coarse:min-h-11 coarse:min-w-11 coarse:justify-center"
       >
         <span aria-hidden className="font-heading text-lg font-bold leading-none text-foreground">
           学

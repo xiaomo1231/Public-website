@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState, type KeyboardEvent } from 'react'
+import { useId, useMemo, useRef, useState, type KeyboardEvent } from 'react'
 import { CheckCircle2, Eye, Lightbulb, Wand2 } from 'lucide-react'
 import {
   agreesWithWalkthrough,
@@ -94,6 +94,8 @@ function ChainWorkspace({ chain, progress, active, onChange }: ChainWorkspacePro
   const [checks, setChecks] = useState<CellCheck[][] | null>(null)
   const [justDone, setJustDone] = useState(false)
   const opRef = useRef<HTMLInputElement>(null)
+  // Unique per exercise: several chains show a step 1 at the same time.
+  const opFieldId = useId()
 
   if (!route) {
     return <p className="text-sm text-muted-foreground">{t('guided.routeLost')}</p>
@@ -274,7 +276,7 @@ function ChainWorkspace({ chain, progress, active, onChange }: ChainWorkspacePro
 
           <div className="space-y-2">
             <label
-              htmlFor={`guided-op-${stepNumber}`}
+              htmlFor={`${opFieldId}-op-${stepNumber}`}
               className="block text-sm font-medium text-foreground"
             >
               {t('guided.opLabel')}
@@ -282,7 +284,8 @@ function ChainWorkspace({ chain, progress, active, onChange }: ChainWorkspacePro
             <div className="flex flex-wrap items-start gap-2">
               <Input
                 ref={opRef}
-                id={`guided-op-${stepNumber}`}
+                id={`${opFieldId}-op-${stepNumber}`}
+                aria-label={t('guided.opLabel')}
                 value={pending.typedOp ?? ''}
                 disabled={Boolean(pending.op)}
                 placeholder={t('guided.opPlaceholder')}

@@ -1,12 +1,16 @@
+import { useEffect, useRef } from 'react'
 import { Loader2, Save, Undo2 } from 'lucide-react'
 import { Button } from '@/shared/ui/Button'
 import { cn } from '@/shared/lib/utils'
+import { publishStickyFooter } from '@/shared/lib/keyboardInset'
 import { useTranslation } from '@/i18n'
 
 /**
  * The settings save bar: stuck to the bottom of the viewport while there are
  * unsaved changes, gone otherwise. Only the AI-service sections go through
- * it; the instant sections apply on their own.
+ * it; the instant sections apply on their own. While shown it publishes its
+ * height (`--sticky-footer`), so a field revealed above the on-screen
+ * keyboard also clears the bar.
  */
 export function SaveBar({
   visible,
@@ -20,9 +24,17 @@ export function SaveBar({
   onDiscard: () => void
 }): JSX.Element | null {
   const { t } = useTranslation()
-  if (!visible && !saving) return null
+  const ref = useRef<HTMLDivElement>(null)
+  const shown = visible || saving
+  useEffect(() => {
+    if (!shown || !ref.current) return
+    return publishStickyFooter(ref.current)
+  }, [shown])
+  if (!shown) return null
   return (
     <div
+      ref={ref}
+      data-sticky-footer
       role="region"
       aria-label={t('settings.unsaved')}
       className={cn(

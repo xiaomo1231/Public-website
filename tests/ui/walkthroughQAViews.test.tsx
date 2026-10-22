@@ -464,7 +464,8 @@ describe('dragging windows and cards with a finger or pen (2h3)', () => {
     render(<FloatingQALayer setId="s1" />)
     const grip = document.querySelector<HTMLElement>('[data-resize-handle]')!
     expect(grip.className).toContain('touch-none')
-    expect(grip.className).toContain('[@media(pointer:coarse)]:h-8')
+    expect(grip.className).toContain('coarse:h-11')
+    expect(grip.className).toContain('coarse:w-11')
   })
 
   it('a card tapped without moving expands; a dragged card moves and stays a card', () => {

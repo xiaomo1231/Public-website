@@ -507,7 +507,7 @@ function CoursesHeading({ total }: { total: number }): JSX.Element {
       {total > COURSE_PREVIEW && (
         <Link
           to="/projects"
-          className="focus-ring rounded-full text-sm text-muted-foreground transition-colors hover:text-foreground lab:text-xs"
+          className="focus-ring rounded-full text-sm text-muted-foreground transition-colors hover:text-foreground lab:text-xs coarse:inline-flex coarse:min-h-11 coarse:items-center"
         >
           {t('home.courses.viewAll')}
         </Link>
@@ -650,7 +650,7 @@ function CourseTable({
                   <td className={cell}>
                     <Link
                       to={`/projects/${project.id}`}
-                      className="focus-ring block min-w-0 rounded-sm"
+                      className="focus-ring block min-w-0 rounded-sm coarse:min-h-11 coarse:py-1"
                     >
                       <TruncatedText
                         as="span"

@@ -112,7 +112,8 @@ describe('touch targets on coarse pointers', () => {
 describe('Scribble-friendly answer fields', () => {
   it('maps answer kinds to keyboards', () => {
     expect(answerFieldAttrs('number').inputMode).toBe('decimal')
-    expect(answerFieldAttrs('fraction').inputMode).toBe('numeric')
+    const iPad = { userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X)', maxTouchPoints: 5 }
+    expect(answerFieldAttrs('fraction', iPad).inputMode).toBe('numeric')
     expect(answerFieldAttrs('expression')).toMatchObject({
       inputMode: 'text',
       autoCapitalize: 'off',
@@ -122,7 +123,7 @@ describe('Scribble-friendly answer fields', () => {
     expect(answerFieldAttrs('text').spellCheck).toBe(true)
   })
 
-  it('matrix cells are real inputs with a numeric keyboard', () => {
+  it('matrix cells are real inputs with a keyboard for exact numbers', () => {
     render(
       <MatrixInputGrid
         values={[
@@ -138,10 +139,16 @@ describe('Scribble-friendly answer fields', () => {
     expect(cells).toHaveLength(4)
     for (const cell of cells) {
       expect(cell.tagName).toBe('INPUT')
-      expect(cell).toHaveAttribute('inputmode', 'numeric')
+      // jsdom is not iPadOS: the full keyboard, so "/" and "−" can be typed.
+      expect(cell).toHaveAttribute('inputmode', 'text')
       expect(cell).toHaveAttribute('autocapitalize', 'off')
-      expect(cell).toHaveAttribute('enterkeyhint', 'go')
     }
+    expect(cells.map((cell) => cell.getAttribute('enterkeyhint'))).toEqual([
+      'next',
+      'next',
+      'next',
+      'go',
+    ])
   })
 
   it('number answers use the decimal keyboard; expressions never auto-capitalise', () => {

@@ -135,7 +135,7 @@ export function ProjectDetailPage(): JSX.Element {
             <Link
               to="/projects"
               aria-label={t('projectDetail.backToProjects')}
-              className="focus-ring -ml-1 grid h-7 w-7 place-items-center rounded-full text-muted-foreground transition-colors duration-150 hover:bg-accent hover:text-foreground lab:rounded-md"
+              className="focus-ring -ml-1 grid h-7 w-7 place-items-center rounded-full text-muted-foreground transition-colors duration-150 hover:bg-accent hover:text-foreground lab:rounded-md coarse:h-11 coarse:w-11"
             >
               <ArrowLeft className="h-4 w-4" />
             </Link>

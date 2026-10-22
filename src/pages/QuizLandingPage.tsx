@@ -397,7 +397,7 @@ export function QuizLandingPage(): JSX.Element {
 }
 
 const ROW_LINK =
-  'flex flex-wrap items-center gap-3 rounded-lg border px-3 py-2 text-sm transition-colors duration-150 ease-out hover:bg-accent/50 lecture:rounded-xl lecture:px-4 lecture:py-2.5 lab:-mt-px lab:rounded-none lab:hover:bg-background'
+  'flex flex-wrap items-center gap-3 rounded-lg border px-3 py-2 text-sm transition-colors duration-150 ease-out hover:bg-accent/50 lecture:rounded-xl lecture:px-4 lecture:py-2.5 lab:-mt-px lab:rounded-none lab:hover:bg-background coarse:min-h-11'
 
 /**
  * An unfinished quiz: its questions so far are kept, it cannot be taken yet,

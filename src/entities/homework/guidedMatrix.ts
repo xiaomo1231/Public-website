@@ -110,26 +110,33 @@ export function opsLatex(ops: readonly RowOp[]): string {
  * `交换 R1 R2`, `R2 / 3`, `1/2 R2`, `(1/2)R2`, `R₂ → R₂ − 2R₁` and LaTeX.
  */
 export function normalizeTypedOps(input: string): string {
-  return input
-    .normalize('NFKC')
-    .replace(/⁄/g, '/')
-    .replace(/[−‒–—]/g, '-')
-    .replace(/[×✕]/g, '*')
-    .replace(/÷/g, '/')
-    .replace(
-      /(?:swap|exchange|interchange|交换|互换)\s*([Rr]_?\{?\d+\}?)\s*(?:,|，|和|与|及|and|with|&)?\s*([Rr]_?\{?\d+\}?)/gi,
-      '$1 \\leftrightarrow $2',
-    )
-    .replace(
-      /([Rr]_?\{?\d+\}?)\s*(?:和|与|及|and|with)\s*([Rr]_?\{?\d+\}?)\s*(?:互换|交换|对调|swapped|swap)/gi,
-      '$1 \\leftrightarrow $2',
-    )
-    .replace(/<->|<=>|<-->|⇔|⟷|↔/g, ' \\leftrightarrow ')
-    .replace(/-->|->|=>|⟶|⇒|→|↦/g, ' \\to ')
-    .replace(/<-|←/g, ' \\gets ')
-    .replace(/([Rr]_?\{?\d+\}?)\s*(?::=|=)(?!>)/g, '$1 \\to ')
-    .replace(/[“”"']/g, '')
-    .trim()
+  return (
+    input
+      .normalize('NFKC')
+      // Row names however they were typed or handwritten: `R 1`, `R _1`, `r1`,
+      // `row 1`, `第1行` → `R1` (Scribble and autocorrect insert spaces).
+      .replace(/第\s*(\d+)\s*行/g, 'R$1')
+      .replace(/\brow\s*(\d+)/gi, 'R$1')
+      .replace(/(^|[^A-Za-z\\])[Rr]\s*_?\s*\{?\s*(\d+)\s*\}?/g, '$1R$2')
+      .replace(/⁄/g, '/')
+      .replace(/[−‒–—]/g, '-')
+      .replace(/[×✕]/g, '*')
+      .replace(/÷/g, '/')
+      .replace(
+        /(?:swap|exchange|interchange|交换|互换)\s*([Rr]_?\{?\d+\}?)\s*(?:,|，|和|与|及|and|with|&)?\s*([Rr]_?\{?\d+\}?)/gi,
+        '$1 \\leftrightarrow $2',
+      )
+      .replace(
+        /([Rr]_?\{?\d+\}?)\s*(?:和|与|及|and|with)\s*([Rr]_?\{?\d+\}?)\s*(?:互换|交换|对调|swapped|swap)/gi,
+        '$1 \\leftrightarrow $2',
+      )
+      .replace(/<->|<=>|<-->|⇔|⟷|↔/g, ' \\leftrightarrow ')
+      .replace(/-->|->|=>|⟶|⇒|→|↦/g, ' \\to ')
+      .replace(/<-|←/g, ' \\gets ')
+      .replace(/([Rr]_?\{?\d+\}?)\s*(?::=|=)(?!>)/g, '$1 \\to ')
+      .replace(/[“”"']/g, '')
+      .trim()
+  )
 }
 
 /** The operations a student typed, or null when they cannot be read. */

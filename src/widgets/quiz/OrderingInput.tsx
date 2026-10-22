@@ -1,4 +1,11 @@
-import { useMemo, useRef, useState, type DragEvent, type PointerEvent } from 'react'
+import {
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+  type DragEvent,
+  type PointerEvent,
+} from 'react'
 import { ArrowDown, ArrowUp, GripVertical } from 'lucide-react'
 import type { Question } from '@/entities/question/types'
 import { orderingItems, shuffledForDisplay } from '@/services/answerPreview'
@@ -33,6 +40,29 @@ export interface OrderingInputProps {
  * page still scrolls from anywhere else, and a press must travel a little
  * before it becomes a drag.
  */
+interface PointerDrag {
+  from: number
+  dy: number
+  to: number
+  step: number
+}
+
+/**
+ * Where a row sits during a finger / pen drag: the dragged row follows the
+ * finger; rows between its place and the drop place shift one step to open
+ * the gap.
+ */
+function orderingRowStyle(drag: PointerDrag | null, index: number): CSSProperties | undefined {
+  if (!drag) return undefined
+  if (drag.from === index)
+    return { transform: `translateY(${drag.dy}px)`, position: 'relative', zIndex: 1 }
+  if (drag.from < drag.to && index > drag.from && index <= drag.to)
+    return { transform: `translateY(${-drag.step}px)` }
+  if (drag.to < drag.from && index >= drag.to && index < drag.from)
+    return { transform: `translateY(${drag.step}px)` }
+  return undefined
+}
+
 export function OrderingInput({
   question,
   value,
@@ -41,10 +71,9 @@ export function OrderingInput({
 }: OrderingInputProps): JSX.Element {
   const { t } = useTranslation()
   const [dragIndex, setDragIndex] = useState<number | null>(null)
-  // Finger / pen drag: the item, how far it moved and where it would land.
-  const [pointerDrag, setPointerDrag] = useState<{ from: number; dy: number; to: number } | null>(
-    null,
-  )
+  // Finger / pen drag: the item, how far it moved, where it would land and
+  // how far the others shift to open a gap there (its height plus the gap).
+  const [pointerDrag, setPointerDrag] = useState<PointerDrag | null>(null)
   const listRef = useRef<HTMLOListElement>(null)
   const initial = useMemo(() => {
     const source = question.orderItems?.length
@@ -71,10 +100,12 @@ export function OrderingInput({
     const pointerType = event.pointerType
     capturePointer(handle, pointerId)
     // Item centres as laid out now; the drop index is read against them.
-    const midpoints = Array.from(listRef.current?.children ?? []).map((child) => {
-      const rect = child.getBoundingClientRect()
-      return rect.top + rect.height / 2
-    })
+    const rects = Array.from(listRef.current?.children ?? []).map((child) =>
+      child.getBoundingClientRect(),
+    )
+    const midpoints = rects.map((rect) => rect.top + rect.height / 2)
+    const gap = rects.length > 1 ? Math.max(0, rects[1]!.top - rects[0]!.bottom) : 0
+    const step = (rects[from]?.height ?? 0) + gap
     const origin = { x: event.clientX, y: event.clientY }
     let dragging = false
     let to = from
@@ -84,7 +115,7 @@ export function OrderingInput({
       if (!dragging && !passedDragThreshold(origin, point, pointerType)) return
       dragging = true
       to = dropIndexAt(midpoints, from, point.y)
-      setPointerDrag({ from, dy: point.y - origin.y, to })
+      setPointerDrag({ from, dy: point.y - origin.y, to, step })
     }
     const finish = (commit: boolean): void => {
       window.removeEventListener('pointermove', onMove)
@@ -121,15 +152,17 @@ export function OrderingInput({
             data-drop-target={
               pointerDrag && pointerDrag.to === index && pointerDrag.from !== index ? '' : undefined
             }
-            style={
-              pointerDrag?.from === index
-                ? { transform: `translateY(${pointerDrag.dy}px)`, position: 'relative', zIndex: 1 }
-                : undefined
-            }
+            style={orderingRowStyle(pointerDrag, index)}
             className={cn(
               'flex items-center gap-2 rounded-lg border border-border/80 bg-card px-2 py-2 text-sm transition-colors',
               !disabled && 'cursor-grab active:cursor-grabbing',
-              (dragIndex === index || pointerDrag?.from === index) && 'opacity-60 shadow-lg',
+              dragIndex === index && 'opacity-60 shadow-lg',
+              // Finger / pen: the lifted row stays opaque and follows the
+              // finger; the others slide (≤200ms) to open the gap.
+              pointerDrag?.from === index && 'shadow-lift ring-1 ring-primary/40',
+              pointerDrag &&
+                pointerDrag.from !== index &&
+                'transition-[transform,color,background-color,border-color] duration-200 ease-out motion-reduce:transition-none',
               'data-[drop-target]:border-primary',
             )}
           >
@@ -139,7 +172,7 @@ export function OrderingInput({
               aria-hidden
               onPointerDown={(event) => startPointerDrag(event, index)}
               className={cn(
-                '-my-1 -ml-1 grid shrink-0 place-items-center self-stretch rounded-md px-1 text-muted-foreground',
+                '-my-1 -ml-1 grid shrink-0 place-items-center self-stretch rounded-md px-1 text-muted-foreground coarse:w-11',
                 !disabled && 'touch-none',
               )}
             >
