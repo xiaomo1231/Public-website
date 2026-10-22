@@ -8,6 +8,7 @@ import {
   extractJSON,
 } from '@/infrastructure/ai'
 import { InvalidJSONError, OutputTruncatedError } from '@/infrastructure/ai/errors'
+import { resolveProviderConfig, type ResolvedOutputLimit } from '@/infrastructure/ai/outputLimit'
 import { ThinkStreamFilter, stripThinkBlocks } from '@/infrastructure/ai/responseText'
 import { logger } from '@/infrastructure/logger/logger'
 import type { TokenUsage } from '@/infrastructure/ai/types'
@@ -58,11 +59,14 @@ interface UsageTag {
 export class AIService {
   private provider: AIProvider
   private config: ProviderConfig
+  private limit: ResolvedOutputLimit
   private usageKind: AIUsageKind
 
   constructor(opts: AIServiceOptions) {
-    this.config = opts.config
-    this.provider = createProvider(opts.config)
+    const { outputLimit, ...config } = resolveProviderConfig(opts.config)
+    this.config = config
+    this.limit = outputLimit
+    this.provider = createProvider(config)
     this.usageKind = opts.usageKind ?? 'other'
   }
 
@@ -88,8 +92,16 @@ export class AIService {
 
   /** Replace the provider when the user updates their settings. */
   reset(config: ProviderConfig): void {
-    this.config = config
-    this.provider = createProvider(config)
+    const { outputLimit, ...resolved } = resolveProviderConfig(config)
+    this.config = resolved
+    this.limit = outputLimit
+    this.provider = createProvider(resolved)
+  }
+
+  /** A requested budget, never above the model's own output limit. */
+  private cap(maxTokens: number): number {
+    const modelMax = this.config.modelMaxOutputTokens
+    return modelMax !== undefined && maxTokens > modelMax ? modelMax : maxTokens
   }
 
   get currentProvider(): AIProvider {
@@ -109,7 +121,7 @@ export class AIService {
       messages,
       ...(options?.model ? { model: options.model } : {}),
       ...(options?.temperature !== undefined ? { temperature: options.temperature } : {}),
-      ...(options?.maxTokens !== undefined ? { maxTokens: options.maxTokens } : {}),
+      ...(options?.maxTokens !== undefined ? { maxTokens: this.cap(options.maxTokens) } : {}),
       ...(options?.signal ? { signal: options.signal } : {}),
     }
     // Hidden reasoning never reaches a caller, so no renderer can show it.
@@ -128,7 +140,7 @@ export class AIService {
     options?: { model?: string; maxTokens?: number; signal?: AbortSignal } & UsageTag,
   ): Promise<{ data: T; raw: ChatResponse }> {
     const useNativeJson = this.provider.capabilities.jsonMode
-    const maxTokens = options?.maxTokens ?? this.config.maxTokens
+    const maxTokens = this.cap(options?.maxTokens ?? this.config.maxTokens)
     const req: ChatRequest = {
       messages,
       maxTokens,
@@ -184,7 +196,7 @@ export class AIService {
       return this.chatJSON<T>(messages, options)
     }
 
-    const maxTokens = options?.maxTokens ?? this.config.maxTokens
+    const maxTokens = this.cap(options?.maxTokens ?? this.config.maxTokens)
     const useNativeJson = this.provider.capabilities.jsonMode
     const req: ChatRequest = {
       messages,
@@ -207,9 +219,22 @@ export class AIService {
     return { data, raw: { ...res, content } }
   }
 
-  /** The output token cap currently configured by the user. */
+  /**
+   * The output token cap requests may use: the model's own limit in 「使用模型
+   * 允许的最大值」 mode, else the user's number (never above a known model limit).
+   */
   get maxOutputTokens(): number {
     return this.config.maxTokens
+  }
+
+  /** The model's own output limit, when known (`/models` metadata or the documented table). */
+  get modelMaxOutputTokens(): number | undefined {
+    return this.config.modelMaxOutputTokens
+  }
+
+  /** How the output cap was resolved. */
+  get outputLimit(): ResolvedOutputLimit {
+    return this.limit
   }
 
   async streamChat(

@@ -1156,6 +1156,16 @@ function WalkthroughSectionView({
               {t('homework.walkthrough.partialDone', { done: 0, total: draft.labels.length })}
             </p>
           )}
+          {section.frameDraft && (
+            <p className="text-sm text-muted-foreground">
+              {t('homework.walkthrough.frameGroupsDone', {
+                done: section.frameDraft.groups.filter(
+                  (group) => section.frameDraft!.pieces[group.join(',')] !== undefined,
+                ).length,
+                total: section.frameDraft.groups.length,
+              })}
+            </p>
+          )}
           {onGenerate && !running && (
             <Button variant="outline" size="sm" onClick={onGenerate}>
               <RefreshCw className="h-4 w-4" aria-hidden />
@@ -1238,18 +1248,6 @@ function WalkthroughSectionView({
               )}
             </div>
           )}
-          {content?.conclusion && (
-            <div className="max-w-[70ch] rounded-lg border-l-4 border-primary bg-theme-primary-soft/40 px-4 py-3 lecture:rounded-none lecture:border-l-[3px] lecture:bg-transparent lecture:py-1 lab:rounded-none lab:border lab:border-l-2 lab:border-border lab:border-l-primary">
-              <span className="text-sm font-semibold lecture:block lecture:text-xs lecture:font-normal lecture:tracking-[0.14em] lecture:text-muted-foreground lab:font-mono lab:text-[11px] lab:uppercase lab:tracking-wider">
-                {t('homework.walkthrough.conclusion')}
-              </span>
-              <RichText
-                text={formatWalkthroughText(content.conclusion)}
-                format="markdown"
-                paragraphClassName="text-[15px] font-semibold leading-relaxed lecture:text-[17px] lecture:text-foreground"
-              />
-            </div>
-          )}
           <WalkthroughBody
             text={content?.body ?? section.body}
             {...(content?.conclusion ? { conclusion: content.conclusion } : {})}
@@ -1274,6 +1272,19 @@ function WalkthroughSectionView({
             </div>
           )}
           {content?.checks && content.checks.length > 0 && <ChecksView checks={content.checks} />}
+          {/* The conclusion closes the question, after the worked solution. */}
+          {content?.conclusion && (
+            <div className="max-w-[70ch] rounded-lg border-l-4 border-primary bg-theme-primary-soft/40 px-4 py-3 lecture:rounded-none lecture:border-l-[3px] lecture:bg-transparent lecture:py-1 lab:rounded-none lab:border lab:border-l-2 lab:border-border lab:border-l-primary">
+              <span className="text-sm font-semibold lecture:block lecture:text-xs lecture:font-normal lecture:tracking-[0.14em] lecture:text-muted-foreground lab:font-mono lab:text-[11px] lab:uppercase lab:tracking-wider">
+                {t('homework.walkthrough.conclusion')}
+              </span>
+              <RichText
+                text={formatWalkthroughText(content.conclusion)}
+                format="markdown"
+                paragraphClassName="text-[15px] font-semibold leading-relaxed lecture:text-[17px] lecture:text-foreground"
+              />
+            </div>
+          )}
           {section.issues && section.issues.length > 0 && (
             <ImportIssuesView issues={section.issues} />
           )}

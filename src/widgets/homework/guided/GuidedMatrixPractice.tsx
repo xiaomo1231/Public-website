@@ -30,6 +30,8 @@ import { Math as TeX } from '@/shared/ui/Math'
 import { RichText } from '@/shared/ui/RichText'
 import { cn } from '@/shared/lib/utils'
 import { answerFieldAttrs } from '@/shared/lib/answerFieldAttrs'
+import { findPlaceholder, rowOpQuickItems } from '@/shared/lib/quickInsert'
+import { QuickInsertBar } from '@/widgets/mathInput/QuickInsertBar'
 import { useTranslation, type TranslationKey } from '@/i18n'
 import { MatrixDisplay, MatrixInputGrid } from './MatrixParts'
 
@@ -106,6 +108,8 @@ function ChainWorkspace({ chain, progress, active, onChange }: ChainWorkspacePro
   const applied: Applied | null = acceptedOps ? applyOps(current, acceptedOps) : null
   const reference = nextReferenceStep(chain, current)
   const stepNumber = progress.records.length + 1
+  // R1 … Rn of this matrix, the arrows and the three elementary templates.
+  const rowOps = rowOpQuickItems(current.length)
   const unchangedRows = new Set(
     applied ? applied.provenance.flatMap((origin, row) => (origin ? [] : [row])) : [],
   )
@@ -300,6 +304,24 @@ function ChainWorkspace({ chain, progress, active, onChange }: ChainWorkspacePro
                   if (event.key === 'Enter' && !event.nativeEvent.isComposing) {
                     event.preventDefault()
                     checkOp()
+                    return
+                  }
+                  // Tab / Shift+Tab move between the `?` of an inserted template;
+                  // past the last one Tab leaves the field as usual.
+                  if (event.key === 'Tab' && !event.altKey && !event.ctrlKey && !event.metaKey) {
+                    const field = event.currentTarget
+                    const from = event.shiftKey
+                      ? (field.selectionStart ?? 0)
+                      : (field.selectionEnd ?? 0)
+                    const target = findPlaceholder(field.value, from, event.shiftKey)
+                    const wrapped = target
+                      ? event.shiftKey
+                        ? target.start >= from
+                        : target.start < from
+                      : true
+                    if (!target || wrapped) return
+                    event.preventDefault()
+                    field.setSelectionRange(target.start, target.end)
                   }
                 }}
               />
@@ -314,6 +336,18 @@ function ChainWorkspace({ chain, progress, active, onChange }: ChainWorkspacePro
                 </Button>
               )}
             </div>
+            {!pending.op && (
+              <QuickInsertBar
+                items={rowOps}
+                field={() => opRef.current}
+                value={() => pending.typedOp ?? ''}
+                onChange={(typedOp) => {
+                  setOpMessage(null)
+                  setPending({ ...pending, typedOp })
+                }}
+                label={t('quickInsert.rowOpLabel')}
+              />
+            )}
             <OpPreview typed={pending.typedOp ?? ''} accepted={pending.op} />
             {opMessage && (
               <p

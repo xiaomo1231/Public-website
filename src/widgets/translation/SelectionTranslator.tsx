@@ -15,6 +15,8 @@ import type { ContextualTutorKind } from '@/infrastructure/ai/prompts/contextual
 import { describeAnchor, type TextAnchor } from '@/shared/lib/textAnchor'
 import { openPassage } from '@/features/homework/floatingQA'
 import { isTouchLike } from '@/shared/lib/pointerGesture'
+import { selectionTextWithMath } from '@/shared/lib/selectionText'
+import { RichText } from '@/shared/ui/RichText'
 import {
   computeSelectionPopupPosition,
   isPopupAnchorVisible,
@@ -205,8 +207,11 @@ export function SelectionTranslator(): JSX.Element | null {
       // hidden KaTeX annotation); fall back to the stored range.
       const sel = window.getSelection()
       const live = sel && !sel.isCollapsed && sel.rangeCount > 0 && sel.getRangeAt(0) === range
-      const text = (live ? sel.toString() : range.toString()).trim()
-      if (!text) return
+      const plain = (live ? sel.toString() : range.toString()).trim()
+      if (!plain) return
+      // Formulas once, as LaTeX — the plain string repeats each one (MathML +
+      // HTML copies). Anchors below still use the plain range text.
+      const text = selectionTextWithMath(range) || plain
 
       const key = selectionKey(range, text)
       if (key === shownKeyRef.current) return
@@ -566,9 +571,12 @@ export function SelectionTranslator(): JSX.Element | null {
               <X className="h-3 w-3" />
             </Button>
           </div>
-          <p className="line-clamp-2 rounded bg-muted/60 px-2 py-1 text-xs text-muted-foreground">
-            “{selection.text}”
-          </p>
+          <RichText
+            text={`“${selection.text}”`}
+            format="markdown"
+            className="line-clamp-2 rounded bg-muted/60 px-2 py-1"
+            paragraphClassName="text-xs text-muted-foreground"
+          />
           {translating && (
             <p className="mt-2 flex items-center gap-2 text-[13px] text-muted-foreground">
               <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
@@ -577,9 +585,11 @@ export function SelectionTranslator(): JSX.Element | null {
           )}
           {translation && (
             <div className="mt-2 space-y-1.5">
-              <p className="text-sm font-medium leading-relaxed text-foreground">
-                {translation.translation}
-              </p>
+              <RichText
+                text={translation.translation}
+                format="markdown"
+                paragraphClassName="text-sm font-medium leading-relaxed text-foreground"
+              />
               {translation.contextNote && (
                 <p className="text-xs text-muted-foreground">{translation.contextNote}</p>
               )}

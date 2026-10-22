@@ -724,7 +724,7 @@ export const en = {
   'guided.opLabel': 'Row operation for this step',
   'guided.opPlaceholder': 'e.g. R2 -> R2 - 2R1',
   'guided.opSyntax':
-    'Write it like R2 -> R2 - 2R1, R1 <-> R2 or R2 -> 1/3 R2. Several at once: separate with commas.',
+    'Write it like R2 -> R2 - 2R1, R1 <-> R2 or R2 -> 1/3 R2. Several at once: separate with commas. A template fills in at the ?: type over it, Tab goes to the next.',
   'guided.opReadAs': 'Read as',
   'guided.opAccepted': 'Operation',
   'guided.checkOp': 'Check operation',
@@ -888,6 +888,8 @@ export const en = {
     'This section could not be regenerated; it is unchanged.',
   'homework.walkthrough.restorePrevious': 'Restore previous version',
   'homework.walkthrough.restored': 'Switched to the other version',
+  'homework.walkthrough.frameGroupsDone':
+    'Too long for one reply: {done} of {total} question groups done',
   'homework.walkthrough.partialDone': '{done} / {total} sub-questions written',
   'homework.walkthrough.continueGenerating': 'Continue writing',
   'homework.walkthrough.writingPart': 'Writing ({part})',
@@ -934,7 +936,6 @@ export const en = {
   'homework.walkthrough.step.mismatch':
     'Row {row}, column {col}: the walkthrough writes {written}; the operation gives {expected}.',
   'homework.walkthrough.step.expected': 'should be {value}',
-  'homework.walkthrough.step.checked': 'Checked locally: this step’s arithmetic is right.',
   'settings.walkthrough.title': 'Homework walkthrough',
   'settings.walkthrough.description':
     'Which version a walkthrough section shows by default. You can still switch each section, and a version you have not written yet is written only when you ask.',
@@ -1719,6 +1720,14 @@ export const en = {
   'symbolBar.hide': 'Hide symbols',
   'symbolBar.groups': 'Symbol groups',
   'symbolBar.inserts': 'Insert {text}',
+  'quickInsert.label': 'Quick insert',
+  'quickInsert.rowOpLabel': 'Quick insert for the row operation',
+  'quickInsert.cellLabel': 'Quick insert for row {row}, column {col}',
+  'quickInsert.addMultiple': 'Add a multiple of a row',
+  'quickInsert.swap': 'Swap',
+  'quickInsert.scale': 'Scale',
+  'quickInsert.backspace': 'Delete the character before the cursor',
+  'quickInsert.fraction': 'Fraction',
   'symbolBar.submitHint': 'Press Enter to submit',
   'symbolBar.submitHintMultiline': 'Press Ctrl+Enter to submit',
   'symbolGroup.basic': 'Common',
@@ -2070,7 +2079,20 @@ export const en = {
   'settings.sampling.temperatureHint':
     '0 = deterministic, 2 = highly creative. Recommended 0.3–0.8 for study content.',
   'settings.sampling.maxTokens': 'Max tokens',
-  'settings.sampling.maxTokensHint': 'Maximum tokens per response. Range 64 – 32000.',
+  'settings.sampling.maxTokensHint':
+    'Maximum tokens per response, 64 – 128000; never above the model’s own limit when it is known.',
+  'settings.sampling.maxTokensHintModel':
+    'Requests use the model’s own output limit: from the model list when the provider states it, else from the official docs; when neither is known, the number above. A limit is always sent — without one some providers fall back to a small default (DeepSeek: 4096) and long walkthroughs get cut off.',
+  'settings.sampling.modeModel': 'Use the model’s maximum',
+  'settings.sampling.modeManual': 'Set manually',
+  'settings.sampling.modelMaxKnown':
+    'This model returns at most {max} tokens per reply ({source}). Request limit: {tokens}.',
+  'settings.sampling.modelMaxAbove':
+    'This model returns at most {max} tokens per reply ({source}). Request limit: {tokens} (your number).',
+  'settings.sampling.modelMaxUnknown':
+    'This model’s output limit is unknown. Request limit: {tokens} (the number above).',
+  'settings.sampling.sourceMetadata': 'from the model list',
+  'settings.sampling.sourceTable': 'from the official docs',
   'settings.webImages.title': 'Web reference images',
   'settings.webImages.description':
     'Chemistry and biology lessons can show reference pictures from PubChem and Wikimedia Commons. Off by default.',
@@ -2362,7 +2384,7 @@ export const en = {
   'errors.mistakeKnowledgePointRequired': 'Knowledge point is required',
   'errors.baseUrlInvalid': 'Base URL must start with http:// or https://',
   'errors.temperatureRange': 'Temperature must be between 0 and 2',
-  'errors.maxTokensRange': 'Max tokens must be an integer between 64 and 32000',
+  'errors.maxTokensRange': 'Max tokens must be an integer between 64 and 128000',
   'errors.failedToLoadProfile': 'Failed to load profile',
   'errors.failedToLoadProjects': 'Failed to load projects',
   'errors.failedToLoadProject': 'Failed to load project',
@@ -2531,6 +2553,10 @@ export const en = {
   'friendlyError.invalidInput': 'The input was not valid.',
   'friendlyError.generic': 'The request failed. Please try again.',
   'friendlyError.offline': 'AI connection unavailable. Check your network connection.',
+  'friendlyError.outputTruncatedModelMax':
+    'This model returns at most about {limit} tokens per reply, and this part is still too long. Try a model that supports longer output.',
+  'friendlyError.outputTruncatedSettingMax':
+    'The reply reached your output limit (about {limit} tokens) and this part is still too long. Raise Max tokens in Settings or choose “Use the model’s maximum”, or try a model with longer output.',
   'friendlyError.outputTruncated':
     'The model stopped before finishing its reply. Retry this question; if it keeps happening, try a model with a larger output window.',
   'homework.originalPages': 'Original PDF pages and diagrams',

@@ -127,13 +127,13 @@ describe('pausing the walkthrough', () => {
       ['q:q4', null],
       ['summary', null],
     ])
-    expect(walkthroughPausedRun(setId)).toMatchObject({ done: 2, total: 5, stopped: false })
+    expect(walkthroughPausedRun(setId)).toMatchObject({ done: 2, total: 6, stopped: false })
 
     calls.length = 0
     run = createGenerationRun()
     const second = await service(ai).resume(setId, { control: run })
-    expect(second).toEqual({ generated: 3, failed: 0 })
-    expect(calls).toEqual(['3', '4', 'frame'])
+    expect(second).toEqual({ generated: 4, failed: 0 })
+    expect(calls).toEqual(['3', '4', 'frame', 'frame'])
     expect(walkthroughPausedRun(setId)).toBeUndefined()
     expect((await sections()).every(([, status]) => status === 'ready')).toBe(true)
   })
@@ -158,7 +158,7 @@ describe('pausing the walkthrough', () => {
   it('a paused "regenerate all" does not redo what it already rewrote', async () => {
     const { ai, calls } = stubAI((_call, system) => answer(system))
     await service(ai).generate(setId)
-    expect(calls).toHaveLength(5)
+    expect(calls).toHaveLength(6)
     await new Promise((resolve) => setTimeout(resolve, 5))
 
     calls.length = 0
@@ -176,8 +176,8 @@ describe('pausing the walkthrough', () => {
     forced.calls.length = 0
     run = createGenerationRun()
     const second = await service(forced.ai).resume(setId, { control: run })
-    expect(second).toEqual({ generated: 3, failed: 0 })
-    // Only the sections the forced run had not rewritten, then the frame.
-    expect(forced.calls).toEqual(['3', '4', 'frame'])
+    expect(second).toEqual({ generated: 4, failed: 0 })
+    // Only the sections the forced run had not rewritten, then the opening and summary.
+    expect(forced.calls).toEqual(['3', '4', 'frame', 'frame'])
   })
 })

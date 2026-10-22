@@ -1,4 +1,4 @@
-import { useId, type KeyboardEvent } from 'react'
+import { useId, useState, type FocusEvent, type KeyboardEvent } from 'react'
 import type { Matrix } from '@/entities/homework/guidedMatrix'
 import type { CellCheck } from '@/entities/homework/guidedMatrix'
 import { cellLatex } from '@/entities/homework/walkthroughSteps'
@@ -6,6 +6,8 @@ import { Math as TeX } from '@/shared/ui/Math'
 import { cn } from '@/shared/lib/utils'
 import { answerFieldAttrs } from '@/shared/lib/answerFieldAttrs'
 import { useTranslation } from '@/i18n'
+import { MATRIX_CELL_QUICK_ITEMS } from '@/shared/lib/quickInsert'
+import { QuickInsertBar } from '@/widgets/mathInput/QuickInsertBar'
 
 /** LaTeX of a matrix, with the augmented bar where the walkthrough had it. */
 function matrixLatex(matrix: Matrix, bar?: number): string {
@@ -78,6 +80,12 @@ export function MatrixInputGrid({
   const height = values.length
   const cellId = (r: number, c: number): string => `${id}-${r}-${c}`
   const isLast = (r: number, c: number): boolean => r === height - 1 && c === width - 1
+  // The cell being typed in: the − / bar shows while one has focus.
+  const [focused, setFocused] = useState<{ r: number; c: number } | null>(null)
+  const onBlurWithin = (event: FocusEvent<HTMLDivElement>): void => {
+    // Moving to another cell or to the bar keeps it.
+    if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setFocused(null)
+  }
   const onKeyDown = (event: KeyboardEvent<HTMLInputElement>, r: number, c: number): void => {
     if (event.key !== 'Enter' || event.nativeEvent.isComposing) return
     event.preventDefault()
@@ -91,61 +99,76 @@ export function MatrixInputGrid({
     else onSubmit()
   }
   return (
-    <div className="max-w-full overflow-x-auto overflow-y-hidden py-1">
-      <div
-        role="group"
-        aria-label={label}
-        className="relative inline-block px-2.5 py-1 before:absolute before:inset-y-0 before:left-0 before:w-2 before:border-y-2 before:border-l-2 before:border-foreground/70 after:absolute after:inset-y-0 after:right-0 after:w-2 after:border-y-2 after:border-r-2 after:border-foreground/70"
-      >
-        <table className="border-separate border-spacing-1">
-          <tbody>
-            {values.map((row, r) => (
-              <tr key={r} data-unchanged={unchangedRows?.has(r) ? '' : undefined}>
-                {row.map((value, c) => {
-                  const status = checks?.[r]?.[c]?.status
-                  const bad = status === 'wrong' || status === 'unreadable' || status === 'inexact'
-                  return (
-                    <td
-                      key={c}
-                      className={cn(
-                        bar !== undefined &&
-                          c === bar - 1 &&
-                          'border-r-2 border-foreground/50 pr-1.5',
-                        bar !== undefined && c === bar && 'pl-1.5',
-                      )}
-                    >
-                      <input
-                        id={cellId(r, c)}
-                        type="text"
-                        // Exact numbers (−3/2): a keyboard with − and / (see
-                        // answerFieldAttrs), and Scribble writes straight in.
-                        {...answerFieldAttrs('fraction')}
-                        enterKeyHint={isLast(r, c) ? 'go' : 'next'}
-                        value={value}
-                        disabled={disabled}
-                        aria-label={t('guided.cellLabel', { row: r + 1, col: c + 1 })}
-                        aria-invalid={bad || undefined}
-                        data-status={status}
-                        onChange={(event) => onChange(r, c, event.target.value)}
-                        onKeyDown={(event) => onKeyDown(event, r, c)}
+    <div onBlur={onBlurWithin} className="space-y-1.5">
+      <div className="max-w-full overflow-x-auto overflow-y-hidden py-1">
+        <div
+          role="group"
+          aria-label={label}
+          className="relative inline-block px-2.5 py-1 before:absolute before:inset-y-0 before:left-0 before:w-2 before:border-y-2 before:border-l-2 before:border-foreground/70 after:absolute after:inset-y-0 after:right-0 after:w-2 after:border-y-2 after:border-r-2 after:border-foreground/70"
+        >
+          <table className="border-separate border-spacing-1">
+            <tbody>
+              {values.map((row, r) => (
+                <tr key={r} data-unchanged={unchangedRows?.has(r) ? '' : undefined}>
+                  {row.map((value, c) => {
+                    const status = checks?.[r]?.[c]?.status
+                    const bad =
+                      status === 'wrong' || status === 'unreadable' || status === 'inexact'
+                    return (
+                      <td
+                        key={c}
                         className={cn(
-                          'focus-ring h-11 w-[4.5rem] rounded-md border border-input bg-background px-1.5 text-center font-mono text-[15px] tabular-nums text-foreground transition-colors lab:rounded-sm',
-                          unchangedRows?.has(r) && 'bg-muted/40',
-                          status === 'correct' &&
-                            'border-emerald-500/70 bg-emerald-500/10 dark:border-emerald-400/60',
-                          bad && 'border-destructive bg-destructive/10 ring-1 ring-destructive',
-                          disabled && 'opacity-80',
-                          c === width - 1 && 'mr-0',
+                          bar !== undefined &&
+                            c === bar - 1 &&
+                            'border-r-2 border-foreground/50 pr-1.5',
+                          bar !== undefined && c === bar && 'pl-1.5',
                         )}
-                      />
-                    </td>
-                  )
-                })}
-              </tr>
-            ))}
-          </tbody>
-        </table>
+                      >
+                        <input
+                          id={cellId(r, c)}
+                          type="text"
+                          // Exact numbers (−3/2): a keyboard with − and / (see
+                          // answerFieldAttrs), and Scribble writes straight in.
+                          {...answerFieldAttrs('fraction')}
+                          enterKeyHint={isLast(r, c) ? 'go' : 'next'}
+                          value={value}
+                          disabled={disabled}
+                          aria-label={t('guided.cellLabel', { row: r + 1, col: c + 1 })}
+                          aria-invalid={bad || undefined}
+                          data-status={status}
+                          onChange={(event) => onChange(r, c, event.target.value)}
+                          onFocus={() => setFocused({ r, c })}
+                          onKeyDown={(event) => onKeyDown(event, r, c)}
+                          className={cn(
+                            'focus-ring h-11 w-[4.5rem] rounded-md border border-input bg-background px-1.5 text-center font-mono text-[15px] tabular-nums text-foreground transition-colors lab:rounded-sm',
+                            unchangedRows?.has(r) && 'bg-muted/40',
+                            status === 'correct' &&
+                              'border-emerald-500/70 bg-emerald-500/10 dark:border-emerald-400/60',
+                            bad && 'border-destructive bg-destructive/10 ring-1 ring-destructive',
+                            disabled && 'opacity-80',
+                            c === width - 1 && 'mr-0',
+                          )}
+                        />
+                      </td>
+                    )
+                  })}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
+      {focused && !disabled && (
+        <QuickInsertBar
+          items={MATRIX_CELL_QUICK_ITEMS}
+          field={() =>
+            document.getElementById(cellId(focused.r, focused.c)) as HTMLInputElement | null
+          }
+          value={() => values[focused.r]?.[focused.c] ?? ''}
+          onChange={(value) => onChange(focused.r, focused.c, value)}
+          label={t('quickInsert.cellLabel', { row: focused.r + 1, col: focused.c + 1 })}
+        />
+      )}
     </div>
   )
 }

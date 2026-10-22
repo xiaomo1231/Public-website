@@ -93,6 +93,24 @@ export interface WalkthroughDraft {
 }
 
 /**
+ * The opening or summary being written one question group at a time (a part
+ * too long for one reply). Kept on the section so a pause, a reload or a
+ * failure continues with the groups not yet written; on a ready section it is
+ * an unfinished rewrite that never replaces the ready text until it is done.
+ */
+export interface WalkthroughFrameDraft {
+  mode: 'generate' | 'regenerate'
+  suggestion?: string
+  /** The section inputs the draft was written for. */
+  inputHash: string
+  /** Question section ids by group, in reading order. */
+  groups: string[][]
+  /** Finished groups' replies (normalized), by `groups[i].join(',')`. */
+  pieces: Record<string, unknown>
+  startedAt: number
+}
+
+/**
  * 普通版 / 详细版. The standard version is the section's own fields; the
  * detailed one is stored next to it (`variants.detailed`). Both share the
  * section's input hash: a variant written for other inputs is not shown.
@@ -172,6 +190,8 @@ export interface WalkthroughSection {
   parts?: WalkthroughPart[]
   /** Split question in progress (see `WalkthroughDraft`). */
   draft?: WalkthroughDraft
+  /** Opening / summary written in question groups, in progress (see `WalkthroughFrameDraft`). */
+  frameDraft?: WalkthroughFrameDraft
   /** The ready version a section regeneration replaced. */
   previous?: WalkthroughSectionVersion
   /** Absent means generated here; `imported` shows 「来自导入」. */
@@ -389,6 +409,12 @@ export interface NoteWindowRect {
   height: number
 }
 
+/** The size the learner gave the note's small card (缩成小卡片). */
+export interface NoteCardSize {
+  width: number
+  height: number
+}
+
 /**
  * A question the learner asked about a passage of the walkthrough and chose to
  * keep. The passage is found again by its text (with a little context either
@@ -411,6 +437,8 @@ export interface WalkthroughNote {
   title: string
   turns: WalkthroughNoteTurn[]
   rect?: NoteWindowRect
+  /** Hand-set card size; absent means the card fits its content. */
+  cardSize?: NoteCardSize
   createdAt: number
   updatedAt: number
 }

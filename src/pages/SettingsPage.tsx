@@ -43,6 +43,11 @@ import {
 import { SettingsGroup } from '@/widgets/settings/SettingsGroup'
 import { SaveBar } from '@/widgets/settings/SaveBar'
 import { fetchModelList, type ModelListResult } from '@/infrastructure/ai/models'
+import {
+  MANUAL_MAX_TOKENS_MAX,
+  MANUAL_MAX_TOKENS_MIN,
+  resolveOutputLimit,
+} from '@/infrastructure/ai/outputLimit'
 import { APP_VERSION } from '@/shared/config/config'
 import { LANGUAGE_LABELS, UI_LANGUAGES, useTranslation, type UILanguage } from '@/i18n'
 
@@ -54,7 +59,8 @@ const SECTION_BODY = SETTINGS_SECTION_BODY
 export function SettingsPage(): JSX.Element {
   const { t } = useTranslation()
   const { language, setLanguage } = useUILanguage()
-  const { settings, loaded, loading, saving, update, reset } = useAISettings()
+  const { settings, loaded, loading, saving, update, reset, rememberModelOutputLimits } =
+    useAISettings()
   const [draft, setDraft] = useState<AISettings | null>(null)
   const [showKey, setShowKey] = useState(false)
   const [dirty, setDirty] = useState(false)
@@ -120,7 +126,16 @@ export function SettingsPage(): JSX.Element {
     fetchedFor.current = signature
     setFetchingModels(true)
     try {
-      setModelList(await fetchModelList({ baseURL, apiKey }))
+      const result = await fetchModelList({ baseURL, apiKey })
+      setModelList(result)
+      if (result.ok) {
+        // Output limits from the metadata, when the provider states them. Kept
+        // out of the unsaved edits: they describe the provider, not a choice.
+        setDraft((d) =>
+          d && d.baseURL.trim() === baseURL ? { ...d, modelOutputLimits: result.limits } : d,
+        )
+        void rememberModelOutputLimits(baseURL, result.limits)
+      }
     } finally {
       setFetchingModels(false)
     }
@@ -465,21 +480,7 @@ export function SettingsPage(): JSX.Element {
                   </p>
                 </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="maxTokens">{t('settings.sampling.maxTokens')}</Label>
-                  <Input
-                    id="maxTokens"
-                    type="number"
-                    min={64}
-                    max={32000}
-                    step={64}
-                    value={draft.maxTokens}
-                    onChange={(e) => patch('maxTokens', Number(e.target.value))}
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    {t('settings.sampling.maxTokensHint')}
-                  </p>
-                </div>
+                <MaxTokensSetting draft={draft} patch={patch} />
               </CardContent>
             </Card>
 
@@ -573,5 +574,82 @@ function ModelListNote({ result }: { result: ModelListResult }): JSX.Element {
     >
       {text}
     </p>
+  )
+}
+
+/**
+ * 最大 Token 数: 「使用模型允许的最大值」 or a number of the student's own. The
+ * readout says what requests will actually use for the current model.
+ */
+function MaxTokensSetting({
+  draft,
+  patch,
+}: {
+  draft: AISettings
+  patch: <K extends keyof AISettings>(key: K, value: AISettings[K]) => void
+}) {
+  const { t } = useTranslation()
+  const resolved = resolveOutputLimit({
+    mode: draft.maxTokensMode,
+    manualMaxTokens: draft.maxTokens,
+    model: draft.model,
+    metadata: draft.modelOutputLimits,
+  })
+  const known = resolved.modelMax
+  const readout =
+    known === undefined
+      ? t('settings.sampling.modelMaxUnknown', { tokens: resolved.maxTokens })
+      : t(
+          draft.maxTokensMode === 'model' || resolved.maxTokens === known
+            ? 'settings.sampling.modelMaxKnown'
+            : 'settings.sampling.modelMaxAbove',
+          {
+            tokens: resolved.maxTokens,
+            max: known,
+            source: t(
+              draft.modelOutputLimits[draft.model.trim()]
+                ? 'settings.sampling.sourceMetadata'
+                : 'settings.sampling.sourceTable',
+            ),
+          },
+        )
+  return (
+    <div className="space-y-2">
+      <Label htmlFor="maxTokens">{t('settings.sampling.maxTokens')}</Label>
+      <div role="radiogroup" aria-label={t('settings.sampling.maxTokens')} className="space-y-1.5">
+        {(['model', 'manual'] as const).map((mode) => (
+          <label key={mode} className="flex cursor-pointer items-center gap-2 text-sm">
+            <input
+              type="radio"
+              name="maxTokensMode"
+              className="focus-ring h-4 w-4 accent-primary"
+              checked={draft.maxTokensMode === mode}
+              onChange={() => patch('maxTokensMode', mode)}
+            />
+            {t(mode === 'model' ? 'settings.sampling.modeModel' : 'settings.sampling.modeManual')}
+          </label>
+        ))}
+      </div>
+      <Input
+        id="maxTokens"
+        type="number"
+        min={MANUAL_MAX_TOKENS_MIN}
+        max={MANUAL_MAX_TOKENS_MAX}
+        step={64}
+        aria-describedby="maxTokensHint"
+        value={draft.maxTokens}
+        onChange={(e) => patch('maxTokens', Number(e.target.value))}
+      />
+      <p className="text-xs text-foreground/80" aria-live="polite">
+        {readout}
+      </p>
+      <p id="maxTokensHint" className="text-xs text-muted-foreground">
+        {t(
+          draft.maxTokensMode === 'model'
+            ? 'settings.sampling.maxTokensHintModel'
+            : 'settings.sampling.maxTokensHint',
+        )}
+      </p>
+    </div>
   )
 }

@@ -61,7 +61,10 @@ export const DEFAULT_AI_SETTINGS: Omit<AISettingsRow, 'updatedAt'> = {
   baseURL: 'https://api.openai.com/v1',
   model: 'gpt-4o-mini',
   temperature: 0.7,
-  maxTokens: 2048,
+  // New installs use the model's own output limit; the number is the fallback
+  // when that limit is unknown. Existing rows (no mode) keep their number.
+  maxTokens: 8192,
+  maxTokensMode: 'model',
 }
 
 /**
@@ -71,6 +74,14 @@ export const DEFAULT_AI_SETTINGS: Omit<AISettingsRow, 'updatedAt'> = {
  * `apiKeyEncrypted` as an AES-GCM payload. `apiKey` exists only to carry a
  * legacy plaintext value until the migration in `SettingsService` moves it.
  */
+/** `/models` output limits, remembered for the base URL they were read from. */
+export interface ModelOutputLimits {
+  baseURL: string
+  limits: Record<string, number>
+}
+
+export type MaxTokensMode = 'model' | 'manual'
+
 export interface AISettingsRow {
   id: 'singleton'
   provider: AIProviderId
@@ -82,6 +93,16 @@ export interface AISettingsRow {
   model: string
   temperature: number
   maxTokens: number
+  /**
+   * 「使用模型允许的最大值」 (`model`) or the number above (`manual`). Absent on
+   * rows written before the option existed: those keep their number.
+   */
+  maxTokensMode?: MaxTokensMode
+  /**
+   * Output limits by model id from the provider's `/models` metadata (only
+   * output fields, never the context length), for `baseURL`.
+   */
+  modelOutputLimits?: ModelOutputLimits
   /** Opt-in: search the web for chemistry / biology reference images. */
   webImagesEnabled?: boolean
   /** Ask the (vision-capable) model whether each image fits its purpose. */
@@ -116,7 +137,11 @@ export interface AISettings {
   apiKey: string
   model: string
   temperature: number
+  /** The manual number (also the fallback when the model's limit is unknown). */
   maxTokens: number
+  maxTokensMode: MaxTokensMode
+  /** Limits read from `/models` for the current base URL (empty when none). */
+  modelOutputLimits: Record<string, number>
   /** Off by default; see `AISettingsRow.webImagesEnabled`. */
   webImagesEnabled: boolean
   webImagesVisionCheck: boolean
@@ -133,6 +158,7 @@ export interface UpdateAISettingsInput {
   model?: string
   temperature?: number
   maxTokens?: number
+  maxTokensMode?: MaxTokensMode
   webImagesEnabled?: boolean
   webImagesVisionCheck?: boolean
   adminApiKey?: string

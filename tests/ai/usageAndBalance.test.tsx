@@ -323,7 +323,7 @@ describe('model list', () => {
         { baseURL: 'https://api.deepseek.com/v1', apiKey: SECRET },
         { fetchImpl: ok as unknown as typeof fetch },
       ),
-    ).toEqual({ ok: true, models: ['deepseek-chat'] })
+    ).toEqual({ ok: true, models: ['deepseek-chat'], limits: {} })
     expect(ok.mock.calls[0]![1].headers.Authorization).toBe(`Bearer ${SECRET}`)
 
     const blocked = vi.fn().mockRejectedValue(new TypeError('Failed to fetch'))

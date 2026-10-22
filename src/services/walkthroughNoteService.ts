@@ -7,6 +7,7 @@ import {
   defaultNoteTitle,
   MAX_NOTE_TITLE,
   MAX_NOTE_TURNS,
+  type NoteCardSize,
   type NoteWindowRect,
   type WalkthroughNote,
   type WalkthroughNoteTurn,
@@ -25,6 +26,7 @@ export interface NewWalkthroughNote {
   surrounding: string
   turns: WalkthroughNoteTurn[]
   rect?: NoteWindowRect
+  cardSize?: NoteCardSize
   /** Name it after the passage (the first question was the generic "explain"). */
   titleFromQuote?: boolean
 }
@@ -84,6 +86,7 @@ export class WalkthroughNoteService {
       title: defaultNoteTitle({ turns: input.titleFromQuote ? [] : turns, quote }),
       turns,
       ...(input.rect ? { rect: input.rect } : {}),
+      ...(input.cardSize ? { cardSize: input.cardSize } : {}),
       createdAt: now,
       updatedAt: now,
     }
@@ -118,6 +121,14 @@ export class WalkthroughNoteService {
     await this.db.transaction('rw', this.db.walkthroughNotes, async () => {
       const note = await this.repo.getNote(id)
       if (note) await this.repo.putNote({ ...note, rect })
+    })
+  }
+
+  /** Remember the size the learner gave the note's card; does not count as an edit. */
+  async saveCardSize(id: string, cardSize: NoteCardSize): Promise<void> {
+    await this.db.transaction('rw', this.db.walkthroughNotes, async () => {
+      const note = await this.repo.getNote(id)
+      if (note) await this.repo.putNote({ ...note, cardSize })
     })
   }
 

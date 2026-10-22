@@ -663,7 +663,8 @@ export const zhCN: Record<TranslationKey, string> = {
   'guided.showStepAnswer': '看这一步答案',
   'guided.opLabel': '这一步的行变换',
   'guided.opPlaceholder': '例如 R2 -> R2 - 2R1',
-  'guided.opSyntax': '写法如 R2 -> R2 - 2R1、R1 <-> R2、R2 -> 1/3 R2；同时做几个变换用逗号隔开。',
+  'guided.opSyntax':
+    '写法如 R2 -> R2 - 2R1、R1 <-> R2、R2 -> 1/3 R2；同时做几个变换用逗号隔开。模板里的 ? 直接输入覆盖，Tab 跳到下一个。',
   'guided.opReadAs': '识别为',
   'guided.opAccepted': '变换',
   'guided.checkOp': '检查变换',
@@ -811,6 +812,7 @@ export const zhCN: Record<TranslationKey, string> = {
   'homework.walkthrough.regenerateFailed': '这一节未能重新生成，原内容没有改变。',
   'homework.walkthrough.restorePrevious': '恢复上一版',
   'homework.walkthrough.restored': '已切换到另一版本',
+  'homework.walkthrough.frameGroupsDone': '这一部分太长，已分组完成 {done} / {total} 组题目',
   'homework.walkthrough.partialDone': '已完成 {done} / {total} 小题',
   'homework.walkthrough.continueGenerating': '继续生成',
   'homework.walkthrough.writingPart': '({part}) 正在编写',
@@ -851,7 +853,6 @@ export const zhCN: Record<TranslationKey, string> = {
   'homework.walkthrough.step.mismatch':
     '第 {row} 行第 {col} 列：讲解写的是 {written}，按这一步的变换应为 {expected}。',
   'homework.walkthrough.step.expected': '应为 {value}',
-  'homework.walkthrough.step.checked': '本地核对：这一步的计算无误。',
   'settings.walkthrough.title': '作业完整讲解',
   'settings.walkthrough.description':
     '讲解默认显示哪个版本。每节仍可单独切换；还没有生成的版本只在你点击时才生成。',
@@ -1585,6 +1586,14 @@ export const zhCN: Record<TranslationKey, string> = {
   'symbolBar.hide': '收起符号',
   'symbolBar.groups': '符号分组',
   'symbolBar.inserts': '插入 {text}',
+  'quickInsert.label': '快捷输入',
+  'quickInsert.rowOpLabel': '行变换快捷输入',
+  'quickInsert.cellLabel': '第 {row} 行第 {col} 列的快捷输入',
+  'quickInsert.addMultiple': '倍加：一行加上另一行的倍数',
+  'quickInsert.swap': '交换',
+  'quickInsert.scale': '倍乘',
+  'quickInsert.backspace': '删除光标前一个字符',
+  'quickInsert.fraction': '分数',
   'symbolBar.submitHint': '按 Enter 提交',
   'symbolBar.submitHintMultiline': '按 Ctrl+Enter 提交',
   'symbolGroup.basic': '常用',
@@ -1911,7 +1920,20 @@ export const zhCN: Record<TranslationKey, string> = {
   'settings.sampling.temperature': '温度',
   'settings.sampling.temperatureHint': '0 = 确定性输出，2 = 高度发散。学习内容建议 0.3–0.8。',
   'settings.sampling.maxTokens': '最大 Token 数',
-  'settings.sampling.maxTokensHint': '单次回复的最大 Token 数。范围为 64 – 32000。',
+  'settings.sampling.maxTokensHint':
+    '单次回复最多输出的 Token 数，范围 64 – 128000；已知模型上限时不会超过模型上限。',
+  'settings.sampling.maxTokensHintModel':
+    '按模型允许的最大值请求：优先读取模型列表里的输出上限，其次是官方文档写明的值；都不知道时使用上面的数字。始终会发送这个上限——不发送时部分服务商会改用很小的默认值（如 DeepSeek 为 4096），长讲解会被截断。',
+  'settings.sampling.modeModel': '使用模型允许的最大值',
+  'settings.sampling.modeManual': '手动设置',
+  'settings.sampling.modelMaxKnown':
+    '当前模型单次最多输出 {max} token（{source}），请求上限：{tokens}。',
+  'settings.sampling.modelMaxAbove':
+    '当前模型单次最多输出 {max} token（{source}），请求上限：{tokens}（按你设置的数字）。',
+  'settings.sampling.modelMaxUnknown':
+    '不知道当前模型的输出上限，请求上限：{tokens}（上面的数字）。',
+  'settings.sampling.sourceMetadata': '来自模型列表',
+  'settings.sampling.sourceTable': '来自官方文档',
   'settings.webImages.title': '联网参考图片',
   'settings.webImages.description':
     '化学、生物讲解可以显示来自 PubChem 和 Wikimedia Commons 的参考图片。默认关闭。',
@@ -2189,7 +2211,7 @@ export const zhCN: Record<TranslationKey, string> = {
   'errors.mistakeKnowledgePointRequired': '知识点不能为空',
   'errors.baseUrlInvalid': 'Base URL 必须以 http:// 或 https:// 开头',
   'errors.temperatureRange': '温度必须介于 0 到 2 之间',
-  'errors.maxTokensRange': '最大 Token 数必须是 64 到 32000 之间的整数',
+  'errors.maxTokensRange': '最大 Token 数必须是 64 到 128000 之间的整数',
   'errors.failedToLoadProfile': '加载用户资料失败',
   'errors.failedToLoadProjects': '加载项目失败',
   'errors.failedToLoadProject': '加载项目失败',
@@ -2342,6 +2364,10 @@ export const zhCN: Record<TranslationKey, string> = {
   'friendlyError.invalidInput': '输入内容无效。',
   'friendlyError.generic': '请求失败，请重试。',
   'friendlyError.offline': 'AI 连接不可用。请检查网络连接。',
+  'friendlyError.outputTruncatedModelMax':
+    '当前模型单次最多输出约 {limit} token，这一部分仍然太长。可换用支持更长输出的模型后重试。',
+  'friendlyError.outputTruncatedSettingMax':
+    '已达到设置中的单次输出上限（约 {limit} token），这一部分仍然太长。可在设置中调高最大 Token 数或选择「使用模型允许的最大值」，或换用支持更长输出的模型。',
   'friendlyError.outputTruncated':
     '模型尚未完成回复就停止了。请重试本题；如果持续出现，可换用支持更长输出的模型。',
   'homework.originalPages': '原文页面与图示',

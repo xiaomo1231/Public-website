@@ -161,7 +161,7 @@ describe('homework-walkthrough/v3 prompts', () => {
       earlier: [],
     }
     expect(V3.buildPartUserPrompt(part)).toBe(V2.buildPartUserPrompt(part))
-    expect(prompts.homeworkWalkthrough.VERSION).toBe('v4')
+    expect(prompts.homeworkWalkthrough.VERSION).toBe('v5')
     expect(prompts.homeworkWalkthrough.CACHE_VERSION).toBe('v1')
   })
 
@@ -209,7 +209,7 @@ describe('homework-walkthrough/v3 prompts', () => {
 describe('题目分析', () => {
   it('new sections carry the analysis; the frame request sees key points only', async () => {
     const { ai, calls } = stubAI(model)
-    expect(await service(ai).generate(setId)).toEqual({ generated: 3, failed: 0 })
+    expect(await service(ai).generate(setId)).toEqual({ generated: 4, failed: 0 })
     expect((await stored('q:q1'))?.analysis).toBe('- What is asked.')
     const frame = calls.find((call) => call.kind === 'frame')!
     expect(frame.user).not.toContain('Long worked text')
@@ -287,7 +287,7 @@ describe('a section that never finishes', () => {
       })
     for (let step = 0; step < 200 && !settled; step++) await vi.advanceTimersByTimeAsync(5_000)
     const result = await promise
-    expect(result).toEqual({ generated: 2, failed: 1 })
+    expect(result).toEqual({ generated: 3, failed: 1 })
     const failed = (await stored('q:q1'))!
     // Given up once the section's total time was used (not 20+ minutes later).
     expect(failed.generatedAt - start).toBeLessThanOrEqual(SECTION_TOTAL_MS + 10_000)

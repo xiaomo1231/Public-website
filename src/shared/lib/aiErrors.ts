@@ -1,5 +1,5 @@
 import { isAppError } from '@/infrastructure/errors/AppError'
-import { AIProviderError } from '@/infrastructure/ai/errors'
+import { AIProviderError, OutputTruncatedError } from '@/infrastructure/ai/errors'
 import { t } from '@/i18n'
 
 /**
@@ -36,8 +36,17 @@ export function friendlyAIError(err: unknown): string {
       case 'INVALID_JSON':
       case 'INVALID_RESPONSE':
         return t('friendlyError.invalidResponse')
-      case 'OUTPUT_TRUNCATED':
+      case 'OUTPUT_TRUNCATED': {
+        const atCap = err instanceof OutputTruncatedError ? err.atCap : undefined
+        if (atCap)
+          return t(
+            atCap.by === 'model'
+              ? 'friendlyError.outputTruncatedModelMax'
+              : 'friendlyError.outputTruncatedSettingMax',
+            { limit: atCap.limit },
+          )
         return t('friendlyError.outputTruncated')
+      }
       case 'ABORTED':
         return t('friendlyError.cancelled')
       case 'INVALID_REQUEST':

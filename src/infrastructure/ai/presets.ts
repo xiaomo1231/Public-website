@@ -75,6 +75,35 @@ export const PROVIDER_PRESETS: ProviderPresetInfo[] = [
   },
 ]
 
+/**
+ * Maximum output tokens per request for models whose limit is published in
+ * the provider's own documentation (checked 2026-10):
+ *  - OpenAI model pages: gpt-4o / gpt-4o-mini 16,384; gpt-4-turbo and
+ *    gpt-3.5-turbo 4,096.
+ *  - DeepSeek pricing page: deepseek-v4-pro "maximum 384K" (written here as
+ *    384,000, the lower reading of "K").
+ * Models whose docs give no output limit (MiniMax-M3 / M3.1-Flash, current
+ * Qwen and deepseek-flash, legacy deepseek-chat / deepseek-reasoner) are left
+ * out on purpose: a guessed value could send a `max_tokens` the provider
+ * rejects, or cut answers short. A context length is never used as an output
+ * limit. `/models` metadata, when the provider returns it, takes precedence.
+ */
+export const KNOWN_MODEL_OUTPUT_LIMITS: Readonly<Record<string, number>> = {
+  'gpt-4o': 16_384,
+  'gpt-4o-mini': 16_384,
+  'gpt-4-turbo': 4_096,
+  'gpt-3.5-turbo': 4_096,
+  'deepseek-v4-pro': 384_000,
+}
+
+/** The documented output limit of `model` (exact id, case-insensitive), if known. */
+export function knownModelOutputLimit(model: string): number | undefined {
+  const id = model.trim().toLowerCase()
+  return id && Object.prototype.hasOwnProperty.call(KNOWN_MODEL_OUTPUT_LIMITS, id)
+    ? KNOWN_MODEL_OUTPUT_LIMITS[id]
+    : undefined
+}
+
 export function getPreset(id: AIProviderId): ProviderPresetInfo {
   const found = PROVIDER_PRESETS.find((p) => p.id === id)
   if (!found) {

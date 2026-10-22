@@ -12,7 +12,9 @@ describe('SettingsService', () => {
     expect(settings.baseURL).toContain('api.openai.com')
     expect(settings.model).toBe('gpt-4o-mini')
     expect(settings.temperature).toBe(0.7)
-    expect(settings.maxTokens).toBe(2048)
+    // New installs use the model's own limit; the number is the fallback.
+    expect(settings.maxTokensMode).toBe('model')
+    expect(settings.maxTokens).toBe(8192)
   })
 
   it('updates individual fields', async () => {

@@ -16,6 +16,8 @@ import { GenerationControls } from '@/shared/ui/GenerationControls'
 import { LoadingState } from '@/shared/ui/LoadingState'
 import { RichText } from '@/shared/ui/RichText'
 import { useTranslation, type TranslationKey } from '@/i18n'
+import { useProject } from '@/features/project/useProjects'
+import { targetLanguageOf } from '@/shared/lib/language'
 import { GuidedMatrixPractice } from './GuidedMatrixPractice'
 import { GuidedBlankPractice } from './GuidedBlankPractice'
 import { useGuidedQuestion } from './useGuidedQuestion'
@@ -42,6 +44,8 @@ export function GuidedPracticeView({
 }: GuidedPracticeViewProps): JSX.Element {
   const { t } = useTranslation()
   const guided = useGuidedQuestion(setId, question.id, service)
+  // A language course's letters go on its written blanks.
+  const language = targetLanguageOf(useProject(question.projectId).project)
   const { state, progress, update } = guided
   const summary = summarizeProgress(progress ?? undefined)
   const preparingActive = guided.preparing.active
@@ -177,6 +181,7 @@ export function GuidedPracticeView({
                   steps={state.source.steps}
                   progress={progress.steps ?? []}
                   {...(state.subject ? { subject: state.subject } : {})}
+                  {...(language ? { language } : {})}
                   onChange={(index, next) =>
                     update((current) =>
                       withCompletion({

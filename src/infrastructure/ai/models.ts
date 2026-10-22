@@ -18,7 +18,12 @@ export type ModelListFailure =
   | 'missing-config'
 
 export type ModelListResult =
-  | { ok: true; models: string[] }
+  | {
+      ok: true
+      models: string[]
+      /** Output limits by model id, for the models whose metadata states one. */
+      limits: Record<string, number>
+    }
   | { ok: false; reason: ModelListFailure; status?: number; message?: string }
 
 /** `{base}/models`, tolerating a base that already ends in `/chat/completions`. */
@@ -58,6 +63,55 @@ export function parseModelList(json: unknown): string[] | null {
     if (typeof id === 'string' && id.trim()) ids.add(id.trim())
   }
   return [...ids].sort((a, b) => a.localeCompare(b))
+}
+
+/** Output-limit fields some `/models` bodies carry (never a context length). */
+const OUTPUT_LIMIT_FIELDS = [
+  'max_output_tokens',
+  'max_completion_tokens',
+  'output_token_limit',
+  'outputTokenLimit',
+] as const
+
+function positiveInt(value: unknown): number | undefined {
+  const n = typeof value === 'string' && /^\d+$/.test(value.trim()) ? Number(value) : value
+  return typeof n === 'number' && Number.isFinite(n) && n > 0 ? Math.floor(n) : undefined
+}
+
+/**
+ * Output limits from a `/models` body, by model id: `max_output_tokens`,
+ * `max_completion_tokens`, `output_token_limit` / `outputTokenLimit`, or
+ * OpenRouter's `top_provider.max_completion_tokens`. `context_length` and
+ * other context fields are ignored on purpose — the input window says
+ * nothing reliable about how much one reply may hold.
+ */
+export function parseModelOutputLimits(json: unknown): Record<string, number> {
+  const root = json as Record<string, unknown> | unknown[] | null
+  const list = Array.isArray(root)
+    ? root
+    : root && typeof root === 'object'
+      ? Array.isArray(root.data)
+        ? root.data
+        : Array.isArray(root.models)
+          ? root.models
+          : []
+      : []
+  const limits: Record<string, number> = {}
+  for (const entry of list) {
+    if (!entry || typeof entry !== 'object') continue
+    const row = entry as Record<string, unknown>
+    const id = typeof row.id === 'string' ? row.id : typeof row.name === 'string' ? row.name : ''
+    if (!id.trim()) continue
+    let limit: number | undefined
+    for (const field of OUTPUT_LIMIT_FIELDS) {
+      limit = positiveInt(row[field])
+      if (limit) break
+    }
+    if (!limit && row.top_provider && typeof row.top_provider === 'object')
+      limit = positiveInt((row.top_provider as Record<string, unknown>).max_completion_tokens)
+    if (limit) limits[id.trim()] = limit
+  }
+  return limits
 }
 
 /**
@@ -107,7 +161,7 @@ export async function fetchModelList(
     const json = await res.json().catch(() => null)
     const models = parseModelList(json)
     if (!models) return { ok: false, reason: 'failed', status: res.status }
-    return { ok: true, models }
+    return { ok: true, models, limits: parseModelOutputLimits(json) }
   } finally {
     clearTimeout(timer)
     options.signal?.removeEventListener('abort', onAbort)

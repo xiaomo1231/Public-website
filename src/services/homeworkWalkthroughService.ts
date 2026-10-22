@@ -2,9 +2,17 @@ import type { AIService } from './aiService'
 import type { AppDatabase } from '@/infrastructure/db/database'
 import { getDb } from '@/infrastructure/db/database'
 import type { ChatMessage } from '@/infrastructure/ai/types'
-import type { FrameRevision } from '@/infrastructure/ai/prompts/homework-walkthrough/v3'
+import type {
+  FramePart,
+  NormalizedOverviewPart,
+  NormalizedSummaryPart,
+} from '@/infrastructure/ai/prompts/homework-walkthrough/v5'
 import { prompts } from '@/infrastructure/ai/prompts'
-import { AbortedError, TimeoutError as AITimeoutError } from '@/infrastructure/ai/errors'
+import {
+  AbortedError,
+  OutputTruncatedError,
+  TimeoutError as AITimeoutError,
+} from '@/infrastructure/ai/errors'
 import { AppError, NotFoundError } from '@/infrastructure/errors/AppError'
 import { HomeworkRepository } from '@/entities/homework/repository'
 import { UserRepository } from '@/entities/user/repository'
@@ -37,6 +45,7 @@ import {
   type WalkthroughVariant,
   type WalkthroughVariantDraft,
   type WalkthroughDraft,
+  type WalkthroughFrameDraft,
   type WalkthroughLanguage,
   type WalkthroughPart,
   type WalkthroughPlanEntry,
@@ -44,6 +53,13 @@ import {
   type WalkthroughSectionVersion,
 } from '@/entities/homework/walkthrough'
 import { WalkthroughRepository } from '@/entities/homework/walkthroughRepository'
+import {
+  halves,
+  mergeOverviews,
+  mergeSummaries,
+  renderOverview,
+  renderSummary,
+} from '@/entities/homework/walkthroughFrame'
 import type { HomeworkQuestion, HomeworkSet } from '@/entities/homework/types'
 import type { SubjectContext } from '@/entities/project/types'
 import { friendlyAIError } from '@/shared/lib/aiErrors'
@@ -68,8 +84,13 @@ const SECTION_DEADLINE_MS = 240_000
  * run moves on, instead of trying for 20+ minutes with no sign of life.
  */
 export const SECTION_TOTAL_MS = 360_000
+/**
+ * First budget of a section request. A truncated reply doubles it up to the
+ * resolved output cap (`ai.maxOutputTokens`: the model's own limit, or the
+ * user's number) — no fixed ceiling of its own; time stays bounded by
+ * `SECTION_TOTAL_MS`.
+ */
 const SECTION_OUTPUT_CEILING = 8_192
-const SECTION_OUTPUT_MAX = 16_384
 /** Hard cap on paid requests for one section (budget changes + transient retries). */
 const SECTION_MAX_ATTEMPTS = 6
 const MAX_TRANSIENT_RETRIES = 2
@@ -371,9 +392,13 @@ export class HomeworkWalkthroughService {
         ))
     const questionEntries = state.plan.filter((entry) => entry.kind === 'question')
     const todo = questionEntries.filter(redo)
-    const frameEntries = state.plan.filter((entry) => entry.kind !== 'question')
-    const frameNeeded = todo.length > 0 || frameEntries.some(redo)
-    progress.total = todo.length + (frameNeeded ? 1 : 0)
+    // The opening and the summary are each redone when out of date, and
+    // whenever a question is rewritten (they depend on every question).
+    const frameParts = state.plan.filter(
+      (entry) =>
+        (entry.kind === 'overview' || entry.kind === 'summary') && (todo.length > 0 || redo(entry)),
+    )
+    progress.total = todo.length + frameParts.length
     emit()
 
     const result: WalkthroughRunResult = { generated: 0, failed: 0 }
@@ -461,40 +486,52 @@ export class HomeworkWalkthroughService {
       Array.from({ length: Math.min(SECTION_CONCURRENCY, queue.length) }, () => worker()),
     )
 
-    if (frameNeeded && !fatal && !gone && (interrupted || !control.shouldContinue())) {
-      // The opening and summary come last; a paused run leaves them to do.
-      interrupted = true
-    } else if (frameNeeded && !fatal && !gone) {
-      progress.running.push('overview', 'summary')
+    // The opening and the summary come last, one request each (split into
+    // question groups when one is too long for a reply). A pause between them
+    // keeps what is written; the rest stays to do.
+    for (const entry of frameParts) {
+      if (fatal || gone) break
+      if (interrupted || !control.shouldContinue()) {
+        interrupted = true
+        break
+      }
+      const part = entry.kind as FramePart
+      progress.running.push(part)
       emit()
       let aborted = false
       try {
-        const frame = await this.writeFrame(ai, setId, state, labels, subject, {
-          signal: control.signal,
-          onAttempt: (attempt) => setAttempt(progress, ['overview', 'summary'], attempt),
+        const section = await this.writeFramePart(ai, part, entry, state, labels, subject, {
+          control,
+          mode: 'generate',
+          ...(forceSince !== undefined ? { draftSince: forceSince } : {}),
+          save,
+          onAttempt: (attempt) => setAttempt(progress, [part], attempt),
         })
-        if (frame) {
-          for (const section of frame) await save(section)
+        if (section) {
+          await save(section)
           result.generated += 1
         }
       } catch (err) {
         if (isAbortError(err, control.signal)) {
           aborted = true
           interrupted = true
-          return this.finishInterrupted(base.id, state, result, fatal, control)
+          break
         }
         if (isAccountFatalError(classifyHomeworkError(err))) fatal = friendlyAIError(err)
         result.failed += 1
         progress.failed += 1
-        for (const entry of frameEntries) {
-          if (entry.section?.status !== 'ready') {
-            await save(failedSection(entry, entry.kind, friendlyAIError(err)))
-          }
+        // A finished part is never replaced by a failure; finished groups are kept.
+        const latest = await this.storedSection(base.id, entry.id)
+        if (latest?.status !== 'ready') {
+          await save({
+            ...failedSection(entry, entry.kind, friendlyAIError(err)),
+            ...(latest?.frameDraft ? { frameDraft: latest.frameDraft } : {}),
+          })
         }
       } finally {
-        progress.running = []
+        progress.running = progress.running.filter((id) => id !== part)
         if (!aborted) progress.done += 1
-        setAttempt(progress, ['overview', 'summary'], null)
+        setAttempt(progress, [part], null)
       }
     }
 
@@ -629,26 +666,25 @@ export class HomeworkWalkthroughService {
         // Only the standard version is rewritten; the detailed one stays.
         await save(withLevel(withPrevious(section, current), current, true))
       } else {
-        const frame = await this.writeFrame(
+        // Only the requested part is asked for and rewritten.
+        const next = await this.writeFramePart(
           ai,
-          setId,
+          entry.kind as FramePart,
+          entry,
           state,
           labels,
           subject,
           {
-            signal: control.signal,
+            control,
+            mode: 'regenerate',
+            ...(suggestion ? { suggestion } : {}),
+            ...(current ? { current } : {}),
+            save,
             onAttempt: (attempt) => setAttempt(progress, [sectionId], attempt),
           },
-          {
-            target: entry.kind,
-            ...(current ? { current: { body: frameText(current) } } : {}),
-            ...(suggestion ? { suggestion } : {}),
-          },
         )
-        if (!frame)
+        if (!next)
           throw new AppError(t('homework.walkthrough.frameNeedsQuestions'), 'VALIDATION_ERROR')
-        // The frame request returns both parts; only the requested one is saved.
-        const next = frame.find((section) => section.id === sectionId)!
         await save(withPrevious(next, current))
       }
       progress.done = progress.total
@@ -982,77 +1018,174 @@ export class HomeworkWalkthroughService {
     return joinParts(entry, label, draft.parts, draft.analysis)
   }
 
-  /** The opening and the summary, from every question that has a section. */
-  private async writeFrame(
+  /**
+   * The opening or the summary, from every question that has a section. One
+   * request for the whole assignment; a reply cut off even at the largest
+   * allowed budget is asked again for each half of the questions (recursively,
+   * down to one question) and the pieces are merged locally. Finished groups
+   * are saved as a draft, so a pause or a failure continues from there.
+   */
+  private async writeFramePart(
     ai: AIService,
-    setId: string,
+    part: FramePart,
+    entry: WalkthroughPlanEntry,
     state: WalkthroughState,
     labels: ReadonlyMap<string, string>,
     subject: SubjectContext | undefined,
-    request: { signal?: AbortSignal; onAttempt?: (attempt: SectionAttempt) => void },
-    /** Rewrite one of the two parts (the other is returned but not saved). */
-    revision?: FrameRevision,
-  ): Promise<WalkthroughSection[] | null> {
-    const stored = await this.repo.get(walkthroughId(setId, state.language))
+    job: {
+      control: GenerationControl
+      mode: 'generate' | 'regenerate'
+      suggestion?: string
+      /** The ready version being rewritten (regenerate). */
+      current?: WalkthroughSection
+      /** A forced run continues only drafts it started itself. */
+      draftSince?: number
+      save: (section: WalkthroughSection) => Promise<void>
+      onAttempt?: (attempt: SectionAttempt) => void
+    },
+  ): Promise<WalkthroughSection | null> {
+    const stored = await this.repo.get(walkthroughId(state.set.id, state.language))
     const byId = new Map((stored?.sections ?? []).map((section) => [section.id, section]))
-    const questions = state.plan
-      .filter((entry) => entry.kind === 'question')
-      .map((entry) => ({ entry, section: byId.get(entry.id) }))
-      .filter(({ section }) => section?.status === 'ready')
-      .map(({ entry, section }) => ({
-        label: labels.get(entry.question!.id) ?? '?',
-        question: clip(entry.question!.prompt, FRAME_QUESTION_CHARS),
-        conclusion: clip(section!.conclusion ?? '', FRAME_CONCLUSION_CHARS),
-        keyPoints: sectionKeyPoints(section!),
-      }))
-    if (questions.length === 0) return null
-    const messages: ChatMessage[] = [
-      {
-        role: 'system',
-        content: prompts.subjectProfile.withSubject(
-          prompts.homeworkWalkthrough.buildFrameSystemPrompt({ keyPoints: true }),
-          subject,
-        ),
-      },
-      {
-        role: 'user',
-        content: prompts.homeworkWalkthrough.buildFrameKeyPointsUserPrompt({
-          title: state.set.title,
-          questions,
-          language: state.language,
-          ...(revision ? { revision } : {}),
-        }),
-      },
-    ]
-    const frame = prompts.homeworkWalkthrough.normalizeFrame(
-      await requestSectionJSON(ai, messages, request.signal, request.onAttempt),
+    const questions = new Map(
+      state.plan
+        .filter((item) => item.kind === 'question')
+        .map((item) => ({ item, section: byId.get(item.id) }))
+        .filter(({ section }) => section?.status === 'ready')
+        .map(({ item, section }) => [
+          item.id,
+          {
+            label: labels.get(item.question!.id) ?? '?',
+            question: clip(item.question!.prompt, FRAME_QUESTION_CHARS),
+            conclusion: clip(section!.conclusion ?? '', FRAME_CONCLUSION_CHARS),
+            keyPoints: sectionKeyPoints(section!),
+          },
+        ]),
     )
-    if (!frame) throw new AppError(t('homework.walkthrough.invalid'), 'INVALID_RESPONSE')
-    const frameHash = state.plan.find((entry) => entry.kind === 'overview')!.inputHash
+    if (questions.size === 0) return null
+    const ids = [...questions.keys()]
+    const latest = byId.get(entry.id)
+    const earlier = latest?.frameDraft
+    const reusable =
+      earlier !== undefined &&
+      earlier.inputHash === entry.inputHash &&
+      earlier.mode === job.mode &&
+      (earlier.suggestion ?? '') === (job.suggestion ?? '') &&
+      (job.draftSince === undefined || earlier.startedAt >= job.draftSince) &&
+      earlier.groups.flat().join(',') === ids.join(',')
+    let draft: WalkthroughFrameDraft = reusable
+      ? earlier
+      : {
+          mode: job.mode,
+          ...(job.mode === 'regenerate' && job.suggestion ? { suggestion: job.suggestion } : {}),
+          inputHash: entry.inputHash,
+          groups: [ids],
+          pieces: {},
+          startedAt: Date.now(),
+        }
+    // A ready section keeps its text until every group is rewritten.
+    const holder = job.current ?? (latest?.status === 'ready' ? latest : undefined)
+    const saveDraft = (next: WalkthroughFrameDraft): Promise<void> =>
+      job.save(
+        holder
+          ? { ...holder, frameDraft: next }
+          : {
+              id: entry.id,
+              kind: entry.kind,
+              title: entry.kind,
+              body: '',
+              status: 'partial',
+              inputHash: entry.inputHash,
+              frameDraft: next,
+              generatedAt: Date.now(),
+            },
+      )
+    const system = prompts.subjectProfile.withSubject(
+      prompts.homeworkWalkthrough.buildFramePartSystemPrompt({ part }),
+      subject,
+    )
+    const revision =
+      job.mode === 'regenerate'
+        ? {
+            ...(job.current ? { current: { body: frameText(job.current) } } : {}),
+            ...(job.suggestion ? { suggestion: job.suggestion } : {}),
+          }
+        : undefined
+    const normalize = (raw: unknown): NormalizedOverviewPart | NormalizedSummaryPart | null =>
+      part === 'overview'
+        ? prompts.homeworkWalkthrough.normalizeOverviewPart(raw)
+        : prompts.homeworkWalkthrough.normalizeSummaryPart(raw)
+    const done = (group: readonly string[]): boolean =>
+      normalize(draft.pieces[group.join(',')]) !== null
+
+    for (let index = 0; index < draft.groups.length; index++) {
+      const group = draft.groups[index]!
+      if (done(group)) continue
+      // Pausing stops between groups; the finished ones are saved.
+      if (!job.control.shouldContinue()) throw new GenerationPausedError(job.control.signal.aborted)
+      const messages: ChatMessage[] = [
+        { role: 'system', content: system },
+        {
+          role: 'user',
+          content: prompts.homeworkWalkthrough.buildFramePartUserPrompt({
+            title: state.set.title,
+            questions: group.map((questionId) => questions.get(questionId)!),
+            language: state.language,
+            part,
+            ...(draft.groups.length > 1
+              ? { group: { index: index + 1, count: draft.groups.length } }
+              : {}),
+            ...(revision ? { revision } : {}),
+          }),
+        },
+      ]
+      let piece: NormalizedOverviewPart | NormalizedSummaryPart | null
+      try {
+        piece = normalize(await requestSectionJSON(ai, messages, job.control.signal, job.onAttempt))
+      } catch (err) {
+        // Too long even at the largest budget: ask for each half on its own.
+        if (classifyHomeworkError(err) === 'truncated' && group.length > 1) {
+          const groups = [...draft.groups]
+          groups.splice(index, 1, ...halves(group))
+          draft = { ...draft, groups }
+          await saveDraft(draft)
+          index -= 1
+          continue
+        }
+        throw err
+      }
+      if (!piece) throw new AppError(t('homework.walkthrough.invalid'), 'INVALID_RESPONSE')
+      draft = { ...draft, pieces: { ...draft.pieces, [group.join(',')]: piece } }
+      // The last one is saved as the finished section by the caller.
+      if (draft.groups.some((next) => !done(next))) await saveDraft(draft)
+    }
+
+    const pieces = draft.groups.map((group) => normalize(draft.pieces[group.join(',')])!)
     const now = Date.now()
-    return [
-      {
+    if (part === 'overview') {
+      const merged = mergeOverviews(pieces as NormalizedOverviewPart[])
+      return {
         id: 'overview',
         kind: 'overview',
         title: 'overview',
-        body: formatHomeworkReviewText(frame.overview),
+        body: formatHomeworkReviewText(renderOverview(merged)),
         status: 'ready',
-        inputHash: frameHash,
+        inputHash: entry.inputHash,
         generatedAt: now,
-      },
-      {
-        id: 'summary',
-        kind: 'summary',
-        title: 'summary',
-        body: formatHomeworkReviewText(frame.summary),
-        ...(frame.suggestions.length > 0
-          ? { suggestions: frame.suggestions.map(formatHomeworkReviewText) }
-          : {}),
-        status: 'ready',
-        inputHash: frameHash,
-        generatedAt: now,
-      },
-    ]
+      }
+    }
+    const summary = renderSummary(mergeSummaries(pieces as NormalizedSummaryPart[]), state.language)
+    return {
+      id: 'summary',
+      kind: 'summary',
+      title: 'summary',
+      body: formatHomeworkReviewText(summary.body),
+      ...(summary.suggestions.length > 0
+        ? { suggestions: summary.suggestions.map(formatHomeworkReviewText) }
+        : {}),
+      status: 'ready',
+      inputHash: entry.inputHash,
+      generatedAt: now,
+    }
   }
 
   // --- 普通版 / 详细版 -------------------------------------------------------
@@ -1732,8 +1865,12 @@ async function requestSectionJSON(
       if (remaining() <= 0) throw sectionTimeoutError()
       if (attempts >= SECTION_MAX_ATTEMPTS) throw failure
       if (kind === 'truncated') {
-        const next = Math.min(userCap, SECTION_OUTPUT_MAX, budget * 2, rejectedBudget - 1)
-        if (next <= budget || tried.has(next)) throw failure
+        const next = Math.min(userCap, budget * 2, rejectedBudget - 1)
+        if (next <= budget || tried.has(next)) {
+          // Cut off at the largest budget allowed: asking again cannot help.
+          if (budget >= userCap) throw truncatedAtCap(ai, budget)
+          throw failure
+        }
         budget = next
       } else if (kind === 'output-limit') {
         rejectedBudget = Math.min(rejectedBudget, budget)
@@ -1754,6 +1891,18 @@ async function requestSectionJSON(
       runSignal?.removeEventListener('abort', onRunAbort)
     }
   }
+}
+
+/**
+ * Cut off at the largest budget allowed: say whose limit it was (the model's
+ * own, or the user's setting) and how large.
+ */
+function truncatedAtCap(ai: AIService, budget: number): OutputTruncatedError {
+  const modelMax = ai.modelMaxOutputTokens
+  return new OutputTruncatedError(budget, {
+    limit: budget,
+    by: modelMax !== undefined && budget >= modelMax ? 'model' : 'setting',
+  })
 }
 
 /** A section that ran out of total time: saved as failed, the run moves on. */

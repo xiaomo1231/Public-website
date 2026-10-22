@@ -174,7 +174,7 @@ describe('homework-walkthrough/v2 prompts', () => {
     }
     expect(V2.buildFrameUserPrompt(frame)).toBe(V1.buildFrameUserPrompt(frame))
     expect(V2.buildFrameSystemPrompt()).toBe(V1.buildFrameSystemPrompt())
-    expect(prompts.homeworkWalkthrough.VERSION).toBe('v4')
+    expect(prompts.homeworkWalkthrough.VERSION).toBe('v5')
     expect(prompts.homeworkWalkthrough.CACHE_VERSION).toBe('v1')
 
     await setup('calculus', ['Differentiate x^2.'])
@@ -227,9 +227,9 @@ describe('splitting long multipart questions', () => {
 
     calls.length = 0
     run = createGenerationRun()
-    expect(await service(ai).resume(setId, { control: run })).toEqual({ generated: 2, failed: 0 })
+    expect(await service(ai).resume(setId, { control: run })).toEqual({ generated: 3, failed: 0 })
     // Only the unfinished sub-parts, then the frame.
-    expect(ids()).toEqual(['1b', '1c', 'frame'])
+    expect(ids()).toEqual(['1b', '1c', 'frame', 'frame'])
     // Later sub-parts see the earlier ones.
     expect(calls[1]!.user).toContain('ALREADY WRITTEN (a)')
     expect(calls[1]!.user).toContain('ALREADY WRITTEN (b)')
@@ -248,7 +248,7 @@ describe('splitting long multipart questions', () => {
       if (call.kind === 'question') throw new OutputTruncatedError(8192)
       return model(call)
     })
-    expect(await service(ai).generate(setId)).toEqual({ generated: 2, failed: 0 })
+    expect(await service(ai).generate(setId)).toEqual({ generated: 3, failed: 0 })
     expect(calls.filter((call) => call.kind === 'part').map((call) => call.id)).toEqual([
       '1a',
       '1b',
@@ -345,7 +345,9 @@ describe('regenerating one section', () => {
     expect(calls.map((call) => call.kind)).toEqual(['frame'])
     expect(calls[0]!.user).toContain(oldOverview.body)
     expect(calls[0]!.user).toContain('Add a table.')
-    expect(calls[0]!.user).toContain('Rewrite only "overview"')
+    // Only the opening is asked for.
+    expect(calls[0]!.system).toContain('ONLY the opening')
+    expect(calls[0]!.user).toContain('The student asked for the opening (tools) to be rewritten.')
     const overview = (await section('overview')).section!
     expect(overview.body).not.toBe(oldOverview.body)
     expect(overview.previous?.body).toBe(oldOverview.body)

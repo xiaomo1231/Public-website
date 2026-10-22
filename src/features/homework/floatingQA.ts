@@ -87,6 +87,7 @@ export function openNote(note: WalkthroughNote, setTitle: string, language: 'zh'
     noteId: note.id,
     title: note.title,
     rect: clampRect(note.rect ?? fallback),
+    ...(note.cardSize ? { cardSize: note.cardSize } : {}),
   })
 }
 
@@ -184,6 +185,7 @@ export async function saveWindow(id: string): Promise<WalkthroughNote | null> {
     surrounding: passage.surrounding,
     turns: win.turns,
     rect: win.rect,
+    ...(win.cardSize ? { cardSize: win.cardSize } : {}),
     titleFromQuote: win.turns[0]?.question === t('contextual.explainQuestion'),
   })
   useFloatingQA.getState().update(id, { noteId: note.id, title: note.title })
@@ -215,4 +217,10 @@ export function addNoteToCards(noteId: string): Promise<number> {
 export async function persistWindowRect(id: string): Promise<void> {
   const win = useFloatingQA.getState().windows.find((item) => item.id === id)
   if (win?.noteId) await notes().saveRect(win.noteId, win.rect)
+}
+
+/** After resizing a card: remember a saved note's card size. */
+export async function persistCardSize(id: string): Promise<void> {
+  const win = useFloatingQA.getState().windows.find((item) => item.id === id)
+  if (win?.noteId && win.cardSize) await notes().saveCardSize(win.noteId, win.cardSize)
 }

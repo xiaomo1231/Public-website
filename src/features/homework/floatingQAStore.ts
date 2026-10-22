@@ -41,6 +41,21 @@ export interface CompactCard {
   x: number
   y: number
   pinned: boolean
+  /** Rendered width; absent on old records (then `CARD_SIZE.width`). */
+  width?: number
+  /**
+   * Rendered height. Without `manual` it is the measured fit of the question
+   * and latest answer (capped, see `fitCardHeight`); absent until measured.
+   */
+  height?: number
+  /** The learner resized the card: keep its size, stop fitting to the content. */
+  manual?: boolean
+}
+
+/** A card size the learner chose; kept for the visit (and on a saved note). */
+export interface CardSize {
+  width: number
+  height: number
 }
 
 export interface FloatingQAWindow {
@@ -65,6 +80,8 @@ export interface FloatingQAWindow {
   enterOrigin?: string
   /** Shown as a small card instead of the full window. */
   compact?: CompactCard
+  /** The card size the learner set by hand; the next card starts at it. */
+  cardSize?: CardSize
   /** Tucked into the text: no window, the passage is marked instead. */
   tucked?: boolean
 }
@@ -80,7 +97,11 @@ export function windowMode(window: FloatingQAWindow): FloatingQAMode {
 export const MAX_OPEN_WINDOWS = 3
 export const MAX_COMPACT_CARDS = 6
 export const DEFAULT_WINDOW_SIZE = { width: 400, height: 460 }
-export const CARD_SIZE = { width: 280, height: 140 }
+/** Fallback card size: the default width, and the height before it is measured. */
+export const CARD_SIZE = { width: 320, height: 140 }
+export const CARD_MIN = { width: 240, height: 120 }
+/** A card fits its content up to min(60% of the viewport height, 520px), then scrolls. */
+const CARD_MAX_AUTO_HEIGHT = 520
 const MIN_WIDTH = 300
 const MIN_HEIGHT = 220
 const MARGIN = 12
@@ -107,31 +128,81 @@ export function clampRect(
   }
 }
 
+/** The tallest a card grows to fit its content before its body scrolls. */
+export function cardAutoHeightCap(viewportHeight: number): number {
+  return Math.max(CARD_MIN.height, Math.min(Math.round(viewportHeight * 0.6), CARD_MAX_AUTO_HEIGHT))
+}
+
+/** Height that shows `contentHeight` (header + question + answer) whole, up to the cap. */
+export function fitCardHeight(contentHeight: number, viewportHeight: number): number {
+  return Math.min(
+    Math.max(Math.ceil(contentHeight), CARD_MIN.height),
+    cardAutoHeightCap(viewportHeight),
+  )
+}
+
+/** A new card's width: 320px, narrower only when the viewport is. */
+export function defaultCardWidth(viewportWidth: number): number {
+  return Math.min(CARD_SIZE.width, Math.max(CARD_MIN.width, viewportWidth - MARGIN * 2))
+}
+
+/** The card's real size (fallbacks before it was measured). */
+export function cardSize(card: CompactCard): CardSize {
+  return { width: card.width ?? CARD_SIZE.width, height: card.height ?? CARD_SIZE.height }
+}
+
+/** A resized card: at least `CARD_MIN`, at most the bounds minus margins. */
+export function clampCardSize(
+  size: CardSize,
+  bounds: { width: number; height: number },
+  pinned = true,
+): CardSize {
+  const margin = pinned ? MARGIN : LAYER_MARGIN
+  return {
+    width: Math.round(
+      Math.min(
+        Math.max(size.width, CARD_MIN.width),
+        Math.max(CARD_MIN.width, bounds.width - margin * 2),
+      ),
+    ),
+    height: Math.round(
+      Math.min(
+        Math.max(size.height, CARD_MIN.height),
+        Math.max(CARD_MIN.height, bounds.height - margin * 2),
+      ),
+    ),
+  }
+}
+
 /**
  * Keep a card inside `bounds`: the viewport when pinned, the card layer (the
- * walkthrough's content box) when it follows the page.
+ * walkthrough's content box) when it follows the page. Uses the card's real
+ * size; a hand-set size larger than the bounds is shrunk to fit.
  */
 export function clampCard(
   card: CompactCard,
   bounds: { width: number; height: number },
 ): CompactCard {
   const margin = card.pinned ? MARGIN : LAYER_MARGIN
+  const sized =
+    card.manual && card.width !== undefined && card.height !== undefined
+      ? {
+          ...card,
+          ...clampCardSize({ width: card.width, height: card.height }, bounds, card.pinned),
+        }
+      : card
+  const { width, height } = cardSize(sized)
   return {
-    ...card,
-    x: Math.min(
-      Math.max(card.x, margin),
-      Math.max(margin, bounds.width - CARD_SIZE.width - margin),
-    ),
-    y: Math.min(
-      Math.max(card.y, margin),
-      Math.max(margin, bounds.height - CARD_SIZE.height - margin),
-    ),
+    ...sized,
+    x: Math.min(Math.max(sized.x, margin), Math.max(margin, bounds.width - width - margin)),
+    y: Math.min(Math.max(sized.y, margin), Math.max(margin, bounds.height - height - margin)),
   }
 }
 
 /**
  * Pin a card to the screen or attach it to the page without it moving on
- * screen. `layer` is the card layer's current viewport position.
+ * screen (its size is kept). `layer` is the card layer's current viewport
+ * position.
  */
 export function convertCardPin(
   card: CompactCard,
@@ -140,8 +211,8 @@ export function convertCardPin(
 ): CompactCard {
   if (card.pinned === pinned) return card
   return pinned
-    ? { x: card.x + layer.left, y: card.y + layer.top, pinned }
-    : { x: card.x - layer.left, y: card.y - layer.top, pinned }
+    ? { ...card, x: card.x + layer.left, y: card.y + layer.top, pinned }
+    : { ...card, x: card.x - layer.left, y: card.y - layer.top, pinned }
 }
 
 /** Beside the selection: to its right when there is room, else to its left. */
@@ -188,6 +259,8 @@ interface FloatingQAState {
   compact: (id: string, card: CompactCard) => void
   /** Move a card, or pin / unpin it. */
   setCard: (id: string, card: CompactCard) => void
+  /** The learner resized a card: keep the size (also for the next card of this window). */
+  resizeCard: (id: string, size: CardSize) => void
   /** Back to the full window, optionally at a new place. */
   expand: (id: string, rect?: NoteWindowRect) => void
   /** Tuck into the text. */
@@ -291,6 +364,14 @@ export const useFloatingQA = create<FloatingQAState>((set) => ({
       cardPinned: card.pinned,
       windows: state.windows.map((window) =>
         window.id === id && window.compact ? { ...window, compact: card } : window,
+      ),
+    })),
+  resizeCard: (id, size) =>
+    set((state) => ({
+      windows: state.windows.map((window) =>
+        window.id === id && window.compact
+          ? { ...window, cardSize: size, compact: { ...window.compact, ...size, manual: true } }
+          : window,
       ),
     })),
   expand: (id, rect) =>

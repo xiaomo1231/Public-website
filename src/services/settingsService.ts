@@ -10,6 +10,7 @@ import { getDeviceKey } from '@/infrastructure/crypto/deviceKey'
 import { logger } from '@/infrastructure/logger/logger'
 import { ValidationError } from '@/infrastructure/errors/AppError'
 import { normalizePrices } from '@/entities/aiUsage/types'
+import { MANUAL_MAX_TOKENS_MAX, MANUAL_MAX_TOKENS_MIN } from '@/infrastructure/ai/outputLimit'
 import { t } from '@/i18n'
 
 /**
@@ -40,6 +41,13 @@ export class SettingsService {
       model: row.model,
       temperature: row.temperature,
       maxTokens: row.maxTokens,
+      // Rows from before the option keep their number.
+      maxTokensMode: row.maxTokensMode ?? 'manual',
+      // Limits read for another base URL describe other models: ignored.
+      modelOutputLimits:
+        row.modelOutputLimits && row.modelOutputLimits.baseURL === row.baseURL
+          ? { ...row.modelOutputLimits.limits }
+          : {},
       webImagesEnabled: row.webImagesEnabled === true,
       webImagesVisionCheck: row.webImagesVisionCheck === true,
       adminApiKey: await this.decryptSecret(row.adminApiKeyEncrypted),
@@ -70,10 +78,13 @@ export class SettingsService {
     }
     if (patch.maxTokens !== undefined) {
       const m = Number(patch.maxTokens)
-      if (!Number.isInteger(m) || m < 64 || m > 32000) {
+      if (!Number.isInteger(m) || m < MANUAL_MAX_TOKENS_MIN || m > MANUAL_MAX_TOKENS_MAX) {
         throw new ValidationError(t('errors.maxTokensRange'))
       }
       next.maxTokens = m
+    }
+    if (patch.maxTokensMode !== undefined) {
+      next.maxTokensMode = patch.maxTokensMode === 'model' ? 'model' : 'manual'
     }
 
     if (patch.webImagesEnabled !== undefined)
@@ -109,6 +120,31 @@ export class SettingsService {
     const saved = await this.repo.putRow(next)
     logger.info('AI settings updated', { provider: saved.provider, model: saved.model })
     return this.toSettings(saved)
+  }
+
+  /**
+   * Remember the output limits a `/models` call returned for `baseURL`
+   * (replacing any earlier list). Only positive integers are kept; an empty
+   * list clears what was stored for that base URL.
+   */
+  async rememberModelOutputLimits(
+    baseURL: string,
+    limits: Record<string, number>,
+  ): Promise<AISettings> {
+    const current = await this.getMigratedRow()
+    const clean: Record<string, number> = {}
+    for (const [model, value] of Object.entries(limits)) {
+      if (Number.isFinite(value) && value > 0) clean[model] = Math.floor(value)
+    }
+    const next: AISettingsRow = { ...current }
+    if (Object.keys(clean).length > 0) {
+      next.modelOutputLimits = { baseURL: baseURL.trim(), limits: clean }
+    } else if (current.modelOutputLimits?.baseURL === baseURL.trim()) {
+      delete next.modelOutputLimits
+    } else {
+      return this.toSettings(current)
+    }
+    return this.toSettings(await this.repo.putRow(next))
   }
 
   /**

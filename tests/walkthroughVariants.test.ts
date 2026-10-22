@@ -188,9 +188,9 @@ describe('普通版 / 详细版', () => {
     const stored = await section('q:q1')
     expect(stored.body).toBe(standard.body)
     expect(stored.inputHash).toBe(standard.inputHash)
-    expect(detailedVariant(stored)!.body).toBe('Detailed 1 v4.')
+    expect(detailedVariant(stored)!.body).toBe('Detailed 1 v5.')
     expect(sectionContent(stored, 'standard')!.body).toBe(standard.body)
-    expect(sectionContent(stored, 'detailed')!.body).toBe('Detailed 1 v4.')
+    expect(sectionContent(stored, 'detailed')!.body).toBe('Detailed 1 v5.')
     // Nothing is out of date after adding a version.
     expect((await plan()).every((entry) => !entry.needsWork)).toBe(true)
   })

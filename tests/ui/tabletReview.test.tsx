@@ -263,11 +263,11 @@ describe('T11 matrix cell keyboards per platform', () => {
       />,
     )
     const cells = screen.getAllByRole('textbox')
-    cells[1]!.focus()
+    act(() => cells[1]!.focus())
     await userEvent.keyboard('{Enter}')
     expect(cells[2]).toHaveFocus()
     expect(onSubmit).not.toHaveBeenCalled()
-    cells[3]!.focus()
+    act(() => cells[3]!.focus())
     await userEvent.keyboard('{Enter}')
     expect(onSubmit).toHaveBeenCalledTimes(1)
   })
@@ -285,7 +285,7 @@ describe('T11 matrix cell keyboards per platform', () => {
         label="Result"
       />,
     )
-    screen.getAllByRole('textbox')[0]!.focus()
+    act(() => screen.getAllByRole('textbox')[0]!.focus())
     await userEvent.keyboard('{Enter}')
     expect(onSubmit).toHaveBeenCalledTimes(1)
   })

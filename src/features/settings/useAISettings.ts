@@ -19,5 +19,6 @@ export function useAISettings() {
     update: store.update,
     applyPreset: store.applyPreset,
     reset: store.reset,
+    rememberModelOutputLimits: store.rememberModelOutputLimits,
   }
 }

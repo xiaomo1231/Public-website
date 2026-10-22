@@ -62,7 +62,7 @@ function currentText(current: NonNullable<SectionRevision['current']>): string {
 }
 
 /** The revision block: current version, student request, and the rule for using them. */
-function revisionBlock(revision: SectionRevision, what: string): string {
+export function revisionBlock(revision: SectionRevision, what: string): string {
   const suggestion = revision.suggestion?.trim().slice(0, MAX_SUGGESTION_CHARS)
   return [
     `The student asked for ${what} to be rewritten.`,

@@ -16,6 +16,8 @@ interface SettingsStoreActions {
   update: (patch: Partial<AISettings>) => Promise<void>
   applyPreset: (providerId: AISettings['provider']) => Promise<void>
   reset: () => Promise<void>
+  /** Store the output limits a `/models` call returned (no other field changes). */
+  rememberModelOutputLimits: (baseURL: string, limits: Record<string, number>) => Promise<void>
 }
 
 export type SettingsStore = SettingsStoreState & SettingsStoreActions
@@ -66,6 +68,15 @@ export const useSettingsStore = create<SettingsStore>((set) => ({
       const msg = err instanceof Error ? err.message : t('errors.failedToApplyPreset')
       set({ error: msg, saving: false })
       throw err
+    }
+  },
+
+  async rememberModelOutputLimits(baseURL, limits) {
+    try {
+      const settings = await service.rememberModelOutputLimits(baseURL, limits)
+      set({ settings })
+    } catch {
+      // Only a convenience: the manual number / documented table still apply.
     }
   },
 

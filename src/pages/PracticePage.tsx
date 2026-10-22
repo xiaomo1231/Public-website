@@ -10,6 +10,7 @@ import { LoadingState } from '@/shared/ui/LoadingState'
 import { PageContainer, PageContent, PageHeader } from '@/shared/ui/Page'
 import { RichText } from '@/shared/ui/RichText'
 import { MathField } from '@/widgets/mathInput/MathField'
+import { expressionQuickItems } from '@/services/quickInputs'
 import { useProject } from '@/features/project/useProjects'
 import { VisualSourceFigure } from '@/widgets/source/VisualSourceFigure'
 import { DocumentUploadDialog } from '@/widgets/documents/DocumentUploadDialog'
@@ -177,6 +178,9 @@ function QuestionCard({
               subject={project?.subject}
               language={targetLanguageOf(project)}
               multiline={question.type === 'short_answer' || question.type === 'unknown'}
+              {...(question.type === 'math_expr'
+                ? { quickItems: expressionQuickItems(question.expectedAnswer) }
+                : {})}
               value={answer}
               onChange={setAnswer}
               placeholder={t('practice.placeholder')}

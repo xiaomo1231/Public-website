@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { CheckCircle2, Eye, Lightbulb } from 'lucide-react'
 import type {
   GuidedBlank,
@@ -8,6 +8,7 @@ import type {
 } from '@/entities/homework/guided'
 import { stepTextWithAnswers, stepTextWithGaps } from '@/entities/homework/guidedSteps'
 import { gradeBlank, stepComplete, type BlankGrade } from '@/services/guidedGrading'
+import { blankQuickItems } from '@/services/quickInputs'
 import type { MathInputMode } from '@/shared/lib/mathInput'
 import { Badge } from '@/shared/ui/Badge'
 import { Button } from '@/shared/ui/Button'
@@ -40,6 +41,8 @@ export interface GuidedBlankPracticeProps {
   steps: GuidedTextStep[]
   progress: GuidedBlankStepProgress[]
   subject?: string
+  /** Target language of a language course (its letters for written blanks). */
+  language?: string
   onChange: (index: number, next: GuidedBlankStepProgress) => void
 }
 
@@ -48,6 +51,7 @@ export function GuidedBlankPractice({
   steps,
   progress,
   subject,
+  language,
   onChange,
 }: GuidedBlankPracticeProps): JSX.Element {
   const { t } = useTranslation()
@@ -87,6 +91,7 @@ export function GuidedBlankPractice({
                 index={index}
                 record={record}
                 {...(subject ? { subject } : {})}
+                {...(language ? { language } : {})}
                 onChange={(next) => onChange(index, next)}
               />
             )}
@@ -102,12 +107,14 @@ function ActiveBlankStep({
   index,
   record,
   subject,
+  language,
   onChange,
 }: {
   step: GuidedTextStep
   index: number
   record: GuidedBlankStepProgress
   subject?: string
+  language?: string
   onChange: (next: GuidedBlankStepProgress) => void
 }): JSX.Element {
   const { t } = useTranslation()
@@ -189,6 +196,7 @@ function ActiveBlankStep({
               value={record.values[blank.id] ?? ''}
               grade={grades?.[blank.id]}
               {...(subject ? { subject } : {})}
+              {...(language ? { language } : {})}
               onChange={(value) => {
                 setGrades((previous) => {
                   if (!previous) return previous
@@ -228,6 +236,7 @@ function BlankField({
   value,
   grade,
   subject,
+  language,
   onChange,
   onSubmit,
 }: {
@@ -236,11 +245,17 @@ function BlankField({
   value: string
   grade: BlankGrade | undefined
   subject?: string
+  language?: string
   onChange: (value: string) => void
   onSubmit: () => void
 }): JSX.Element {
   const { t } = useTranslation()
   const id = `guided-blank-${blank.id}`
+  // Only what this blank needs: its variables / units / equation arrows.
+  const quickItems = useMemo(
+    () => blankQuickItems(blank, subject, language),
+    [blank, subject, language],
+  )
   return (
     <div className="space-y-1.5" data-blank-kind={blank.kind}>
       <label htmlFor={id} className="flex flex-wrap items-center gap-2 text-sm font-medium">
@@ -256,6 +271,8 @@ function BlankField({
         onChange={onChange}
         onSubmit={onSubmit}
         {...(subject ? { subject } : {})}
+        {...(language ? { language } : {})}
+        quickItems={quickItems}
         inputClassName="h-11 text-[15px]"
         aria-label={t('guided.blankLabel', { index: position + 1 })}
       />

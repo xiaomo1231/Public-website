@@ -6,6 +6,7 @@ import { Textarea } from '@/shared/ui/Textarea'
 import { cn } from '@/shared/lib/utils'
 import { useProject } from '@/features/project/useProjects'
 import { MathField } from '@/widgets/mathInput/MathField'
+import { expressionQuickItems } from '@/services/quickInputs'
 import { OrderingInput } from './OrderingInput'
 import { FillBlankInput, MatchingInput, MultipleSelectInput } from './ExamFormatInputs'
 import { ArticleGenderInput, ParadigmTableInput } from './LanguageDrillInputs'
@@ -223,6 +224,8 @@ export function AnswerInput({
           language={language}
           value={value}
           onChange={onChange}
+          // The answer's variables and the common templates, always visible.
+          quickItems={expressionQuickItems(question.correctAnswer)}
           placeholder={t('answerInput.expressionPlaceholder')}
           disabled={disabled}
           {...(onSubmit ? { onSubmit } : {})}

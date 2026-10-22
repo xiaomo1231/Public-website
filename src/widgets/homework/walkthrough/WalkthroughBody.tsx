@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useId, useMemo, useRef, useState } from 'react'
-import { AlertTriangle, ShieldCheck } from 'lucide-react'
+import { AlertTriangle } from 'lucide-react'
 import type { WalkthroughPart } from '@/entities/homework/walkthrough'
 import {
   conclusionByPart,
@@ -306,7 +306,8 @@ export function StepCard({ step }: { step: WalkthroughStep }): JSX.Element {
           t('homework.walkthrough.step.hint')
         )}
       </div>
-      {step.mismatches.length > 0 ? (
+      {/* Only a problem is worth a line; a correct step stays quiet. */}
+      {step.mismatches.length > 0 && (
         <ul className="space-y-1 text-[13.5px] text-amber-700 dark:text-amber-300">
           {step.mismatches.map((item) => (
             <li key={`${item.row}:${item.col}`} className="flex items-start gap-1.5">
@@ -320,14 +321,6 @@ export function StepCard({ step }: { step: WalkthroughStep }): JSX.Element {
             </li>
           ))}
         </ul>
-      ) : (
-        <p className="flex items-center gap-1.5 text-[13px] text-muted-foreground">
-          <ShieldCheck
-            className="h-3.5 w-3.5 shrink-0 text-emerald-600 dark:text-emerald-400"
-            aria-hidden
-          />
-          {t('homework.walkthrough.step.checked')}
-        </p>
       )}
     </div>
   )

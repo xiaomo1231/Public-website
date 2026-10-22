@@ -92,6 +92,15 @@ export interface ProviderConfig {
   model: string
   temperature: number
   maxTokens: number
+  /** How `maxTokens` is chosen (absent: the number as given, as before). */
+  maxTokensMode?: 'model' | 'manual'
+  /** Output limits by model id, read from the provider's `/models` metadata. */
+  modelOutputLimits?: Record<string, number>
+  /**
+   * The model's own output limit, once resolved (`resolveProviderConfig`).
+   * No request ever asks for more than this.
+   */
+  modelMaxOutputTokens?: number
 }
 
 export function ensureConfig(cfg: ProviderConfig): ProviderConfig {

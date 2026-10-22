@@ -163,10 +163,12 @@ describe('writing the walkthrough', () => {
   it('writes each question, then the opening and summary, and checks the row reduction', async () => {
     const { ai, calls } = stubAI(goodModel)
     const result = await service(ai).generate(setId)
-    expect(result).toEqual({ generated: 3, failed: 0 })
-    // One request per question, then one for the frame.
-    expect(calls).toHaveLength(3)
+    expect(result).toEqual({ generated: 4, failed: 0 })
+    // One request per question, then one for the opening and one for the summary.
+    expect(calls).toHaveLength(4)
     expect(isFrame(calls[2]!.system)).toBe(true)
+    expect(calls[2]!.system).toContain('ONLY the opening')
+    expect(calls[3]!.system).toContain('ONLY the closing summary')
     expect(calls[2]!.user).toContain('Infinitely many solutions.')
     // Default language: Chinese with English terms; linear-algebra rules included.
     expect(calls[0]!.user).toContain('主元（pivot）')
@@ -210,7 +212,7 @@ describe('writing the walkthrough', () => {
       calls.map((call) =>
         isFrame(call.system) ? 'frame' : call.user.includes('question 2.') ? 'q2' : 'q1',
       ),
-    ).toEqual(['q2', 'frame'])
+    ).toEqual(['q2', 'frame', 'frame'])
   })
 
   it('keeps a finished section when rewriting it fails, and records sections the model cannot write', async () => {
@@ -295,7 +297,7 @@ describe('writing the walkthrough', () => {
     const svc = service(ai)
     const [a, b] = await Promise.all([svc.generate(setId), service(ai).generate(setId)])
     expect(a).toEqual(b)
-    expect(calls).toHaveLength(3)
+    expect(calls).toHaveLength(4)
   })
 })
 

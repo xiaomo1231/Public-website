@@ -379,7 +379,11 @@ export class OpenAICompatibleProvider implements AIProvider {
         return msg
       }),
       temperature: req.temperature ?? this.config.temperature,
-      max_tokens: req.maxTokens ?? this.config.maxTokens,
+      // Never above the model's own output limit, when known.
+      max_tokens: Math.min(
+        req.maxTokens ?? this.config.maxTokens,
+        this.config.modelMaxOutputTokens ?? Infinity,
+      ),
       stream,
     }
     if (stream && this.options.streamUsage) body.stream_options = { include_usage: true }

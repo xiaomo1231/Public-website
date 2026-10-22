@@ -28,6 +28,8 @@ import {
   previewQuantity,
 } from '@/services/answerPreview'
 import { useTranslation, type TranslationKey } from '@/i18n'
+import type { QuickItem } from '@/shared/lib/quickInsert'
+import { QuickInsertBar } from './QuickInsertBar'
 
 const GROUP_LABEL_KEYS: Record<SymbolGroupId, TranslationKey> = {
   basic: 'symbolGroup.basic',
@@ -114,6 +116,11 @@ export interface MathFieldProps {
   showRenderedPreview?: boolean
   /** Lets a parent focus or scroll to the field. */
   fieldRef?: MutableRefObject<FieldElement | null>
+  /**
+   * The few symbols this field needs (its variables, its units …), shown
+   * under the field at all times; the full symbol keyboard stays foldable.
+   */
+  quickItems?: readonly QuickItem[]
 }
 
 /**
@@ -139,6 +146,7 @@ export function MathField({
   onKeyDown,
   showRenderedPreview = false,
   fieldRef,
+  quickItems,
 }: MathFieldProps): JSX.Element {
   const { t } = useTranslation()
   const localRef = useRef<FieldElement | null>(null)
@@ -230,6 +238,16 @@ export function MathField({
           autoComplete="off"
           onChange={(event) => onChange(event.target.value)}
           className={cn(mode !== 'text' && 'font-mono', inputClassName)}
+        />
+      )}
+
+      {quickItems && quickItems.length > 0 && !disabled && (
+        <QuickInsertBar
+          items={quickItems}
+          field={() => localRef.current}
+          value={() => value}
+          onChange={onChange}
+          label={t('quickInsert.label')}
         />
       )}
 

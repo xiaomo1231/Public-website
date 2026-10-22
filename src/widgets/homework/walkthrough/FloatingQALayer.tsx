@@ -1,5 +1,6 @@
 import {
   memo,
+  useCallback,
   useEffect,
   useLayoutEffect,
   useMemo,
@@ -31,10 +32,14 @@ import { RichText } from '@/shared/ui/RichText'
 import { GenerationControls } from '@/shared/ui/GenerationControls'
 import { toast } from '@/features/toast/toastStore'
 import {
-  CARD_SIZE,
+  cardAutoHeightCap,
+  cardSize,
   clampCard,
+  clampCardSize,
   clampRect,
   convertCardPin,
+  defaultCardWidth,
+  fitCardHeight,
   useFloatingQA,
   windowMode,
   type CompactCard,
@@ -44,6 +49,7 @@ import {
   addNoteToCards,
   askInWindow,
   stopInWindow,
+  persistCardSize,
   persistWindowRect,
   saveWindow,
   windowTitle,
@@ -502,7 +508,16 @@ const FloatingQAWindowView = memo(function FloatingQAWindowView({
    * page like the last card did (pinned at first, like a window).
    */
   function shrink(): void {
-    const pinnedCard: CompactCard = { x: win.rect.x, y: win.rect.y, pinned: true }
+    // A size set by hand earlier comes back; otherwise 320px wide and as tall
+    // as the content (measured once the card renders).
+    const size = win.cardSize
+    const pinnedCard: CompactCard = {
+      x: win.rect.x,
+      y: win.rect.y,
+      pinned: true,
+      width: size?.width ?? defaultCardWidth(window.innerWidth),
+      ...(size ? { height: size.height, manual: true } : {}),
+    }
     const card =
       !useFloatingQA.getState().cardPinned && cardLayer
         ? clampCard(
@@ -781,10 +796,12 @@ const FloatingQAWindowView = memo(function FloatingQAWindowView({
 const shownCards = new Set<string>()
 
 /**
- * A window shrunk to a card: its title and the start of the latest answer.
- * Drag it anywhere; click it (or Expand) to get the full window back. A pinned
- * card is fixed to the screen; one that follows the page sits in the
- * walkthrough's card layer and scrolls with the text.
+ * A window shrunk to a card: its title, the latest question and the whole
+ * latest answer. It fits its content (up to a cap, then the answer scrolls)
+ * until the learner resizes it from the corner grip. Drag it anywhere; click
+ * it (or Expand) to get the full window back. A pinned card is fixed to the
+ * screen; one that follows the page sits in the walkthrough's card layer and
+ * scrolls with the text.
  */
 const CompactCardView = memo(function CompactCardView({
   win,
@@ -798,12 +815,18 @@ const CompactCardView = memo(function CompactCardView({
   attached: boolean
 }): JSX.Element {
   const { t } = useTranslation()
-  const { raise, setCard, expand, setMinimized, tuck } = useFloatingQA.getState()
+  const { raise, setCard, resizeCard, expand, setMinimized, tuck } = useFloatingQA.getState()
   const rootRef = useRef<HTMLDivElement>(null)
+  const bodyRef = useRef<HTMLDivElement>(null)
+  const contentRef = useRef<HTMLDivElement>(null)
   const [firstShow] = useState(() => !shownCards.has(win.id))
+  const [overflowing, setOverflowing] = useState(false)
+  const [atEnd, setAtEnd] = useState(false)
   const card = win.compact!
+  const { width } = cardSize(card)
   const title = windowTitle(win, t)
   const latest = win.turns[win.turns.length - 1]
+  const question = win.pending ?? latest?.question
 
   useEffect(() => {
     shownCards.add(win.id)
@@ -816,9 +839,52 @@ const CompactCardView = memo(function CompactCardView({
     }
   }, [win.id])
 
-  function bounds(pinned: boolean): { width: number; height: number } {
-    return !pinned && cardLayer ? layerBounds(cardLayer) : viewport()
-  }
+  const bounds = useCallback(
+    (pinned: boolean): { width: number; height: number } =>
+      !pinned && cardLayer ? layerBounds(cardLayer) : viewport(),
+    [cardLayer],
+  )
+
+  /**
+   * Fit the card to its content (header + question + answer) unless the
+   * learner sized it, and note whether the body now scrolls. Nothing is
+   * written when there is no layout (a hidden page).
+   */
+  const measure = useCallback((): void => {
+    const root = rootRef.current
+    const body = bodyRef.current
+    const content = contentRef.current
+    if (!root || !body || !content || content.offsetHeight <= 0) return
+    const current = useFloatingQA.getState().windows.find((window) => window.id === win.id)?.compact
+    if (!current) return
+    if (!current.manual) {
+      const needed = root.offsetHeight - body.clientHeight + content.offsetHeight
+      const height = fitCardHeight(needed, window.innerHeight)
+      if (current.height !== height)
+        setCard(win.id, clampCard({ ...current, height }, bounds(current.pinned)))
+    }
+    setOverflowing(content.offsetHeight > body.clientHeight + 1)
+    setAtEnd(body.scrollTop + body.clientHeight >= content.offsetHeight - 2)
+  }, [win.id, setCard, bounds])
+
+  // Re-fit when the answer changes (KaTeX renders synchronously).
+  useLayoutEffect(measure, [
+    measure,
+    latest?.answer,
+    question,
+    win.error,
+    card.manual,
+    card.width,
+    card.height,
+  ])
+  // …and when the content reflows later (fonts, the card resized).
+  useEffect(() => {
+    if (typeof ResizeObserver === 'undefined') return
+    const observer = new ResizeObserver(() => measure())
+    if (contentRef.current) observer.observe(contentRef.current)
+    if (bodyRef.current) observer.observe(bodyRef.current)
+    return () => observer.disconnect()
+  }, [measure])
 
   /** Back to the full window (its previous size) where the card is on screen. */
   function expandNow(): void {
@@ -854,10 +920,18 @@ const CompactCardView = memo(function CompactCardView({
 
   /**
    * Drag, or click to expand. Like the window, a drag only writes a transform
-   * until release; a press that barely moves is a click.
+   * until release; a press that barely moves is a click. A finger or pen on
+   * an answer long enough to scroll scrolls it instead.
    */
   function startDrag(event: ReactPointerEvent<HTMLDivElement>): void {
-    if (event.button !== 0 || (event.target as HTMLElement).closest('button')) return
+    const target = event.target as HTMLElement
+    if (event.button !== 0 || target.closest('button')) return
+    const body = bodyRef.current
+    if (body && overflowing && body.contains(target)) {
+      if (event.pointerType !== 'mouse') return
+      // A press on the body's own scrollbar.
+      if (target === body && event.nativeEvent.offsetX >= body.clientWidth) return
+    }
     event.preventDefault()
     raise(win.id)
     const handle = event.currentTarget
@@ -902,6 +976,77 @@ const CompactCardView = memo(function CompactCardView({
     window.addEventListener('pointercancel', onCancel)
   }
 
+  /**
+   * Resize from the corner grip. Only the element's size changes while the
+   * pointer is down; on release the size is kept (no more fitting) for this
+   * visit, and on the saved note.
+   */
+  function startResize(event: ReactPointerEvent<HTMLDivElement>): void {
+    if (event.button !== 0) return
+    event.preventDefault()
+    event.stopPropagation()
+    raise(win.id)
+    const handle = event.currentTarget
+    const pointerId = event.pointerId
+    const pointerType = event.pointerType
+    capturePointer(handle, pointerId)
+    const origin = { x: event.clientX, y: event.clientY }
+    const start = {
+      width: card.width ?? (rootRef.current?.offsetWidth || width),
+      height: card.height ?? (rootRef.current?.offsetHeight || cardSize(card).height),
+    }
+    const pinned = card.pinned
+    // At most the viewport (and the card layer's width) minus margins.
+    const view = viewport()
+    const limit =
+      !pinned && cardLayer
+        ? { width: Math.min(view.width, layerBounds(cardLayer).width), height: view.height }
+        : view
+    let size = start
+    let moved = false
+    const onMove = (move: PointerEvent): void => {
+      if (move.pointerId !== pointerId) return
+      if (move.buttons === 0) {
+        finish()
+        return
+      }
+      if (!moved && !passedDragThreshold(origin, { x: move.clientX, y: move.clientY }, pointerType))
+        return
+      moved = true
+      size = clampCardSize(
+        {
+          width: start.width + move.clientX - origin.x,
+          height: start.height + move.clientY - origin.y,
+        },
+        limit,
+        pinned,
+      )
+      const element = rootRef.current
+      if (!element) return
+      element.style.maxHeight = 'none'
+      element.style.width = `${size.width}px`
+      element.style.height = `${size.height}px`
+    }
+    function finish(): void {
+      window.removeEventListener('pointermove', onMove)
+      window.removeEventListener('pointerup', finish)
+      window.removeEventListener('pointercancel', finish)
+      releasePointer(handle, pointerId)
+      if (!moved) return
+      flushSync(() => {
+        resizeCard(win.id, size)
+        const current = useFloatingQA
+          .getState()
+          .windows.find((window) => window.id === win.id)?.compact
+        if (current) setCard(win.id, clampCard(current, bounds(current.pinned)))
+      })
+      void persistCardSize(win.id)
+    }
+    window.addEventListener('pointermove', onMove)
+    window.addEventListener('pointerup', finish)
+    window.addEventListener('pointercancel', finish)
+  }
+
   return (
     <div
       ref={rootRef}
@@ -921,8 +1066,10 @@ const CompactCardView = memo(function CompactCardView({
       style={{
         left: card.x,
         top: card.y,
-        width: CARD_SIZE.width,
-        maxHeight: CARD_SIZE.height,
+        width,
+        height: card.height,
+        // Until it is measured (and while it fits its content) the cap holds.
+        maxHeight: card.manual ? undefined : cardAutoHeightCap(window.innerHeight),
         zIndex: layer,
       }}
       className={cn(
@@ -932,7 +1079,7 @@ const CompactCardView = memo(function CompactCardView({
         firstShow && 'animate-pop-in',
       )}
     >
-      <div className="flex items-center gap-1 border-b py-1 pl-2.5 pr-1 lecture:border-b-0 lab:bg-background">
+      <div className="flex shrink-0 items-center gap-1 border-b py-1 pl-2.5 pr-1 lecture:border-b-0 lab:bg-background">
         <MessageCircleQuestion className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden />
         <span
           className="min-w-0 flex-1 truncate text-xs font-medium lecture:font-heading lecture:font-bold lab:font-mono lab:text-[11px]"
@@ -973,25 +1120,60 @@ const CompactCardView = memo(function CompactCardView({
           {t('walkthroughQA.expand')}
         </Button>
       </div>
-      <div className="min-h-0 flex-1 overflow-hidden px-2.5 py-1.5 [mask-image:linear-gradient(to_bottom,black_65%,transparent)]">
-        {win.pending ? (
-          <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
-            <Loader2 className="h-3 w-3 animate-spin" aria-hidden />
-            {t('contextual.thinking')}
-          </p>
-        ) : latest ? (
-          <RichText
-            text={latest.answer}
-            format="markdown"
-            className="space-y-1"
-            paragraphClassName="text-[13px] leading-[1.55]"
-          />
-        ) : (
-          <p className="text-xs text-muted-foreground">
-            {win.error ? t('contextual.failed') : t('walkthroughQA.noAnswer')}
-          </p>
+      <div
+        ref={bodyRef}
+        data-card-body
+        data-overflowing={overflowing ? '' : undefined}
+        onScroll={(event) => {
+          const body = event.currentTarget
+          const end = contentRef.current?.offsetHeight ?? body.scrollHeight
+          setAtEnd(body.scrollTop + body.clientHeight >= end - 2)
+        }}
+        className={cn(
+          'min-h-0 flex-1 overflow-y-auto overscroll-contain',
+          // A long answer scrolls: a finger pans it, the bottom fades until the end.
+          overflowing && 'touch-pan-y',
+          overflowing &&
+            !atEnd &&
+            '[mask-image:linear-gradient(to_bottom,black_calc(100%-1.5rem),transparent)]',
         )}
+      >
+        <div ref={contentRef} data-card-content className="space-y-1.5 px-2.5 pb-4 pt-1.5">
+          {question && (
+            <p className="w-fit max-w-full rounded-md bg-primary/10 px-1.5 py-0.5 text-xs text-foreground lecture:bg-transparent lecture:px-0 lecture:text-muted-foreground lab:rounded-none lab:bg-theme-primary-soft">
+              {question}
+            </p>
+          )}
+          {win.pending ? (
+            <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              <Loader2 className="h-3 w-3 animate-spin" aria-hidden />
+              {t('contextual.thinking')}
+            </p>
+          ) : latest ? (
+            <RichText
+              text={latest.answer}
+              format="markdown"
+              className="space-y-1"
+              paragraphClassName="text-[13px] leading-[1.55]"
+            />
+          ) : (
+            <p className="text-xs text-muted-foreground">
+              {win.error ? t('contextual.failed') : t('walkthroughQA.noAnswer')}
+            </p>
+          )}
+        </div>
       </div>
+      {/* Same grip as the window: 16px drawn, 44px to a finger. */}
+      <div
+        role="presentation"
+        aria-hidden
+        data-card-resize
+        onPointerDown={startResize}
+        className={cn(
+          'absolute bottom-0 right-0 z-[1] h-4 w-4 cursor-se-resize touch-none bg-no-repeat [background-position:bottom_right] [background-size:1rem_1rem] coarse:h-11 coarse:w-11',
+          'bg-[linear-gradient(135deg,transparent_50%,hsl(var(--muted-foreground)/0.45)_50%,transparent_60%,transparent_70%,hsl(var(--muted-foreground)/0.45)_70%,transparent_80%)]',
+        )}
+      />
     </div>
   )
 })

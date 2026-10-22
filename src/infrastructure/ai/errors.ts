@@ -122,13 +122,21 @@ export class InvalidJSONError extends AIProviderError {
  * to raise the output budget (or send less input), not to retry the parse.
  */
 export class OutputTruncatedError extends AIProviderError {
-  constructor(limit?: number) {
+  /**
+   * Set when the reply was cut at the largest budget allowed: the model's own
+   * output limit (`model`) or the user's setting (`setting`). Asking again
+   * with more room is impossible, so the message says so.
+   */
+  readonly atCap?: { limit: number; by: 'model' | 'setting' }
+
+  constructor(limit?: number, atCap?: { limit: number; by: 'model' | 'setting' }) {
     super(
       typeof limit === 'number'
         ? t('errors.aiOutputTruncated', { limit })
         : t('errors.aiOutputTruncatedGeneric'),
       'OUTPUT_TRUNCATED',
     )
+    if (atCap) this.atCap = atCap
   }
 }
 

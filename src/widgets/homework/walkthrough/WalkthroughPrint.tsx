@@ -68,6 +68,12 @@ export function WalkthroughPrint({
               />
             </div>
           )}
+          <RichText
+            text={section.body}
+            format="markdown"
+            className="space-y-2"
+            paragraphClassName="text-[14px] leading-[1.7]"
+          />
           {section.conclusion && (
             <div className="border-l-4 pl-3">
               <strong>{t('homework.walkthrough.conclusion')}</strong>
@@ -78,12 +84,6 @@ export function WalkthroughPrint({
               />
             </div>
           )}
-          <RichText
-            text={section.body}
-            format="markdown"
-            className="space-y-2"
-            paragraphClassName="text-[14px] leading-[1.7]"
-          />
           {section.suggestions && section.suggestions.length > 0 && (
             <>
               <h3 className="text-base font-semibold">{t('homework.walkthrough.suggestions')}</h3>
