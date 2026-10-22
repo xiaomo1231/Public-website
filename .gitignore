@@ -80,3 +80,5 @@ release/
 *.pid
 *.seed
 *.pid.lock
+# 本地素材（版权材料，不入库）
+训练素材/
