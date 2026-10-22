@@ -20,6 +20,7 @@ import { toast } from '@/features/toast/toastStore'
 import { targetLanguageOf, languageName } from '@/shared/lib/language'
 import { friendlyAIError } from '@/shared/lib/aiErrors'
 import { buildAIServices } from '@/services/aiServices'
+import { withUsageKind } from '@/services/aiService'
 import { InterviewService } from '@/services/interviewService'
 import type { InterviewScenario, InterviewSession } from '@/entities/interview/types'
 import { formatDateTime, useTranslation, type TranslationKey } from '@/i18n'
@@ -121,7 +122,7 @@ function InterviewLanding({ projectId }: { projectId: string }): JSX.Element {
 
   const service = useCallback(async () => {
     const bundle = await buildAIServices()
-    return new InterviewService({ ai: bundle?.ai ?? null })
+    return new InterviewService({ ai: withUsageKind(bundle?.ai ?? null, 'tutor') })
   }, [])
 
   /** Read the scenario cards; `resume` continues a paused run with the requests left. */

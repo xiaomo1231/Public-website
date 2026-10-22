@@ -13,6 +13,7 @@ import { Input } from '@/shared/ui/Input'
 import { Progress } from '@/shared/ui/Progress'
 import { toast } from '@/features/toast/toastStore'
 import { buildAIServices } from '@/services/aiServices'
+import { withUsageKind } from '@/services/aiService'
 import { PHRASE_KINDS, PhraseCardService, type PhraseCandidate } from '@/services/phraseCards'
 import { friendlyAIError } from '@/shared/lib/aiErrors'
 import { useTranslation, type TranslationKey } from '@/i18n'
@@ -79,16 +80,15 @@ export function PhraseCardsDialog({
     setProgress(0)
     try {
       const bundle = await buildAIServices()
-      const result = await new PhraseCardService({ ai: bundle?.ai ?? null }).extractParts(
-        projectId,
-        {
-          control: run,
-          onProgress: (done, total) => {
-            setProgress(Math.round((done / total) * 100))
-            setParts((prev) => ({ ...prev, done, total }))
-          },
+      const result = await new PhraseCardService({
+        ai: withUsageKind(bundle?.ai ?? null, 'vocab'),
+      }).extractParts(projectId, {
+        control: run,
+        onProgress: (done, total) => {
+          setProgress(Math.round((done / total) * 100))
+          setParts((prev) => ({ ...prev, done, total }))
         },
-      )
+      })
       run.finish()
       // Continuing a paused read keeps the edits and unticks made so far.
       const key = (row: PhraseCandidate) => `${row.chunkId}|${row.phrase}`

@@ -13,7 +13,12 @@ import { MistakeService } from '@/services/mistakeService'
 import { BackupError } from '@/infrastructure/errors/AppError'
 import { scanBackup } from '@/infrastructure/backup/backupReader'
 
-const RESTORED_TABLES = [...EXPORTED_TABLES, 'documentBlobs', 'visualSourceImages']
+const RESTORED_TABLES = [
+  ...EXPORTED_TABLES,
+  'documentBlobs',
+  'visualSourceImages',
+  'homeworkAnswerImages',
+]
 
 /** Every restored table as plain data; ArrayBuffers become byte arrays. */
 async function snapshot(db: AppDatabase): Promise<Record<string, unknown[]>> {

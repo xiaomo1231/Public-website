@@ -9,6 +9,11 @@ export interface ProviderPresetInfo {
   defaultModel: string
   models: string[]
   supportsJsonMode: boolean
+  /**
+   * The provider documents `stream_options.include_usage`, so streamed
+   * responses can report token usage. Off for presets where it is unverified.
+   */
+  streamUsage?: boolean
 }
 
 /**
@@ -24,6 +29,7 @@ export const PROVIDER_PRESETS: ProviderPresetInfo[] = [
     defaultModel: 'gpt-4o-mini',
     models: ['gpt-4o-mini', 'gpt-4o', 'gpt-4-turbo', 'gpt-3.5-turbo'],
     supportsJsonMode: true,
+    streamUsage: true,
   },
   {
     id: 'qwen',
@@ -32,6 +38,7 @@ export const PROVIDER_PRESETS: ProviderPresetInfo[] = [
     defaultModel: 'qwen-plus',
     models: ['qwen-plus', 'qwen-turbo', 'qwen-max', 'qwen-long'],
     supportsJsonMode: true,
+    streamUsage: true,
   },
   {
     id: 'deepseek',
@@ -40,6 +47,7 @@ export const PROVIDER_PRESETS: ProviderPresetInfo[] = [
     defaultModel: 'deepseek-chat',
     models: ['deepseek-chat', 'deepseek-reasoner'],
     supportsJsonMode: false,
+    streamUsage: true,
   },
   {
     id: 'MiniMax',
@@ -84,5 +92,6 @@ export function createProvider(config: ProviderConfig): AIProvider {
   return new OpenAICompatibleProvider(preset.id, preset.label, config, {
     defaultModel: preset.defaultModel,
     supportsJsonMode: preset.supportsJsonMode,
+    streamUsage: preset.streamUsage === true,
   })
 }

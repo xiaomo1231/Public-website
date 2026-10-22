@@ -38,7 +38,7 @@ import { prompts } from '@/infrastructure/ai/prompts'
 import { normalizeTopicAnalysis } from '@/infrastructure/ai/prompts/topic-analyzer/normalize'
 import { normalizeMathNotation } from '@/infrastructure/files/mathNotation'
 import { buildAIServices } from './aiServices'
-import type { AIService } from './aiService'
+import { type AIService, withUsageKind } from './aiService'
 import {
   ANALYSIS_MIN_OUTPUT_TOKENS,
   type DocumentAnalysisProgress,
@@ -652,7 +652,7 @@ export class CourseContentService {
       const staged = await this.stageTopic(
         topic,
         candidateChunks,
-        services!.ai,
+        withUsageKind(services!.ai, 'analysis'),
         analysisLanguage,
         subject,
         control.signal,

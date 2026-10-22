@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } fr
 import {
   AlertTriangle,
   BookOpenText,
+  ListChecks,
   Link2,
   Loader2,
   MessageSquareText,
@@ -21,7 +22,8 @@ import type {
 } from '@/entities/homework/walkthrough'
 import { formatHomeworkQuestion } from '@/entities/homework/formatQuestion'
 import { useHomeworkService } from '@/features/homework/useHomeworkService'
-import { questionLabel } from '@/services/homeworkWalkthroughService'
+import { questionLabel, type SectionAttempt } from '@/services/homeworkWalkthroughService'
+import { tidyBoxedPunctuation } from '@/entities/homework/walkthroughFormat'
 import { useWalkthrough } from '@/features/homework/useWalkthrough'
 import { openNote, windowTitle } from '@/features/homework/floatingQA'
 import { useFloatingQA, type FloatingQAWindow } from '@/features/homework/floatingQAStore'
@@ -91,6 +93,7 @@ export function HomeworkWalkthroughPanel({
     aiReady = false,
     regenerateSection,
     restorePrevious,
+    addAnalysis,
   } = useWalkthrough(set.id)
   const homework = useHomeworkService()
   // The spoiler notice appears once per assignment; dismissing it is stored on
@@ -140,7 +143,10 @@ export function HomeworkWalkthroughPanel({
   // Changes only when some section's rendered text may have changed — not on
   // progress ticks or other walkthrough state updates.
   const textKey = entries
-    .map((entry) => `${entry.id}:${entry.section?.status ?? ''}:${entry.section?.generatedAt ?? 0}`)
+    .map(
+      (entry) =>
+        `${entry.id}:${entry.section?.status ?? ''}:${entry.section?.generatedAt ?? 0}:${entry.section?.analysis ? 1 : 0}`,
+    )
     .join('|')
     .concat(`|${uiLanguage}`)
 
@@ -267,6 +273,17 @@ export function HomeworkWalkthroughPanel({
     toast({ variant: 'success', title: t('homework.walkthrough.regenerated') })
   }
 
+  async function analyze(entry: WalkthroughPlanEntry): Promise<void> {
+    if (!addAnalysis) return
+    const result = await addAnalysis(entry.id)
+    if (!result) {
+      toast({ variant: 'error', title: t('homework.walkthrough.analysisFailed') })
+      return
+    }
+    if (result.paused) return
+    toast({ variant: 'success', title: t('homework.walkthrough.analysisAdded') })
+  }
+
   async function restore(entry: WalkthroughPlanEntry): Promise<void> {
     if (!restorePrevious) return
     if (await restorePrevious(entry.id))
@@ -312,9 +329,16 @@ export function HomeworkWalkthroughPanel({
     .map((entry) => ({
       id: entry.id,
       title: sectionTitle(entry, labels, t),
-      conclusion: entry.section!.conclusion,
-      body: entry.section!.body,
-      suggestions: entry.section!.suggestions,
+      ...(entry.section!.analysis
+        ? { analysis: tidyBoxedPunctuation(entry.section!.analysis) }
+        : {}),
+      ...(entry.section!.conclusion
+        ? { conclusion: tidyBoxedPunctuation(entry.section!.conclusion) }
+        : {}),
+      body: tidyBoxedPunctuation(entry.section!.body),
+      ...(entry.section!.suggestions
+        ? { suggestions: entry.section!.suggestions.map(tidyBoxedPunctuation) }
+        : {}),
     }))
 
   return (
@@ -387,9 +411,12 @@ export function HomeworkWalkthroughPanel({
             <p role="status" className="flex items-center gap-2 text-sm">
               <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
               {progress.section
-                ? t('homework.walkthrough.regenerating', {
-                    title: regeneratingTitle(progress.section.id, entries, labels, t),
-                  })
+                ? t(
+                    progress.section.analysis
+                      ? 'homework.walkthrough.analyzing'
+                      : 'homework.walkthrough.regenerating',
+                    { title: regeneratingTitle(progress.section.id, entries, labels, t) },
+                  )
                 : t('homework.walkthrough.progress', {
                     done: progress.done,
                     total: progress.total,
@@ -403,6 +430,16 @@ export function HomeworkWalkthroughPanel({
                 })}
               </p>
             ))}
+            {Object.entries(progress.attempts ?? {})
+              // The opening and summary share one request: name it once.
+              .filter(([sectionId]) => sectionId !== 'summary')
+              .map(([sectionId, attempt]) => (
+                <p key={sectionId} className="text-xs text-amber-700 dark:text-amber-300">
+                  {regeneratingTitle(sectionId, entries, labels, t)}
+                  {t('homework.walkthrough.titleSeparator')}
+                  {attemptText(attempt, t)}
+                </p>
+              ))}
             <div className="flex flex-wrap items-center gap-3">
               <Progress
                 className="min-w-[12rem] flex-1"
@@ -529,6 +566,10 @@ export function HomeworkWalkthroughPanel({
                     marker={sectionMarker(entry, labels)}
                     running={progress?.running.includes(entry.id) ?? false}
                     runningPart={progress?.parts?.[entry.id]}
+                    attempt={progress?.attempts?.[entry.id]}
+                    analyzing={
+                      progress?.section?.id === entry.id && progress.section.analysis === true
+                    }
                     notes={notes.filter((note) => note.sectionId === entry.id)}
                     tucked={tucked.filter(
                       (window) => window.passage.sectionId === entry.id && !window.noteId,
@@ -543,6 +584,7 @@ export function HomeworkWalkthroughPanel({
                           onContinueRegenerate: (suggestion?: string) =>
                             void regenerate(entry, suggestion),
                           onRestore: () => void restore(entry),
+                          onAddAnalysis: () => void analyze(entry),
                         })}
                     aiReady={aiReady}
                   />
@@ -642,6 +684,28 @@ function regeneratingTitle(
   return entry ? sectionTitle(entry, labels, t) : ''
 }
 
+/** 第 2 次尝试：上次超时 */
+function attemptText(attempt: SectionAttempt, t: T): string {
+  return t('homework.walkthrough.attempt', {
+    attempt: attempt.attempt,
+    reason: failureText(attempt.lastFailure, t),
+  })
+}
+
+function failureText(kind: SectionAttempt['lastFailure'], t: T): string {
+  switch (kind) {
+    case 'timeout':
+    case 'truncated':
+    case 'output-limit':
+    case 'rate-limited':
+    case 'unavailable':
+    case 'invalid-response':
+      return t(`homework.walkthrough.failure.${kind}` as TranslationKey)
+    default:
+      return t('homework.walkthrough.failure.other')
+  }
+}
+
 /** The lab style's mono section number: Q1, Q2(a) … for questions, § otherwise. */
 function sectionMarker(entry: WalkthroughPlanEntry, labels: ReadonlyMap<string, string>): string {
   if (!entry.question) return '§'
@@ -655,6 +719,10 @@ interface SectionViewProps {
   running: boolean
   /** Split question: the sub-part being written now (`b`). */
   runningPart?: string | undefined
+  /** The request is being tried again, and why the last attempt failed. */
+  attempt?: SectionAttempt | undefined
+  /** Only the 题目分析 is being written (补充题目分析). */
+  analyzing: boolean
   notes: WalkthroughNote[]
   /** Unsaved conversations tucked into this section's text. */
   tucked: FloatingQAWindow[]
@@ -667,6 +735,8 @@ interface SectionViewProps {
   onContinueRegenerate?: (suggestion?: string) => void
   /** Swap with the version the last regeneration replaced. */
   onRestore?: () => void
+  /** 补充题目分析 for a section written before the analysis existed. */
+  onAddAnalysis?: () => void
   aiReady: boolean
 }
 
@@ -676,6 +746,8 @@ function WalkthroughSectionView({
   marker,
   running,
   runningPart,
+  attempt,
+  analyzing,
   notes,
   tucked,
   onOpenNote,
@@ -683,6 +755,7 @@ function WalkthroughSectionView({
   onRegenerate,
   onContinueRegenerate,
   onRestore,
+  onAddAnalysis,
   aiReady,
 }: SectionViewProps): JSX.Element {
   const { t } = useTranslation()
@@ -713,9 +786,19 @@ function WalkthroughSectionView({
         {running && (
           <Badge variant="outline" className="gap-1">
             <Loader2 className="h-3 w-3 animate-spin" aria-hidden />
-            {runningPart
-              ? t('homework.walkthrough.writingPart', { part: runningPart })
-              : t('homework.walkthrough.writing')}
+            {analyzing
+              ? t('homework.walkthrough.writingAnalysis')
+              : runningPart
+                ? t('homework.walkthrough.writingPart', { part: runningPart })
+                : t('homework.walkthrough.writing')}
+          </Badge>
+        )}
+        {running && attempt && (
+          <Badge
+            variant="outline"
+            className="border-amber-500/50 text-amber-700 dark:text-amber-300"
+          >
+            {attemptText(attempt, t)}
           </Badge>
         )}
         {!running && entry.outdated && (
@@ -795,20 +878,44 @@ function WalkthroughSectionView({
         </p>
       ) : (
         <>
+          {entry.kind === 'question' &&
+            (section.analysis ? (
+              <QuestionAnalysis analysis={section.analysis} />
+            ) : (
+              onAddAnalysis &&
+              !running && (
+                <div
+                  className="flex flex-wrap items-center gap-3 rounded-lg border border-dashed border-border/80 px-4 py-2 text-sm text-muted-foreground lecture:rounded-none lecture:border-x-0 lecture:px-0 lab:rounded-none"
+                  data-print-hidden
+                >
+                  <span>{t('homework.walkthrough.analysisMissing')}</span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={!aiReady}
+                    title={noProvider}
+                    onClick={onAddAnalysis}
+                  >
+                    <ListChecks className="h-4 w-4" aria-hidden />
+                    {t('homework.walkthrough.addAnalysis')}
+                  </Button>
+                </div>
+              )
+            ))}
           {section.conclusion && (
             <div className="rounded-lg border-l-4 border-primary bg-theme-primary-soft/40 px-4 py-3 lecture:rounded-none lecture:border-l-[3px] lecture:bg-transparent lecture:py-1 lab:rounded-none lab:border lab:border-l-2 lab:border-border lab:border-l-primary">
               <span className="text-sm font-semibold lecture:block lecture:text-xs lecture:font-normal lecture:tracking-[0.14em] lecture:text-muted-foreground lab:font-mono lab:text-[11px] lab:uppercase lab:tracking-wider">
                 {t('homework.walkthrough.conclusion')}
               </span>
               <RichText
-                text={section.conclusion}
+                text={tidyBoxedPunctuation(section.conclusion)}
                 format="markdown"
                 paragraphClassName="text-[15px] leading-relaxed lecture:text-[17px] lecture:text-foreground"
               />
             </div>
           )}
           <RichText
-            text={section.body}
+            text={tidyBoxedPunctuation(section.body)}
             format="markdown"
             className="min-w-0 space-y-3"
             paragraphClassName="text-[15px] leading-[1.8] lecture:text-[17px] lecture:leading-[1.9]"
@@ -822,7 +929,7 @@ function WalkthroughSectionView({
                 {section.suggestions.map((item, index) => (
                   <li key={index}>
                     <RichText
-                      text={item}
+                      text={tidyBoxedPunctuation(item)}
                       format="markdown"
                       paragraphClassName="text-[15px] leading-relaxed"
                     />
@@ -910,12 +1017,12 @@ function PartialParts({ parts, total }: { parts: WalkthroughPart[]; total: numbe
             {`(${part.label}) ${part.heading}`.trim()}
           </h3>
           <RichText
-            text={part.conclusion}
+            text={tidyBoxedPunctuation(part.conclusion)}
             format="markdown"
             paragraphClassName="text-[15px] font-medium leading-relaxed"
           />
           <RichText
-            text={part.body}
+            text={tidyBoxedPunctuation(part.body)}
             format="markdown"
             className="min-w-0 space-y-3"
             paragraphClassName="text-[15px] leading-[1.8] lecture:text-[17px] lecture:leading-[1.9]"
@@ -939,6 +1046,28 @@ function QuestionPrompt({ question }: { question: HomeworkQuestion }): JSX.Eleme
         format="markdown"
         className="mt-2"
         paragraphClassName="text-sm leading-relaxed"
+      />
+    </details>
+  )
+}
+
+/** 题目分析: what is asked and what the answer looks like, before the conclusion. */
+function QuestionAnalysis({ analysis }: { analysis: string }): JSX.Element {
+  const { t } = useTranslation()
+  return (
+    <details
+      open
+      data-walkthrough-analysis
+      className="group rounded-lg border border-border/70 px-4 py-2 text-sm lecture:rounded-none lecture:border-x-0 lecture:border-t-0 lecture:px-0 lab:rounded-none lab:border-dashed"
+    >
+      <summary className="cursor-pointer select-none font-medium text-muted-foreground lecture:text-xs lecture:font-normal lecture:tracking-[0.14em] lab:font-mono lab:text-[11px] lab:uppercase lab:tracking-wider">
+        {t('homework.walkthrough.analysis')}
+      </summary>
+      <RichText
+        text={tidyBoxedPunctuation(analysis)}
+        format="markdown"
+        className="mt-2 min-w-0 space-y-2"
+        paragraphClassName="text-[15px] leading-relaxed lecture:text-[16px]"
       />
     </details>
   )

@@ -1,8 +1,9 @@
 import { NavLink, useLocation } from 'react-router-dom'
-import { PanelLeftClose, ShieldCheck } from 'lucide-react'
+import { PanelLeftClose } from 'lucide-react'
 import { Button } from '@/shared/ui/Button'
 import { useTranslation } from '@/i18n'
 import { cn } from '@/shared/lib/utils'
+import { UsageReadout } from '@/widgets/settings/UsageReadout'
 import { NAV_ITEMS, isNavItemActive } from './navItems'
 
 export interface SidebarProps {
@@ -78,9 +79,8 @@ export function Sidebar({ onNavigate, onCollapse }: SidebarProps): JSX.Element {
         })}
       </nav>
 
-      <div className="flex items-start gap-2 border-t px-4 py-3 font-mono text-[11px] text-muted-foreground">
-        <ShieldCheck className="mt-px h-3.5 w-3.5 shrink-0" aria-hidden />
-        <span>{t('app.dataStaysLocal')}</span>
+      <div className="border-t px-4 py-3 font-mono text-[11px]">
+        <UsageReadout onNavigate={onNavigate} />
       </div>
     </aside>
   )

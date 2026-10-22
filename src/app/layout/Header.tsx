@@ -1,7 +1,7 @@
 import { Monitor, Moon, Sun, LogOut, Languages, Menu, PanelLeftOpen } from 'lucide-react'
 import type { UserTheme } from '@/entities/user/types'
 import { useAuth } from '@/features/auth/useAuth'
-import { useThemePreference } from '@/features/theme/useAppearance'
+import { useThemePreference, useUiStyle } from '@/features/theme/useAppearance'
 import { useUILanguage } from '@/features/settings/useUILanguage'
 import { LANGUAGE_LABELS, UI_LANGUAGES, useTranslation, type TranslationKey } from '@/i18n'
 import { Button } from '@/shared/ui/Button'
@@ -14,6 +14,7 @@ import {
   DropdownMenuSeparator,
 } from '@/shared/ui/DropdownMenu'
 import { cn } from '@/shared/lib/utils'
+import { UsageReadout } from '@/widgets/settings/UsageReadout'
 
 const THEME_OPTIONS: { value: UserTheme; labelKey: TranslationKey; icon: typeof Sun }[] = [
   { value: 'light', labelKey: 'header.theme.light', icon: Sun },
@@ -71,6 +72,7 @@ export function HeaderControls(): JSX.Element {
   const { t } = useTranslation()
   const { language, setLanguage } = useUILanguage()
   const { preference, setPreference } = useThemePreference()
+  const { uiStyle } = useUiStyle()
 
   const ThemeIcon = preference === 'light' ? Sun : preference === 'dark' ? Moon : Monitor
 
@@ -141,6 +143,15 @@ export function HeaderControls(): JSX.Element {
             {profile?.name ?? t('header.student')}
           </DropdownMenuLabel>
           <DropdownMenuSeparator />
+          {/* Lecture has no side rail, so the AI balance / usage lives here. */}
+          {uiStyle === 'lecture' && (
+            <>
+              <DropdownMenuItem asChild>
+                <UsageReadout className="text-xs" />
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+            </>
+          )}
           <DropdownMenuItem onSelect={() => void lock()}>
             <LogOut className="h-4 w-4" />
             {t('header.lockApp')}

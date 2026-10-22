@@ -65,11 +65,14 @@ export interface WalkthroughDraft {
   /** Sub-part labels of the question, in order. */
   labels: string[]
   parts: WalkthroughPart[]
+  /** The 题目分析 of the whole question, returned with the first sub-part. */
+  analysis?: string
   startedAt: number
 }
 
 /** The version a regeneration replaced (one level, for 恢复上一版). */
 export interface WalkthroughSectionVersion {
+  analysis?: string
   conclusion?: string
   body: string
   checks?: LinearSystemCheck[]
@@ -85,6 +88,13 @@ export interface WalkthroughSection {
   kind: WalkthroughSectionKind
   questionId?: string
   title: string
+  /**
+   * Question sections: the 题目分析 (what is asked, what is given, each
+   * sub-part's task, the knowledge used, the form of the answer), shown
+   * collapsed before the conclusion. Sections written before prompt v3 have
+   * none until the student asks for it (补充题目分析).
+   */
+  analysis?: string
   /** Question sections: the answer in one or two lines, shown first. */
   conclusion?: string
   /** Markdown + LaTeX. */

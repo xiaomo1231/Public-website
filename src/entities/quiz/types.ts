@@ -127,6 +127,41 @@ export interface Quiz {
   resume?: QuizResumeState
   /** Oral rehearsal while generating / paused: the topics still to draw up. */
   oralResume?: OralResumeState
+  /**
+   * An adaptive quiz drawn from a question bank (题库式自适应). While
+   * generating, `questionIds` holds every bank question; once ready it holds
+   * only the questions served so far (in order) and `difficultyPlan` their
+   * levels — the rest of the bank stays hidden in `bank.entries`.
+   */
+  bank?: QuizBank
+}
+
+/** One planned bank position: the quiz slot it may fill and its level. */
+export interface QuizBankSlot {
+  slot: number
+  difficulty: DifficultyLevel
+}
+
+/** A generated bank question (served or not). */
+export interface QuizBankEntry extends QuizBankSlot {
+  questionId: string
+}
+
+export interface QuizBank {
+  /** The level the quiz starts at. */
+  start: DifficultyLevel
+  /** What was planned, indexed like `QuizResumeState.questionSlots` while generating. */
+  plan: QuizBankSlot[]
+  /** Every generated bank question; empty until generation completes. */
+  entries: QuizBankEntry[]
+  /** Questions the student answers in all (the configured count, or fewer if the bank is short). */
+  length: number
+}
+
+/** How many questions the student answers: a bank quiz serves them one by one. */
+export function quizLength(quiz: Quiz): number {
+  if (quiz.bank && quiz.bank.entries.length > 0) return quiz.bank.length
+  return quiz.questionIds.length
 }
 
 /** One planned question not generated yet; `slot` is its place in the plan. */
@@ -181,5 +216,7 @@ export function quizGenerationProgress(quiz: Quiz): { done: number; total: numbe
     const total = quiz.oralResume.total
     return { done: total - quiz.oralResume.remaining.length, total }
   }
+  // A bank quiz generates several levels per slot before it can be taken.
+  if (quiz.bank) return { done: quiz.questionIds.length, total: quiz.bank.plan.length }
   return { done: quiz.questionIds.length, total: quiz.config.count }
 }

@@ -31,10 +31,22 @@ export class SettingsRepository {
     }
   }
 
+  /**
+   * Write the settings row. The local usage counters (`usage`) are owned by
+   * `AIUsageService`, which updates them after every AI response; a settings
+   * write keeps the counters currently stored instead of the (possibly stale)
+   * copy it read earlier, so a save never rolls usage back.
+   */
   async putRow(row: AISettingsRow): Promise<AISettingsRow> {
     try {
-      await this.db.settings.put(row)
-      return row
+      return await this.db.transaction('rw', this.db.settings, async () => {
+        const current = await this.db.settings.get('singleton')
+        const next: AISettingsRow = { ...row }
+        if (current?.usage) next.usage = current.usage
+        else delete next.usage
+        await this.db.settings.put(next)
+        return next
+      })
     } catch (err) {
       throw new StorageError(t('storage.failedToSaveSettings'), err)
     }

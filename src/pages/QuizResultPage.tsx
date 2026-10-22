@@ -366,6 +366,21 @@ export function QuizResultPage(): JSX.Element {
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-2 lab:space-y-0">
+              {quiz.bank && questions.length > 0 && (
+                <div className="space-y-1 pb-2">
+                  <p className="text-xs font-medium text-muted-foreground">
+                    {t('quizResult.difficultyPath')}
+                  </p>
+                  <p className="text-sm lab:font-mono lab:text-xs">
+                    {questions
+                      .map((question) => t(difficultyLabelKey(question.difficulty)))
+                      .join(' → ')}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    {t('quizResult.difficultyPathHint')}
+                  </p>
+                </div>
+              )}
               {Object.entries(score.byDifficulty).length === 0 ? (
                 <p className="text-xs text-muted-foreground">{t('quizResult.noData')}</p>
               ) : (

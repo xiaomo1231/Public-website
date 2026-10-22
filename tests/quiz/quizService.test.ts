@@ -139,6 +139,8 @@ describe('QuizService.generateQuiz', () => {
     const svc = buildService(db, fakeAI(chatJSON))
     const quiz = await svc.generateQuiz(project.id, {
       ...baseConfig,
+      // A fixed level: an adaptive quiz is a bank served one question at a time.
+      difficulty: 'basic',
       topicId,
       topicName: 'Derivatives',
     })

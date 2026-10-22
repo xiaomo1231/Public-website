@@ -9,6 +9,7 @@ import { decryptString, encryptString } from '@/infrastructure/crypto/crypto'
 import { getDeviceKey } from '@/infrastructure/crypto/deviceKey'
 import { logger } from '@/infrastructure/logger/logger'
 import { ValidationError } from '@/infrastructure/errors/AppError'
+import { normalizePrices } from '@/entities/aiUsage/types'
 import { t } from '@/i18n'
 
 /**
@@ -27,7 +28,10 @@ export class SettingsService {
 
   /** Read settings, migrating a legacy plaintext key if one is present. */
   async get(): Promise<AISettings> {
-    const row = await this.getMigratedRow()
+    return this.toSettings(await this.getMigratedRow())
+  }
+
+  private async toSettings(row: AISettingsRow): Promise<AISettings> {
     return {
       id: 'singleton',
       provider: row.provider,
@@ -38,6 +42,8 @@ export class SettingsService {
       maxTokens: row.maxTokens,
       webImagesEnabled: row.webImagesEnabled === true,
       webImagesVisionCheck: row.webImagesVisionCheck === true,
+      adminApiKey: await this.decryptSecret(row.adminApiKeyEncrypted),
+      usagePrices: normalizePrices(row.usagePrices),
       updatedAt: row.updatedAt,
     }
   }
@@ -86,20 +92,23 @@ export class SettingsService {
       delete next.apiKey
     }
 
+    if (patch.adminApiKey !== undefined) {
+      const trimmed = patch.adminApiKey.trim()
+      if (trimmed) {
+        next.adminApiKeyEncrypted = await encryptString(await getDeviceKey(), trimmed)
+      } else {
+        delete next.adminApiKeyEncrypted
+      }
+    }
+    if (patch.usagePrices !== undefined) {
+      const prices = normalizePrices(patch.usagePrices)
+      if (prices) next.usagePrices = prices
+      else delete next.usagePrices
+    }
+
     const saved = await this.repo.putRow(next)
     logger.info('AI settings updated', { provider: saved.provider, model: saved.model })
-    return {
-      id: 'singleton',
-      provider: saved.provider,
-      baseURL: saved.baseURL,
-      apiKey: await this.decryptApiKey(saved),
-      model: saved.model,
-      temperature: saved.temperature,
-      maxTokens: saved.maxTokens,
-      webImagesEnabled: saved.webImagesEnabled === true,
-      webImagesVisionCheck: saved.webImagesVisionCheck === true,
-      updatedAt: saved.updatedAt,
-    }
+    return this.toSettings(saved)
   }
 
   /**
@@ -163,9 +172,13 @@ export class SettingsService {
   }
 
   private async decryptApiKey(row: AISettingsRow): Promise<string> {
-    if (!row.apiKeyEncrypted) return ''
+    return this.decryptSecret(row.apiKeyEncrypted)
+  }
+
+  private async decryptSecret(payload: string | undefined): Promise<string> {
+    if (!payload) return ''
     try {
-      return await decryptString(await getDeviceKey(), row.apiKeyEncrypted)
+      return await decryptString(await getDeviceKey(), payload)
     } catch (err) {
       // A lost device key makes the ciphertext unreadable. Report it as "not
       // configured" rather than crashing; the user can re-enter the key.

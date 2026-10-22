@@ -44,6 +44,8 @@ export interface UseWalkthrough {
   ) => Promise<WalkthroughRunResult | null>
   /** Swap a section with the version its last regeneration replaced. */
   restorePrevious: (sectionId: string) => Promise<boolean>
+  /** 补充题目分析: write only the analysis of an older question section. */
+  addAnalysis: (sectionId: string) => Promise<WalkthroughRunResult | null>
 }
 
 /**
@@ -159,6 +161,10 @@ export function useWalkthrough(setId: string): UseWalkthrough {
       ),
     [start, setId],
   )
+  const addAnalysis = useCallback(
+    (sectionId: string) => start((svc, run) => svc.addAnalysis(setId, sectionId, { control: run })),
+    [start, setId],
+  )
   const restorePrevious = useCallback(
     async (sectionId: string) => {
       if (!service) return false
@@ -204,5 +210,6 @@ export function useWalkthrough(setId: string): UseWalkthrough {
     aiReady: service?.hasAI() ?? false,
     regenerateSection,
     restorePrevious,
+    addAnalysis,
   }
 }

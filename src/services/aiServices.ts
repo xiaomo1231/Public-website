@@ -63,7 +63,7 @@ export async function buildAIServices(): Promise<AIServicesBundle | null> {
   const mastery = new MasteryService(db)
   const mistakes = new MistakeService(db)
   const quiz = new QuizService({
-    ai,
+    ai: ai.withKind('quiz'),
     db,
     questions: new QuestionRepository(db),
     attempts: new QuestionAttemptRepository(db),
@@ -77,7 +77,7 @@ export async function buildAIServices(): Promise<AIServicesBundle | null> {
   return {
     ai,
     documentAnalysis: new DocumentAnalysisService({
-      ai,
+      ai: ai.withKind('analysis'),
       projects,
       db,
       documents: new DocumentRepository(db),
@@ -85,7 +85,7 @@ export async function buildAIServices(): Promise<AIServicesBundle | null> {
       analyses,
     }),
     tutor: new TutorService({
-      ai,
+      ai: ai.withKind('tutor'),
       projects,
       db,
       sessions: new TutorSessionRepository(db),
@@ -96,20 +96,28 @@ export async function buildAIServices(): Promise<AIServicesBundle | null> {
       mistakes,
     }),
     tutorLesson: new TutorLessonService({
-      ai,
+      ai: ai.withKind('tutor'),
       db,
       lessons: new TutorLessonRepository(db),
       analyses,
       chunks,
       visuals: new VisualSourceRepository(db),
-      visualizationService: new TutorVisualizationService({ ai }),
+      visualizationService: new TutorVisualizationService({ ai: ai.withKind('tutor') }),
     }),
-    translation: new TranslationService({ ai, repo: new TranslationRepository(db) }),
-    contextualTutor: new ContextualTutorService({ ai }),
+    translation: new TranslationService({
+      ai: ai.withKind('qa'),
+      repo: new TranslationRepository(db),
+    }),
+    contextualTutor: new ContextualTutorService({ ai: ai.withKind('qa') }),
     quiz,
     mastery,
     mistakes,
-    mistakeAnalysis: new MistakeAnalysisService({ ai, mistakes, chunks, analyses }),
+    mistakeAnalysis: new MistakeAnalysisService({
+      ai: ai.withKind('grading'),
+      mistakes,
+      chunks,
+      analyses,
+    }),
     weakness: new WeaknessService(db),
     reviewSession: new ReviewSessionService({ quiz, mistakes, db }),
   }
@@ -123,7 +131,9 @@ export async function buildAIServices(): Promise<AIServicesBundle | null> {
  */
 export async function buildHomeworkService(): Promise<HomeworkService> {
   const settings = await new SettingsService().get()
-  const ai = settings.apiKey.trim() ? new AIService({ config: settings }) : null
+  const ai = settings.apiKey.trim()
+    ? new AIService({ config: settings, usageKind: 'walkthrough' })
+    : null
   return new HomeworkService({ ai, db: getDb() })
 }
 
@@ -133,7 +143,9 @@ export async function buildHomeworkService(): Promise<HomeworkService> {
  */
 export async function buildHomeworkWalkthroughService(): Promise<HomeworkWalkthroughService> {
   const settings = await new SettingsService().get()
-  const ai = settings.apiKey.trim() ? new AIService({ config: settings }) : null
+  const ai = settings.apiKey.trim()
+    ? new AIService({ config: settings, usageKind: 'walkthrough' })
+    : null
   return new HomeworkWalkthroughService({ ai, db: getDb() })
 }
 
@@ -144,7 +156,7 @@ export async function buildHomeworkWalkthroughService(): Promise<HomeworkWalkthr
  */
 export async function buildSlideLessonService(): Promise<SlideLessonService> {
   const settings = await new SettingsService().get()
-  const ai = settings.apiKey.trim() ? new AIService({ config: settings }) : null
+  const ai = settings.apiKey.trim() ? new AIService({ config: settings, usageKind: 'tutor' }) : null
   return new SlideLessonService({ ai, db: getDb() })
 }
 
@@ -186,7 +198,9 @@ export function buildOfflineQuizService(): QuizService {
 export async function buildPracticeService(): Promise<PracticeService> {
   const db = getDb()
   const settings = await new SettingsService().get().catch(() => null)
-  const ai = settings?.apiKey.trim() ? new AIService({ config: settings }) : undefined
+  const ai = settings?.apiKey.trim()
+    ? new AIService({ config: settings, usageKind: 'grading' })
+    : undefined
   return new PracticeService({
     db,
     ...(ai ? { ai } : {}),

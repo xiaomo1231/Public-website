@@ -1,3 +1,5 @@
+import type { AIUsagePrices, AIUsageStore } from '@/entities/aiUsage/types'
+
 export type AIProviderId = 'openai' | 'qwen' | 'deepseek' | 'MiniMax' | 'mimo' | 'custom'
 
 export interface ProviderPreset {
@@ -84,6 +86,18 @@ export interface AISettingsRow {
   webImagesEnabled?: boolean
   /** Ask the (vision-capable) model whether each image fits its purpose. */
   webImagesVisionCheck?: boolean
+  /**
+   * OpenAI admin key (`sk-admin-…`), AES-GCM encrypted like the API key. Used
+   * ONLY for the organization Costs API (this month's spend). Never exported.
+   */
+  adminApiKeyEncrypted?: string
+  /** Optional per-1M-token prices for an estimated cost (labelled 估算). */
+  usagePrices?: AIUsagePrices
+  /**
+   * Local per-month, per-kind token counters. Owned by `AIUsageService`:
+   * settings writes preserve whatever is stored (see `SettingsRepository`).
+   */
+  usage?: AIUsageStore
   updatedAt: number
 }
 
@@ -106,6 +120,9 @@ export interface AISettings {
   /** Off by default; see `AISettingsRow.webImagesEnabled`. */
   webImagesEnabled: boolean
   webImagesVisionCheck: boolean
+  /** Decrypted OpenAI admin key ('' when unset). In memory only. */
+  adminApiKey: string
+  usagePrices: AIUsagePrices | null
   updatedAt: number
 }
 
@@ -118,4 +135,6 @@ export interface UpdateAISettingsInput {
   maxTokens?: number
   webImagesEnabled?: boolean
   webImagesVisionCheck?: boolean
+  adminApiKey?: string
+  usagePrices?: AIUsagePrices | null
 }

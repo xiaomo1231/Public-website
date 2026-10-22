@@ -112,6 +112,10 @@ export interface HomeworkMessage {
   id: string
   role: 'student' | 'assistant'
   content: string
+  /** Student turn: answer images sent along with it. */
+  imageCount?: number
+  /** Assistant turn: the model could not read the attached images. */
+  imagesIgnored?: boolean
   createdAt: number
 }
 

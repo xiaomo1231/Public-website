@@ -1,5 +1,17 @@
-import { useEffect, useState } from 'react'
-import { Eye, EyeOff, ImageIcon, Languages, Loader2, RotateCcw, Save, Wifi } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
+import { useLocation } from 'react-router-dom'
+import {
+  Eye,
+  EyeOff,
+  Gauge,
+  ImageIcon,
+  Languages,
+  ListRestart,
+  Loader2,
+  RotateCcw,
+  Save,
+  Wifi,
+} from 'lucide-react'
 import { useAISettings } from '@/features/settings/useAISettings'
 import { useSettingsStore } from '@/features/settings/settingsStore'
 import { useUILanguage } from '@/features/settings/useUILanguage'
@@ -18,6 +30,9 @@ import { toast } from '@/features/toast/toastStore'
 import { isAppError } from '@/infrastructure/errors/AppError'
 import { AIService } from '@/services/aiService'
 import { DataManagementPanel } from '@/widgets/dataManagement/DataManagementPanel'
+import { ModelCombobox } from '@/widgets/settings/ModelCombobox'
+import { UsagePanel } from '@/widgets/settings/UsagePanel'
+import { fetchModelList, type ModelListResult } from '@/infrastructure/ai/models'
 import { APP_VERSION } from '@/shared/config/config'
 import { LANGUAGE_LABELS, UI_LANGUAGES, useTranslation, type UILanguage } from '@/i18n'
 
@@ -47,12 +62,26 @@ export function SettingsPage(): JSX.Element {
     model: string
     error?: string
   } | null>(null)
+  const location = useLocation()
+  const [modelList, setModelList] = useState<ModelListResult | null>(null)
+  const [fetchingModels, setFetchingModels] = useState(false)
+  /** Base URL + key the current list was fetched for: blur only refetches on change. */
+  const fetchedFor = useRef('')
 
   useEffect(() => {
     if (settings && !draft) {
       setDraft(settings)
     }
   }, [settings, draft])
+
+  // `/settings#ai-usage` (the sidebar / account-menu readout) scrolls to the
+  // usage section once the page has rendered.
+  const ready = Boolean(loaded && !loading && draft)
+  useEffect(() => {
+    if (!ready || !location.hash) return
+    const target = document.getElementById(location.hash.slice(1))
+    target?.scrollIntoView({ block: 'start' })
+  }, [ready, location.hash])
 
   if (!loaded || loading || !draft) {
     return (
@@ -62,6 +91,25 @@ export function SettingsPage(): JSX.Element {
         </PageContent>
       </PageContainer>
     )
+  }
+
+  /**
+   * `GET {base}/models` with the draft's Base URL and key. `auto` runs on blur
+   * and after saving: it is silent when nothing changed or a field is empty.
+   */
+  async function loadModels(auto: boolean) {
+    if (!draft) return
+    const baseURL = draft.baseURL.trim()
+    const apiKey = draft.apiKey.trim()
+    const signature = `${baseURL} ${apiKey}`
+    if (auto && (!baseURL || !apiKey || signature === fetchedFor.current)) return
+    fetchedFor.current = signature
+    setFetchingModels(true)
+    try {
+      setModelList(await fetchModelList({ baseURL, apiKey }))
+    } finally {
+      setFetchingModels(false)
+    }
   }
 
   function patch<K extends keyof AISettings>(key: K, value: AISettings[K]) {
@@ -85,6 +133,7 @@ export function SettingsPage(): JSX.Element {
       await update(draft)
       setDirty(false)
       toast({ variant: 'success', title: t('settings.saved') })
+      void loadModels(true)
     } catch (err) {
       const msg = isAppError(err) ? err.message : t('settings.saveFailed')
       toast({ variant: 'error', title: t('settings.saveFailedTitle'), description: msg })
@@ -248,21 +297,32 @@ export function SettingsPage(): JSX.Element {
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="model">{t('settings.model')}</Label>
-                  <Input
+                  <div className="flex items-center justify-between gap-2">
+                    <Label htmlFor="model">{t('settings.model')}</Label>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 px-2 text-xs"
+                      onClick={() => void loadModels(false)}
+                      disabled={fetchingModels}
+                    >
+                      {fetchingModels ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
+                      ) : (
+                        <ListRestart className="h-3.5 w-3.5" aria-hidden />
+                      )}
+                      {fetchingModels ? t('settings.models.fetching') : t('settings.models.fetch')}
+                    </Button>
+                  </div>
+                  <ModelCombobox
                     id="model"
-                    list="model-suggestions"
                     value={draft.model}
-                    onChange={(e) => patch('model', e.target.value)}
+                    onChange={(value) => patch('model', value)}
+                    models={modelList?.ok ? modelList.models : (preset?.models ?? [])}
                     placeholder={preset?.defaultModel || t('settings.modelPlaceholder')}
                   />
-                  {preset && preset.models.length > 0 && (
-                    <datalist id="model-suggestions">
-                      {preset.models.map((m) => (
-                        <option key={m} value={m} />
-                      ))}
-                    </datalist>
-                  )}
+                  {modelList && <ModelListNote result={modelList} />}
                 </div>
               </div>
 
@@ -272,6 +332,7 @@ export function SettingsPage(): JSX.Element {
                   id="baseURL"
                   value={draft.baseURL}
                   onChange={(e) => patch('baseURL', e.target.value)}
+                  onBlur={() => void loadModels(true)}
                   placeholder="https://api.example.com/v1"
                 />
                 <p className="text-xs text-muted-foreground">{t('settings.baseUrlHint')}</p>
@@ -293,6 +354,7 @@ export function SettingsPage(): JSX.Element {
                     type={showKey ? 'text' : 'password'}
                     value={draft.apiKey}
                     onChange={(e) => patch('apiKey', e.target.value)}
+                    onBlur={() => void loadModels(true)}
                     placeholder="sk-..."
                     autoComplete="off"
                     spellCheck={false}
@@ -325,6 +387,19 @@ export function SettingsPage(): JSX.Element {
                   </p>
                 )}
               </div>
+            </CardContent>
+          </Card>
+
+          <Card id="ai-usage" className={cn(SECTION, 'scroll-mt-20')}>
+            <CardHeader className={SECTION_HEAD}>
+              <CardTitle className={cn(SECTION_TITLE, 'flex items-center gap-2')}>
+                <Gauge className="h-4 w-4 lecture:hidden" aria-hidden />
+                {t('usage.title')}
+              </CardTitle>
+              <CardDescription>{t('usage.description')}</CardDescription>
+            </CardHeader>
+            <CardContent className={SECTION_BODY}>
+              <UsagePanel draft={draft} patch={patch} />
             </CardContent>
           </Card>
 
@@ -432,5 +507,29 @@ export function SettingsPage(): JSX.Element {
         </div>
       </PageContent>
     </PageContainer>
+  )
+}
+
+/** Result of the last model-list fetch: how many models, or why manual input is needed. */
+function ModelListNote({ result }: { result: ModelListResult }): JSX.Element {
+  const { t } = useTranslation()
+  let text: string
+  if (result.ok) text = t('settings.models.count', { count: result.models.length })
+  else if (result.reason === 'blocked') text = t('settings.models.blocked')
+  else if (result.reason === 'auth')
+    text = t('settings.models.auth', { status: result.status ?? '' })
+  else if (result.reason === 'unsupported') text = t('settings.models.unsupported')
+  else if (result.reason === 'missing-config') text = t('settings.models.missingConfig')
+  else text = t('settings.models.failed')
+  return (
+    <p
+      className={cn(
+        'text-xs',
+        result.ok ? 'text-muted-foreground' : 'text-amber-700 dark:text-amber-400',
+      )}
+      aria-live="polite"
+    >
+      {text}
+    </p>
   )
 }

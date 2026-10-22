@@ -29,6 +29,10 @@ import {
 } from '@/shared/lib/generationControl'
 import { getUILanguage, t } from '@/i18n'
 import { HomeworkRepository } from '@/entities/homework/repository'
+import { AnswerImageRepository } from '@/entities/homework/answerImageRepository'
+import { answerImageKey } from '@/entities/homework/answerImages'
+import { answerImageNote, answerImageUrls, withAnswerImages } from './answerImagesAI'
+import { HomeworkAnswerImageService } from './homeworkAnswerImageService'
 import {
   currentHomeworkReview,
   homeworkReviewInputHash,
@@ -282,11 +286,22 @@ export class HomeworkService {
     return (await this.homework.listQuestions(setId)).filter((question) => question.retired)
   }
 
+  /** The answer-image service on the same database (photos / pen-board pages). */
+  answerImageService(): HomeworkAnswerImageService {
+    return new HomeworkAnswerImageService({ db: this.db })
+  }
+
   getQuestion(id: string): Promise<HomeworkQuestion | undefined> {
     return this.homework.getQuestion(id)
   }
 
-  /** Check the exact submitted draft against this question's current answer. */
+  /**
+   * Check the exact submitted draft — plus THIS question's answer images, if
+   * any — against this question's current answer. Images go to the model as
+   * `ChatMessage.images`; a model that cannot read them gets the typed text
+   * only (the check is flagged `imagesIgnored`), or, with no typed text, an
+   * actionable error. Images of other questions are never sent.
+   */
   async checkAnswer(
     questionId: string,
     draft: string,
@@ -294,7 +309,10 @@ export class HomeworkService {
     options: HomeworkRequestOptions = {},
   ): Promise<HomeworkAnswerCheck> {
     const submittedDraft = draft.trim()
-    if (!submittedDraft) throw new AppError(t('homework.check.empty'), 'VALIDATION_ERROR')
+    const answerImages = await new AnswerImageRepository(this.db).list(questionId)
+    const imageKey = answerImageKey(answerImages)
+    if (!submittedDraft && answerImages.length === 0)
+      throw new AppError(t('homework.check.empty'), 'VALIDATION_ERROR')
     let question = await this.homework.getQuestion(questionId)
     if (!question) throw new AppError(t('homework.questionMissing'), 'NOT_FOUND')
     const set = await this.homework.getSet(question.setId)
@@ -313,13 +331,16 @@ export class HomeworkService {
       prompts.homeworkAnswerCheck.VERSION,
       subject,
     )
-    const cached = currentAnswerCheck(question, draft, language, checkVersion)
-    if (cached) return cached
+    const cached = currentAnswerCheck(question, draft, language, checkVersion, imageKey)
+    // A check that could not read the images is redone on request (the student
+    // may have switched to a model that can).
+    if (cached && !cached.imagesIgnored) return cached
     const reference = answerReference(question)
     if (!reference) throw new AppError(t('homework.check.noReference'), 'VALIDATION_ERROR')
-    const inputHash = answerCheckInputHash(question, draft, language, checkVersion)
+    const inputHash = answerCheckInputHash(question, draft, language, checkVersion, imageKey)
+    // With handwritten working attached, the whole answer goes to the model.
     const local =
-      reference.kind === 'professor'
+      reference.kind === 'professor' && answerImages.length === 0
         ? checkObjectiveAnswer(question, reference.text, submittedDraft)
         : null
     let check: HomeworkAnswerCheck
@@ -355,7 +376,7 @@ export class HomeworkService {
           role: 'user',
           content: prompts.homeworkAnswerCheck.buildUserPrompt({
             question: question.prompt,
-            studentAnswer: submittedDraft,
+            studentAnswer: submittedDraft || '(No typed answer: see the attached images.)',
             referenceAnswer: reference.text,
             referenceKind: reference.kind,
             sourceText: await this.sourceText(question),
@@ -367,10 +388,21 @@ export class HomeworkService {
         messages[0]!.content.length + messages[1]!.content.length,
         ai.maxOutputTokens,
       )
-      const { data } = await ai.streamJSON<unknown>(messages, undefined, {
-        maxTokens: budget,
-        ...(options.signal ? { signal: options.signal } : {}),
-      })
+      const { result, imagesIgnored } = await withAnswerImages(
+        messages,
+        answerImageUrls(answerImages),
+        answerImageNote(answerImages.length),
+        (request) =>
+          ai.streamJSON<unknown>(request, undefined, {
+            maxTokens: budget,
+            ...(options.signal ? { signal: options.signal } : {}),
+          }),
+        {
+          ...(options.signal ? { signal: options.signal } : {}),
+          textOnlyFallback: !!submittedDraft,
+        },
+      )
+      const data = result.data
       const assessed = prompts.homeworkAnswerCheck.normalizeAssessment(data)
       if (!assessed) throw new AppError(t('homework.check.invalid'), 'INVALID_RESPONSE')
       if (assessed.status === 'insufficient') {
@@ -392,6 +424,8 @@ export class HomeworkService {
         promptVersion: checkVersion,
         questionSourceRefs: question.sourceRefs,
         answerChunkIds: reference.kind === 'professor' ? (question.answerChunkIds ?? []) : [],
+        ...(answerImages.length ? { imageCount: answerImages.length } : {}),
+        ...(imagesIgnored ? { imagesIgnored: true } : {}),
         createdAt: Date.now(),
       }
     }
@@ -591,7 +625,9 @@ export class HomeworkService {
   /** True when any question in the set holds the learner's own work. */
   private async setHasStudentWork(setId: string): Promise<boolean> {
     const questions = await this.homework.listQuestions(setId)
-    return questions.some((question) => hasStudentWork(question))
+    if (questions.some((question) => hasStudentWork(question))) return true
+    // Attached answer images are the learner's own work too.
+    return (await new AnswerImageRepository(this.db).countBySet(setId)) > 0
   }
 
   /**
@@ -658,6 +694,7 @@ export class HomeworkService {
         this.db.homeworkQuestions,
         this.db.homeworkWalkthroughs,
         this.db.walkthroughNotes,
+        this.db.homeworkAnswerImages,
         this.db.documents,
         this.db.documentBlobs,
         this.db.chunks,
@@ -1223,7 +1260,12 @@ export class HomeworkService {
     await this.homework.deleteQuestion(questionId)
   }
 
-  /** One turn of the per-question help conversation. */
+  /**
+   * One turn of the per-question help conversation. THIS question's answer
+   * images are attached to the turn (never another question's); a model that
+   * cannot read them answers from the text and the reply is flagged
+   * `imagesIgnored`.
+   */
   async ask(
     questionId: string,
     message: string,
@@ -1258,9 +1300,14 @@ export class HomeworkService {
         }),
       },
     ]
-    const reply = await this.requireAI().chat(
+    const ai = this.requireAI()
+    const answerImages = await new AnswerImageRepository(this.db).list(questionId)
+    const { result: reply, imagesIgnored } = await withAnswerImages(
       messages,
-      options.signal ? { signal: options.signal } : undefined,
+      answerImageUrls(answerImages),
+      answerImageNote(answerImages.length),
+      (request) => ai.chat(request, options.signal ? { signal: options.signal } : undefined),
+      options.signal ? { signal: options.signal } : {},
     )
     const content = (reply.content ?? '').trim()
     if (!content) throw new AppError(t('homework.emptyReply'), 'EMPTY_TUTOR_RESPONSE')
@@ -1270,12 +1317,14 @@ export class HomeworkService {
       id: crypto.randomUUID(),
       role: 'student',
       content: trimmed,
+      ...(answerImages.length ? { imageCount: answerImages.length } : {}),
       createdAt: now,
     }
     const assistant: HomeworkMessage = {
       id: crypto.randomUUID(),
       role: 'assistant',
       content,
+      ...(imagesIgnored ? { imagesIgnored: true } : {}),
       createdAt: now + 1,
     }
     // Merge from the latest row so a concurrent regeneration can't drop turns.
@@ -1750,181 +1799,196 @@ export class HomeworkService {
     const summary: ReanalysisSummary = { ...EMPTY_REANALYSIS_SUMMARY }
     const pendingIds: string[] = []
 
-    await this.db.transaction('rw', this.db.homeworkSets, this.db.homeworkQuestions, async () => {
-      // If the assignment was deleted while the AI was running, drop the whole
-      // result instead of resurrecting the card.
-      if (!(await this.homework.getSet(set.id))) {
-        throw new AppError(t('homework.setRemoved'), 'HOMEWORK_SET_GONE')
-      }
-      const all = await this.homework.listQuestions(set.id)
-      const active = all.filter((question) => !question.retired)
-      const retiredRows = all.filter((question) => question.retired)
+    await this.db.transaction(
+      'rw',
+      this.db.homeworkSets,
+      this.db.homeworkQuestions,
+      this.db.homeworkAnswerImages,
+      async () => {
+        // If the assignment was deleted while the AI was running, drop the whole
+        // result instead of resurrecting the card.
+        if (!(await this.homework.getSet(set.id))) {
+          throw new AppError(t('homework.setRemoved'), 'HOMEWORK_SET_GONE')
+        }
+        const all = await this.homework.listQuestions(set.id)
+        const active = all.filter((question) => !question.retired)
+        const retiredRows = all.filter((question) => question.retired)
 
-      const incomingMatchable = incoming.map(normalizedToMatchable)
-      const activeResult = matchHomeworkQuestions(incomingMatchable, active.map(toMatchable))
-      const activePairByNew = new Map<number, QuestionMatch>()
-      for (const pair of activeResult.pairs) activePairByNew.set(pair.newIndex, pair)
+        const incomingMatchable = incoming.map(normalizedToMatchable)
+        const activeResult = matchHomeworkQuestions(incomingMatchable, active.map(toMatchable))
+        const activePairByNew = new Map<number, QuestionMatch>()
+        for (const pair of activeResult.pairs) activePairByNew.set(pair.newIndex, pair)
 
-      // A question matched to an active row that the student never touched can
-      // be re-pointed at a retired row that DOES hold work. This heals the old
-      // "active blank + archived record" duplicate, but only when the retired
-      // match is at least as reliable as the active one, so an active
-      // association is never stolen by a weaker guess.
-      const blankActiveNew = new Set<number>()
-      for (const pair of activeResult.pairs) {
-        const prior = active[pair.oldIndex]
-        if (prior && !hasStudentWork(prior)) blankActiveNew.add(pair.newIndex)
-      }
+        // A question matched to an active row that the student never touched can
+        // be re-pointed at a retired row that DOES hold work. This heals the old
+        // "active blank + archived record" duplicate, but only when the retired
+        // match is at least as reliable as the active one, so an active
+        // association is never stolen by a weaker guess.
+        const blankActiveNew = new Set<number>()
+        for (const pair of activeResult.pairs) {
+          const prior = active[pair.oldIndex]
+          if (prior && !hasStudentWork(prior)) blankActiveNew.add(pair.newIndex)
+        }
 
-      const eligibleNew = [...new Set([...activeResult.unmatchedNew, ...blankActiveNew])]
-      const retiredResult = matchRetiredCandidates(
-        incomingMatchable,
-        eligibleNew,
-        retiredRows.map(toMatchable),
-      )
+        const eligibleNew = [...new Set([...activeResult.unmatchedNew, ...blankActiveNew])]
+        const retiredResult = matchRetiredCandidates(
+          incomingMatchable,
+          eligibleNew,
+          retiredRows.map(toMatchable),
+        )
 
-      const reviveByNew = new Map<number, QuestionMatch>()
-      const supersededActiveNew = new Set<number>()
-      for (const pair of retiredResult.pairs) {
-        const retiredPrior = retiredRows[pair.oldIndex]
-        if (!retiredPrior) continue
-        if (activeResult.unmatchedNew.includes(pair.newIndex)) {
-          reviveByNew.set(pair.newIndex, pair)
-        } else if (blankActiveNew.has(pair.newIndex) && hasStudentWork(retiredPrior)) {
-          const activePair = activePairByNew.get(pair.newIndex)
-          if (activePair && pair.score >= activePair.score) {
+        const reviveByNew = new Map<number, QuestionMatch>()
+        const supersededActiveNew = new Set<number>()
+        for (const pair of retiredResult.pairs) {
+          const retiredPrior = retiredRows[pair.oldIndex]
+          if (!retiredPrior) continue
+          if (activeResult.unmatchedNew.includes(pair.newIndex)) {
             reviveByNew.set(pair.newIndex, pair)
-            supersededActiveNew.add(pair.newIndex)
+          } else if (blankActiveNew.has(pair.newIndex) && hasStudentWork(retiredPrior)) {
+            const activePair = activePairByNew.get(pair.newIndex)
+            if (activePair && pair.score >= activePair.score) {
+              reviveByNew.set(pair.newIndex, pair)
+              supersededActiveNew.add(pair.newIndex)
+            }
           }
         }
-      }
 
-      const rows: HomeworkQuestion[] = incoming.map((question, index) => {
-        const chunkIds = groundedChunkIds(question)
-        const fingerprint = homeworkContentFingerprint({
-          prompt: question.prompt,
-          number: question.number,
-          chunkIds,
-        })
-
-        const revived = reviveByNew.get(index)
-        if (revived) {
-          // Reuse the archived row's id and every student field; only the place
-          // in the walkthrough and (if the wording moved) the AI content change.
-          const prior = retiredRows[revived.oldIndex]!
-          const unchanged = prior.contentFingerprint === fingerprint
-          const next: HomeworkQuestion = {
-            ...prior,
-            order: index,
+        const rows: HomeworkQuestion[] = incoming.map((question, index) => {
+          const chunkIds = groundedChunkIds(question)
+          const fingerprint = homeworkContentFingerprint({
+            prompt: question.prompt,
             number: question.number,
+            chunkIds,
+          })
+
+          const revived = reviveByNew.get(index)
+          if (revived) {
+            // Reuse the archived row's id and every student field; only the place
+            // in the walkthrough and (if the wording moved) the AI content change.
+            const prior = retiredRows[revived.oldIndex]!
+            const unchanged = prior.contentFingerprint === fingerprint
+            const next: HomeworkQuestion = {
+              ...prior,
+              order: index,
+              number: question.number,
+              prompt: question.prompt,
+              sourceRefs: question.sourceRefs,
+              contentFingerprint: fingerprint,
+              retired: false,
+              retiredAt: undefined,
+              answerStatus: answerKeptForMatch(prior, question.number),
+              updatedAt: now,
+            }
+            if (!unchanged) {
+              next.generationStatus = 'pending'
+              pendingIds.push(prior.id)
+            }
+            summary.restored += 1
+            return next
+          }
+
+          const pair = activePairByNew.get(index)
+          if (pair) {
+            const prior = active[pair.oldIndex]!
+            const unchanged = prior.contentFingerprint === fingerprint
+            const next: HomeworkQuestion = {
+              ...prior,
+              order: index,
+              number: question.number,
+              prompt: question.prompt,
+              sourceRefs: question.sourceRefs,
+              contentFingerprint: fingerprint,
+              answerStatus: answerKeptForMatch(prior, question.number),
+              updatedAt: now,
+            }
+            if (unchanged) {
+              summary.matched += 1
+            } else {
+              // Keep the old hints/solution until the new ones are ready; the row
+              // keeps the id, draft, revealed hints, solution flag and messages.
+              next.generationStatus = 'pending'
+              pendingIds.push(prior.id)
+              summary.regenerated += 1
+            }
+            return next
+          }
+
+          const created: HomeworkQuestion = {
+            id: crypto.randomUUID(),
+            projectId: set.projectId,
+            setId: set.id,
+            documentId: document.id,
+            documentName: document.name,
+            order: index,
+            ...(question.number ? { number: question.number } : {}),
             prompt: question.prompt,
             sourceRefs: question.sourceRefs,
+            hints: [],
+            generationStatus: 'pending',
+            promptVersion: HOMEWORK_QUESTION_PROMPT_VERSION,
+            draftText: '',
+            revealedHints: 0,
+            solutionRevealed: false,
+            messages: [],
             contentFingerprint: fingerprint,
-            retired: false,
-            retiredAt: undefined,
-            answerStatus: answerKeptForMatch(prior, question.number),
+            createdAt: now,
             updatedAt: now,
           }
-          if (!unchanged) {
-            next.generationStatus = 'pending'
-            pendingIds.push(prior.id)
-          }
-          summary.restored += 1
-          return next
-        }
+          pendingIds.push(created.id)
+          summary.added += 1
+          return created
+        })
 
-        const pair = activePairByNew.get(index)
-        if (pair) {
-          const prior = active[pair.oldIndex]!
-          const unchanged = prior.contentFingerprint === fingerprint
-          const next: HomeworkQuestion = {
-            ...prior,
-            order: index,
-            number: question.number,
-            prompt: question.prompt,
-            sourceRefs: question.sourceRefs,
-            contentFingerprint: fingerprint,
-            answerStatus: answerKeptForMatch(prior, question.number),
+        // Active rows that no longer matched move to the archive (records kept).
+        for (const oldIndex of activeResult.unmatchedOld) {
+          const question = active[oldIndex]!
+          await this.homework.upsertQuestion({
+            ...question,
+            retired: true,
+            retiredAt: now,
             updatedAt: now,
-          }
-          if (unchanged) {
-            summary.matched += 1
-          } else {
-            // Keep the old hints/solution until the new ones are ready; the row
-            // keeps the id, draft, revealed hints, solution flag and messages.
-            next.generationStatus = 'pending'
-            pendingIds.push(prior.id)
-            summary.regenerated += 1
-          }
-          return next
+          })
+          summary.retired += 1
         }
 
-        const created: HomeworkQuestion = {
-          id: crypto.randomUUID(),
-          projectId: set.projectId,
-          setId: set.id,
-          documentId: document.id,
-          documentName: document.name,
-          order: index,
-          ...(question.number ? { number: question.number } : {}),
-          prompt: question.prompt,
-          sourceRefs: question.sourceRefs,
-          hints: [],
-          generationStatus: 'pending',
-          promptVersion: HOMEWORK_QUESTION_PROMPT_VERSION,
-          draftText: '',
-          revealedHints: 0,
-          solutionRevealed: false,
-          messages: [],
-          contentFingerprint: fingerprint,
-          createdAt: now,
-          updatedAt: now,
+        // Blank active duplicates that a restored archive row replaced are removed
+        // — they hold no student input, so nothing is lost. Archived rows that
+        // were not restored are left exactly as they were.
+        for (const newIndex of supersededActiveNew) {
+          const pair = activePairByNew.get(newIndex)
+          const blank = pair ? active[pair.oldIndex] : undefined
+          if (!blank) continue
+          // Attached answer images are student work: archive, never delete.
+          if ((await new AnswerImageRepository(this.db).list(blank.id)).length > 0) {
+            await this.homework.upsertQuestion({
+              ...blank,
+              retired: true,
+              retiredAt: now,
+              updatedAt: now,
+            })
+          } else await this.homework.deleteQuestion(blank.id)
         }
-        pendingIds.push(created.id)
-        summary.added += 1
-        return created
-      })
 
-      // Active rows that no longer matched move to the archive (records kept).
-      for (const oldIndex of activeResult.unmatchedOld) {
-        const question = active[oldIndex]!
-        await this.homework.upsertQuestion({
-          ...question,
-          retired: true,
-          retiredAt: now,
+        for (const row of rows) await this.homework.upsertQuestion(row)
+
+        // Stay `analyzing` while the pending hints+solutions are generated; the
+        // run flips to `ready` only when that stage finishes. Progress is written
+        // atomically with the questions so a refresh right after the commit still
+        // shows the correct stage.
+        const pending = pendingIds.length > 0
+        await this.homework.upsertSet({
+          ...set,
+          status: pending ? 'analyzing' : 'ready',
+          questionCount: rows.length,
+          errorMessage: undefined,
+          analysisNote: note,
+          progress: pending
+            ? { stage: 'generating', completed: 0, total: pendingIds.length, updatedAt: now }
+            : undefined,
           updatedAt: now,
         })
-        summary.retired += 1
-      }
-
-      // Blank active duplicates that a restored archive row replaced are removed
-      // — they hold no student input, so nothing is lost. Archived rows that
-      // were not restored are left exactly as they were.
-      for (const newIndex of supersededActiveNew) {
-        const pair = activePairByNew.get(newIndex)
-        const blank = pair ? active[pair.oldIndex] : undefined
-        if (blank) await this.homework.deleteQuestion(blank.id)
-      }
-
-      for (const row of rows) await this.homework.upsertQuestion(row)
-
-      // Stay `analyzing` while the pending hints+solutions are generated; the
-      // run flips to `ready` only when that stage finishes. Progress is written
-      // atomically with the questions so a refresh right after the commit still
-      // shows the correct stage.
-      const pending = pendingIds.length > 0
-      await this.homework.upsertSet({
-        ...set,
-        status: pending ? 'analyzing' : 'ready',
-        questionCount: rows.length,
-        errorMessage: undefined,
-        analysisNote: note,
-        progress: pending
-          ? { stage: 'generating', completed: 0, total: pendingIds.length, updatedAt: now }
-          : undefined,
-        updatedAt: now,
-      })
-    })
+      },
+    )
 
     return { summary, pendingIds }
   }

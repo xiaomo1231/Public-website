@@ -1,0 +1,713 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>成本测试台</title>
+    <style>
+      :root {
+        --bg: #f6f8f7;
+        --surface: #fff;
+        --ink: #14211d;
+        --muted: #55645f;
+        --line: #d9e1de;
+        --accent: #0e6b5c;
+        --accent-soft: #e2f0ec;
+        --bad: #a3322a;
+        --bad-soft: #fbe9e7;
+        color-scheme: light;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg: #0f1614;
+          --surface: #17201d;
+          --ink: #e5ece9;
+          --muted: #9aaba5;
+          --line: #2a3632;
+          --accent: #5cc4ae;
+          --accent-soft: #1c2f2a;
+          --bad: #f08a80;
+          --bad-soft: #3a2220;
+          color-scheme: dark;
+        }
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--ink);
+        font:
+          14px/1.6 system-ui,
+          'Microsoft YaHei',
+          sans-serif;
+      }
+      .wrap {
+        max-width: 1280px;
+        margin: 0 auto;
+        padding: 24px 16px 48px;
+        display: grid;
+        grid-template-columns: 340px minmax(0, 1fr);
+        gap: 24px;
+      }
+      @media (max-width: 900px) {
+        .wrap {
+          grid-template-columns: minmax(0, 1fr);
+        }
+      }
+      h1 {
+        font-size: 20px;
+        margin: 0 0 4px;
+      }
+      h2 {
+        font-size: 15px;
+        margin: 20px 0 8px;
+      }
+      p.hint {
+        color: var(--muted);
+        font-size: 12.5px;
+        margin: 4px 0 0;
+      }
+      form,
+      .panel {
+        background: var(--surface);
+        border: 1px solid var(--line);
+        padding: 16px;
+      }
+      label {
+        display: block;
+        font-size: 12.5px;
+        color: var(--muted);
+        margin: 10px 0 3px;
+      }
+      input,
+      select,
+      textarea {
+        width: 100%;
+        padding: 6px 8px;
+        border: 1px solid var(--line);
+        background: var(--bg);
+        color: var(--ink);
+        font: inherit;
+      }
+      textarea {
+        font-family: ui-monospace, Consolas, monospace;
+        font-size: 12.5px;
+      }
+      .row {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 8px;
+      }
+      .check {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        margin-top: 10px;
+        color: var(--ink);
+        font-size: 13.5px;
+      }
+      .check input {
+        width: auto;
+      }
+      .presets {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+      }
+      button {
+        font: inherit;
+        padding: 6px 12px;
+        border: 1px solid var(--line);
+        background: var(--surface);
+        color: var(--ink);
+        cursor: pointer;
+      }
+      button.primary {
+        background: var(--accent);
+        border-color: var(--accent);
+        color: #fff;
+      }
+      @media (prefers-color-scheme: dark) {
+        button.primary {
+          color: #08201b;
+        }
+      }
+      button:disabled {
+        opacity: 0.5;
+        cursor: default;
+      }
+      .actions {
+        display: flex;
+        gap: 8px;
+        margin-top: 16px;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 13px;
+      }
+      th,
+      td {
+        text-align: left;
+        padding: 6px 8px;
+        border-bottom: 1px solid var(--line);
+        vertical-align: top;
+      }
+      th {
+        color: var(--muted);
+        font-weight: 500;
+        white-space: nowrap;
+      }
+      td.num,
+      th.num {
+        text-align: right;
+        font-variant-numeric: tabular-nums;
+        white-space: nowrap;
+      }
+      tr.fail td {
+        background: var(--bad-soft);
+      }
+      tr.clickable {
+        cursor: pointer;
+      }
+      tr.clickable:hover td {
+        background: var(--accent-soft);
+      }
+      .scroll {
+        overflow-x: auto;
+      }
+      pre {
+        white-space: pre-wrap;
+        word-break: break-word;
+        margin: 0;
+        font-size: 12px;
+        max-height: 360px;
+        overflow: auto;
+        background: var(--bg);
+        padding: 8px;
+      }
+      .cards {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+        gap: 8px;
+      }
+      .card {
+        background: var(--surface);
+        border: 1px solid var(--line);
+        padding: 10px 12px;
+      }
+      .card b {
+        display: block;
+        font-size: 18px;
+        font-variant-numeric: tabular-nums;
+      }
+      .card span {
+        color: var(--muted);
+        font-size: 12px;
+      }
+      #log {
+        color: var(--muted);
+        font-size: 12.5px;
+        min-height: 1.6em;
+      }
+      .error {
+        color: var(--bad);
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <div>
+        <h1>成本测试台</h1>
+        <p class="hint">
+          用网站里真实的提示词，把一份作业按「识别 → 完整讲解 → 提示 → 检查答案 →
+          划词提问」跑一遍，记录每次请求的缓存命中、未命中和输出 token。
+        </p>
+        <form id="form">
+          <label>档次预设</label>
+          <div class="presets">
+            <button type="button" data-preset="flash">基础 · DeepSeek Flash</button>
+            <button type="button" data-preset="pro">标准 · DeepSeek Pro</button>
+            <button type="button" data-preset="astra">高级 · Astra（中转）</button>
+          </div>
+          <label for="baseUrl">Base URL</label>
+          <input id="baseUrl" name="baseUrl" placeholder="https://api.deepseek.com" />
+          <label for="apiKey">API Key（只留在这个页面的内存里，不保存）</label>
+          <input id="apiKey" name="apiKey" type="password" autocomplete="off" />
+          <label for="model">模型名</label>
+          <input id="model" name="model" placeholder="deepseek-flash" />
+          <label>单价（人民币 / 每百万 token）</label>
+          <div class="row">
+            <input
+              name="priceHit"
+              type="number"
+              step="any"
+              title="缓存命中输入"
+              placeholder="命中"
+            />
+            <input
+              name="priceMiss"
+              type="number"
+              step="any"
+              title="未命中输入"
+              placeholder="未命中"
+            />
+            <input name="priceOut" type="number" step="any" title="输出" placeholder="输出" />
+          </div>
+          <p class="hint">依次为：缓存命中输入 / 未命中输入 / 输出。</p>
+          <label for="peakMode">高峰时段计价（DeepSeek 高峰价 = 空闲价 ×2）</label>
+          <select id="peakMode" name="peakMode">
+            <option value="auto">自动：按每次请求的北京时间判断</option>
+            <option value="off">一律按空闲价</option>
+            <option value="on">一律按高峰价</option>
+          </select>
+          <p class="hint">
+            DeepSeek 高峰时段：北京时间周一至周五
+            9:00–12:00、14:00–18:00（法定节假日除外，这里不识别节假日）。
+          </p>
+          <label class="check"
+            ><input type="checkbox" name="noThinking" checked />
+            关闭思考模式（DeepSeek：thinking.type = disabled）</label
+          >
+          <label class="check"
+            ><input type="checkbox" name="jsonMode" checked /> 结构化步骤使用 JSON 模式</label
+          >
+
+          <label for="filePath">作业文件（本机路径，或下面选择文件）</label>
+          <input id="filePath" name="filePath" value="C:\Users\yujun\Downloads\HW4.pdf" />
+          <input id="file" type="file" accept=".pdf,.txt,.md" style="margin-top: 6px" />
+          <label for="subject">科目</label>
+          <select id="subject" name="subject">
+            <option value="linear_algebra">线性代数</option>
+            <option value="calculus">微积分</option>
+            <option value="physics">物理</option>
+            <option value="chemistry">化学</option>
+            <option value="biology">生物</option>
+            <option value="stats">概率统计</option>
+            <option value="cs">计算机</option>
+            <option value="medicine">医学</option>
+            <option value="other">其它</option>
+          </select>
+
+          <label>每步请求数</label>
+          <div class="row">
+            <input name="hintCount" type="number" min="0" value="4" title="做题提示：前几题" />
+            <input name="checkCount" type="number" min="0" value="8" title="检查答案：前几题" />
+            <input name="askCount" type="number" min="0" value="10" title="划词提问次数" />
+          </div>
+          <p class="hint">依次为：提示（前几题）/ 检查答案（前几题）/ 划词提问（次）。</p>
+          <label>输出上限（token）</label>
+          <div class="row">
+            <input name="walkthroughMaxTokens" type="number" value="8192" title="完整讲解每题" />
+            <input name="maxTokens" type="number" value="4096" title="其它请求" />
+            <input name="concurrency" type="number" min="1" max="4" value="2" title="并发" />
+          </div>
+          <p class="hint">依次为：完整讲解每题 / 其它请求 / 并发数。</p>
+          <label for="extraBody">额外请求参数（JSON，可选）</label>
+          <textarea
+            id="extraBody"
+            name="extraBody"
+            rows="3"
+            placeholder="例如关闭思考模式的参数，按服务商文档填写"
+          ></textarea>
+          <div class="actions">
+            <button class="primary" id="run" type="submit">开始测试</button>
+            <button id="stop" type="button" disabled>停止</button>
+          </div>
+        </form>
+      </div>
+
+      <div>
+        <div id="log"></div>
+        <h2>汇总</h2>
+        <div class="cards" id="cards"></div>
+        <div class="panel scroll" style="margin-top: 8px">
+          <table id="steps">
+            <thead>
+              <tr>
+                <th>步骤</th>
+                <th class="num">请求</th>
+                <th class="num">命中输入</th>
+                <th class="num">未命中输入</th>
+                <th class="num">输出</th>
+                <th class="num">其中思考</th>
+                <th class="num">成本</th>
+                <th class="num">文档估算</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+
+        <h2>每次请求（点击一行看模型输出）</h2>
+        <div class="panel scroll">
+          <table id="requests">
+            <thead>
+              <tr>
+                <th>步骤</th>
+                <th>对象</th>
+                <th class="num">命中</th>
+                <th class="num">未命中</th>
+                <th class="num">输出</th>
+                <th class="num">思考</th>
+                <th class="num">耗时</th>
+                <th class="num">成本</th>
+                <th>时段</th>
+                <th>结束</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+
+        <h2>
+          历史结果
+          <button type="button" id="refresh" style="font-size: 12px; padding: 2px 8px">刷新</button>
+        </h2>
+        <div class="panel scroll">
+          <table id="history">
+            <thead>
+              <tr>
+                <th>时间</th>
+                <th>模型</th>
+                <th>文件</th>
+                <th class="num">请求</th>
+                <th class="num">命中</th>
+                <th class="num">未命中</th>
+                <th class="num">输出</th>
+                <th class="num">成本</th>
+                <th class="num">点数</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+          <p class="hint">完整记录（含每次输出，不含 API Key）保存在 tools/cost-bench/results/。</p>
+        </div>
+      </div>
+    </div>
+
+    <script>
+            const PRESETS = {
+              flash: {
+                baseUrl: 'https://api.deepseek.com',
+                model: 'deepseek-flash',
+                priceHit: 0.02,
+                priceMiss: 1,
+                priceOut: 4,
+              },
+              pro: {
+                baseUrl: 'https://api.deepseek.com',
+                model: 'deepseek-v4-pro',
+                priceHit: 0.15,
+                priceMiss: 4.5,
+                priceOut: 13.5,
+              },
+              astra: {
+                baseUrl: '',
+                model: 'openai/gpt-6-astra',
+                priceHit: 1.08,
+                priceMiss: 10.8,
+                priceOut: 54,
+              },
+            }
+            // The plan document's estimate for this homework, per step and tier (¥, off-peak).
+            const ESTIMATE = {
+              flash: {
+                '① 识别题目': 0.0138,
+                '② 完整讲解': 0.106,
+                '③ 做题提示': 0.013,
+                '④ 检查答案': 0.038,
+                '⑤ 划词提问': 0.0453,
+              },
+              pro: {
+                '① 识别题目': 0.0488,
+                '② 完整讲解': 0.382,
+                '③ 做题提示': 0.048,
+                '④ 检查答案': 0.1434,
+                '⑤ 划词提问': 0.1822,
+              },
+              astra: {
+                '① 识别题目': 0.1831,
+                '② 完整讲解': 1.4002,
+                '③ 做题提示': 0.1728,
+                '④ 检查答案': 0.4968,
+                '⑤ 划词提问': 0.5562,
+              },
+            }
+            const STORE = 'cost-bench:settings'
+            const form = document.getElementById('form')
+            const $ = (id) => document.getElementById(id)
+            let preset = 'flash'
+            let controller = null
+            let records = []
+
+            function fields() {
+              return Object.fromEntries(new FormData(form))
+            }
+            function setFields(values) {
+              for (const [key, value] of Object.entries(values)) {
+                const el = form.elements[key]
+                if (!el) continue
+                if (el.type === 'checkbox') el.checked = !!value
+                else el.value = value
+              }
+            }
+            function save() {
+              const { apiKey, ...rest } = fields()
+              rest.noThinking = form.elements.noThinking.checked
+              rest.jsonMode = form.elements.jsonMode.checked
+              rest.preset = preset
+              try {
+                localStorage.setItem(STORE, JSON.stringify(rest))
+              } catch {}
+            }
+            try {
+              const saved = JSON.parse(localStorage.getItem(STORE) || 'null')
+              if (saved) {
+                preset = saved.preset || 'flash'
+                setFields(saved)
+              } else setFields(PRESETS.flash)
+            } catch {
+              setFields(PRESETS.flash)
+            }
+
+            document.querySelectorAll('[data-preset]').forEach((button) =>
+              button.addEventListener('click', () => {
+                preset = button.dataset.preset
+                setFields(PRESETS[preset])
+                save()
+              }),
+            )
+            form.addEventListener('change', save)
+
+            const yuan = (v) => (v == null ? '—' : v < 0.1 ? `¥${v.toFixed(4)}` : `¥${v.toFixed(3)}`)
+            const n = (v) => (v == null ? '—' : Number(v).toLocaleString())
+
+            function renderSteps(summary) {
+              const est = ESTIMATE[preset] || {}
+              const body = $('steps').querySelector('tbody')
+              body.innerHTML = ''
+              const steps = summary?.steps || {}
+              let estTotal = 0
+              for (const [name, s] of Object.entries(steps)) {
+                estTotal += est[name] || 0
+                const tr = document.createElement('tr')
+                tr.innerHTML = `<td>${name}</td><td class="num">${s.requests}${s.failed ? `（失败 ${s.failed}）` : ''}</td><td class="num">${n(s.hit)}</td><td class="num">${n(s.miss)}</td><td class="num">${n(s.out)}</td><td class="num">${n(s.reasoning)}</td><td class="num">${yuan(s.cost)}</td><td class="num">${est[name] != null ? yuan(est[name]) : '—'}</td>`
+                body.appendChild(tr)
+              }
+              const t = summary?.total
+              if (t) {
+                const tr = document.createElement('tr')
+                tr.innerHTML = `<td><b>合计</b></td><td class="num">${t.requests}</td><td class="num">${n(t.hit)}</td><td class="num">${n(t.miss)}</td><td class="num">${n(t.out)}</td><td class="num">${n(t.reasoning)}</td><td class="num"><b>${yuan(t.cost)}</b></td><td class="num">${yuan(estTotal)}</td>`
+                body.appendChild(tr)
+              }
+            }
+
+            function summarise() {
+              const steps = {}
+              const total = {
+                requests: 0,
+                failed: 0,
+                hit: 0,
+                miss: 0,
+                out: 0,
+                reasoning: 0,
+                cost: 0,
+                ms: 0,
+              }
+              for (const r of records) {
+                const s = (steps[r.step] ??= {
+                  requests: 0,
+                  failed: 0,
+                  hit: 0,
+                  miss: 0,
+                  out: 0,
+                  reasoning: 0,
+                  cost: 0,
+                })
+                for (const x of [s, total]) {
+                  x.requests++
+                  if (!r.ok) {
+                    x.failed++
+                    continue
+                  }
+                  x.hit += r.hit
+                  x.miss += r.miss
+                  x.out += r.out
+                  x.reasoning += r.reasoning
+                  x.cost += r.cost
+                }
+                if (r.ok) total.ms += r.ms
+              }
+              return { steps, total }
+            }
+
+            function renderCards() {
+              const { total } = summarise()
+              const prompt = total.hit + total.miss
+              const cards = [
+                ['总成本', yuan(total.cost), `约 C$${(total.cost / 5.2).toFixed(3)}`],
+                ['扣点（¥0.005 / 点）', Math.round(total.cost / 0.005), '按实际成本'],
+                [
+                  '缓存命中率',
+                  prompt ? `${Math.round((total.hit / prompt) * 100)}%` : '—',
+                  `输入共 ${n(prompt)}`,
+                ],
+                [
+                  '输出 token',
+                  n(total.out),
+                  total.reasoning ? `其中思考 ${n(total.reasoning)}` : '无思考 token',
+                ],
+                ['请求数', total.requests, total.failed ? `失败 ${total.failed}` : `高峰时段 ${records.filter((r) => r.ok && r.peak).length} 次`],
+                ['累计耗时', `${(total.ms / 1000).toFixed(0)} 秒`, '各请求耗时相加'],
+              ]
+              $('cards').innerHTML = cards
+                .map(
+                  ([a, b, c]) => `<div class="card"><span>${a}</span><b>${b}</b><span>${c}</span></div>`,
+                )
+                .join('')
+              renderSteps(summarise())
+            }
+
+            function addRequest(r) {
+              records.push(r)
+              const body = $('requests').querySelector('tbody')
+              const tr = document.createElement('tr')
+              tr.className = r.ok ? 'clickable' : 'fail'
+              tr.innerHTML = r.ok
+                ? `<td>${r.step}</td><td>${r.label}</td><td class="num">${n(r.hit)}</td><td class="num">${n(r.miss)}</td><td class="num">${n(r.out)}</td><td class="num">${n(r.reasoning)}</td><td class="num">${(r.ms / 1000).toFixed(1)}s</td><td class="num">${yuan(r.cost)}</td><td>${r.peak ? '高峰' : '空闲'}</td><td>${r.finish === 'length' ? '<span class="error">被截断</span>' : r.finish}</td>`
+                : `<td>${r.step}</td><td>${r.label}</td><td colspan="8" class="error"></td>`
+              if (!r.ok) tr.lastElementChild.textContent = r.error
+              body.appendChild(tr)
+              if (r.ok) {
+                const detail = document.createElement('tr')
+                detail.hidden = true
+                const td = document.createElement('td')
+                td.colSpan = 10
+                const pre = document.createElement('pre')
+                pre.textContent = (r.output || '（空）') + '
+
+      — 接口返回的原始用量 —
+      ' + JSON.stringify(r.rawUsage, null, 2)
+                td.appendChild(pre)
+                detail.appendChild(td)
+                body.appendChild(detail)
+                tr.addEventListener('click', () => {
+                  detail.hidden = !detail.hidden
+                })
+              }
+              renderCards()
+            }
+
+            async function loadHistory() {
+              try {
+                const list = await (await fetch('/api/results')).json()
+                $('history').querySelector('tbody').innerHTML = list
+                  .map((r) => {
+                    const t = r.summary.total
+                    return `<tr><td>${new Date(r.at).toLocaleString()}</td><td>${r.model}${r.thinking === false ? ' · 无思考' : ''}${r.peakMode === 'on' ? '（高峰价）' : r.peakMode === 'auto' ? `（自动，高峰 ${r.summary.total.peakRequests ?? 0} 次）` : ''}</td><td>${r.doc}</td><td class="num">${t.requests}</td><td class="num">${n(t.hit)}</td><td class="num">${n(t.miss)}</td><td class="num">${n(t.out)}</td><td class="num">${yuan(t.cost)}</td><td class="num">${r.summary.points}</td></tr>`
+                  })
+                  .join('')
+              } catch {}
+            }
+            $('refresh').addEventListener('click', loadHistory)
+            loadHistory()
+
+            async function fileBase64(file) {
+              const bytes = new Uint8Array(await file.arrayBuffer())
+              let binary = ''
+              for (let i = 0; i < bytes.length; i += 0x8000)
+                binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000))
+              return btoa(binary)
+            }
+
+            form.addEventListener('submit', async (event) => {
+              event.preventDefault()
+              const f = fields()
+              let extraBody = {}
+              if (f.extraBody.trim()) {
+                try {
+                  extraBody = JSON.parse(f.extraBody)
+                } catch {
+                  $('log').innerHTML = '<span class="error">额外请求参数不是合法 JSON</span>'
+                  return
+                }
+              }
+              const file = $('file').files[0]
+              const payload = {
+                baseUrl: f.baseUrl,
+                apiKey: f.apiKey,
+                model: f.model,
+                price: { hit: +f.priceHit, miss: +f.priceMiss, out: +f.priceOut },
+                peakMode: f.peakMode,
+                jsonMode: form.elements.jsonMode.checked,
+                extraBody: form.elements.noThinking.checked
+                  ? { ...extraBody, thinking: { type: 'disabled' } }
+                  : extraBody,
+                subject: f.subject,
+                filePath: f.filePath,
+                hintCount: +f.hintCount,
+                checkCount: +f.checkCount,
+                askCount: +f.askCount,
+                walkthroughMaxTokens: +f.walkthroughMaxTokens,
+                maxTokens: +f.maxTokens,
+                concurrency: +f.concurrency,
+                ...(file ? { fileBase64: await fileBase64(file), fileName: file.name } : {}),
+              }
+              records = []
+              $('requests').querySelector('tbody').innerHTML = ''
+              renderCards()
+              $('log').textContent = '开始…'
+              $('run').disabled = true
+              $('stop').disabled = false
+              controller = new AbortController()
+              try {
+                const res = await fetch('/api/run', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify(payload),
+                  signal: controller.signal,
+                })
+                if (!res.ok) {
+                  $('log').innerHTML = `<span class="error">${(await res.json()).error}</span>`
+                  return
+                }
+                const reader = res.body.getReader()
+                const decoder = new TextDecoder()
+                let buffer = ''
+                for (;;) {
+                  const { value, done } = await reader.read()
+                  if (done) break
+                  buffer += decoder.decode(value, { stream: true })
+                  let i
+                  while ((i = buffer.indexOf('\n')) >= 0) {
+                    const line = buffer.slice(0, i)
+                    buffer = buffer.slice(i + 1)
+                    if (!line.trim()) continue
+                    const event = JSON.parse(line)
+                    if (event.type === 'log') $('log').textContent = event.text
+                    if (event.type === 'request') addRequest(event.record)
+                    if (event.type === 'done') {
+                      $('log').innerHTML = event.error
+                        ? `<span class="error">中途停止：${event.error}</span>`
+                        : `完成，结果已保存：${event.file}`
+                      loadHistory()
+                    }
+                  }
+                }
+              } catch (err) {
+                $('log').textContent = controller.signal.aborted
+                  ? '已停止（已完成的请求照样计费，结果已保存）'
+                  : String(err)
+                loadHistory()
+              } finally {
+                $('run').disabled = false
+                $('stop').disabled = true
+              }
+            })
+            $('stop').addEventListener('click', () => controller?.abort())
+    </script>
+  </body>
+</html>

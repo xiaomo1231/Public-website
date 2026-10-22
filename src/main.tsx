@@ -2,7 +2,11 @@ import React from 'react'
 import ReactDOM from 'react-dom/client'
 import { App } from './App'
 import { logger } from '@/infrastructure/logger/logger'
+import { installAIUsageRecording } from '@/services/aiUsageService'
 import '@/shared/styles/globals.css'
+
+// Every AI response's token usage is counted locally (settings → AI usage).
+installAIUsageRecording()
 
 logger.info('Application starting', { mode: import.meta.env.MODE })
 

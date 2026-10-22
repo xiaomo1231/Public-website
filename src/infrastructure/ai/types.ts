@@ -34,12 +34,21 @@ export interface ChatChunk {
   delta: string
   done: boolean
   /** Usage stats arrive with the final chunk. */
-  usage?: { promptTokens: number; completionTokens: number; totalTokens: number }
+  usage?: TokenUsage
+}
+
+/** Token counts reported by the provider for one response. */
+export interface TokenUsage {
+  promptTokens: number
+  completionTokens: number
+  totalTokens: number
+  /** Prompt tokens served from the provider's prefix cache, when reported. */
+  cachedTokens?: number
 }
 
 export interface ChatResponse {
   content: string
-  usage?: { promptTokens: number; completionTokens: number; totalTokens: number }
+  usage?: TokenUsage
   model: string
   /**
    * Provider stop reason. `'length'` means the model hit the output token cap

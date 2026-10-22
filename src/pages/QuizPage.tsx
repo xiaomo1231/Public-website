@@ -12,7 +12,7 @@ import { OralExamSession } from '@/widgets/quiz/OralExamSession'
 import { ProjectFlowNav } from '@/widgets/project/ProjectFlowNav'
 import { buildAIServices, buildOfflineQuizService } from '@/services/aiServices'
 import type { Question } from '@/entities/question/types'
-import { quizGenerationProgress, type Quiz } from '@/entities/quiz/types'
+import { quizGenerationProgress, quizLength, type Quiz } from '@/entities/quiz/types'
 import type { QuestionEvaluation } from '@/entities/questionAttempt/types'
 import { toast } from '@/features/toast/toastStore'
 import { isAppError } from '@/infrastructure/errors/AppError'
@@ -50,7 +50,11 @@ export function QuizPage(): JSX.Element {
     let cancelled = false
     void (async () => {
       try {
-        const q = await service.getQuiz(quizId, projectId)
+        let q = await service.getQuiz(quizId, projectId)
+        // A bank quiz closed between an answer and its next question serves it now.
+        if (q.bank?.entries.length && q.status !== 'completed') {
+          q = await service.resumeQuestionBank(quizId)
+        }
         const qs = await service.getQuestions(quizId)
         const attempts = q.status === 'completed' ? [] : await service.getAttempts(quizId)
         if (cancelled) return
@@ -109,6 +113,13 @@ export function QuizPage(): JSX.Element {
         setEvaluation(result.evaluation)
         setAttemptId(result.attempt.id)
         setAnsweredIds((prev) => new Set(prev).add(current.id))
+        // A bank quiz: the adaptive model picked the next question.
+        const following = result.nextQuestion
+        if (following) {
+          setQuestions((prev) =>
+            prev.some((question) => question.id === following.id) ? prev : [...prev, following],
+          )
+        }
       } catch (err) {
         if (run && isAbortError(err, run.signal)) {
           toast({ variant: 'info', title: t('quiz.checkStopped') })
@@ -157,6 +168,8 @@ export function QuizPage(): JSX.Element {
   }
 
   const answeredCount = questions.filter((question) => answeredIds.has(question.id)).length
+  /** A bank quiz serves its questions one at a time; the length is fixed. */
+  const total = quiz ? Math.max(quizLength(quiz), questions.length) : questions.length
 
   if (!projectId) return <div />
 
@@ -244,23 +257,23 @@ export function QuizPage(): JSX.Element {
             <div className="space-y-1.5">
               {/* lecture: a thin line. lab: one tick per question. */}
               <Progress
-                value={(answeredCount / questions.length) * 100}
+                value={(answeredCount / Math.max(1, total)) * 100}
                 className="lecture:h-0.5 lecture:rounded-none lab:hidden"
               />
               <ol
                 aria-hidden
                 className="hidden gap-[3px] lab:grid"
-                style={{ gridTemplateColumns: `repeat(${questions.length}, minmax(0, 1fr))` }}
+                style={{ gridTemplateColumns: `repeat(${total}, minmax(0, 1fr))` }}
               >
-                {questions.map((question, i) => (
+                {Array.from({ length: total }, (_, i) => questions[i]).map((question, i) => (
                   <li
-                    key={question.id}
+                    key={question?.id ?? `pending-${i}`}
                     className={cn(
                       'h-1 transition-colors duration-200 ease-out',
                       // Answered is neutral: the tick shows progress, not correctness.
                       i === index
                         ? 'bg-primary'
-                        : answeredIds.has(question.id)
+                        : question && answeredIds.has(question.id)
                           ? 'bg-foreground/60'
                           : 'bg-border',
                     )}
@@ -270,7 +283,7 @@ export function QuizPage(): JSX.Element {
               <p className="data-num text-xs text-muted-foreground lab:font-mono lab:text-[11.5px]">
                 {t('quiz.progress', {
                   answered: answeredCount,
-                  total: questions.length,
+                  total,
                 })}
               </p>
             </div>
@@ -280,7 +293,7 @@ export function QuizPage(): JSX.Element {
                 key={current.id}
                 question={current}
                 index={index}
-                total={questions.length}
+                total={total}
                 difficulty={current.difficulty}
                 value={answer}
                 onChange={setAnswer}

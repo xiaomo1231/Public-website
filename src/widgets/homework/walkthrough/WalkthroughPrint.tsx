@@ -6,6 +6,7 @@ import { useTranslation } from '@/i18n'
 export interface PrintableSection {
   id: string
   title: string
+  analysis?: string
   conclusion?: string
   body: string
   suggestions?: string[]
@@ -56,6 +57,17 @@ export function WalkthroughPrint({
       {sections.map((section) => (
         <section key={section.id} className="space-y-3">
           <h2 className="border-b pb-1 text-xl font-semibold">{section.title}</h2>
+          {section.analysis && (
+            <div className="space-y-1">
+              <strong>{t('homework.walkthrough.analysis')}</strong>
+              <RichText
+                text={section.analysis}
+                format="markdown"
+                className="space-y-1"
+                paragraphClassName="text-[14px] leading-relaxed"
+              />
+            </div>
+          )}
           {section.conclusion && (
             <div className="border-l-4 pl-3">
               <strong>{t('homework.walkthrough.conclusion')}</strong>

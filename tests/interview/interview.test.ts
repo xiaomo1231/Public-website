@@ -440,7 +440,7 @@ describe('migration to v18', () => {
 
     const db = new AppDatabase()
     await db.open()
-    expect(db.verno).toBe(18)
+    expect(db.verno).toBeGreaterThanOrEqual(18)
     expect(db.tables.map((table) => table.name)).toContain('interviewSessions')
     expect((await db.projects.get('p1'))?.name).toBe('Old')
     expect(await db.reviewCards.count()).toBe(1)

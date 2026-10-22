@@ -23,6 +23,7 @@ import { QuizRepository } from '@/entities/quiz/repository'
 import {
   QUIZ_STATUS_LABEL_KEYS,
   quizGenerationProgress,
+  quizLength,
   type Quiz,
   type QuizConfig,
 } from '@/entities/quiz/types'
@@ -180,7 +181,7 @@ export function QuizLandingPage(): JSX.Element {
       toast({
         variant: 'success',
         title: t('quiz.ready'),
-        description: t('quiz.readyBody', { count: quiz.questionIds.length }),
+        description: t('quiz.readyBody', { count: quizLength(quiz) }),
       })
       navigate(`/projects/${projectId}/quiz/${quiz.id}`)
     } catch (err) {

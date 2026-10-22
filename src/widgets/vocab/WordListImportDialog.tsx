@@ -16,6 +16,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useDocuments } from '@/features/documents/useDocuments'
 import { toast } from '@/features/toast/toastStore'
 import { buildAIServices } from '@/services/aiServices'
+import { withUsageKind } from '@/services/aiService'
 import { TextbookWordListService, type WordListCandidate } from '@/services/textbookWordList'
 import { friendlyAIError } from '@/shared/lib/aiErrors'
 import { useTranslation } from '@/i18n'
@@ -86,17 +87,15 @@ export function WordListImportDialog({
     setProgress(0)
     try {
       const bundle = await buildAIServices()
-      const result = await new TextbookWordListService({ ai: bundle?.ai ?? null }).split(
-        projectId,
-        chosen,
-        {
-          control: run,
-          onProgress: (done, total) => {
-            setProgress(Math.round((done / total) * 100))
-            setParts((prev) => ({ ...prev, done, total }))
-          },
+      const result = await new TextbookWordListService({
+        ai: withUsageKind(bundle?.ai ?? null, 'vocab'),
+      }).split(projectId, chosen, {
+        control: run,
+        onProgress: (done, total) => {
+          setProgress(Math.round((done / total) * 100))
+          setParts((prev) => ({ ...prev, done, total }))
         },
-      )
+      })
       run.finish()
       // Continuing a paused read keeps the edits and unticks made so far.
       const key = (row: WordListCandidate) => `${row.article ?? ''} ${row.term}`

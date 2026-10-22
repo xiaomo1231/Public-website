@@ -2,7 +2,7 @@ import type { AIService } from './aiService'
 import type { AppDatabase } from '@/infrastructure/db/database'
 import { getDb } from '@/infrastructure/db/database'
 import type { ChatMessage } from '@/infrastructure/ai/types'
-import type { FrameRevision } from '@/infrastructure/ai/prompts/homework-walkthrough/v2'
+import type { FrameRevision } from '@/infrastructure/ai/prompts/homework-walkthrough/v3'
 import { prompts } from '@/infrastructure/ai/prompts'
 import { AbortedError, TimeoutError as AITimeoutError } from '@/infrastructure/ai/errors'
 import { AppError, NotFoundError } from '@/infrastructure/errors/AppError'
@@ -14,6 +14,7 @@ import {
   classifyHomeworkError,
   isAccountFatalError,
   isRetryableHomeworkError,
+  type HomeworkErrorKind,
 } from '@/entities/homework/errorKind'
 import { MIN_OUTPUT_TOKENS, planOutputBudget } from '@/entities/homework/tokenBudget'
 import {
@@ -57,15 +58,26 @@ import { loadProjectSubjectContext } from './projectSubject'
 const SECTION_CONCURRENCY = 2
 /** A long question (seven parts of row reduction) streams for a while. */
 const SECTION_DEADLINE_MS = 240_000
+/**
+ * Every attempt of one section request together (retries, budget changes):
+ * past this the section is saved as failed ("timed out, try again") and the
+ * run moves on, instead of trying for 20+ minutes with no sign of life.
+ */
+export const SECTION_TOTAL_MS = 360_000
 const SECTION_OUTPUT_CEILING = 8_192
 const SECTION_OUTPUT_MAX = 16_384
 /** Hard cap on paid requests for one section (budget changes + transient retries). */
 const SECTION_MAX_ATTEMPTS = 6
 const MAX_TRANSIENT_RETRIES = 2
 const RETRY_BASE_DELAY_MS = 700
-/** How much of each question the opening / summary request sees. */
-const FRAME_QUESTION_CHARS = 1_500
-const FRAME_EXCERPT_CHARS = 1_500
+/**
+ * How much of each question the opening / summary request sees: the question,
+ * its conclusion and its key points — never the worked text, so the request
+ * stays small however long the assignment is.
+ */
+const FRAME_QUESTION_CHARS = 800
+const FRAME_CONCLUSION_CHARS = 1_000
+const FRAME_KEY_POINT_CHARS = 600
 /** How much of the sub-parts already written each later sub-part request sees. */
 const PART_EARLIER_CHARS = 6_000
 const PART_EARLIER_MIN_CHARS = 600
@@ -90,7 +102,21 @@ export interface WalkthroughProgress {
   /** Split questions: the sub-part being written, by section id (`b`). */
   parts?: Record<string, string>
   /** Set while one section is being regenerated on its own. */
-  section?: { id: string; split: boolean }
+  section?: {
+    id: string
+    split: boolean
+    /** Only the 题目分析 is being written (补充题目分析). */
+    analysis?: boolean
+  }
+  /** Sections on a second or later attempt, with why the last one failed. */
+  attempts?: Record<string, SectionAttempt>
+}
+
+/** A section request being tried again. */
+export interface SectionAttempt {
+  /** 2 for the first retry. */
+  attempt: number
+  lastFailure: HomeworkErrorKind
 }
 
 export interface WalkthroughRunResult {
@@ -160,8 +186,25 @@ export function walkthroughRunProgress(setId: string): WalkthroughProgress | und
         running: [...run.progress.running],
         ...(run.progress.parts ? { parts: { ...run.progress.parts } } : {}),
         ...(run.progress.section ? { section: { ...run.progress.section } } : {}),
+        ...(run.progress.attempts ? { attempts: { ...run.progress.attempts } } : {}),
       }
     : undefined
+}
+
+/** Show (or, with `null`, clear) a section's retry state. */
+function setAttempt(
+  progress: WalkthroughProgress,
+  ids: readonly string[],
+  attempt: SectionAttempt | null,
+): void {
+  const next = { ...progress.attempts }
+  for (const id of ids) {
+    if (attempt) next[id] = attempt
+    else delete next[id]
+  }
+  if (Object.keys(next).length > 0) progress.attempts = next
+  else delete progress.attempts
+  emit()
 }
 
 /** `1`, `2(a)` or `Problem 3` — how the walkthrough refers to a question. */
@@ -355,8 +398,9 @@ export class HomeworkWalkthroughService {
               progress.parts = { ...progress.parts }
               if (part) progress.parts[entry.id] = part
               else delete progress.parts[entry.id]
-              emit()
+              setAttempt(progress, [entry.id], null)
             },
+            onAttempt: (attempt) => setAttempt(progress, [entry.id], attempt),
           })
           // "Not enough information" is a finished answer, not a failure.
           await save(section)
@@ -388,7 +432,7 @@ export class HomeworkWalkthroughService {
             delete progress.parts[entry.id]
           }
           if (!aborted) progress.done += 1
-          emit()
+          setAttempt(progress, [entry.id], null)
         }
       }
     }
@@ -404,7 +448,10 @@ export class HomeworkWalkthroughService {
       emit()
       let aborted = false
       try {
-        const frame = await this.writeFrame(ai, setId, state, labels, subject, control.signal)
+        const frame = await this.writeFrame(ai, setId, state, labels, subject, {
+          signal: control.signal,
+          onAttempt: (attempt) => setAttempt(progress, ['overview', 'summary'], attempt),
+        })
         if (frame) {
           for (const section of frame) await save(section)
           result.generated += 1
@@ -426,7 +473,7 @@ export class HomeworkWalkthroughService {
       } finally {
         progress.running = []
         if (!aborted) progress.done += 1
-        emit()
+        setAttempt(progress, ['overview', 'summary'], null)
       }
     }
 
@@ -534,8 +581,9 @@ export class HomeworkWalkthroughService {
             progress.total = total
             progress.done = done
             progress.parts = part ? { [sectionId]: part } : {}
-            emit()
+            setAttempt(progress, [sectionId], null)
           },
+          onAttempt: (attempt) => setAttempt(progress, [sectionId], attempt),
         })
         // "Not enough information" never replaces a ready section.
         if (section.status === 'insufficient' && current)
@@ -545,11 +593,22 @@ export class HomeworkWalkthroughService {
           )
         await save(withPrevious(section, current))
       } else {
-        const frame = await this.writeFrame(ai, setId, state, labels, subject, control.signal, {
-          target: entry.kind,
-          ...(current ? { current: { body: frameText(current) } } : {}),
-          ...(suggestion ? { suggestion } : {}),
-        })
+        const frame = await this.writeFrame(
+          ai,
+          setId,
+          state,
+          labels,
+          subject,
+          {
+            signal: control.signal,
+            onAttempt: (attempt) => setAttempt(progress, [sectionId], attempt),
+          },
+          {
+            target: entry.kind,
+            ...(current ? { current: { body: frameText(current) } } : {}),
+            ...(suggestion ? { suggestion } : {}),
+          },
+        )
         if (!frame)
           throw new AppError(t('homework.walkthrough.frameNeedsQuestions'), 'VALIDATION_ERROR')
         // The frame request returns both parts; only the requested one is saved.
@@ -586,6 +645,97 @@ export class HomeworkWalkthroughService {
       },
       { ...applyVersion(section, section.previous), previous: versionOf(section) },
     )
+  }
+
+  /**
+   * 补充题目分析: write only the analysis block of a ready question section
+   * written before prompt v3 (one short request). The section's other text,
+   * its hash and its previous version are untouched; a stop leaves it as it was.
+   */
+  addAnalysis(
+    setId: string,
+    sectionId: string,
+    options: { control?: GenerationControl } = {},
+  ): Promise<WalkthroughRunResult> {
+    if (runs.has(setId))
+      return Promise.reject(new AppError(t('homework.walkthrough.busy'), 'VALIDATION_ERROR'))
+    const control = options.control ?? createGenerationRun()
+    const progress: WalkthroughProgress = {
+      total: 1,
+      done: 0,
+      failed: 0,
+      running: [sectionId],
+      section: { id: sectionId, split: false, analysis: true },
+    }
+    const promise = this.writeAnalysis(setId, sectionId, progress, control).finally(() => {
+      runs.delete(setId)
+      emit()
+    })
+    runs.set(setId, { promise, progress, control })
+    emit()
+    return promise
+  }
+
+  private async writeAnalysis(
+    setId: string,
+    sectionId: string,
+    progress: WalkthroughProgress,
+    control: GenerationControl,
+  ): Promise<WalkthroughRunResult> {
+    const ai = this.requireAI()
+    const state = await this.state(setId)
+    const entry = state.plan.find((item) => item.id === sectionId)
+    if (!entry?.question || entry.section?.status !== 'ready')
+      throw new NotFoundError('WalkthroughSection', sectionId)
+    const subject = await loadProjectSubjectContext(state.set.projectId, this.db)
+    const index = state.questions.findIndex((question) => question.id === entry.question!.id)
+    const messages: ChatMessage[] = [
+      {
+        role: 'system',
+        content: prompts.subjectProfile.withSubject(
+          prompts.homeworkWalkthrough.buildAnalysisSystemPrompt(),
+          subject,
+        ),
+      },
+      {
+        role: 'user',
+        content: prompts.homeworkWalkthrough.buildAnalysisUserPrompt({
+          label: questionLabel(entry.question, index),
+          question: entry.question.prompt,
+          sourceText: await this.homework.questionSourceText(entry.question),
+          ...(entry.section.conclusion ? { conclusion: entry.section.conclusion } : {}),
+          language: state.language,
+        }),
+      },
+    ]
+    try {
+      const analysis = prompts.homeworkWalkthrough.readAnalysis(
+        await requestSectionJSON(ai, messages, control.signal, (attempt) =>
+          setAttempt(progress, [sectionId], attempt),
+        ),
+      )
+      if (!analysis) throw new AppError(t('homework.walkthrough.invalid'), 'INVALID_RESPONSE')
+      // Saved onto the section as it is now (it may have changed meanwhile).
+      const id = walkthroughId(setId, state.language)
+      const latest = await this.storedSection(id, sectionId)
+      if (latest?.status !== 'ready') throw new NotFoundError('WalkthroughSection', sectionId)
+      await this.repo.putSection(
+        { id, projectId: state.set.projectId, setId, language: state.language },
+        { ...latest, analysis: formatHomeworkReviewText(analysis) },
+      )
+      progress.done = 1
+      emit()
+      return { generated: 1, failed: 0 }
+    } catch (err) {
+      if (isAbortError(err, control.signal))
+        return {
+          generated: 0,
+          failed: 0,
+          paused: true,
+          ...(control.signal.aborted ? { stopped: true } : {}),
+        }
+      throw err
+    }
   }
 
   /** What a question's prompt needs besides the question text. */
@@ -646,6 +796,7 @@ export class HomeworkWalkthroughService {
         content: prompts.subjectProfile.withSubject(
           prompts.homeworkWalkthrough.buildQuestionSystemPrompt({
             linearSystems: inputs.linearSystems,
+            analysis: true,
           }),
           job.subject,
         ),
@@ -663,7 +814,7 @@ export class HomeworkWalkthroughService {
         }),
       },
     ]
-    const data = await requestSectionJSON(ai, messages, job.control.signal)
+    const data = await requestSectionJSON(ai, messages, job.control.signal, job.onAttempt)
     const normalized = prompts.homeworkWalkthrough.normalizeQuestionSection(data)
     if (!normalized) throw new AppError(t('homework.walkthrough.invalid'), 'INVALID_RESPONSE')
     if (normalized.status === 'insufficient')
@@ -674,6 +825,7 @@ export class HomeworkWalkthroughService {
       kind: 'question',
       questionId: question.id,
       title: label,
+      ...(normalized.analysis ? { analysis: formatHomeworkReviewText(normalized.analysis) } : {}),
       conclusion: formatHomeworkReviewText(normalized.conclusion),
       body: formatHomeworkReviewText(normalized.body),
       status: 'ready',
@@ -724,7 +876,10 @@ export class HomeworkWalkthroughService {
     // Fallen back after a truncated reply: remember to continue split.
     if (persistStart && !resumeFrom) await saveDraft(draft)
     const system = prompts.subjectProfile.withSubject(
-      prompts.homeworkWalkthrough.buildPartSystemPrompt({ linearSystems: inputs.linearSystems }),
+      prompts.homeworkWalkthrough.buildPartSystemPrompt({
+        linearSystems: inputs.linearSystems,
+        punctuation: true,
+      }),
       job.subject,
     )
     for (let index = draft.parts.length; index < subparts.length; index++) {
@@ -747,15 +902,16 @@ export class HomeworkWalkthroughService {
             part,
             parts: labels,
             earlier: earlierParts(draft.parts),
+            // The first sub-part also brings the analysis of the whole question.
+            ...(index === 0 ? { analysis: true } : {}),
             ...(job.mode === 'regenerate'
               ? { revision: revisionOf(job, currentPart ?? job.current) }
               : {}),
           }),
         },
       ]
-      const normalized = prompts.homeworkWalkthrough.normalizePart(
-        await requestSectionJSON(ai, messages, control.signal),
-      )
+      const raw = await requestSectionJSON(ai, messages, control.signal, job.onAttempt)
+      const normalized = prompts.homeworkWalkthrough.normalizePart(raw)
       if (!normalized) throw new AppError(t('homework.walkthrough.invalid'), 'INVALID_RESPONSE')
       if (normalized.status === 'insufficient')
         return insufficientSection(entry, label, `(${part}) ${normalized.reason}`)
@@ -769,12 +925,17 @@ export class HomeworkWalkthroughService {
         body: formatHomeworkReviewText(normalized.body),
         ...(checks.length > 0 ? { checks } : {}),
       }
-      draft = { ...draft, parts: [...draft.parts, written] }
+      const analysis = index === 0 ? prompts.homeworkWalkthrough.readAnalysis(raw) : ''
+      draft = {
+        ...draft,
+        parts: [...draft.parts, written],
+        ...(analysis ? { analysis: formatHomeworkReviewText(analysis) } : {}),
+      }
       // The last one is saved as the finished section by the caller.
       if (index < subparts.length - 1) await saveDraft(draft)
     }
     job.onPart?.(null, subparts.length, subparts.length)
-    return joinParts(entry, label, draft.parts)
+    return joinParts(entry, label, draft.parts, draft.analysis)
   }
 
   /** The opening and the summary, from every question that has a section. */
@@ -784,7 +945,7 @@ export class HomeworkWalkthroughService {
     state: WalkthroughState,
     labels: ReadonlyMap<string, string>,
     subject: SubjectContext | undefined,
-    signal?: AbortSignal,
+    request: { signal?: AbortSignal; onAttempt?: (attempt: SectionAttempt) => void },
     /** Rewrite one of the two parts (the other is returned but not saved). */
     revision?: FrameRevision,
   ): Promise<WalkthroughSection[] | null> {
@@ -796,22 +957,22 @@ export class HomeworkWalkthroughService {
       .filter(({ section }) => section?.status === 'ready')
       .map(({ entry, section }) => ({
         label: labels.get(entry.question!.id) ?? '?',
-        question: entry.question!.prompt.slice(0, FRAME_QUESTION_CHARS),
-        conclusion: section!.conclusion ?? '',
-        excerpt: section!.body.slice(0, FRAME_EXCERPT_CHARS),
+        question: clip(entry.question!.prompt, FRAME_QUESTION_CHARS),
+        conclusion: clip(section!.conclusion ?? '', FRAME_CONCLUSION_CHARS),
+        keyPoints: sectionKeyPoints(section!),
       }))
     if (questions.length === 0) return null
     const messages: ChatMessage[] = [
       {
         role: 'system',
         content: prompts.subjectProfile.withSubject(
-          prompts.homeworkWalkthrough.buildFrameSystemPrompt(),
+          prompts.homeworkWalkthrough.buildFrameSystemPrompt({ keyPoints: true }),
           subject,
         ),
       },
       {
         role: 'user',
-        content: prompts.homeworkWalkthrough.buildFrameUserPrompt({
+        content: prompts.homeworkWalkthrough.buildFrameKeyPointsUserPrompt({
           title: state.set.title,
           questions,
           language: state.language,
@@ -820,7 +981,7 @@ export class HomeworkWalkthroughService {
       },
     ]
     const frame = prompts.homeworkWalkthrough.normalizeFrame(
-      await requestSectionJSON(ai, messages, signal),
+      await requestSectionJSON(ai, messages, request.signal, request.onAttempt),
     )
     if (!frame) throw new AppError(t('homework.walkthrough.invalid'), 'INVALID_RESPONSE')
     const frameHash = state.plan.find((entry) => entry.kind === 'overview')!.inputHash
@@ -898,6 +1059,8 @@ interface QuestionJob {
   saveSection: (section: WalkthroughSection) => Promise<void>
   /** Split mode: the sub-part now being written (`null` when all are done). */
   onPart?: (part: string | null, done: number, total: number) => void
+  /** A request is being tried again (shown as 第 2 次尝试：上次超时). */
+  onAttempt?: (attempt: SectionAttempt) => void
 }
 
 /** A saved draft this job may continue: same inputs, same request, same sub-parts. */
@@ -963,6 +1126,7 @@ function joinParts(
   entry: WalkthroughPlanEntry,
   label: string,
   parts: readonly WalkthroughPart[],
+  analysis?: string,
 ): WalkthroughSection {
   const checks = parts.flatMap((part) => part.checks ?? [])
   return {
@@ -970,6 +1134,7 @@ function joinParts(
     kind: 'question',
     questionId: entry.question!.id,
     title: label,
+    ...(analysis ? { analysis } : {}),
     conclusion: parts.map((part) => `(${part.label}) ${part.conclusion}`).join('\n\n'),
     body: parts
       .map((part) => `### (${part.label}) ${part.heading}`.trimEnd() + `\n\n${part.body}`)
@@ -1003,6 +1168,7 @@ function insufficientSection(
 /** The replaceable content of a ready section. */
 function versionOf(section: WalkthroughSection): WalkthroughSectionVersion {
   return {
+    ...(section.analysis ? { analysis: section.analysis } : {}),
     ...(section.conclusion ? { conclusion: section.conclusion } : {}),
     body: section.body,
     ...(section.checks ? { checks: section.checks } : {}),
@@ -1023,6 +1189,7 @@ function applyVersion(
     kind: section.kind,
     ...(section.questionId ? { questionId: section.questionId } : {}),
     title: section.title,
+    ...(version.analysis ? { analysis: version.analysis } : {}),
     ...(version.conclusion ? { conclusion: version.conclusion } : {}),
     body: version.body,
     ...(version.suggestions ? { suggestions: version.suggestions } : {}),
@@ -1054,13 +1221,18 @@ function frameText(section: WalkthroughSection): string {
  * One section request. A worked section is much longer than its prompt, so it
  * starts with generous room and doubles it once the model stops early; a
  * provider that rejects the size gets half; brief outages are retried twice.
- * Each attempt has its own deadline even while the stream keeps trickling.
+ * Each attempt has its own deadline even while the stream keeps trickling, and
+ * all attempts together stop at `SECTION_TOTAL_MS` with a "timed out, try
+ * again" error, so one section never holds the run for 20+ minutes.
  */
 async function requestSectionJSON(
   ai: AIService,
   messages: ChatMessage[],
   runSignal?: AbortSignal,
+  onAttempt?: (attempt: SectionAttempt) => void,
 ): Promise<unknown> {
+  const startedAt = Date.now()
+  const remaining = (): number => SECTION_TOTAL_MS - (Date.now() - startedAt)
   const inputChars = messages.reduce((sum, message) => sum + message.content.length, 0)
   const userCap =
     Number.isFinite(ai.maxOutputTokens) && ai.maxOutputTokens > 0 ? ai.maxOutputTokens : Infinity
@@ -1077,16 +1249,22 @@ async function requestSectionJSON(
   // more) again, so truncated / output-limit cannot ping-pong forever.
   let rejectedBudget = Infinity
   const tried = new Set<number>()
+  let lastFailure: HomeworkErrorKind | undefined
   for (;;) {
     attempts += 1
     tried.add(budget)
     if (runSignal?.aborted) throw new AbortedError()
+    const left = remaining()
+    if (left <= 0) throw sectionTimeoutError()
+    if (attempts > 1 && lastFailure) onAttempt?.({ attempt: attempts, lastFailure })
+    // The last attempt only gets what is left of the section's total time.
+    const deadline = Math.min(SECTION_DEADLINE_MS, left)
     const controller = new AbortController()
     let timedOut = false
     const timer = setTimeout(() => {
       timedOut = true
       controller.abort()
-    }, SECTION_DEADLINE_MS)
+    }, deadline)
     // The run's stop aborts this attempt too.
     const onRunAbort = (): void => controller.abort()
     runSignal?.addEventListener('abort', onRunAbort)
@@ -1099,8 +1277,11 @@ async function requestSectionJSON(
     } catch (err) {
       // Stopped by the student: never a timeout, never retried.
       if (runSignal?.aborted) throw new AbortedError()
-      const failure = timedOut ? new AITimeoutError(SECTION_DEADLINE_MS) : err
+      const failure = timedOut ? new AITimeoutError(deadline) : err
       const kind = classifyHomeworkError(failure)
+      lastFailure = kind
+      // Out of total time: a clear "timed out, try again", whatever came last.
+      if (remaining() <= 0) throw sectionTimeoutError()
       if (attempts >= SECTION_MAX_ATTEMPTS) throw failure
       if (kind === 'truncated') {
         const next = Math.min(userCap, SECTION_OUTPUT_MAX, budget * 2, rejectedBudget - 1)
@@ -1113,7 +1294,9 @@ async function requestSectionJSON(
         budget = next
       } else if (isRetryableHomeworkError(kind) && retries < MAX_TRANSIENT_RETRIES) {
         retries += 1
-        await new Promise((resolve) => setTimeout(resolve, RETRY_BASE_DELAY_MS * 2 ** retries))
+        const delay = RETRY_BASE_DELAY_MS * 2 ** retries
+        if (delay >= remaining()) throw sectionTimeoutError()
+        await new Promise((resolve) => setTimeout(resolve, delay))
         if (runSignal?.aborted) throw new AbortedError()
       } else {
         throw failure
@@ -1123,4 +1306,39 @@ async function requestSectionJSON(
       runSignal?.removeEventListener('abort', onRunAbort)
     }
   }
+}
+
+/** A section that ran out of total time: saved as failed, the run moves on. */
+function sectionTimeoutError(): AppError {
+  return new AppError(
+    t('homework.walkthrough.sectionTimeout', { minutes: Math.round(SECTION_TOTAL_MS / 60_000) }),
+    'SECTION_TIMEOUT',
+  )
+}
+
+function clip(value: string, max: number): string {
+  return value.length > max ? `${value.slice(0, max)}…` : value
+}
+
+/**
+ * What the opening / summary needs from a worked section besides its
+ * conclusion: its step headings and the terms it puts in bold, one per line.
+ * Local and short — the worked text itself is not sent.
+ */
+export function sectionKeyPoints(section: Pick<WalkthroughSection, 'body' | 'parts'>): string {
+  const points: string[] = []
+  const add = (value: string): void => {
+    const point = value.replace(/\s+/g, ' ').trim()
+    if (point && !points.includes(point)) points.push(point)
+  }
+  for (const part of section.parts ?? []) add(`(${part.label}) ${part.heading}`)
+  for (const match of section.body.matchAll(/^#{2,4}\s+(.+)$/gm)) add(match[1]!)
+  for (const match of section.body.matchAll(/\*\*([^*\n]{2,80})\*\*/g)) add(match[1]!)
+  let text = ''
+  for (const point of points) {
+    const line = `- ${point}`
+    if (text.length + line.length + 1 > FRAME_KEY_POINT_CHARS) break
+    text += text ? `\n${line}` : line
+  }
+  return text
 }

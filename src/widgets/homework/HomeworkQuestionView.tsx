@@ -43,6 +43,8 @@ import { cn } from '@/shared/lib/utils'
 import { useTranslation } from '@/i18n'
 import { appendSpeechText, useSpeechInput } from '@/features/homework/useSpeechInput'
 import { HomeworkStudyGuide } from './HomeworkStudyGuide'
+import { AnswerImages } from '@/widgets/handwriting/AnswerImages'
+import { answerImageKey, type HomeworkAnswerImage } from '@/entities/homework/answerImages'
 import { HomeworkReviewPanel } from './HomeworkReviewPanel'
 
 export interface HomeworkQuestionViewProps {
@@ -107,6 +109,12 @@ export function HomeworkQuestionView({
   const [answerPages, setAnswerPages] = useState<Array<{ page: number; url: string }>>([])
   const [originalAnswerOpen, setOriginalAnswerOpen] = useState(false)
   const [displaySourceRefs, setDisplaySourceRefs] = useState<SourceReference[]>(question.sourceRefs)
+  // Handwritten working (photos / pen-board pages) attached to this answer.
+  // Optional on test doubles of the service; without it the field is hidden.
+  const [imageService] = useState(() => service.answerImageService?.() ?? null)
+  const [answerImages, setAnswerImages] = useState<HomeworkAnswerImage[]>([])
+  const imageKey = answerImageKey(answerImages)
+  const hasAnswer = draft.trim() !== '' || answerImages.length > 0
 
   const saveTimer = useRef<number | null>(null)
   const workingRef = useRef<HTMLInputElement | HTMLTextAreaElement | null>(null)
@@ -120,7 +128,7 @@ export function HomeworkQuestionView({
   const visibleCheck =
     answerCheck &&
     answerCheck.inputHash ===
-      answerCheckInputHash(question, draft, checkLanguage, answerCheck.promptVersion)
+      answerCheckInputHash(question, draft, checkLanguage, answerCheck.promptVersion, imageKey)
       ? answerCheck
       : null
 
@@ -217,7 +225,7 @@ export function HomeworkQuestionView({
   }
 
   async function checkDraft(): Promise<void> {
-    if (!draft.trim() || checking) return
+    if (!hasAnswer || checking) return
     setChecking(true)
     setCheckError(null)
     const run = checkRun.start()
@@ -294,6 +302,7 @@ export function HomeworkQuestionView({
       id: `local-${crypto.randomUUID()}`,
       role: 'student',
       content: text,
+      ...(answerImages.length ? { imageCount: answerImages.length } : {}),
       createdAt: Date.now(),
     }
     setMessages((prev) => [...prev, optimistic])
@@ -518,11 +527,19 @@ export function HomeworkQuestionView({
               showRenderedPreview
               {...(availableReference ? { onSubmit: () => void checkDraft() } : {})}
             />
+            {imageService && (
+              <AnswerImages
+                questionId={question.id}
+                service={imageService}
+                onChange={setAnswerImages}
+                disabled={checking}
+              />
+            )}
             <div className="flex flex-wrap items-center gap-3">
               <Button
                 type="button"
                 onClick={() => void checkDraft()}
-                disabled={!draft.trim() || checking || !availableReference}
+                disabled={!hasAnswer || checking || !availableReference}
               >
                 {checking ? (
                   <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
@@ -566,6 +583,11 @@ export function HomeworkQuestionView({
                       : t('homework.check.aiReference')}
                   </span>
                 </div>
+                {visibleCheck.imagesIgnored && (
+                  <p role="status" className="text-sm text-muted-foreground">
+                    {t('homework.images.visionUnsupported')} {t('homework.images.textOnly')}
+                  </p>
+                )}
                 {visibleCheck.similarityPercent !== undefined && (
                   <p className="text-sm font-medium tabular-nums">
                     {t('homework.check.similarity')}: {visibleCheck.similarityPercent}%
@@ -766,13 +788,27 @@ export function HomeworkQuestionView({
                       {message.role === 'student' ? t('homework.you') : t('homework.tutor')}:{' '}
                     </span>
                     {message.role === 'assistant' ? (
-                      <RichText
-                        text={message.content}
-                        format="markdown"
-                        paragraphClassName="text-sm leading-relaxed"
-                      />
+                      <>
+                        {message.imagesIgnored && (
+                          <p className="mb-1 text-xs text-muted-foreground">
+                            {t('homework.images.visionUnsupported')} {t('homework.images.textOnly')}
+                          </p>
+                        )}
+                        <RichText
+                          text={message.content}
+                          format="markdown"
+                          paragraphClassName="text-sm leading-relaxed"
+                        />
+                      </>
                     ) : (
-                      message.content
+                      <>
+                        {message.content}
+                        {message.imageCount ? (
+                          <span className="mt-1 block text-xs opacity-80">
+                            {t('homework.images.sentWith', { count: message.imageCount })}
+                          </span>
+                        ) : null}
+                      </>
                     )}
                   </li>
                 ))}

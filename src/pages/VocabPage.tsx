@@ -39,6 +39,7 @@ import {
 import { CourseVocabService } from '@/services/courseVocabService'
 import { ProjectService } from '@/services/projectService'
 import { buildAIServices } from '@/services/aiServices'
+import { withUsageKind } from '@/services/aiService'
 import { useProjects } from '@/features/project/useProjects'
 import {
   RECOMMENDED_BOOK,
@@ -713,7 +714,7 @@ function CourseVocabPanel({
       const bundle = await buildAIServices()
       const result = await new CourseVocabService({
         projects: new ProjectService(),
-        ai: bundle?.ai ?? null,
+        ai: withUsageKind(bundle?.ai ?? null, 'vocab'),
       }).extract(projectId, {
         control: run,
         onProgress: ({ done, total }) => setGloss({ projectId, done, total, paused: false }),

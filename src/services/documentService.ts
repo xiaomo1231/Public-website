@@ -9,6 +9,7 @@ import { CourseContentService } from './courseContentService'
 import { getDb, type AppDatabase } from '@/infrastructure/db/database'
 import { ChunkRepository } from '@/entities/chunk/repository'
 import { HomeworkRepository } from '@/entities/homework/repository'
+import { AnswerImageRepository } from '@/entities/homework/answerImageRepository'
 import { PracticeRepository } from '@/entities/practice/repository'
 import { hasStudentWork } from '@/entities/homework/matching'
 import { AppError, NotFoundError, ValidationError } from '@/infrastructure/errors/AppError'
@@ -172,6 +173,7 @@ export class DocumentService {
         this.db.homeworkQuestions,
         this.db.homeworkWalkthroughs,
         this.db.walkthroughNotes,
+        this.db.homeworkAnswerImages,
         this.db.slideLessons,
         this.db.practiceSets,
         this.db.practiceQuestions,
@@ -257,7 +259,11 @@ export class DocumentService {
     for (const set of hwSets) {
       const questions = await this.homework.listQuestions(set.id)
       homeworkQuestions += questions.length
-      homeworkAnswers += questions.filter((question) => hasStudentWork(question)).length
+      // Attached answer images (photos / pen-board pages) are student work too.
+      const withImages = await new AnswerImageRepository(this.db).questionIdsWithImages(set.id)
+      homeworkAnswers += questions.filter(
+        (question) => hasStudentWork(question) || withImages.has(question.id),
+      ).length
       // Questions saved about the walkthrough are student work too.
       homeworkAnswers += await this.db.walkthroughNotes
         .where('[setId+updatedAt]')

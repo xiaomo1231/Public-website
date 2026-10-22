@@ -5,6 +5,7 @@ import {
   type ChatResponse,
   type ProviderCapabilities,
   type ProviderConfig,
+  type TokenUsage,
   ensureConfig,
 } from './types'
 import {
@@ -47,6 +48,12 @@ export interface OpenAICompatibleOptions {
    * slow-but-working request must not be cut off at the streaming idle window.
    */
   nonStreamingTimeoutMs?: number
+  /**
+   * Ask for the usage block on streamed responses
+   * (`stream_options: { include_usage: true }`). Only enabled for presets whose
+   * documentation lists the option; an unknown server might reject it.
+   */
+  streamUsage?: boolean
 }
 
 /**
@@ -95,14 +102,7 @@ export class OpenAICompatibleProvider implements AIProvider {
       if (hasErrorPayload(json)) throw errorFromPayload(json, res.status)
       const choice = json.choices?.[0]
       const content = choice?.message?.content ?? choice?.delta?.content ?? ''
-      const u = json.usage
-      const usage = u
-        ? {
-            promptTokens: u.prompt_tokens ?? 0,
-            completionTokens: u.completion_tokens ?? 0,
-            totalTokens: u.total_tokens ?? 0,
-          }
-        : undefined
+      const usage = parseUsage(json.usage)
       const model = json.model ?? req.model ?? this.config.model
       const finishReason =
         typeof choice?.finish_reason === 'string' ? choice.finish_reason : undefined
@@ -174,14 +174,8 @@ export class OpenAICompatibleProvider implements AIProvider {
           content += delta
           onChunk({ delta, done: false })
         }
-        const u = parsed.usage
-        if (u) {
-          usage = {
-            promptTokens: u.prompt_tokens ?? 0,
-            completionTokens: u.completion_tokens ?? 0,
-            totalTokens: u.total_tokens ?? 0,
-          }
-        }
+        const parsedUsage = parseUsage(parsed.usage)
+        if (parsedUsage) usage = parsedUsage
         if (parsed.model) finalModel = parsed.model
         if (typeof choice?.finish_reason === 'string') {
           finalFinishReason = choice.finish_reason
@@ -246,14 +240,8 @@ export class OpenAICompatibleProvider implements AIProvider {
             content += whole
             onChunk({ delta: whole, done: false })
           }
-          const u = parsed.usage
-          if (u) {
-            usage = {
-              promptTokens: u.prompt_tokens ?? 0,
-              completionTokens: u.completion_tokens ?? 0,
-              totalTokens: u.total_tokens ?? 0,
-            }
-          }
+          const wholeUsage = parseUsage(parsed.usage)
+          if (wholeUsage) usage = wholeUsage
           if (parsed.model) finalModel = parsed.model
           if (typeof choice?.finish_reason === 'string') finalFinishReason = choice.finish_reason
         }
@@ -394,6 +382,7 @@ export class OpenAICompatibleProvider implements AIProvider {
       max_tokens: req.maxTokens ?? this.config.maxTokens,
       stream,
     }
+    if (stream && this.options.streamUsage) body.stream_options = { include_usage: true }
     if (req.responseFormat?.type === 'json_object' && this.options.supportsJsonMode) {
       body.response_format = { type: 'json_object' }
     }
@@ -469,8 +458,7 @@ export class OpenAICompatibleProvider implements AIProvider {
         ...init,
         method: init?.method ?? 'POST',
         headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${this.config.apiKey}`,
+          ...providerHeaders(this.config.apiKey),
           ...(init?.headers as Record<string, string> | undefined),
         },
         signal,
@@ -490,6 +478,45 @@ export class OpenAICompatibleProvider implements AIProvider {
       if (err instanceof AIProviderError) throw err
       throw new ProviderUnavailableError((err as Error)?.message ?? t('errors.aiNetwork'))
     }
+  }
+}
+
+/**
+ * The headers every request to an OpenAI-compatible endpoint carries. Shared
+ * by chat, the model list and balance queries so they authenticate the same
+ * way. The result holds the key: never log it.
+ */
+export function providerHeaders(apiKey: string): Record<string, string> {
+  return {
+    'Content-Type': 'application/json',
+    Authorization: `Bearer ${apiKey}`,
+  }
+}
+
+/**
+ * Normalize a provider `usage` block. Cached prompt tokens come from
+ * `prompt_tokens_details.cached_tokens` (OpenAI, DeepSeek, Qwen) or DeepSeek's
+ * `prompt_cache_hit_tokens`. Returns undefined when there is no usage block.
+ */
+export function parseUsage(raw: unknown): TokenUsage | undefined {
+  if (!raw || typeof raw !== 'object') return undefined
+  const u = raw as Record<string, unknown>
+  const num = (v: unknown): number | undefined => {
+    const n = typeof v === 'string' ? Number(v) : v
+    return typeof n === 'number' && Number.isFinite(n) && n >= 0 ? n : undefined
+  }
+  const prompt = num(u.prompt_tokens) ?? num(u.input_tokens)
+  const completion = num(u.completion_tokens) ?? num(u.output_tokens)
+  if (prompt === undefined && completion === undefined) return undefined
+  const details = u.prompt_tokens_details as Record<string, unknown> | null | undefined
+  const cached =
+    num(details && typeof details === 'object' ? details.cached_tokens : undefined) ??
+    num(u.prompt_cache_hit_tokens)
+  return {
+    promptTokens: prompt ?? 0,
+    completionTokens: completion ?? 0,
+    totalTokens: num(u.total_tokens) ?? (prompt ?? 0) + (completion ?? 0),
+    ...(cached !== undefined && cached > 0 ? { cachedTokens: cached } : {}),
   }
 }
 
@@ -529,7 +556,7 @@ interface SSEChoice {
 }
 interface SSEParsed {
   choices?: SSEChoice[]
-  usage?: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number }
+  usage?: unknown
   model?: string
 }
 

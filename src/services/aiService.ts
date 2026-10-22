@@ -10,6 +10,21 @@ import {
 import { InvalidJSONError, OutputTruncatedError } from '@/infrastructure/ai/errors'
 import { ThinkStreamFilter, stripThinkBlocks } from '@/infrastructure/ai/responseText'
 import { logger } from '@/infrastructure/logger/logger'
+import type { TokenUsage } from '@/infrastructure/ai/types'
+import type { AIUsageKind } from '@/entities/aiUsage/types'
+
+/**
+ * Receives every AI response's usage block (or `undefined` when the provider
+ * sent none). Installed once at app start by `installAIUsageRecording()`;
+ * unset (no-op) in tests unless a test installs one.
+ */
+export type AIUsageSink = (kind: AIUsageKind, usage: TokenUsage | undefined) => void
+
+let usageSink: AIUsageSink | null = null
+
+export function setAIUsageSink(sink: AIUsageSink | null): void {
+  usageSink = sink
+}
 
 /**
  * A model that stopped because it hit the output cap returns incomplete JSON.
@@ -22,6 +37,13 @@ function assertNotTruncated(res: ChatResponse, maxTokens: number): void {
 
 export interface AIServiceOptions {
   config: ProviderConfig
+  /** Request kind recorded in local usage statistics (default `other`). */
+  usageKind?: AIUsageKind
+}
+
+/** Per-call override of the usage kind. */
+interface UsageTag {
+  usageKind?: AIUsageKind
 }
 
 /**
@@ -36,10 +58,32 @@ export interface AIServiceOptions {
 export class AIService {
   private provider: AIProvider
   private config: ProviderConfig
+  private usageKind: AIUsageKind
 
   constructor(opts: AIServiceOptions) {
     this.config = opts.config
     this.provider = createProvider(opts.config)
+    this.usageKind = opts.usageKind ?? 'other'
+  }
+
+  /**
+   * A view of this service that records usage under `kind`. It shares the
+   * provider and configuration (a later `reset` applies to both).
+   */
+  withKind(kind: AIUsageKind): AIService {
+    const view = Object.create(this) as AIService
+    view.usageKind = kind
+    return view
+  }
+
+  /** Hand the response's usage to the sink. Never throws. */
+  private track(res: ChatResponse, kind?: AIUsageKind): void {
+    if (!usageSink) return
+    try {
+      usageSink(kind ?? this.usageKind, res.usage)
+    } catch (err) {
+      logger.debug('AI usage recording failed', { error: (err as Error)?.message })
+    }
   }
 
   /** Replace the provider when the user updates their settings. */
@@ -54,7 +98,12 @@ export class AIService {
 
   async chat(
     messages: ChatMessage[],
-    options?: { model?: string; temperature?: number; maxTokens?: number; signal?: AbortSignal },
+    options?: {
+      model?: string
+      temperature?: number
+      maxTokens?: number
+      signal?: AbortSignal
+    } & UsageTag,
   ): Promise<ChatResponse> {
     const req: ChatRequest = {
       messages,
@@ -65,6 +114,7 @@ export class AIService {
     }
     // Hidden reasoning never reaches a caller, so no renderer can show it.
     const res = await this.provider.chat(req)
+    this.track(res, options?.usageKind)
     return { ...res, content: stripThinkBlocks(res.content) }
   }
 
@@ -75,7 +125,7 @@ export class AIService {
    */
   async chatJSON<T>(
     messages: ChatMessage[],
-    options?: { model?: string; maxTokens?: number; signal?: AbortSignal },
+    options?: { model?: string; maxTokens?: number; signal?: AbortSignal } & UsageTag,
   ): Promise<{ data: T; raw: ChatResponse }> {
     const useNativeJson = this.provider.capabilities.jsonMode
     const maxTokens = options?.maxTokens ?? this.config.maxTokens
@@ -89,6 +139,7 @@ export class AIService {
     }
 
     const res = await this.provider.chat(req)
+    this.track(res, options?.usageKind)
     assertNotTruncated(res, maxTokens)
     const content = stripThinkBlocks(res.content)
     try {
@@ -102,6 +153,7 @@ export class AIService {
         })
         // One retry without json mode to coax a parsable result.
         const retry = await this.provider.chat({ ...req, responseFormat: { type: 'text' } })
+        this.track(retry, options?.usageKind)
         assertNotTruncated(retry, maxTokens)
         const retryContent = stripThinkBlocks(retry.content)
         try {
@@ -126,7 +178,7 @@ export class AIService {
   async streamJSON<T>(
     messages: ChatMessage[],
     onDelta?: (delta: string) => void,
-    options?: { model?: string; maxTokens?: number; signal?: AbortSignal },
+    options?: { model?: string; maxTokens?: number; signal?: AbortSignal } & UsageTag,
   ): Promise<{ data: T; raw: ChatResponse }> {
     if (!this.provider.capabilities.streaming) {
       return this.chatJSON<T>(messages, options)
@@ -148,6 +200,7 @@ export class AIService {
       if (chunk.delta && filter) filter.push(chunk.delta)
     })
     filter?.flush()
+    this.track(res, options?.usageKind)
     assertNotTruncated(res, maxTokens)
     const content = stripThinkBlocks(res.content)
     const data = extractJSON<T>(content)
@@ -162,7 +215,7 @@ export class AIService {
   async streamChat(
     messages: ChatMessage[],
     onDelta: (delta: string) => void,
-    options?: { model?: string; signal?: AbortSignal },
+    options?: { model?: string; signal?: AbortSignal } & UsageTag,
   ): Promise<ChatResponse> {
     const req: ChatRequest = {
       messages,
@@ -176,6 +229,7 @@ export class AIService {
       if (chunk.delta) filter.push(chunk.delta)
     })
     filter.flush()
+    this.track(res, options?.usageKind)
     return { ...res, content: stripThinkBlocks(res.content) }
   }
 
@@ -187,4 +241,15 @@ export class AIService {
   }> {
     return this.provider.testConnection()
   }
+}
+
+/**
+ * `ai.withKind(kind)` when available. Test doubles that only stub the chat
+ * methods are returned unchanged.
+ */
+export function withUsageKind<T extends AIService | null | undefined>(ai: T, kind: AIUsageKind): T {
+  if (ai && typeof (ai as Partial<AIService>).withKind === 'function') {
+    return ai.withKind(kind) as T
+  }
+  return ai
 }

@@ -5,6 +5,8 @@ import type { HomeworkQuestion, HomeworkSet } from './types'
 import { homeworkReviewInputHash, type HomeworkReviewGuide } from './reviewGuide'
 import { answerCheckInputHash, type HomeworkAnswerCheck } from './answerCheck'
 import { WalkthroughRepository } from './walkthroughRepository'
+import { AnswerImageRepository } from './answerImageRepository'
+import { answerImageKey } from './answerImages'
 
 /**
  * Persistence for homework assignments and their questions.
@@ -111,19 +113,29 @@ export class HomeworkRepository {
     })
   }
 
-  /** A slow AI check must never overwrite newer student work or a changed answer key. */
+  /**
+   * A slow AI check must never overwrite newer student work or a changed
+   * answer key. The question's answer images are part of the work: adding,
+   * removing or reordering one while the check ran discards the result.
+   */
   async applyAnswerCheck(
     id: string,
     submittedDraft: string,
     check: HomeworkAnswerCheck,
   ): Promise<HomeworkQuestion | undefined> {
-    return this.db.transaction('rw', this.questions(), async () => {
+    return this.db.transaction('rw', this.questions(), this.db.homeworkAnswerImages, async () => {
       const existing = await this.questions().get(id)
+      const imageKey = answerImageKey(await new AnswerImageRepository(this.db).list(id))
       if (
         !existing ||
         existing.draftText !== submittedDraft ||
-        answerCheckInputHash(existing, submittedDraft, check.language, check.promptVersion) !==
-          check.inputHash
+        answerCheckInputHash(
+          existing,
+          submittedDraft,
+          check.language,
+          check.promptVersion,
+          imageKey,
+        ) !== check.inputHash
       )
         return undefined
       const next: HomeworkQuestion = { ...existing, answerCheck: check, updatedAt: Date.now() }
@@ -277,14 +289,24 @@ export class HomeworkRepository {
   }
 
   async deleteQuestion(id: string): Promise<void> {
-    await this.questions().delete(id)
+    await this.db.transaction('rw', this.questions(), this.db.homeworkAnswerImages, async () => {
+      await new AnswerImageRepository(this.db).deleteByQuestion(id)
+      await this.questions().delete(id)
+    })
   }
 
   async deleteSet(setId: string): Promise<void> {
-    await this.db.transaction('rw', this.sets(), this.questions(), async () => {
-      await this.questions().where('setId').equals(setId).delete()
-      await this.sets().delete(setId)
-    })
+    await this.db.transaction(
+      'rw',
+      this.sets(),
+      this.questions(),
+      this.db.homeworkAnswerImages,
+      async () => {
+        await new AnswerImageRepository(this.db).deleteBySet(setId)
+        await this.questions().where('setId').equals(setId).delete()
+        await this.sets().delete(setId)
+      },
+    )
   }
 
   async deleteQuestionsBySet(setId: string): Promise<number> {
@@ -296,9 +318,17 @@ export class HomeworkRepository {
     const walkthroughs = new WalkthroughRepository(this.db)
     await this.db.transaction(
       'rw',
-      [this.sets(), this.questions(), this.db.homeworkWalkthroughs, this.db.walkthroughNotes],
+      [
+        this.sets(),
+        this.questions(),
+        this.db.homeworkWalkthroughs,
+        this.db.walkthroughNotes,
+        this.db.homeworkAnswerImages,
+      ],
       async () => {
+        const images = new AnswerImageRepository(this.db)
         for (const set of sets) {
+          await images.deleteBySet(set.id)
           await this.questions().where('setId').equals(set.id).delete()
           await walkthroughs.deleteBySet(set.id)
           await this.sets().delete(set.id)
@@ -311,9 +341,16 @@ export class HomeworkRepository {
     const sets = await this.sets().where('projectId').equals(projectId).toArray()
     await this.db.transaction(
       'rw',
-      [this.sets(), this.questions(), this.db.homeworkWalkthroughs, this.db.walkthroughNotes],
+      [
+        this.sets(),
+        this.questions(),
+        this.db.homeworkWalkthroughs,
+        this.db.walkthroughNotes,
+        this.db.homeworkAnswerImages,
+      ],
       async () => {
         await new WalkthroughRepository(this.db).deleteByProject(projectId)
+        await new AnswerImageRepository(this.db).deleteByProject(projectId)
         await this.questions().where('projectId').equals(projectId).delete()
         await this.sets().where('projectId').equals(projectId).delete()
       },

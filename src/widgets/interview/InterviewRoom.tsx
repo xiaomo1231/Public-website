@@ -29,6 +29,7 @@ import { friendlyAIError } from '@/shared/lib/aiErrors'
 import { canSpeak, hasVoiceFor, onVoicesChanged, speak } from '@/shared/lib/speech'
 import { cn } from '@/shared/lib/utils'
 import { buildAIServices } from '@/services/aiServices'
+import { withUsageKind } from '@/services/aiService'
 import { InterviewService } from '@/services/interviewService'
 import {
   askedQuestionIds,
@@ -40,7 +41,7 @@ import { useTranslation } from '@/i18n'
 
 async function aiService(): Promise<InterviewService> {
   const bundle = await buildAIServices()
-  return new InterviewService({ ai: bundle?.ai ?? null })
+  return new InterviewService({ ai: withUsageKind(bundle?.ai ?? null, 'tutor') })
 }
 
 /** One interview: the conversation, the checklist, the summary and the result. */

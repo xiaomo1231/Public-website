@@ -56,7 +56,7 @@ export interface DataInventory {
 
 export interface ExportBlob {
   id: string
-  kind: 'document' | 'visualSource'
+  kind: 'document' | 'visualSource' | 'homeworkAnswerImage'
   mimeType: string
   /**
    * The stored row's other fields (currently `projectId`). Added after
@@ -143,6 +143,9 @@ function encodeBytes(bytes: ArrayBuffer): string {
 const BINARY_TABLES = [
   { table: 'documentBlobs', kind: 'document' },
   { table: 'visualSourceImages', kind: 'visualSource' },
+  // Images of handwritten homework working; each row carries its own
+  // projectId / setId / questionId / order, exported as the entry's fields.
+  { table: 'homeworkAnswerImages', kind: 'homeworkAnswerImage' },
 ] as const
 
 /** Tables exported as rows in `json` (binary tables go to `blobs`). */
@@ -212,9 +215,10 @@ function blobHead(row: Record<string, unknown>, kind: string): Record<string, un
 }
 
 function stripSecrets(row: Record<string, unknown>): Record<string, unknown> {
-  const { apiKey, apiKeyEncrypted, ...safe } = row
+  const { apiKey, apiKeyEncrypted, adminApiKeyEncrypted, ...safe } = row
   void apiKey
   void apiKeyEncrypted
+  void adminApiKeyEncrypted
   return safe
 }
 
@@ -287,7 +291,7 @@ export class DataManagementService {
     })
     // Page images kept from course files and cached reference images also
     // occupy storage; count their bytes too.
-    for (const name of ['visualSourceImages', 'referenceImageBlobs']) {
+    for (const name of ['visualSourceImages', 'referenceImageBlobs', 'homeworkAnswerImages']) {
       await db.table(name).each((row: { bytes?: ArrayBuffer; sizeBytes?: number }) => {
         blobBytes += row.bytes?.byteLength ?? row.sizeBytes ?? 0
       })
@@ -703,7 +707,8 @@ function resolveBlob(
   const id = fields.id
   if (!binary || !entry.hasBytes || typeof id !== 'string' || !id) return null
   let projectId = fields.projectId
-  if (typeof projectId !== 'string' || !projectId) {
+  if ((typeof projectId !== 'string' || !projectId) && binary.kind !== 'homeworkAnswerImage') {
+    // Answer images were always exported with their projectId.
     projectId = owners[binary.kind === 'document' ? 'documents' : 'visualSources']!.get(id)
   }
   if (typeof projectId !== 'string') return null

@@ -14,6 +14,8 @@ import {
 import type { QuestionAttempt, QuestionEvaluation } from '@/entities/questionAttempt/types'
 import type {
   Quiz,
+  QuizBank,
+  QuizBankEntry,
   QuizConfig,
   QuizDifficulty,
   QuizKnowledgeStat,
@@ -55,6 +57,7 @@ import {
   stepDifficulty,
 } from './adaptiveDifficulty'
 import { MasteryService } from './masteryService'
+import { planBank, selectNextBankQuestion, usesQuestionBank, type BankCandidate } from './quizBank'
 import type { MistakeService } from './mistakeService'
 import type { ProjectService } from './projectService'
 import {
@@ -123,6 +126,8 @@ export interface SubmitAnswerResult {
   nextDifficulty: DifficultyLevel
   difficultyReason: string
   isLastQuestion: boolean
+  /** A bank quiz: the question served next, chosen by the adaptive model. */
+  nextQuestion?: Question
 }
 
 export type MoreQuestionsMode = 'same_topic' | 'similar' | 'harder' | 'easier' | 'weakness'
@@ -296,6 +301,24 @@ export function adaptiveHistory(history: QuestionAttempt[]): {
       { consecutiveCorrect: 0, consecutiveWrong: 0 },
     ),
   }
+}
+
+/** A bank's entries with their stored questions (missing rows are skipped). */
+function bankCandidates(entries: QuizBankEntry[], questions: Question[]): BankCandidate[] {
+  const byId = new Map(questions.map((question) => [question.id, question]))
+  return entries.flatMap((entry) => {
+    const question = byId.get(entry.questionId)
+    if (!question) return []
+    return [
+      {
+        questionId: entry.questionId,
+        slot: entry.slot,
+        difficulty: entry.difficulty,
+        knowledgePoint: question.knowledgePoint,
+        type: question.type,
+      },
+    ]
+  })
 }
 
 /** How much of a chunk to show when the model's quote cannot be verified. */
@@ -476,11 +499,28 @@ export class QuizService {
       { ...config, types: offeredQuizTypes(config.types, subjectContext) },
       config.count,
     )
-    const plan: PlanEntry[] = difficultyPlan.map((difficulty, i) => ({
-      slot: i,
-      difficulty,
-      type: typePlan[i]!,
-    }))
+    // An adaptive quiz is generated as a bank: several levels per slot, and
+    // each answer picks the next question. `PlanEntry.slot` then indexes the
+    // bank plan; the quiz slot it fills is `bank.plan[slot].slot`.
+    const bank: QuizBank | undefined = usesQuestionBank(config)
+      ? {
+          start: DEFAULT_DIFFICULTY,
+          plan: planBank(config.count, DEFAULT_DIFFICULTY),
+          entries: [],
+          length: config.count,
+        }
+      : undefined
+    const plan: PlanEntry[] = bank
+      ? bank.plan.map((entry, i) => ({
+          slot: i,
+          difficulty: entry.difficulty,
+          type: typePlan[entry.slot]!,
+        }))
+      : difficultyPlan.map((difficulty, i) => ({
+          slot: i,
+          difficulty,
+          type: typePlan[i]!,
+        }))
 
     const quiz: Quiz = {
       id: crypto.randomUUID(),
@@ -489,9 +529,11 @@ export class QuizService {
       config,
       questionIds: [],
       status: 'generating',
-      difficultyPlan,
+      // A bank quiz records the levels actually served, as they are served.
+      difficultyPlan: bank ? [] : difficultyPlan,
       startedAt: Date.now(),
       promptVersion: prompts.quizGenerator.VERSION,
+      ...(bank ? { bank } : {}),
     }
     await this.quizzes.upsert(quiz)
     generatingQuizzes.add(quiz.id)
@@ -510,13 +552,22 @@ export class QuizService {
         ...(config.chapterId ? { chapterId: config.chapterId } : {}),
         ...(config.sectionId ? { sectionId: config.sectionId } : {}),
       }
-      const groups = await this.planGroups(projectId, config, candidates, knowledgePoints, topic)
+      const groups = await this.planGroups(
+        projectId,
+        config,
+        candidates,
+        knowledgePoints,
+        topic,
+        plan.length,
+      )
       // Spread the questions over the groups (one group unless a mixed review).
+      // A bank slot's levels share their quiz slot's group.
       groups.forEach((group) => {
         group.snippets = scopeSnippetsByStructure(group.snippets, scope)
       })
       plan.forEach((entry, i) => {
-        if (groups.length > 1) entry.group = i % groups.length
+        const quizSlot = bank ? bank.plan[i]!.slot : i
+        if (groups.length > 1) entry.group = quizSlot % groups.length
       })
 
       options.onProgress?.('generating', 30)
@@ -672,7 +723,7 @@ export class QuizService {
     )
     const existing = await this.questions.listByIds(quiz.questionIds)
     let current: Quiz = quiz
-    const total = quiz.config.count
+    const total = quiz.bank ? quiz.bank.plan.length : quiz.config.count
     const toInput = (question: GeneratedQuizQuestion, entry: PlanEntry, i: number) => {
       const group = groups[entry.group ?? 0]
       const topicId = group?.topicId ?? topic?.id
@@ -778,6 +829,7 @@ export class QuizService {
     }
 
     onProgress?.('storing', 80)
+    if (current.bank) return this.readyBank(current, resume.topicName, onProgress)
     // Keep the plan's order (difficulty ramps up through an adaptive quiz).
     const slots = current.resume!.questionSlots
     const ordered = current.questionIds
@@ -805,6 +857,124 @@ export class QuizService {
     onProgress?.('done', 100)
     logger.info('Quiz generated', { quizId: ready.id, count: ordered.length })
     return ready
+  }
+
+  /**
+   * A generated bank becomes takeable: every bank question is recorded in
+   * `bank.entries` and only the first one (the starting level of slot 0) is
+   * served. The quiz is as long as configured, or as the bank if shorter.
+   */
+  private async readyBank(
+    current: Quiz,
+    topicName: string,
+    onProgress?: (stage: string, progress: number) => void,
+  ): Promise<Quiz> {
+    const bank = current.bank!
+    const slots = current.resume?.questionSlots ?? []
+    const entries: QuizBankEntry[] = current.questionIds
+      .map((questionId, i) => {
+        const planned = bank.plan[slots[i] ?? i] ?? { slot: i, difficulty: bank.start }
+        return { questionId, slot: planned.slot, difficulty: planned.difficulty }
+      })
+      .sort(
+        (a, b) =>
+          a.slot - b.slot ||
+          DIFFICULTY_ORDER.indexOf(a.difficulty) - DIFFICULTY_ORDER.indexOf(b.difficulty),
+      )
+    const questions = await this.questions.listByIds(entries.map((entry) => entry.questionId))
+    const first = selectNextBankQuestion({
+      candidates: bankCandidates(entries, questions),
+      served: new Set(),
+      slot: 0,
+      target: bank.start,
+    })
+    if (!first) throw new AppError(t('errors.noUsableQuestions'), 'MALFORMED_QUIZ')
+    const length = Math.min(current.config.count, entries.length)
+    const { resume: _finished, errorMessage: _error, ...rest } = current
+    void _finished
+    void _error
+    const ready: Quiz = {
+      ...rest,
+      title: t('quiz.topicTitle', { topic: topicName, count: length }),
+      questionIds: [first.questionId],
+      difficultyPlan: [first.difficulty],
+      status: 'ready',
+      bank: { ...bank, entries, length },
+    }
+    await this.quizzes.upsert(ready)
+    onProgress?.('done', 100)
+    logger.info('Quiz bank generated', { quizId: ready.id, bank: entries.length, length })
+    return ready
+  }
+
+  /**
+   * After every served question of a bank quiz has an answer, serve the next
+   * one at `target` (see `selectNextBankQuestion`). Nothing is served while a
+   * served question is still open, once the quiz length is reached, or when
+   * the bank is used up.
+   */
+  private async serveNextFromBank(
+    quiz: Quiz,
+    history: QuestionAttempt[],
+    target: DifficultyLevel,
+    previousKnowledgePoint?: string,
+  ): Promise<{ quiz: Quiz; question: Question | null }> {
+    const bank = quiz.bank
+    if (!bank || bank.entries.length === 0) return { quiz, question: null }
+    const answered = new Set(history.map((attempt) => attempt.questionId))
+    if (
+      quiz.questionIds.length >= bank.length ||
+      !quiz.questionIds.every((id) => answered.has(id))
+    ) {
+      return { quiz, question: null }
+    }
+    const questions = await this.questions.listByIds(bank.entries.map((entry) => entry.questionId))
+    const pick = selectNextBankQuestion({
+      candidates: bankCandidates(bank.entries, questions),
+      served: new Set(quiz.questionIds),
+      slot: quiz.questionIds.length,
+      target,
+      ...(previousKnowledgePoint !== undefined ? { previousKnowledgePoint } : {}),
+    })
+    if (!pick) return { quiz, question: null }
+    const next: Quiz = {
+      ...quiz,
+      questionIds: [...quiz.questionIds, pick.questionId],
+      difficultyPlan: [...quiz.difficultyPlan, pick.difficulty],
+    }
+    await this.quizzes.upsert(next)
+    return { quiz: next, question: questions.find((q) => q.id === pick.questionId) ?? null }
+  }
+
+  /**
+   * Reopening a bank quiz whose served questions are all answered (the tab
+   * closed between an answer and serving the next one): serve the next one
+   * as the answer would have. Any other quiz is returned unchanged.
+   */
+  async resumeQuestionBank(quizId: string): Promise<Quiz> {
+    const quiz = await this.getQuiz(quizId)
+    if (!quiz.bank?.entries.length || quiz.status === 'completed') return quiz
+    const lastId = quiz.questionIds[quiz.questionIds.length - 1]
+    const last = lastId ? await this.questions.get(lastId) : undefined
+    if (!last) return quiz
+    const history = await this.attempts.listByQuiz(quizId)
+    if (!history.some((attempt) => attempt.questionId === last.id)) return quiz
+    const decision = await this.nextDifficultyFor(quiz, history, last)
+    return (await this.serveNextFromBank(quiz, history, decision.difficulty, last.knowledgePoint))
+      .quiz
+  }
+
+  /** The adaptive model's decision after `question` (disputed answers move nothing). */
+  private async nextDifficultyFor(quiz: Quiz, history: QuestionAttempt[], question: Question) {
+    const { recentResults, streaks } = adaptiveHistory(history)
+    const masteryRow = await this.mastery.get(quiz.projectId, question.knowledgePoint)
+    return decideNextDifficulty({
+      currentDifficulty: question.difficulty,
+      recentResults,
+      consecutiveCorrect: streaks.consecutiveCorrect,
+      consecutiveWrong: streaks.consecutiveWrong,
+      knowledgePointMastery: masteryRow?.mastery ?? 0,
+    })
   }
 
   /**
@@ -937,6 +1107,8 @@ export class QuizService {
     candidates: SourceSnippet[],
     knowledgePoints: string[],
     topic: Awaited<ReturnType<CourseAnalysisRepository['getTopic']>>,
+    /** Questions to generate (a bank holds more than the quiz length). */
+    generated: number = config.count,
   ): Promise<QuizGroup[]> {
     if (config.examScope) return this.planExamGroups(projectId, config, candidates)
     const single = (): QuizGroup[] => [
@@ -946,7 +1118,7 @@ export class QuizService {
         snippets: pickQuizSnippets(candidates, {
           ...(topic?.sourceChunkIds?.length ? { preferChunkIds: topic.sourceChunkIds } : {}),
           keywords: knowledgePoints,
-          limit: Math.min(MAX_QUIZ_SNIPPETS, Math.max(MIN_QUIZ_SNIPPETS, config.count + 3)),
+          limit: Math.min(MAX_QUIZ_SNIPPETS, Math.max(MIN_QUIZ_SNIPPETS, generated + 3)),
         }),
       },
     ]
@@ -1444,19 +1616,19 @@ export class QuizService {
 
     // Adaptive adjustment for the *next* question.
     const history = await this.attempts.listByQuiz(quizId)
-    const { recentResults, streaks } = adaptiveHistory(history)
-    const masteryRow = await this.mastery.get(quiz.projectId, question.knowledgePoint)
-    const decision = decideNextDifficulty({
-      currentDifficulty: question.difficulty,
-      recentResults,
-      consecutiveCorrect: streaks.consecutiveCorrect,
-      consecutiveWrong: streaks.consecutiveWrong,
-      knowledgePointMastery: masteryRow?.mastery ?? 0,
-    })
+    const decision = await this.nextDifficultyFor(quiz, history, question)
+
+    // A bank quiz serves its next question at the decided level.
+    const { quiz: served, question: nextQuestion } = await this.serveNextFromBank(
+      quiz,
+      history,
+      decision.difficulty,
+      question.knowledgePoint,
+    )
 
     // Distinct questions, not attempts: a resumed quiz may re-answer one.
     const answered = new Set(history.map((a) => a.questionId))
-    const isLastQuestion = quiz.questionIds.every((id) => answered.has(id))
+    const isLastQuestion = served.questionIds.every((id) => answered.has(id))
     if (isLastQuestion) {
       await this.completeQuiz(quizId)
     }
@@ -1466,6 +1638,7 @@ export class QuizService {
       nextDifficulty: decision.difficulty,
       difficultyReason: decision.reason,
       isLastQuestion,
+      ...(nextQuestion ? { nextQuestion } : {}),
     }
   }
 

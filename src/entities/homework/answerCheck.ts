@@ -28,6 +28,13 @@ export interface HomeworkAnswerCheck {
   promptVersion: string
   questionSourceRefs: SourceReference[]
   answerChunkIds: string[]
+  /** Answer images that were part of the checked work. */
+  imageCount?: number
+  /**
+   * The model could not read images, so the check used the typed text only.
+   * The UI says so; handwriting is never guessed with local OCR.
+   */
+  imagesIgnored?: boolean
   createdAt: number
 }
 
@@ -47,6 +54,8 @@ export function answerCheckInputHash(
   draft: string,
   language: 'zh' | 'en',
   promptVersion = HOMEWORK_ANSWER_CHECK_VERSION,
+  /** `answerImageKey` of the question's current answer images ('' = none). */
+  imageKey = '',
 ): string {
   return fnv1a(
     JSON.stringify({
@@ -59,6 +68,8 @@ export function answerCheckInputHash(
       draft: draft.trim(),
       language,
       promptVersion,
+      // Only present with images, so text-only checks keep their old hash.
+      ...(imageKey ? { images: imageKey } : {}),
     }),
   )
 }
@@ -69,12 +80,13 @@ export function currentAnswerCheck(
   language: 'zh' | 'en',
   /** The version the check must have been produced with (prompt + subject). */
   promptVersion: string = HOMEWORK_ANSWER_CHECK_VERSION,
+  imageKey = '',
 ): HomeworkAnswerCheck | null {
   const check = question.answerCheck
   return check &&
     check.language === language &&
     check.promptVersion === promptVersion &&
-    check.inputHash === answerCheckInputHash(question, draft, language, promptVersion)
+    check.inputHash === answerCheckInputHash(question, draft, language, promptVersion, imageKey)
     ? check
     : null
 }

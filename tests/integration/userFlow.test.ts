@@ -271,12 +271,14 @@ describe('End-to-end user flow', () => {
       types: ['math_expr' as const],
     }
     const generated = await quiz.generateQuiz(project.id, quizConfig)
-    expect(generated.questionIds).toHaveLength(2)
-    const questions = await quiz.getQuestions(generated.id)
-    expect(questions).toHaveLength(2)
+    // Adaptive: a question bank, served one question at a time.
+    expect(generated.bank?.entries).toHaveLength(2)
+    expect(generated.questionIds).toHaveLength(1)
+    const [served] = await quiz.getQuestions(generated.id)
 
     // First answer: wrong → goes into the mistake book
-    const first = await quiz.submitAnswer(generated.id, questions[0]!.id, 'wrong')
+    const first = await quiz.submitAnswer(generated.id, served!.id, 'wrong')
+    const questions = [served!, first.nextQuestion!]
     expect(first.evaluation.isCorrect).toBe(false)
     const mistakeRows = await mistakes.list(project.id, { status: 'active' })
     expect(mistakeRows).toHaveLength(1)
