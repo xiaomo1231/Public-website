@@ -5,10 +5,12 @@ import type { TextAnchor } from '@/shared/lib/textAnchor'
 /**
  * Floating question windows over a homework walkthrough.
  *
- * Each window holds one conversation about one passage. Windows live in memory
- * until the learner saves them (they then mirror a stored note and every new
- * turn is saved too). At most three are open at a time; opening a fourth tucks
- * the one at the back into the dock.
+ * Each window holds one conversation about one passage. A window is saved as a
+ * note as soon as its first answer arrives (or when the learner clicks 保存);
+ * it then mirrors the stored note: every new turn, and how and where it is
+ * shown (window / card / tucked / dock), are saved too, so it comes back the
+ * same way after a reload (see `floatingQA.ts`). At most three are open at a
+ * time; opening a fourth tucks the one at the back into the dock.
  *
  * A window can also shrink to a small card (`compact`) or be tucked into the
  * text (`tucked`: no window at all — the passage is marked and hovering it
@@ -84,6 +86,8 @@ export interface FloatingQAWindow {
   cardSize?: CardSize
   /** Tucked into the text: no window, the passage is marked instead. */
   tucked?: boolean
+  /** A saved note whose passage is no longer in the walkthrough (「原文已更新」). */
+  passageMissing?: boolean
 }
 
 export type FloatingQAMode = 'full' | 'compact' | 'tucked' | 'minimized'

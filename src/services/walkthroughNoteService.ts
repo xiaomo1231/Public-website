@@ -8,6 +8,7 @@ import {
   MAX_NOTE_TITLE,
   MAX_NOTE_TURNS,
   type NoteCardSize,
+  type NoteDisplay,
   type NoteWindowRect,
   type WalkthroughNote,
   type WalkthroughNoteTurn,
@@ -27,6 +28,8 @@ export interface NewWalkthroughNote {
   turns: WalkthroughNoteTurn[]
   rect?: NoteWindowRect
   cardSize?: NoteCardSize
+  /** How it is shown now (kept on the page after a reload). */
+  display?: NoteDisplay
   /** Name it after the passage (the first question was the generic "explain"). */
   titleFromQuote?: boolean
 }
@@ -87,6 +90,7 @@ export class WalkthroughNoteService {
       turns,
       ...(input.rect ? { rect: input.rect } : {}),
       ...(input.cardSize ? { cardSize: input.cardSize } : {}),
+      ...(input.display ? { display: input.display } : {}),
       createdAt: now,
       updatedAt: now,
     }
@@ -129,6 +133,28 @@ export class WalkthroughNoteService {
     await this.db.transaction('rw', this.db.walkthroughNotes, async () => {
       const note = await this.repo.getNote(id)
       if (note) await this.repo.putNote({ ...note, cardSize })
+    })
+  }
+
+  /**
+   * Remember how the note is shown (window / card / tucked / dock, and where),
+   * or that it was closed (`undefined`); does not count as an edit. A missing
+   * note (deleted meanwhile) is left alone.
+   */
+  async saveDisplay(
+    id: string,
+    display: NoteDisplay | undefined,
+    rect?: NoteWindowRect,
+  ): Promise<void> {
+    await this.db.transaction('rw', this.db.walkthroughNotes, async () => {
+      const note = await this.repo.getNote(id)
+      if (!note) return
+      const { display: _previous, ...rest } = note
+      await this.repo.putNote({
+        ...rest,
+        ...(display ? { display } : {}),
+        ...(rect ? { rect } : {}),
+      })
     })
   }
 

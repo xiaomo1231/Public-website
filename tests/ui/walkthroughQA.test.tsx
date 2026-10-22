@@ -118,10 +118,11 @@ describe('questions about the walkthrough', () => {
       }),
     )
 
-    await user.click(screen.getByRole('button', { name: 'Save' }))
-    await waitFor(async () =>
-      expect(await new WalkthroughRepository(db).listNotes('s1')).toHaveLength(1),
-    )
+    // Saved automatically once answered (the 保存 button shows it is saved).
+    await waitFor(async () => {
+      const [saved] = await new WalkthroughRepository(db).listNotes('s1')
+      expect(saved?.turns).toHaveLength(2)
+    })
     const [note] = await new WalkthroughRepository(db).listNotes('s1')
     expect(note).toMatchObject({
       projectId: 'p1',
@@ -135,17 +136,49 @@ describe('questions about the walkthrough', () => {
     expect(await screen.findAllByText('Saved')).not.toHaveLength(0)
   })
 
-  it('asks before closing a conversation that is not saved', async () => {
+  it('closes a saved conversation without asking (it stays saved), and deletes it on request', async () => {
     const user = userEvent.setup()
     const text = renderWalkthrough()
     select(text, 9, 22)
     await user.click(await screen.findByRole('button', { name: 'Explain' }))
     await screen.findByText('It clears the entry below the pivot.')
+    await screen.findByRole('button', { name: 'Delete this conversation' })
     await user.click(screen.getByRole('button', { name: 'Close' }))
-    expect(screen.getByText(/not saved and will be lost/)).toBeInTheDocument()
-    await user.click(screen.getByRole('button', { name: "Don't save" }))
+    expect(screen.queryByText(/not saved and will be lost/)).toBeNull()
     expect(screen.queryByRole('dialog')).toBeNull()
-    expect(await new WalkthroughRepository(db).listNotes('s1')).toEqual([])
+    await waitFor(async () => {
+      const [note] = await new WalkthroughRepository(db).listNotes('s1')
+      expect(note).toBeDefined()
+      expect(note!.display).toBeUndefined()
+    })
+
+    // Reopened and deleted from its window.
+    const [note] = await new WalkthroughRepository(db).listNotes('s1')
+    act(() => {
+      useFloatingQA.getState().open({
+        passage: {
+          projectId: 'p1',
+          setId: 's1',
+          setTitle: 'HW3',
+          sectionId: note!.sectionId,
+          sectionTitle: note!.sectionTitle,
+          quote: note!.quote,
+          anchor: note!.anchor,
+          surrounding: note!.surrounding,
+          language: 'en',
+        },
+        turns: note!.turns,
+        noteId: note!.id,
+        rect: { x: 10, y: 10, width: 400, height: 460 },
+      })
+    })
+    await user.click(screen.getByRole('button', { name: 'Delete this conversation' }))
+    const confirm = screen.getAllByRole('button', { name: 'Delete this conversation' }).at(-1)!
+    await user.click(confirm)
+    await waitFor(async () =>
+      expect(await new WalkthroughRepository(db).listNotes('s1')).toEqual([]),
+    )
+    expect(screen.queryByRole('dialog')).toBeNull()
   })
 
   it('minimises with Escape into the dock and focuses its chip; closing returns focus to the article', async () => {

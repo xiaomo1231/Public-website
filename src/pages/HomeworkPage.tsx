@@ -44,6 +44,7 @@ import { effectiveEvalRole, heldOutQuestions } from '@/entities/evaluation/evalR
 import { HomeworkProofreadService } from '@/services/homeworkProofreadService'
 import { ProofreadView } from '@/widgets/homework/proofread/ProofreadView'
 import { SelfTestView } from '@/widgets/homework/selfTest/SelfTestView'
+import { QuestionWindowLayer } from '@/widgets/homework/QuestionWindowLayer'
 import { EvaluationPanel } from '@/widgets/evaluation/EvaluationPanel'
 
 type HomeworkView = 'questions' | 'walkthrough' | 'guided' | 'proofread' | 'selftest' | 'evaluate'
@@ -753,6 +754,8 @@ export function HomeworkPage(): JSX.Element {
           </>
         )}
       </PageContent>
+      {/* Floating 原题 windows: stay across questions and views, close with the set. */}
+      {set && <QuestionWindowLayer setId={set.id} />}
     </PageContainer>
   )
 }

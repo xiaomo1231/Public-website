@@ -1,37 +1,41 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type CSSProperties } from 'react'
 import { Loader2, RotateCcw, Square } from 'lucide-react'
 import type { HomeworkQuestion } from '@/entities/homework/types'
 import {
-  currentTranslation,
   isMainlyChinese,
   translationSourceHash,
   type QuestionTranslation,
 } from '@/entities/homework/questionTranslation'
 import { formatHomeworkQuestion } from '@/entities/homework/formatQuestion'
 import {
-  buildQuestionTranslationService,
-  type QuestionTranslationService,
-} from '@/services/questionTranslationService'
+  abortRun,
+  chosenTabs,
+  knownTranslation,
+  startRun,
+  type QuestionTab,
+  type TranslationRun,
+} from '@/features/homework/questionTranslationRuns'
 import { RichText } from '@/shared/ui/RichText'
 import { Button } from '@/shared/ui/Button'
 import { friendlyAIError } from '@/shared/lib/aiErrors'
 import { cn } from '@/shared/lib/utils'
 import { useTranslation } from '@/i18n'
+import type { QuestionTranslationMode } from '@/features/homework/questionWindowStore'
 
-type QuestionTab = 'original' | 'zh'
-
-/** The tab each question showed during this visit (not stored). */
-const chosenTabs = new Map<string, QuestionTab>()
-
-/** Built per request, so a changed AI setting applies to the next one. */
-function translationService(): Promise<QuestionTranslationService> {
-  return buildQuestionTranslationService()
-}
+/**
+ * `request`: the 中文翻译 tab asks for a translation when there is none.
+ * `cached`: only a translation already made is shown (模拟考试 / 自测, where
+ * no AI is used while answering); without one there is no tab.
+ */
+export type { QuestionTranslationMode }
 
 export interface QuestionTextProps {
   question: Pick<HomeworkQuestion, 'id' | 'prompt' | 'translation'>
   className?: string
   paragraphClassName?: string
+  /** Applied to the text (e.g. the floating window's font size). */
+  textStyle?: CSSProperties
+  translationMode?: QuestionTranslationMode
 }
 
 /**
@@ -44,46 +48,71 @@ export function QuestionText({
   question,
   className,
   paragraphClassName,
+  textStyle,
+  translationMode = 'request',
 }: QuestionTextProps): JSX.Element {
   const { t } = useTranslation()
-  const offer = !isMainlyChinese(question.prompt)
-  const [tab, setTab] = useState<QuestionTab>(() => chosenTabs.get(question.id) ?? 'original')
   const [translation, setTranslation] = useState<QuestionTranslation | undefined>(() =>
-    currentTranslation(question),
+    knownTranslation(question),
   )
+  const canRequest = translationMode === 'request'
+  const notChinese = !isMainlyChinese(question.prompt)
+  const offer = notChinese && (canRequest || Boolean(translation))
+  const [tab, setTab] = useState<QuestionTab>(() => chosenTabs.get(question.id) ?? 'original')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const controller = useRef<AbortController | null>(null)
+  const joined = useRef<TranslationRun | null>(null)
 
   // A changed question text makes the translation stale (asked for again on click).
-  const { prompt, translation: stored } = question
+  const { id, prompt, translation: stored } = question
   useEffect(() => {
-    const cached = currentTranslation({ prompt, ...(stored ? { translation: stored } : {}) })
+    const cached = knownTranslation({ id, prompt, ...(stored ? { translation: stored } : {}) })
     setTranslation(
       (shown) =>
         cached ?? (shown && shown.sourceHash === translationSourceHash(prompt) ? shown : undefined),
     )
-  }, [prompt, stored])
+  }, [id, prompt, stored])
 
-  useEffect(() => () => controller.current?.abort(), [])
+  /** Stop waiting; the request is stopped when nobody else waits for it. */
+  function leave(): void {
+    const run = joined.current
+    if (!run) return
+    joined.current = null
+    run.waiters -= 1
+    if (run.waiters <= 0) abortRun(question.id, run)
+  }
+
+  useEffect(
+    () => () => leave(),
+    // On unmount only.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [],
+  )
 
   async function request(): Promise<void> {
-    controller.current?.abort()
-    const run = new AbortController()
-    controller.current = run
+    if (!canRequest) return
+    leave()
+    const run = startRun(question.id)
+    run.waiters += 1
+    joined.current = run
     setLoading(true)
     setError(null)
     try {
-      const service = await translationService()
-      const result = await service.translate(question.id, { signal: run.signal })
-      if (!run.signal.aborted) setTranslation(result)
+      const result = await run.promise
+      if (joined.current === run) setTranslation(result)
     } catch (err) {
-      // Stopped: back to the original, nothing to report.
-      if (run.signal.aborted) return
+      if (joined.current !== run) return
+      // Stopped (here or in another view of this question): back to the original.
+      if (run.controller.signal.aborted) {
+        chosenTabs.set(question.id, 'original')
+        setTab('original')
+        return
+      }
       setError(friendlyAIError(err))
     } finally {
-      if (controller.current === run) {
-        controller.current = null
+      if (joined.current === run) {
+        joined.current = null
+        run.waiters -= 1
         setLoading(false)
       }
     }
@@ -92,17 +121,22 @@ export function QuestionText({
   function choose(next: QuestionTab): void {
     chosenTabs.set(question.id, next)
     setTab(next)
-    if (next === 'zh' && !translation && !loading) void request()
+    if (next !== 'zh' || translation || loading) return
+    const known = knownTranslation(question)
+    if (known) setTranslation(known)
+    else void request()
   }
 
   function stop(): void {
-    controller.current?.abort()
-    controller.current = null
+    const run = joined.current
+    joined.current = null
+    if (run) abortRun(question.id, run)
     setLoading(false)
     choose('original')
   }
 
   const showTranslation = offer && tab === 'zh'
+  const paragraph = paragraphClassName ? { paragraphClassName } : {}
   return (
     <div className={cn('min-w-0 space-y-2', className)}>
       {offer && (
@@ -133,12 +167,17 @@ export function QuestionText({
           ))}
         </div>
       )}
+      {notChinese && !canRequest && !translation && (
+        <p className="text-xs text-muted-foreground" data-translation-unavailable>
+          {t('homework.translation.cachedOnly')}
+        </p>
+      )}
       {showTranslation && translation ? (
-        <div data-question-translation lang="zh-CN">
+        <div data-question-translation lang="zh-CN" style={textStyle}>
           <RichText
             text={formatHomeworkQuestion(translation.text)}
             format="markdown"
-            {...(paragraphClassName ? { paragraphClassName } : {})}
+            {...paragraph}
           />
         </div>
       ) : showTranslation && loading ? (
@@ -164,11 +203,13 @@ export function QuestionText({
           </Button>
         </div>
       ) : (
-        <RichText
-          text={formatHomeworkQuestion(question.prompt)}
-          format="markdown"
-          {...(paragraphClassName ? { paragraphClassName } : {})}
-        />
+        <div style={textStyle}>
+          <RichText
+            text={formatHomeworkQuestion(question.prompt)}
+            format="markdown"
+            {...paragraph}
+          />
+        </div>
       )}
     </div>
   )

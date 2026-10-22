@@ -52,8 +52,13 @@ import { useHomeworkService } from '@/features/homework/useHomeworkService'
 import { questionLabel, type SectionAttempt } from '@/services/homeworkWalkthroughService'
 import { formatWalkthroughText, tidyBoxedPunctuation } from '@/entities/homework/walkthroughFormat'
 import { useWalkthrough } from '@/features/homework/useWalkthrough'
-import { openNote, windowTitle } from '@/features/homework/floatingQA'
-import { useFloatingQA, type FloatingQAWindow } from '@/features/homework/floatingQAStore'
+import { openNote, restoreNotes, windowTitle } from '@/features/homework/floatingQA'
+import {
+  clampCard,
+  defaultCardWidth,
+  useFloatingQA,
+  type FloatingQAWindow,
+} from '@/features/homework/floatingQAStore'
 import { toast } from '@/features/toast/toastStore'
 import { Badge } from '@/shared/ui/Badge'
 import { Button } from '@/shared/ui/Button'
@@ -85,6 +90,7 @@ import {
 import { FloatingQALayer } from './FloatingQALayer'
 import { PracticeSetLauncher } from '../practice/PracticeSetLauncher'
 import { QuestionText } from '@/widgets/homework/QuestionText'
+import { QuestionWindowButton } from '@/widgets/homework/QuestionWindowLayer'
 import { WalkthroughBody, WALKTHROUGH_PARAGRAPH } from './WalkthroughBody'
 import { WalkthroughNotesDialog } from './WalkthroughNotesDialog'
 import { WalkthroughPrint, type PrintableSection } from './WalkthroughPrint'
@@ -265,6 +271,55 @@ export function HomeworkWalkthroughPanel({
     markPassages('walkthrough-link', [...ranges.values()], 1)
     return () => markPassages('walkthrough-link', [])
   }, [tuckedKey, textKey, revealed])
+
+  // After a reload: notes kept on the page (window / card / tucked / dock)
+  // come back the way they were — once per note per visit of this page, and
+  // only once the walkthrough is shown (the card layer exists).
+  const considered = useRef(new Set<string>())
+  useEffect(() => {
+    if (!revealed || !cardLayer) return
+    const fresh = notes.filter((note) => !considered.current.has(note.id))
+    if (fresh.length === 0) return
+    for (const note of fresh) considered.current.add(note.id)
+    restoreNotes(fresh, set.title, qaLanguage, cardLayer)
+  }, [notes, revealed, cardLayer, set.title, qaLanguage])
+
+  // A saved note whose passage is gone (the walkthrough changed): its window /
+  // card says 「原文已更新」, and one tucked into the text (nothing to mark)
+  // comes back as a pinned card.
+  const noteWindowKey = allWindows
+    .filter((window) => window.passage.setId === set.id && window.noteId)
+    .map((window) => `${window.id}:${window.noteId}:${window.tucked ? 1 : 0}`)
+    .join('|')
+  useEffect(() => {
+    if (!revealed || !noteWindowKey) return
+    const store = useFloatingQA.getState()
+    const open = store.windows.filter((window) => window.passage.setId === set.id && window.noteId)
+    const saved = notes.filter((note) => open.some((window) => window.noteId === note.id))
+    const found = locatePassages(saved)
+    for (const window_ of open) {
+      // A note saved this visit and not yet in the list: nothing to judge yet.
+      if (!saved.some((note) => note.id === window_.noteId)) continue
+      const missing = !found.has(window_.noteId!)
+      if (Boolean(window_.passageMissing) !== missing)
+        store.update(window_.id, { passageMissing: missing })
+      if (missing && window_.tucked) {
+        const viewport = { width: window.innerWidth, height: window.innerHeight }
+        store.compact(
+          window_.id,
+          clampCard(
+            {
+              x: window_.rect.x,
+              y: window_.rect.y,
+              pinned: true,
+              width: defaultCardWidth(viewport.width),
+            },
+            viewport,
+          ),
+        )
+      }
+    }
+  }, [noteWindowKey, notes, textKey, revealed, set.id])
 
   /** Marked passages in hit-test order: tucked conversations, then saved notes. */
   const markedPassages = useCallback((): [string, Range][] => {
@@ -1624,6 +1679,8 @@ function QuestionPrompt({ question }: { question: HomeworkQuestion }): JSX.Eleme
     <details className="rounded-lg border border-border/70 bg-muted/20 px-4 py-2 text-sm lecture:rounded-none lecture:border-x-0 lecture:bg-transparent lecture:px-0 lab:rounded-none">
       <summary className="cursor-pointer select-none text-muted-foreground">
         {t('homework.walkthrough.showQuestion')}
+        {/* Its own floating window, to keep the question in view while reading on. */}
+        <QuestionWindowButton question={question} className="-my-1 ml-2 align-middle" />
       </summary>
       <QuestionText
         question={question}

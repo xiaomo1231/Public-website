@@ -689,8 +689,30 @@ export interface WalkthroughNote {
   rect?: NoteWindowRect
   /** Hand-set card size; absent means the card fits its content. */
   cardSize?: NoteCardSize
+  /**
+   * How the note was shown when the page was left, so it comes back the same
+   * way (absent: closed — opened from 我的问答 / its chip / its mark).
+   */
+  display?: NoteDisplay
   createdAt: number
   updatedAt: number
+}
+
+/** A note kept on the page: as a window, a card, tucked into the text or in the dock. */
+export interface NoteDisplay {
+  mode: 'full' | 'compact' | 'tucked' | 'minimized'
+  /**
+   * The card (mode `compact`): pinned → viewport coordinates; otherwise
+   * coordinates in the walkthrough's card layer (it scrolls with the text).
+   */
+  card?: {
+    x: number
+    y: number
+    pinned: boolean
+    width?: number
+    height?: number
+    manual?: boolean
+  }
 }
 
 export const MAX_NOTE_TURNS = 30

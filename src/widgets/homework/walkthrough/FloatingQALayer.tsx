@@ -23,6 +23,7 @@ import {
   Pin,
   PinOff,
   Send,
+  Trash2,
   X,
 } from 'lucide-react'
 import { Button } from '@/shared/ui/Button'
@@ -48,6 +49,9 @@ import {
 import {
   addNoteToCards,
   askInWindow,
+  closeWindow,
+  deleteNote,
+  installNoteDisplaySync,
   stopInWindow,
   persistCardSize,
   persistWindowRect,
@@ -103,8 +107,10 @@ export function FloatingQALayer({
     [all, setId],
   )
   const focus = useFloatingQA((state) => state.focus)
-  const close = useFloatingQA((state) => state.close)
   const minimized = windows.filter((window) => window.minimized)
+
+  // Saved notes keep how and where they are shown, for the next visit.
+  useEffect(() => installNoteDisplaySync(), [])
 
   // Keep windows on screen when the browser window shrinks.
   useEffect(() => {
@@ -201,7 +207,7 @@ export function FloatingQALayer({
                   aria-label={t('common.close')}
                   onClick={() => {
                     if (!window.noteId) stopInWindow(window.id)
-                    close(window.id)
+                    closeWindow(window.id)
                     returnFocusAfterClose(window.id, window.passage.setId)
                   }}
                 >
@@ -306,10 +312,11 @@ const FloatingQAWindowView = memo(function FloatingQAWindowView({
   cardLayer: HTMLElement | null
 }): JSX.Element {
   const { t } = useTranslation()
-  const { focus, close, setMinimized, setRect, compact, tuck } = useFloatingQA.getState()
+  const { focus, setMinimized, setRect, compact, tuck } = useFloatingQA.getState()
   const [input, setInput] = useState('')
   const [confirmClose, setConfirmClose] = useState(false)
-  const [busyAction, setBusyAction] = useState<'save' | 'cards' | null>(null)
+  const [confirmDelete, setConfirmDelete] = useState(false)
+  const [busyAction, setBusyAction] = useState<'save' | 'cards' | 'delete' | null>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
   const rootRef = useRef<HTMLDivElement>(null)
@@ -492,8 +499,27 @@ const FloatingQAWindowView = memo(function FloatingQAWindowView({
     // An unsaved conversation's answer would be thrown away: stop paying for
     // it. A saved note keeps receiving its turn (it is written to the note).
     if (!win.noteId) stopInWindow(win.id)
-    close(win.id)
+    // A saved note stays in 我的问答; it only stops coming back open.
+    closeWindow(win.id)
     returnFocusAfterClose(win.id, win.passage.setId)
+  }
+
+  /** 删除这条问答: the note itself (after confirming in the window). */
+  async function deleteNow(): Promise<void> {
+    if (!win.noteId) return
+    setBusyAction('delete')
+    try {
+      stopInWindow(win.id)
+      await deleteNote(win.noteId)
+      returnFocusAfterClose(win.id, win.passage.setId)
+    } catch (err) {
+      toast({
+        variant: 'error',
+        title: t('walkthroughQA.deleteFailed'),
+        description: friendlyAIError(err),
+      })
+      setBusyAction(null)
+    }
   }
 
   function requestClose(): void {
@@ -625,6 +651,21 @@ const FloatingQAWindowView = memo(function FloatingQAWindowView({
         >
           <Minus className="h-3.5 w-3.5" />
         </Button>
+        {saved && (
+          <TooltipWrapper content={t('walkthroughQA.deleteNote')}>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7 hover:text-destructive"
+              aria-label={t('walkthroughQA.deleteNote')}
+              data-delete-note
+              onPointerDown={(event) => event.stopPropagation()}
+              onClick={() => setConfirmDelete(true)}
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+            </Button>
+          </TooltipWrapper>
+        )}
         <Button
           variant="ghost"
           size="icon"
@@ -653,6 +694,14 @@ const FloatingQAWindowView = memo(function FloatingQAWindowView({
       >
         “{win.passage.quote}”
       </button>
+      {win.passageMissing && (
+        <p
+          data-passage-missing
+          className="mx-3 mt-1 text-[11px] text-muted-foreground lecture:mx-4 lab:font-mono"
+        >
+          {t('walkthroughQA.passageChangedBadge')}
+        </p>
+      )}
 
       <div
         ref={scrollRef}
@@ -696,7 +745,27 @@ const FloatingQAWindowView = memo(function FloatingQAWindowView({
         )}
       </div>
 
-      {confirmClose ? (
+      {confirmDelete ? (
+        <div className="space-y-2 border-t px-3 py-2" role="alert">
+          <p className="text-[13px]">
+            {t('walkthroughQA.deleteBody', { title: win.title ?? title })}
+          </p>
+          <div className="flex flex-wrap justify-end gap-2">
+            <Button size="sm" variant="ghost" onClick={() => setConfirmDelete(false)}>
+              {t('common.cancel')}
+            </Button>
+            <Button
+              size="sm"
+              variant="destructive"
+              disabled={busyAction !== null}
+              onClick={() => void deleteNow()}
+            >
+              {busyAction === 'delete' && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+              {t('walkthroughQA.deleteNote')}
+            </Button>
+          </div>
+        </div>
+      ) : confirmClose ? (
         <div className="space-y-2 border-t px-3 py-2">
           <p className="text-[13px]">{t('walkthroughQA.closeUnsaved')}</p>
           <div className="flex flex-wrap justify-end gap-2">
@@ -1091,6 +1160,14 @@ const CompactCardView = memo(function CompactCardView({
         >
           {title}
         </span>
+        {win.passageMissing && (
+          <span
+            data-passage-missing
+            className="shrink-0 text-[10px] text-muted-foreground lab:font-mono"
+          >
+            {t('walkthroughQA.passageChangedBadge')}
+          </span>
+        )}
         {cardLayer && (
           <TooltipWrapper
             content={card.pinned ? t('walkthroughQA.pinHint') : t('walkthroughQA.followHint')}

@@ -1,5 +1,6 @@
 import { targetLanguageOf } from '@/shared/lib/language'
 import { QuestionText } from './QuestionText'
+import { QuestionWindowButton } from './QuestionWindowLayer'
 import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
@@ -372,6 +373,7 @@ export function HomeworkQuestionView({
                 </Badge>
               )}
               <QuestionOriginBadge origin={homeworkQuestionOrigin(question)} />
+              <QuestionWindowButton question={question} className="ml-auto" />
             </div>
             <QuestionMetaLine question={question} />
             <QuestionText

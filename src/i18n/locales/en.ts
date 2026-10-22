@@ -936,6 +936,19 @@ export const en = {
   'homework.translation.loading': 'Translating this question…',
   'homework.translation.stop': 'Stop',
   'homework.translation.retry': 'Translate again',
+  'homework.translation.cachedOnly':
+    'No new translations during a mock exam or self-test; the original is shown here.',
+  'homework.questionWindow.open': 'View in a floating window',
+  'homework.questionWindow.title': 'Question {label}',
+  'homework.questionWindow.smaller': 'Smaller text',
+  'homework.questionWindow.larger': 'Larger text',
+  'homework.questionWindow.pin': 'Pin to the screen',
+  'homework.questionWindow.pinHint':
+    'Pinned to the screen: stays put while the page scrolls. Click to follow the page.',
+  'homework.questionWindow.followHint':
+    'Follows the page: scrolls with it. Click to pin it to the screen.',
+  'homework.questionWindow.minimize': 'Minimise to the corner',
+  'homework.questionWindow.dock': 'Minimised question windows',
   'homework.translation.invalid':
     'The AI returned no translation. Press “Translate again”, or choose another model in Settings.',
   'homework.translation.truncated':
@@ -1149,7 +1162,7 @@ export const en = {
   'walkthroughQA.listHint':
     'Questions saved in this walkthrough. Opening one puts its window back where it was, and you can keep asking.',
   'walkthroughQA.listEmpty':
-    'No saved questions yet. Select text in the walkthrough, ask, then choose Save in the window.',
+    'No saved questions yet. Select text in the walkthrough and ask; a conversation is saved once it has an answer.',
   'walkthroughQA.noMatch': 'No matching questions',
   'walkthroughQA.search': 'Search questions, answers or passages',
   'walkthroughQA.meta': '{section} · {count} questions · {time}',
@@ -1158,6 +1171,8 @@ export const en = {
   'walkthroughQA.titleEmpty': 'The name cannot be empty',
   'walkthroughQA.deleteTitle': 'Delete this saved question?',
   'walkthroughQA.deleteBody': '"{title}" will be deleted permanently.',
+  'walkthroughQA.deleteNote': 'Delete this conversation',
+  'walkthroughQA.deleteFailed': 'Could not delete the conversation',
   'homework.analysisInterrupted': 'This analysis looks interrupted. Use Re-analyze to try again.',
   'homework.setRemoved': 'This assignment was removed.',
   'homework.deleteTitle': 'Delete this assignment?',

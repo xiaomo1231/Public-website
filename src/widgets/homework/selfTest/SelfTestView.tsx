@@ -11,6 +11,7 @@ import type { HomeworkQuestion, HomeworkSelfTest, HomeworkSet } from '@/entities
 import { answerReference } from '@/entities/homework/answerCheck'
 import { heldOutQuestions as selfTestQuestions } from '@/entities/evaluation/evalRole'
 import type { HomeworkService } from '@/services/homeworkService'
+import { QuestionWindowButton } from '../QuestionWindowLayer'
 import { HomeworkProofreadService } from '@/services/homeworkProofreadService'
 
 const VERDICT_KEYS = {
@@ -99,9 +100,13 @@ export function SelfTestView({
   return (
     <Card data-self-test>
       <CardHeader className="space-y-2">
-        <CardTitle className="text-base lecture:font-heading lecture:font-bold">
-          {t('selfTest.title', { current: index + 1, total: items.length })}
-        </CardTitle>
+        <div className="flex items-center gap-2">
+          <CardTitle className="text-base lecture:font-heading lecture:font-bold">
+            {t('selfTest.title', { current: index + 1, total: items.length })}
+          </CardTitle>
+          {/* 自测 uses no AI while answering: only a translation already made is shown. */}
+          <QuestionWindowButton question={question} translationMode="cached" className="ml-auto" />
+        </div>
         <p className="text-sm text-muted-foreground">{t('selfTest.hint')}</p>
       </CardHeader>
       <CardContent className="space-y-4">

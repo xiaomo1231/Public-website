@@ -16,6 +16,7 @@ import { GenerationControls } from '@/shared/ui/GenerationControls'
 import { ProjectFlowNav } from '@/widgets/project/ProjectFlowNav'
 import { FormulaSheetPanel } from '@/widgets/exam/FormulaSheetPanel'
 import { MockExamResults } from '@/widgets/exam/MockExamResults'
+import { QuestionWindowButton, QuestionWindowLayer } from '@/widgets/homework/QuestionWindowLayer'
 import { AnswerImages } from '@/widgets/handwriting/AnswerImages'
 import { useHomeworkService } from '@/features/homework/useHomeworkService'
 import { MockExamService, type MockExamState } from '@/services/mockExamService'
@@ -282,6 +283,12 @@ export function MockExamPage(): JSX.Element {
                         number: view.question.number ?? String(index + 1),
                       })}
                     </span>
+                    {/* Only the question text; no new translation is asked for while writing. */}
+                    <QuestionWindowButton
+                      question={view.question}
+                      label={view.question.number ?? String(index + 1)}
+                      translationMode="cached"
+                    />
                     {view.marks.total !== undefined && (
                       <Badge variant="outline">
                         {t('mockExam.marksBadge', { marks: view.marks.total })}
@@ -395,6 +402,7 @@ export function MockExamPage(): JSX.Element {
           await load()
         }}
       />
+      <QuestionWindowLayer setId={set.id} />
     </PageContainer>
   )
 }

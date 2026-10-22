@@ -1,23 +1,28 @@
 import { buildAIServices } from '@/services/aiServices'
 import { WalkthroughNoteService } from '@/services/walkthroughNoteService'
 import { buildWalkthroughContext } from '@/services/walkthroughContext'
-import type { WalkthroughNote } from '@/entities/homework/walkthrough'
+import type { NoteDisplay, WalkthroughNote } from '@/entities/homework/walkthrough'
 import { friendlyAIError } from '@/shared/lib/aiErrors'
+import { toast } from '@/features/toast/toastStore'
 import { t } from '@/i18n'
 import {
+  clampCard,
   clampRect,
   DEFAULT_WINDOW_SIZE,
   enterOriginNear,
   rectNearAnchor,
   useFloatingQA,
+  windowMode,
+  type CompactCard,
   type FloatingPassage,
   type FloatingQAWindow,
 } from './floatingQAStore'
 
 /**
  * What the floating question windows do: ask (with the earlier turns, so a
- * follow-up is understood), save as a note, keep a saved note up to date, and
- * reopen a saved note where it was left.
+ * follow-up is understood), save as a note (automatically once the first
+ * answer arrives), keep a saved note up to date — its turns and how / where it
+ * is shown — and bring saved notes back where they were left.
  */
 
 const noteListeners = new Set<() => void>()
@@ -156,11 +161,19 @@ export async function askInWindow(id: string, question: string): Promise<void> {
     const current = useFloatingQA.getState().windows.find((item) => item.id === id)
     if (current)
       useFloatingQA.getState().update(id, { pending: undefined, turns: [...current.turns, turn] })
-    // A saved conversation keeps saving, even if its window was closed meanwhile.
-    const noteId = current?.noteId ?? win.noteId
-    if (noteId) {
-      await notes().appendTurn(noteId, turn)
-      notifyNoteChanges()
+    // Saving is not part of the answer: a failed write is reported, the answer stays.
+    try {
+      // A saved conversation keeps saving, even if its window was closed meanwhile.
+      const noteId = current?.noteId ?? win.noteId
+      if (noteId) {
+        await notes().appendTurn(noteId, turn)
+        notifyNoteChanges()
+      } else if (current) {
+        // The first answer: kept as a note right away, so a reload keeps it.
+        await saveWindow(id)
+      }
+    } catch (err) {
+      reportWriteFailure(err)
     }
   } catch (err) {
     // A stop is not a failure: `stopInWindow` already cleared the window.
@@ -171,7 +184,19 @@ export async function askInWindow(id: string, question: string): Promise<void> {
   }
 }
 
-export async function saveWindow(id: string): Promise<WalkthroughNote | null> {
+/** Saves in progress, so a click on 保存 during the automatic save makes no second note. */
+const saving = new Map<string, Promise<WalkthroughNote | null>>()
+
+/** Save a window as a note (once; later calls while saving share the same save). */
+export function saveWindow(id: string): Promise<WalkthroughNote | null> {
+  const running = saving.get(id)
+  if (running) return running
+  const save = createNote(id).finally(() => saving.delete(id))
+  saving.set(id, save)
+  return save
+}
+
+async function createNote(id: string): Promise<WalkthroughNote | null> {
   const win = useFloatingQA.getState().windows.find((item) => item.id === id)
   if (!win || win.noteId || win.turns.length === 0) return null
   const { passage } = win
@@ -186,11 +211,160 @@ export async function saveWindow(id: string): Promise<WalkthroughNote | null> {
     turns: win.turns,
     rect: win.rect,
     ...(win.cardSize ? { cardSize: win.cardSize } : {}),
+    display: displayOf(win),
     titleFromQuote: win.turns[0]?.question === t('contextual.explainQuestion'),
   })
+  // The window may have moved / changed while saving: the display sync writes
+  // its current state (it watches windows with a note).
   useFloatingQA.getState().update(id, { noteId: note.id, title: note.title })
   notifyNoteChanges()
   return note
+}
+
+/** How a window is shown, as stored on its note. */
+export function displayOf(win: FloatingQAWindow): NoteDisplay {
+  const mode = windowMode(win)
+  if (mode !== 'compact' || !win.compact) return { mode }
+  const { x, y, pinned, width, height, manual } = win.compact
+  return {
+    mode,
+    card: {
+      x,
+      y,
+      pinned,
+      ...(width !== undefined ? { width } : {}),
+      ...(height !== undefined ? { height } : {}),
+      ...(manual ? { manual } : {}),
+    },
+  }
+}
+
+/** A failed write is never silent. */
+function reportWriteFailure(err: unknown): void {
+  toast({
+    variant: 'error',
+    title: t('walkthroughQA.saveFailed'),
+    description: friendlyAIError(err),
+  })
+}
+
+// --- Keeping a note's display in step with its window -----------------------
+
+/** What was last written per note (display + rect), so unchanged state is not rewritten. */
+const writtenDisplay = new Map<string, string>()
+const pendingDisplayWrites = new Map<string, ReturnType<typeof setTimeout>>()
+/** Writes are grouped: a burst of moves / re-fits becomes one write. */
+export const DISPLAY_WRITE_DELAY_MS = 200
+
+function cancelDisplayWrite(noteId: string): void {
+  const timer = pendingDisplayWrites.get(noteId)
+  if (timer !== undefined) clearTimeout(timer)
+  pendingDisplayWrites.delete(noteId)
+}
+
+function syncDisplays(windows: readonly FloatingQAWindow[]): void {
+  for (const win of windows) {
+    const noteId = win.noteId
+    if (!noteId) continue
+    const display = displayOf(win)
+    const rect = win.rect
+    const signature = JSON.stringify([display, rect])
+    if (writtenDisplay.get(noteId) === signature) continue
+    writtenDisplay.set(noteId, signature)
+    cancelDisplayWrite(noteId)
+    pendingDisplayWrites.set(
+      noteId,
+      setTimeout(() => {
+        pendingDisplayWrites.delete(noteId)
+        notes()
+          .saveDisplay(noteId, display, rect)
+          .catch((err: unknown) => {
+            // Try again on the next change.
+            writtenDisplay.delete(noteId)
+            reportWriteFailure(err)
+          })
+      }, DISPLAY_WRITE_DELAY_MS),
+    )
+  }
+}
+
+let syncUsers = 0
+let stopSync: (() => void) | undefined
+
+/**
+ * While a walkthrough is open: save how each saved note's window is shown
+ * (full / card / tucked / dock, its place and pin) whenever that changes.
+ * Windows that disappear because the page is left are not "closed" — only
+ * `closeWindow` clears a note's display.
+ */
+export function installNoteDisplaySync(): () => void {
+  syncUsers += 1
+  if (syncUsers === 1) stopSync = useFloatingQA.subscribe((state) => syncDisplays(state.windows))
+  syncDisplays(useFloatingQA.getState().windows)
+  return () => {
+    syncUsers -= 1
+    if (syncUsers > 0) return
+    stopSync?.()
+    stopSync = undefined
+  }
+}
+
+/**
+ * Close a window. A saved note stays in 我的问答 (and its chip / mark) but no
+ * longer comes back open after a reload.
+ */
+export function closeWindow(id: string): void {
+  const win = useFloatingQA.getState().windows.find((item) => item.id === id)
+  useFloatingQA.getState().close(id)
+  const noteId = win?.noteId
+  if (!noteId) return
+  cancelDisplayWrite(noteId)
+  writtenDisplay.delete(noteId)
+  // The page re-reads its notes, so a closed one is not brought back as open.
+  notes().saveDisplay(noteId, undefined).then(notifyNoteChanges, reportWriteFailure)
+}
+
+/**
+ * After a reload: bring back the notes that were kept on the page, the way
+ * they were shown (oldest first, so the latest is in front; the limits move
+ * the extra ones to the dock). A card that followed the page goes back into
+ * `cardLayer` at its content coordinates; without one it is pinned instead.
+ * Notes already open are left alone.
+ */
+export function restoreNotes(
+  list: readonly WalkthroughNote[],
+  setTitle: string,
+  language: 'zh' | 'en',
+  cardLayer: HTMLElement | null,
+): number {
+  const store = useFloatingQA.getState()
+  const open = new Set(store.windows.map((window) => window.noteId).filter(Boolean))
+  const kept = list
+    .filter((note) => note.display && !open.has(note.id))
+    .sort((a, b) => a.updatedAt - b.updatedAt)
+  for (const note of kept) {
+    const display = note.display!
+    const id = openNote(note, setTitle, language)
+    if (display.mode === 'compact' && display.card) {
+      const saved = display.card
+      const attached = !saved.pinned && cardLayer
+      const card: CompactCard = clampCard(
+        { ...saved, pinned: !attached },
+        attached
+          ? { width: cardLayer.clientWidth, height: cardLayer.clientHeight }
+          : { width: window.innerWidth, height: window.innerHeight },
+      )
+      // Restoring is not the learner's pin choice for new cards.
+      const { cardPinned } = useFloatingQA.getState()
+      store.compact(id, card)
+      useFloatingQA.setState({ cardPinned })
+    } else if (display.mode === 'tucked') {
+      store.tuck(id)
+    } else if (display.mode === 'minimized') {
+      store.setMinimized(id, true)
+    }
+  }
+  return kept.length
 }
 
 export async function renameNote(noteId: string, title: string): Promise<WalkthroughNote> {
@@ -204,6 +378,8 @@ export async function renameNote(noteId: string, title: string): Promise<Walkthr
 
 export async function deleteNote(noteId: string): Promise<void> {
   await notes().delete(noteId)
+  cancelDisplayWrite(noteId)
+  writtenDisplay.delete(noteId)
   const store = useFloatingQA.getState()
   for (const window of store.windows) if (window.noteId === noteId) store.close(window.id)
   notifyNoteChanges()

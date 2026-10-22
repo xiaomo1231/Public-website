@@ -21,6 +21,7 @@ import { targetLanguageOf } from '@/shared/lib/language'
 import { GuidedMatrixPractice } from './GuidedMatrixPractice'
 import { GuidedBlankPractice } from './GuidedBlankPractice'
 import { useGuidedQuestion } from './useGuidedQuestion'
+import { QuestionWindowButton } from '../QuestionWindowLayer'
 
 export interface GuidedPracticeViewProps {
   setId: string
@@ -64,6 +65,7 @@ export function GuidedPracticeView({
                   {question.number}
                 </Badge>
               )}
+              <QuestionWindowButton question={question} className="ml-auto" />
             </div>
             <RichText
               text={formatHomeworkQuestion(question.prompt)}
