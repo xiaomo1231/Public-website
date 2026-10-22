@@ -389,7 +389,7 @@ export class HomeworkService {
             studentAnswer: submittedDraft || '(No typed answer: see the attached images.)',
             referenceAnswer: reference.text,
             referenceKind: reference.kind,
-            sourceText: await this.sourceText(question),
+            sourceText: await this.promptSource(question),
             language,
           }),
         },
@@ -499,7 +499,7 @@ export class HomeworkService {
       Boolean((question.answerText ?? '').trim())
     const input = {
       question: question.prompt,
-      sourceText: await this.sourceText(question),
+      sourceText: await this.promptSource(question),
       language,
       ...(hasProfessorAnswer ? { professorAnswer: question.answerText } : {}),
       ...(!deferredAnswer && question.solution ? { previousSolution: question.solution } : {}),
@@ -1292,7 +1292,7 @@ export class HomeworkService {
     const trimmed = message.trim()
     if (!trimmed) throw new AppError(t('homework.emptyMessage'), 'INVALID_INPUT')
 
-    const sourceText = await this.sourceText(question)
+    const sourceText = await this.promptSource(question, { keepBlock: true })
     const history = question.messages.slice(-CHAT_HISTORY_TURNS).map((item) => ({
       role: item.role,
       content: item.content,
@@ -2030,7 +2030,7 @@ export class HomeworkService {
     })
     try {
       const ai = this.requireAI()
-      const sourceText = await this.sourceText(question)
+      const sourceText = await this.promptSource(question)
       const subject = await loadProjectSubjectContext(question.projectId, this.db)
       let content: { hints: string[]; solution: string }
       try {
@@ -2160,7 +2160,7 @@ export class HomeworkService {
     const linked = linkSignals(controller.signal, signal)
     try {
       const ai = this.requireAI()
-      const sourceText = await this.sourceText(question)
+      const sourceText = await this.promptSource(question)
       const subject = await loadProjectSubjectContext(question.projectId, this.db)
       let content: { hints: string[]; solution: string }
       try {
@@ -2259,6 +2259,14 @@ export class HomeworkService {
   /** The passages a question was read from (or its prompt), for the walkthrough. */
   questionSourceText(question: HomeworkQuestion): Promise<string> {
     return this.sourceText(question)
+  }
+
+  /** The source passages a prompt about this question carries (see `promptSourceText`). */
+  private async promptSource(
+    question: HomeworkQuestion,
+    options: { keepBlock?: boolean } = {},
+  ): Promise<string> {
+    return promptSourceText(question.prompt, await this.sourceText(question), options)
   }
 
   private async sourceText(question: HomeworkQuestion): Promise<string> {
@@ -2555,6 +2563,26 @@ function normalizedToMatchable(question: NormalizedQuestion): MatchableQuestion 
     ...(question.number ? { number: question.number } : {}),
     chunkIds: groundedChunkIds(question),
   }
+}
+
+/** A prompt-side note standing in for source passages that only repeat the question. */
+export const SOURCE_IS_QUESTION_NOTE = '(The question above is the whole source passage.)'
+
+/**
+ * The source passages a homework prompt carries. A question read without a
+ * grounded passage falls back to its own text (`sourceText`), and sending
+ * that next to the question only repeats it: the block is left out, or —
+ * for a prompt that always prints it (`keepBlock`) — reduced to a one-line
+ * note. Grounded passages are returned unchanged.
+ */
+export function promptSourceText(
+  question: string,
+  sourceText: string,
+  options: { keepBlock?: boolean } = {},
+): string {
+  const collapse = (text: string) => text.replace(/\s+/g, ' ').trim()
+  if (!sourceText.trim() || collapse(sourceText) !== collapse(question)) return sourceText
+  return options.keepBlock ? SOURCE_IS_QUESTION_NOTE : ''
 }
 
 /** Every passage is prefixed with its closed-set chunk label, like the analyzer. */

@@ -34,6 +34,9 @@ import { createRng } from '@/entities/homework/practice/random'
 import { matrixToLatex, parseMatrix, rref } from '@/infrastructure/math/rref'
 import { prompts } from '@/infrastructure/ai/prompts'
 import * as QuizV6 from '@/infrastructure/ai/prompts/quiz-generator/v6'
+import * as QuizV7 from '@/infrastructure/ai/prompts/quiz-generator/v7'
+import * as PracticeV1 from '@/infrastructure/ai/prompts/practice-generate/v1'
+import * as OralV1 from '@/infrastructure/ai/prompts/oral-exam/v1'
 import { professorStyleSection } from '@/infrastructure/ai/prompts/question-style/v1'
 import type { AIService } from '@/services/aiService'
 
@@ -211,10 +214,10 @@ describe('the professor-style block in question prompts', () => {
       language: 'en' as const,
       sourceSnippets: ['[chunk:c1] text'],
     }
-    const plain = prompts.quizGenerator.buildUserPrompt(input)
+    const plain = QuizV7.buildUserPrompt(input)
     expect(plain).toBe(QuizV6.buildUserPrompt(input))
     expect(plain).not.toContain('PROFESSOR HABITS')
-    const styled = prompts.quizGenerator.buildUserPrompt({ ...input, professorHabits: HABITS })
+    const styled = QuizV7.buildUserPrompt({ ...input, professorHabits: HABITS })
     expect(styled).toBe(
       plain.replace(
         /\nRespond with the JSON object only\.$/,
@@ -229,9 +232,9 @@ describe('the professor-style block in question prompts', () => {
       keyPoints: '- 主元',
       slots: [{ id: 's1', mode: 'compact' as const, partLabels: [], knowledgePoints: ['主元'] }],
     }
-    const plainPractice = prompts.practiceGenerate.buildUserPrompt(practice)
+    const plainPractice = PracticeV1.buildUserPrompt(practice)
     expect(plainPractice).not.toContain('PROFESSOR')
-    expect(prompts.practiceGenerate.buildUserPrompt({ ...practice, professorHabits: HABITS })).toBe(
+    expect(PracticeV1.buildUserPrompt({ ...practice, professorHabits: HABITS })).toBe(
       `${plainPractice}\n\n${professorStyleSection(HABITS)}`,
     )
 
@@ -242,14 +245,49 @@ describe('the professor-style block in question prompts', () => {
       sourceSnippets: [],
       language: 'en' as const,
     }
-    const plainOral = prompts.oralExam.buildUserPrompt(oral)
+    const plainOral = OralV1.buildUserPrompt(oral)
     expect(plainOral).not.toContain('PROFESSOR')
-    expect(prompts.oralExam.buildUserPrompt({ ...oral, professorHabits: HABITS })).toBe(
+    expect(OralV1.buildUserPrompt({ ...oral, professorHabits: HABITS })).toBe(
       plainOral.replace(
         '\nRespond with the JSON object only.',
         `\n${professorStyleSection(HABITS)}\nRespond with the JSON object only.`,
       ),
     )
+  })
+
+  it('practice-generate v2 and oral-exam v2 put the block before the per-request content', () => {
+    const practice = {
+      language: 'zh' as const,
+      keyPoints: '- 主元',
+      slots: [{ id: 's1', mode: 'compact' as const, partLabels: [], knowledgePoints: ['主元'] }],
+    }
+    expect(prompts.practiceGenerate.VERSION).toBe('v2')
+    expect(prompts.practiceGenerate.buildUserPrompt(practice)).toBe(
+      PracticeV1.buildUserPrompt(practice),
+    )
+    const styled = prompts.practiceGenerate.buildUserPrompt({
+      ...practice,
+      professorHabits: HABITS,
+    })
+    expect(styled.indexOf('END KNOWLEDGE POINTS')).toBeLessThan(styled.indexOf('PROFESSOR HABITS'))
+    expect(styled.indexOf('PROFESSOR HABITS')).toBeLessThan(styled.indexOf('SLOT s1'))
+    expect(styled.length).toBe(
+      PracticeV1.buildUserPrompt({ ...practice, professorHabits: HABITS }).length,
+    )
+
+    const oral = {
+      topic: 'Shoulder joint',
+      courseTopics: [],
+      knowledgePoints: [],
+      sourceSnippets: [],
+      language: 'en' as const,
+    }
+    expect(prompts.oralExam.VERSION).toBe('v2')
+    expect(prompts.oralExam.buildUserPrompt(oral)).toBe(OralV1.buildUserPrompt(oral))
+    const oralStyled = prompts.oralExam.buildUserPrompt({ ...oral, professorHabits: HABITS })
+    expect(oralStyled.startsWith(`Write the question`)).toBe(true)
+    expect(oralStyled.indexOf('PROFESSOR HABITS')).toBeLessThan(oralStyled.indexOf('DRAWN TOPIC'))
+    expect(oralStyled.endsWith('Respond with the JSON object only.')).toBe(true)
   })
 
   it('the block is empty when the profile is off or has no items', () => {

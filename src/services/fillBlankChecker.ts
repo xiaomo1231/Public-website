@@ -1,4 +1,4 @@
-import type { AIService } from './aiService'
+import { withLightModel, type AIService } from './aiService'
 import type { Question } from '@/entities/question/types'
 import type { QuestionEvaluation } from '@/entities/questionAttempt/types'
 import { prompts } from '@/infrastructure/ai/prompts'
@@ -27,7 +27,8 @@ export async function checkBlanksWithAi(
     .filter((blank) => !blank.correct && !blank.spelling && blank.given.trim())
   if (asked.length === 0) return evaluation
   try {
-    const { data } = await ai.chatJSON<unknown>(
+    // A simple equivalence check: the 轻量模型 when one is set.
+    const { data } = await withLightModel(ai).chatJSON<unknown>(
       [
         { role: 'system', content: prompts.fillBlankCheck.buildSystemPrompt() },
         {

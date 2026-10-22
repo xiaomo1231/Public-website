@@ -34,7 +34,7 @@ import { isAbortError } from '@/shared/lib/generationControl'
 import { prompts } from '@/infrastructure/ai/prompts'
 import type { Question, QuestionType, RubricPoint } from '@/entities/question/types'
 import type { QuestionAttempt, QuestionEvaluation } from '@/entities/questionAttempt/types'
-import type { AIService } from './aiService'
+import { withLightModel, type AIService } from './aiService'
 import type { MistakeService } from './mistakeService'
 import type { MasteryService } from './masteryService'
 import { ShortAnswerGrader, unverifiedShortAnswer } from './shortAnswerGrader'
@@ -523,7 +523,7 @@ export class PracticeService {
     const hash = fnv1a(`${prompts.rubricExtractor.VERSION}|${answer}`)
     if (question.rubric?.length && question.rubricAnswerHash === hash) return question.rubric
     try {
-      const { data } = await this.ai.chatJSON<unknown>(
+      const { data } = await withLightModel(this.ai).chatJSON<unknown>(
         [
           { role: 'system', content: prompts.rubricExtractor.buildSystemPrompt() },
           {

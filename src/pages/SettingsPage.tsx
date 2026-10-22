@@ -386,6 +386,18 @@ export function SettingsPage(): JSX.Element {
                   />
                   <p className="text-xs text-muted-foreground">{t('settings.baseUrlHint')}</p>
                 </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="lightModel">{t('settings.lightModel')}</Label>
+                  <ModelCombobox
+                    id="lightModel"
+                    value={draft.lightModel ?? ''}
+                    onChange={(value) => patch('lightModel', value)}
+                    models={modelList?.ok ? modelList.models : (preset?.models ?? [])}
+                    placeholder={t('settings.lightModelPlaceholder')}
+                  />
+                  <p className="text-xs text-muted-foreground">{t('settings.lightModelHint')}</p>
+                </div>
               </CardContent>
             </Card>
 

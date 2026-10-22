@@ -8,19 +8,19 @@ import * as DocumentAnalyzerV2 from './document-analyzer/v2'
 import * as TopicAnalyzerV1 from './topic-analyzer/v1'
 import * as TutorLessonV5 from './tutor/v5-lesson'
 import * as TutorIntroduceV1 from './tutor/v1-introduce'
-import * as TutorQuestionV2 from './tutor/v2-question'
-import * as TutorEvaluateV1 from './tutor/v1-evaluate'
+import * as TutorQuestionV3 from './tutor/v3-question'
+import * as TutorEvaluateV2 from './tutor/v2-evaluate'
 import * as TranslatorV2 from './translator/v2'
 import * as ContextualTutorV3 from './contextual-tutor/v3'
 import * as ProfessorProfileV1 from './professor-profile/v1'
 import * as MistakeAnalyzerV2 from './mistake-analyzer/v2'
-import * as QuizGeneratorV7 from './quiz-generator/v7'
+import * as QuizGeneratorV8 from './quiz-generator/v8'
 import * as VisualizationGeneratorV10 from './visualization-generator/v10'
 import * as HomeworkAnalyzerV2 from './homework-analyzer/v2'
 import * as HomeworkQuestionV3 from './homework-question/v3'
 import * as HomeworkQaV1 from './homework-qa/v1'
 import * as HomeworkReviewV1 from './homework-review/v1'
-import * as HomeworkWalkthroughV6 from './homework-walkthrough/v6'
+import * as HomeworkWalkthroughV7 from './homework-walkthrough/v7'
 import * as HomeworkAnswerCheckV1 from './homework-answer-check/v1'
 import * as WalkthroughImportV1 from './walkthrough-import/v1'
 import * as WalkthroughCompareV1 from './walkthrough-compare/v1'
@@ -39,8 +39,8 @@ import * as PhraseExtractV1 from './phrase-extract/v1'
 import * as InterviewScenarioV1 from './interview-scenario/v1'
 import * as InterviewPatientV1 from './interview-patient/v1'
 import * as InterviewSummaryCheckV1 from './interview-summary-check/v1'
-import * as OralExamV1 from './oral-exam/v1'
-import * as PracticeGenerateV1 from './practice-generate/v1'
+import * as OralExamV2 from './oral-exam/v2'
+import * as PracticeGenerateV2 from './practice-generate/v2'
 import * as PracticeReviewV1 from './practice-review/v1'
 import * as GuidedStepsV1 from './guided-steps/v1'
 import * as QuestionStyleV1 from './question-style/v1'
@@ -51,19 +51,19 @@ export const PROMPT_VERSIONS = {
   topicAnalyzer: 'v1',
   tutorLesson: 'v5',
   tutorIntroduce: 'v1',
-  tutorQuestion: 'v2',
-  tutorEvaluate: 'v1',
+  tutorQuestion: 'v3',
+  tutorEvaluate: 'v2',
   translator: 'v2',
   contextualTutor: 'v3',
   professorProfile: 'v1',
   mistakeAnalyzer: 'v2',
-  quizGenerator: 'v7',
+  quizGenerator: 'v8',
   visualizationGenerator: 'v10',
   homeworkAnalyzer: 'v2',
   homeworkQuestion: 'v3',
   homeworkQa: 'v1',
   homeworkReview: 'v1',
-  homeworkWalkthrough: 'v6',
+  homeworkWalkthrough: 'v7',
   homeworkAnswerCheck: 'v1',
   walkthroughImport: 'v1',
   walkthroughCompare: 'v1',
@@ -82,8 +82,8 @@ export const PROMPT_VERSIONS = {
   interviewScenario: 'v1',
   interviewPatient: 'v1',
   interviewSummaryCheck: 'v1',
-  oralExam: 'v1',
-  practiceGenerate: 'v1',
+  oralExam: 'v2',
+  practiceGenerate: 'v2',
   practiceReview: 'v1',
   guidedSteps: 'v1',
   questionStyle: 'v1',
@@ -95,19 +95,19 @@ export const prompts = {
   topicAnalyzer: TopicAnalyzerV1,
   tutorLesson: TutorLessonV5,
   tutorIntroduce: TutorIntroduceV1,
-  tutorQuestion: TutorQuestionV2,
-  tutorEvaluate: TutorEvaluateV1,
+  tutorQuestion: TutorQuestionV3,
+  tutorEvaluate: TutorEvaluateV2,
   translator: TranslatorV2,
   contextualTutor: ContextualTutorV3,
   professorProfile: ProfessorProfileV1,
   mistakeAnalyzer: MistakeAnalyzerV2,
-  quizGenerator: QuizGeneratorV7,
+  quizGenerator: QuizGeneratorV8,
   visualizationGenerator: VisualizationGeneratorV10,
   homeworkAnalyzer: HomeworkAnalyzerV2,
   homeworkQuestion: HomeworkQuestionV3,
   homeworkQa: HomeworkQaV1,
   homeworkReview: HomeworkReviewV1,
-  homeworkWalkthrough: HomeworkWalkthroughV6,
+  homeworkWalkthrough: HomeworkWalkthroughV7,
   homeworkAnswerCheck: HomeworkAnswerCheckV1,
   walkthroughImport: WalkthroughImportV1,
   walkthroughCompare: WalkthroughCompareV1,
@@ -127,8 +127,8 @@ export const prompts = {
   interviewScenario: InterviewScenarioV1,
   interviewPatient: InterviewPatientV1,
   interviewSummaryCheck: InterviewSummaryCheckV1,
-  oralExam: OralExamV1,
-  practiceGenerate: PracticeGenerateV1,
+  oralExam: OralExamV2,
+  practiceGenerate: PracticeGenerateV2,
   practiceReview: PracticeReviewV1,
   guidedSteps: GuidedStepsV1,
   questionStyle: QuestionStyleV1,
@@ -149,7 +149,7 @@ export type {
   QuizGenerationOutput,
   GeneratedQuizQuestion,
   QuizQuestionType,
-} from './quiz-generator/v7'
+} from './quiz-generator/v8'
 export type { VisualizationInput, VisualizationOutput } from './visualization-generator/v10'
 export type { HomeworkAnalyzerInput, HomeworkAnalyzerOutput } from './homework-analyzer/v1'
 export type { HomeworkQuestionInput, HomeworkQuestionOutput } from './homework-question/v3'

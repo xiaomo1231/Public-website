@@ -101,6 +101,11 @@ export interface ProviderConfig {
    * No request ever asks for more than this.
    */
   modelMaxOutputTokens?: number
+  /**
+   * 轻量模型: a cheaper model of the same provider (same key and base URL)
+   * for simple tasks — see `AIService.light()`. Empty: the main model.
+   */
+  lightModel?: string
 }
 
 export function ensureConfig(cfg: ProviderConfig): ProviderConfig {

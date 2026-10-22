@@ -2038,6 +2038,10 @@ export const en = {
   'settings.model': 'Model',
   'settings.modelPlaceholder': 'model-name',
   'settings.baseUrl': 'API Base URL',
+  'settings.lightModel': 'Light model (optional)',
+  'settings.lightModelPlaceholder': 'Leave empty to use the model above',
+  'settings.lightModelHint':
+    'A cheaper model of the same provider (same key and base URL), used only for simple tasks: word meanings, checking fill-in blanks and short answers against their scoring points, translating a question, matching exam topics and extracting scoring points. Walkthroughs, lessons, quizzes and analysis always use the model above.',
   'settings.baseUrlHint':
     'Must start with http:// or https://. Browser CORS must permit requests from this domain.',
   'settings.models.fetch': 'Fetch models',

@@ -10,7 +10,7 @@ import { loadCommonWords } from '@/infrastructure/vocab/wordData'
 import { prompts } from '@/infrastructure/ai/prompts'
 import { logger } from '@/infrastructure/logger/logger'
 import { AppError } from '@/infrastructure/errors/AppError'
-import type { AIService } from './aiService'
+import { withLightModel, type AIService } from './aiService'
 import type { ProjectService } from './projectService'
 import { loadProjectSubject } from './projectSubject'
 import { projectTargetLanguage } from './projectTargetLanguage'
@@ -235,7 +235,7 @@ export class CourseVocabService {
       if (!control.shouldContinue()) return { glossed, dropped, paused: true }
       const batch = missing.slice(i, i + GLOSS_BATCH)
       try {
-        const { data } = await this.ai.chatJSON<unknown>(
+        const { data } = await withLightModel(this.ai).chatJSON<unknown>(
           [
             {
               role: 'system',

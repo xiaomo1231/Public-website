@@ -1,4 +1,4 @@
-import { AIService } from './aiService'
+import { AIService, withLightModel } from './aiService'
 import type { AppDatabase } from '@/infrastructure/db/database'
 import { getDb } from '@/infrastructure/db/database'
 import { prompts } from '@/infrastructure/ai/prompts'
@@ -46,11 +46,13 @@ export class QuestionTranslationService {
     const cached = currentTranslation(question)
     if (cached) return cached
     if (!this.ai) throw new AppError(t('homework.noProvider'), 'NO_PROVIDER')
+    // A plain translation: the 轻量模型 when one is set.
+    const ai = withLightModel(this.ai)
     const budget = Math.min(
-      this.ai.maxOutputTokens > 0 ? this.ai.maxOutputTokens : Infinity,
+      ai.maxOutputTokens > 0 ? ai.maxOutputTokens : Infinity,
       Math.max(MIN_BUDGET, Math.ceil(question.prompt.length * TOKENS_PER_CHAR) + 500),
     )
-    const { data } = await this.ai.streamJSON<unknown>(
+    const { data } = await ai.streamJSON<unknown>(
       [
         { role: 'system', content: prompts.questionTranslate.buildSystemPrompt() },
         {

@@ -27,7 +27,7 @@ import {
   resolveControl,
   type GenerationControl,
 } from '@/shared/lib/generationControl'
-import type { AIService } from './aiService'
+import { withLightModel, type AIService } from './aiService'
 
 /** Exam topics sent per AI matching request. */
 const MATCH_BATCH = 40
@@ -399,7 +399,7 @@ export class SyllabusService {
       const batch = examEntries.slice(i, i + MATCH_BATCH)
       let data: unknown
       try {
-        ;({ data } = await ai.chatJSON<unknown>(
+        ;({ data } = await withLightModel(ai).chatJSON<unknown>(
           [
             { role: 'system', content: prompts.examTopicMatch.buildSystemPrompt() },
             {

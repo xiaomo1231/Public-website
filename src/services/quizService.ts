@@ -35,7 +35,7 @@ import type {
   QuizGenerationOutput,
   GeneratedQuizQuestion as RawGeneratedQuizQuestion,
   QuizSystemPromptOptions,
-} from '@/infrastructure/ai/prompts/quiz-generator/v7'
+} from '@/infrastructure/ai/prompts/quiz-generator/v8'
 import {
   genderAnswerText,
   paradigmAnswerText,
@@ -148,6 +148,21 @@ const QUIZ_MAX_OUTPUT_TOKENS = 8192
 /** Source passages offered: enough to spread a large quiz across the course. */
 const MIN_QUIZ_SNIPPETS = 8
 const MAX_QUIZ_SNIPPETS = 24
+/** "Avoid repeating" names the latest questions only, each by its opening words. */
+const AVOID_MAX_QUESTIONS = 30
+const AVOID_QUESTION_CHARS = 160
+
+/**
+ * The questions a batch is told not to repeat: the latest
+ * `AVOID_MAX_QUESTIONS`, whitespace collapsed and cut to their opening words
+ * (enough to recognise a question; a vignette or program need not be resent).
+ */
+export function avoidRepeatingList(asked: readonly string[]): string[] {
+  return asked.slice(-AVOID_MAX_QUESTIONS).map((question) => {
+    const text = question.replace(/\s+/g, ' ').trim()
+    return text.length > AVOID_QUESTION_CHARS ? `${text.slice(0, AVOID_QUESTION_CHARS)}…` : text
+  })
+}
 
 /** `group` points into the quiz's topic groups (a mixed review spreads its questions over topics). */
 type PlanEntry = { slot: number; type: QuestionType; difficulty: DifficultyLevel; group?: number }
@@ -1011,21 +1026,28 @@ export class QuizService {
   ): Promise<{ paused: boolean; pending: PlanEntry[]; lastError: unknown }> {
     const asked = [...alreadyAsked]
     const allowedTypes = new Set(plan.map((entry) => entry.type))
+    // One system prompt for every batch, top-up and retry of this quiz.
+    const types = [...allowedTypes].sort()
     let pending = [...plan]
     let lastError: unknown = null
+    // Top-up rounds share the passages out like the first round did, instead
+    // of sending every passage for a question or two.
+    let shares = 0
     for (let round = 0; round <= MAX_TOP_UP_ROUNDS && pending.length > 0; round++) {
       const batches: PlanEntry[][] = []
       for (let i = 0; i < pending.length; i += QUIZ_BATCH_SIZE)
         batches.push(pending.slice(i, i + QUIZ_BATCH_SIZE))
+      if (round === 0) shares = batches.length
       const missing: PlanEntry[] = []
       const remaining = (from: number): PlanEntry[] => [...missing, ...batches.slice(from).flat()]
       for (const [index, batch] of batches.entries()) {
         if (!control.shouldContinue()) return { paused: true, pending: remaining(index), lastError }
+        const shareCount = Math.max(shares, batches.length)
         const { knowledgePoints, snippets } = this.batchMaterial(
           batch,
           groups,
-          index,
-          batches.length,
+          index % shareCount,
+          shareCount,
         )
         const delivered: Array<{ question: GeneratedQuizQuestion; entry: PlanEntry }> = []
         try {
@@ -1035,9 +1057,10 @@ export class QuizService {
               knowledgePoints,
               plan: batch,
               sourceSnippets: snippets,
-              ...(asked.length > 0 ? { avoidRepeating: [...asked] } : {}),
+              ...(asked.length > 0 ? { avoidRepeating: avoidRepeatingList(asked) } : {}),
             },
             subject,
+            types,
             control.signal,
           )
           const open = [...batch]
@@ -1214,13 +1237,15 @@ export class QuizService {
   private async generateWithRetry(
     input: Parameters<typeof prompts.quizGenerator.buildUserPrompt>[0],
     subject: SubjectInput,
+    /** Every type the quiz plans: the system prompt describes only these. */
+    types: QuestionType[],
     signal?: AbortSignal,
   ): Promise<GeneratedQuizQuestion[]> {
     const messages: ChatMessage[] = [
       {
         role: 'system',
         content: prompts.subjectProfile.withSubject(
-          prompts.quizGenerator.buildSystemPrompt(drillPromptOptions(subject)),
+          prompts.quizGenerator.buildSystemPrompt({ ...drillPromptOptions(subject), types }),
           subject,
         ),
       },

@@ -59,10 +59,13 @@ interface UsageTag {
 export class AIService {
   private provider: AIProvider
   private config: ProviderConfig
+  /** The configuration as given (before the output cap is resolved). */
+  private raw: ProviderConfig
   private limit: ResolvedOutputLimit
   private usageKind: AIUsageKind
 
   constructor(opts: AIServiceOptions) {
+    this.raw = opts.config
     const { outputLimit, ...config } = resolveProviderConfig(opts.config)
     this.config = config
     this.limit = outputLimit
@@ -90,8 +93,25 @@ export class AIService {
     }
   }
 
+  /**
+   * The 轻量模型 for a simple task (glossing words, checking a blank or a
+   * short answer against its points, translating a question, matching exam
+   * topics, extracting scoring points): the same provider, key and usage kind
+   * with `config.lightModel` as the model, its output cap resolved for that
+   * model. Without a light model (or the same one) this service itself.
+   */
+  light(): AIService {
+    const model = this.raw.lightModel?.trim()
+    if (!model || model === this.raw.model.trim()) return this
+    return new AIService({
+      config: { ...this.raw, model, lightModel: '' },
+      usageKind: this.usageKind,
+    })
+  }
+
   /** Replace the provider when the user updates their settings. */
   reset(config: ProviderConfig): void {
+    this.raw = config
     const { outputLimit, ...resolved } = resolveProviderConfig(config)
     this.config = resolved
     this.limit = outputLimit
@@ -266,6 +286,15 @@ export class AIService {
   }> {
     return this.provider.testConnection()
   }
+}
+
+/**
+ * `ai.light()` (the 轻量模型) when available. Test doubles that only stub the
+ * chat methods are returned unchanged.
+ */
+export function withLightModel<T extends AIService | null | undefined>(ai: T): T {
+  if (ai && typeof (ai as Partial<AIService>).light === 'function') return ai.light() as T
+  return ai
 }
 
 /**

@@ -39,6 +39,7 @@ export class SettingsService {
       baseURL: row.baseURL,
       apiKey: await this.decryptApiKey(row),
       model: row.model,
+      lightModel: row.lightModel ?? '',
       temperature: row.temperature,
       maxTokens: row.maxTokens,
       // Rows from before the option keep their number.
@@ -69,6 +70,11 @@ export class SettingsService {
       next.baseURL = url
     }
     if (patch.model !== undefined) next.model = patch.model.trim()
+    if (patch.lightModel !== undefined) {
+      const light = patch.lightModel.trim()
+      if (light) next.lightModel = light
+      else delete next.lightModel
+    }
     if (patch.temperature !== undefined) {
       const temp = Number(patch.temperature)
       if (Number.isNaN(temp) || temp < 0 || temp > 2) {

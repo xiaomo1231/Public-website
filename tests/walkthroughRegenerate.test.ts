@@ -180,7 +180,7 @@ describe('homework-walkthrough/v2 prompts', () => {
     }
     expect(V2.buildFrameUserPrompt(frame)).toBe(V1.buildFrameUserPrompt(frame))
     expect(V2.buildFrameSystemPrompt()).toBe(V1.buildFrameSystemPrompt())
-    expect(prompts.homeworkWalkthrough.VERSION).toBe('v6')
+    expect(prompts.homeworkWalkthrough.VERSION).toBe('v7')
     expect(prompts.homeworkWalkthrough.CACHE_VERSION).toBe('v1')
 
     await setup('calculus', ['Differentiate x^2.'])

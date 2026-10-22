@@ -7,7 +7,7 @@ import type { ChatMessage } from '@/infrastructure/ai/types'
 import { logger } from '@/infrastructure/logger/logger'
 import { getUILanguage, t } from '@/i18n'
 import { isAbortError } from '@/shared/lib/generationControl'
-import type { AIService } from './aiService'
+import { withLightModel, type AIService } from './aiService'
 
 /**
  * Short-answer grading by scoring points.
@@ -217,7 +217,8 @@ export class ShortAnswerGrader {
       },
     ]
     try {
-      const { data } = await this.ai.chatJSON<ShortAnswerCheckOutput>(
+      // Point-by-point coverage, verified locally: the 轻量模型 when one is set.
+      const { data } = await withLightModel(this.ai).chatJSON<ShortAnswerCheckOutput>(
         messages,
         options.signal ? { signal: options.signal } : undefined,
       )

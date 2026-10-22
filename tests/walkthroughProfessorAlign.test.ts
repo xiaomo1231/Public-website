@@ -67,7 +67,7 @@ describe('homework-walkthrough/v6 prompts', () => {
         V5.buildVariantSystemPrompt({ linearSystems, level: 'detailed', part: true }),
       )
     }
-    expect(prompts.homeworkWalkthrough.VERSION).toBe('v6')
+    expect(prompts.homeworkWalkthrough.VERSION).toBe('v7')
     expect(prompts.homeworkWalkthrough.CACHE_VERSION).toBe('v1')
   })
 

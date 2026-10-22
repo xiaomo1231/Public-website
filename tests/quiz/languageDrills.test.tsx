@@ -7,6 +7,7 @@ import { QuizService, offeredQuizTypes } from '@/services/quizService'
 import type { AIService } from '@/services/aiService'
 import type { QuizGenerationOutput } from '@/infrastructure/ai/prompts/quiz-generator/v7'
 import * as QuizV6 from '@/infrastructure/ai/prompts/quiz-generator/v6'
+import * as QuizV7 from '@/infrastructure/ai/prompts/quiz-generator/v7'
 import { prompts } from '@/infrastructure/ai/prompts'
 import { evaluateDeterministic } from '@/services/answerEvaluationService'
 import {
@@ -394,19 +395,21 @@ describe('which courses get the drills', () => {
 
 describe('quiz-generator v7', () => {
   it('is v6 word for word outside a language course', () => {
-    expect(prompts.quizGenerator.VERSION).toBe('v7')
-    expect(prompts.quizGenerator.buildSystemPrompt()).toBe(QuizV6.buildSystemPrompt())
+    expect(QuizV7.VERSION).toBe('v7')
+    expect(QuizV7.buildSystemPrompt()).toBe(QuizV6.buildSystemPrompt())
+    // The registry's v8 is v7 word for word when no type set is given.
+    expect(prompts.quizGenerator.buildSystemPrompt()).toBe(QuizV7.buildSystemPrompt())
   })
 
   it('describes the drills for a language course (articles for German only)', () => {
-    const german = prompts.quizGenerator.buildSystemPrompt({
+    const german = QuizV7.buildSystemPrompt({
       languageDrills: { targetLanguage: 'de' },
     })
     expect(german).toContain('`article_gender`')
     expect(german).toContain('`paradigm_table`')
     expect(german).toContain('| fill_blank | article_gender | paradigm_table')
     expect(german.indexOf('Language-course drills')).toBeLessThan(german.indexOf('Security rules'))
-    const hungarian = prompts.quizGenerator.buildSystemPrompt({
+    const hungarian = QuizV7.buildSystemPrompt({
       languageDrills: { targetLanguage: 'hu' },
     })
     expect(hungarian).toContain('`paradigm_table`')

@@ -1879,6 +1879,10 @@ export const zhCN: Record<TranslationKey, string> = {
   'settings.model': '模型',
   'settings.modelPlaceholder': 'model-name',
   'settings.baseUrl': 'API Base URL',
+  'settings.lightModel': '轻量模型（可选）',
+  'settings.lightModelPlaceholder': '留空则使用上面的模型',
+  'settings.lightModelHint':
+    '同一服务商（同一密钥与 Base URL）下更便宜的模型，只用于简单任务：单词释义、填空与简答题按得分点核对、题目翻译、考点匹配、提取得分点。讲解、课时、出题与课程分析始终使用上面的模型。',
   'settings.baseUrlHint':
     '必须以 http:// 或 https:// 开头。浏览器的 CORS 策略必须允许来自该域名的请求。',
   'settings.models.fetch': '获取模型',

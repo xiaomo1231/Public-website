@@ -16,7 +16,8 @@
     "format:check": "prettier --check .",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:coverage": "vitest run --coverage"
+    "test:coverage": "vitest run --coverage",
+    "token-usage": "node scripts/token-usage.mjs"
   },
   "dependencies": {
     "@radix-ui/react-dialog": "^1.1.2",

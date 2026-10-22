@@ -103,6 +103,11 @@ export interface AISettingsRow {
    * output fields, never the context length), for `baseURL`.
    */
   modelOutputLimits?: ModelOutputLimits
+  /**
+   * 轻量模型 (optional): same provider and key, used only for simple tasks
+   * (`AIService.light()`). Absent / empty: the main model does everything.
+   */
+  lightModel?: string
   /** Opt-in: search the web for chemistry / biology reference images. */
   webImagesEnabled?: boolean
   /** Ask the (vision-capable) model whether each image fits its purpose. */
@@ -136,6 +141,8 @@ export interface AISettings {
    */
   apiKey: string
   model: string
+  /** 轻量模型 ('' or absent: none). */
+  lightModel?: string
   temperature: number
   /** The manual number (also the fallback when the model's limit is unknown). */
   maxTokens: number
@@ -156,6 +163,7 @@ export interface UpdateAISettingsInput {
   baseURL?: string
   apiKey?: string
   model?: string
+  lightModel?: string
   temperature?: number
   maxTokens?: number
   maxTokensMode?: MaxTokensMode

@@ -161,7 +161,7 @@ describe('homework-walkthrough/v3 prompts', () => {
       earlier: [],
     }
     expect(V3.buildPartUserPrompt(part)).toBe(V2.buildPartUserPrompt(part))
-    expect(prompts.homeworkWalkthrough.VERSION).toBe('v6')
+    expect(prompts.homeworkWalkthrough.VERSION).toBe('v7')
     expect(prompts.homeworkWalkthrough.CACHE_VERSION).toBe('v1')
   })
 
