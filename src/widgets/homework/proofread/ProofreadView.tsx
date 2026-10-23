@@ -5,7 +5,6 @@ import {
   ArrowLeft,
   ArrowRight,
   CheckCircle2,
-  Circle,
   ImageOff,
   Loader2,
   RotateCcw,
@@ -280,7 +279,6 @@ export function ProofreadView({
     (prompt !== question.prompt ||
       number !== (question.number ?? '') ||
       (question.answerText !== undefined && answer !== question.answerText))
-  const unverified = state.entries.filter((item) => !item.question.verifiedAt).length
   const labels = subpartLabels(prompt)
 
   const run = async (key: string, action: () => Promise<unknown>, done?: string) => {
@@ -309,7 +307,12 @@ export function ProofreadView({
             number,
             ...(question.answerText !== undefined ? { answerText: answer } : {}),
           })
-        if (verify) await service.setVerified(question.id, true)
+        if (verify) {
+          await service.setVerified(question.id, true)
+          // 标记已核对 moves on to the next question.
+          const next = state.entries[index + 1]
+          if (next) setActiveId(next.question.id)
+        }
       },
       t(verify ? 'proofread.savedVerified' : 'proofread.saved'),
     )
@@ -369,9 +372,6 @@ export function ProofreadView({
       <Card className="border-border/70">
         <CardContent className="flex flex-wrap items-center gap-2 p-3 text-sm">
           <span className="font-medium">{t('proofread.title')}</span>
-          <span className="text-muted-foreground" aria-live="polite">
-            {t('proofread.unverifiedCount', { count: unverified, total: state.entries.length })}
-          </span>
           <ol
             className="flex min-w-0 flex-1 flex-wrap gap-1.5"
             aria-label={t('proofread.questionList')}
@@ -404,9 +404,7 @@ export function ProofreadView({
                         className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400"
                         aria-hidden
                       />
-                    ) : (
-                      <Circle className="h-3.5 w-3.5" aria-hidden />
-                    )}
+                    ) : null}
                     <span className="font-mono">{item.question.number ?? position + 1}</span>
                     {(item.risks.length > 0 || item.reconfirm.length > 0) && (
                       <AlertTriangle
@@ -469,9 +467,7 @@ export function ProofreadView({
                   <CheckCircle2 className="h-3 w-3" aria-hidden />
                   {t('proofread.verified')}
                 </Badge>
-              ) : (
-                <Badge variant="outline">{t('proofread.notVerified')}</Badge>
-              )}
+              ) : null}
               {(question.edits?.length ?? 0) > 0 && (
                 <Badge variant="outline">
                   {t('proofread.editCount', { count: question.edits!.length })}

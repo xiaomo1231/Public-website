@@ -1,5 +1,4 @@
 import { Link } from 'react-router-dom'
-import { CheckCircle2 } from 'lucide-react'
 import { useTranslation } from '@/i18n'
 import type { HomeworkQuestion } from '@/entities/homework/types'
 import { EVAL_ROLE_LABEL_KEYS, resolveEvalRole } from '@/entities/evaluation/evalRole'
@@ -14,7 +13,7 @@ export function QuestionMetaLine({ question }: { question: HomeworkQuestion }): 
   const role = resolveEvalRole(question.evalRole)
   const points = meta?.knowledgePoints ?? []
   const exams = meta?.examTopics ?? []
-  if (points.length === 0 && exams.length === 0 && !question.verifiedAt && !role) return null
+  if (points.length === 0 && exams.length === 0 && !role) return null
   return (
     <div
       className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground"
@@ -40,12 +39,6 @@ export function QuestionMetaLine({ question }: { question: HomeworkQuestion }): 
               </Link>
             </span>
           ))}
-        </span>
-      )}
-      {question.verifiedAt && (
-        <span className="inline-flex items-center gap-1 text-emerald-700 dark:text-emerald-300">
-          <CheckCircle2 className="h-3 w-3" aria-hidden />
-          {t('proofread.verified')}
         </span>
       )}
       {role && <span>{t(EVAL_ROLE_LABEL_KEYS[role])}</span>}

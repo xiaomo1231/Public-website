@@ -47,7 +47,17 @@ const question = (partial: Partial<HomeworkQuestion> = {}): HomeworkQuestion => 
   ...partial,
 })
 
-function fakeService(q: HomeworkQuestion) {
+function fakeService(q: HomeworkQuestion, extra: HomeworkQuestion[] = []) {
+  const entry = (item: HomeworkQuestion) => ({
+    question: item,
+    sourceText: item.prompt,
+    risks: findProofreadRisks(item.prompt),
+    answerRisks: [],
+    compareWithImage: false,
+    page: 2,
+    reconfirm: [],
+    hasWalkthroughSection: false,
+  })
   const state = (): ProofreadState => ({
     set,
     document: { id: 'd' } as never,
@@ -63,6 +73,7 @@ function fakeService(q: HomeworkQuestion) {
         reconfirm: q.edits?.length ? ['hints'] : [],
         hasWalkthroughSection: false,
       },
+      ...extra.map(entry),
     ],
   })
   const service = {
@@ -105,7 +116,6 @@ describe('ProofreadView', () => {
     expect(container.querySelector('[data-compare-image]')).not.toBeNull()
     expect(container.querySelector('[data-risk="minus_sign"]')).not.toBeNull()
     expect(container.querySelector('[data-risk="matrix"]')).not.toBeNull()
-    expect(screen.getByText('1 题中 1 题未核对')).toBeInTheDocument()
 
     const editor = screen.getByLabelText('题目文字') as HTMLTextAreaElement
     fireEvent.change(editor, { target: { value: 'Solve x - 3 = 4.' } })
@@ -122,6 +132,27 @@ describe('ProofreadView', () => {
       'data-verified',
       'true',
     )
+  })
+
+  it('moves to the next question after 标记已核对', async () => {
+    setUILanguage('zh-CN')
+    const fake = fakeService(question(), [question({ id: 'q2', number: '2', prompt: 'Second.' })])
+    render(
+      <MemoryRouter>
+        <ProofreadView
+          setId="s"
+          projectId="p"
+          service={fake as unknown as HomeworkProofreadService}
+        />
+      </MemoryRouter>,
+    )
+    await screen.findByLabelText('题目文字')
+    fireEvent.click(await screen.findByRole('button', { name: '标记已核对' }))
+    await waitFor(() => expect(fake.setVerified).toHaveBeenCalledWith('q1', true))
+    await waitFor(() =>
+      expect((screen.getByLabelText('题目文字') as HTMLTextAreaElement).value).toBe('Second.'),
+    )
+    expect(screen.queryByText(/未核对/)).toBeNull()
   })
 
   it('splits a sub-part at the cursor', async () => {

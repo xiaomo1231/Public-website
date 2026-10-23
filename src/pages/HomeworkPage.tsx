@@ -4,7 +4,6 @@ import {
   AlertTriangle,
   ArrowLeft,
   ArrowRight,
-  CheckCircle2,
   ClipboardList,
   Loader2,
   MoreHorizontal,
@@ -57,15 +56,6 @@ const EXTRA_VIEWS: readonly string[] = [
   'evaluate',
 ]
 
-/** Per-viewer: the 「建议先校对」 banner was dismissed for this assignment. */
-function proofreadBannerDismissed(setId: string): boolean {
-  try {
-    return localStorage.getItem(`ai-learning:proofread-banner:${setId}`) === '1'
-  } catch {
-    return false
-  }
-}
-
 /**
  * The dedicated walkthrough for one homework assignment: a question navigator
  * and the active question. Questions, drafts, revealed hints and the revealed
@@ -81,9 +71,6 @@ export function HomeworkPage(): JSX.Element {
   const { id: projectId, assignmentId } = useParams<{ id: string; assignmentId: string }>()
   const service = useHomeworkService()
   const proofread = useMemo(() => new HomeworkProofreadService(), [])
-  const [bannerHidden, setBannerHidden] = useState(() =>
-    assignmentId ? proofreadBannerDismissed(assignmentId) : false,
-  )
 
   const [set, setSet] = useState<HomeworkSet | null>(null)
   const [questions, setQuestions] = useState<HomeworkQuestion[]>([])
@@ -202,7 +189,6 @@ export function HomeworkPage(): JSX.Element {
     () => (set ? questions.filter((q) => effectiveEvalRole(q, set) !== 'independent') : questions),
     [set, questions],
   )
-  const unverified = questions.filter((q) => !q.verifiedAt).length
   const index = useMemo(() => shown.findIndex((q) => q.id === activeId), [shown, activeId])
   const active = index >= 0 ? shown[index] : (shown[0] ?? null)
 
@@ -502,41 +488,6 @@ export function HomeworkPage(): JSX.Element {
               </Card>
             )}
 
-            {set.status === 'ready' &&
-              !isDerivedSet(set) &&
-              unverified > 0 &&
-              !bannerHidden &&
-              view !== 'proofread' &&
-              questions.length > 0 && (
-                <Card className="border-amber-500/40 bg-amber-500/5" data-proofread-banner>
-                  <CardContent className="flex flex-wrap items-center gap-2 p-3 text-sm">
-                    <AlertTriangle
-                      className="h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400"
-                      aria-hidden
-                    />
-                    <span className="flex-1">{t('proofread.banner', { count: unverified })}</span>
-                    <Button size="sm" className="min-h-11" onClick={() => showView('proofread')}>
-                      {t('homework.mode.proofread')}
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      className="min-h-11"
-                      onClick={() => {
-                        setBannerHidden(true)
-                        try {
-                          localStorage.setItem(`ai-learning:proofread-banner:${set.id}`, '1')
-                        } catch {
-                          // Per-viewer convenience only.
-                        }
-                      }}
-                    >
-                      {t('proofread.bannerDismiss')}
-                    </Button>
-                  </CardContent>
-                </Card>
-              )}
-
             {heldOut.length > 0 && view === 'questions' && (
               <p className="text-sm text-muted-foreground" data-held-out-note>
                 {t('selfTest.heldOutNote', { count: heldOut.length })}{' '}
@@ -621,8 +572,7 @@ export function HomeworkPage(): JSX.Element {
                                 ref={isActive ? activeChipRef : undefined}
                                 onClick={() => selectQuestion(question.id)}
                                 aria-current={isActive ? 'true' : undefined}
-                                aria-label={`${position + 1}. ${question.number ?? question.prompt}${question.verifiedAt ? ` · ${t('proofread.verified')}` : ''}`}
-                                data-verified={question.verifiedAt ? 'true' : 'false'}
+                                aria-label={`${position + 1}. ${question.number ?? question.prompt}`}
                                 title={question.number ?? question.prompt}
                                 className={cn(
                                   'focus-ring relative grid h-9 min-w-9 place-items-center rounded-full px-2.5 text-xs font-medium transition-colors duration-150 lab:h-8 lab:rounded-sm motion-safe:active:scale-[0.97]',
@@ -634,12 +584,6 @@ export function HomeworkPage(): JSX.Element {
                                 <span className="data-num font-mono">
                                   {String(position + 1).padStart(2, '0')}
                                 </span>
-                                {question.verifiedAt && (
-                                  <CheckCircle2
-                                    className="absolute -right-0.5 -top-0.5 h-3 w-3 text-emerald-600 dark:text-emerald-400"
-                                    aria-hidden
-                                  />
-                                )}
                               </button>
                             </li>
                           )
