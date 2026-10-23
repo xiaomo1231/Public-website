@@ -135,6 +135,9 @@ export class DocumentRepository {
     if (patch.processedAt !== undefined) next.processedAt = patch.processedAt
     if (patch.syllabus === null) delete next.syllabus
     else if (patch.syllabus !== undefined) next.syllabus = patch.syllabus
+    if (patch.suggestedMaterialType === null) delete next.suggestedMaterialType
+    else if (patch.suggestedMaterialType !== undefined)
+      next.suggestedMaterialType = patch.suggestedMaterialType
     if (patch.folderPath !== undefined) {
       const folder = normalizeFolderPath(patch.folderPath)
       if (folder) next.folderPath = folder

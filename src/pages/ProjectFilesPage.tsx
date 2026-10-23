@@ -1,27 +1,14 @@
-import { useMemo, useState } from 'react'
-import { Input } from '@/shared/ui/Input'
-import { Label } from '@/shared/ui/Label'
-import { listFolders, normalizeFolderPath } from '@/entities/document/folders'
+import { useEffect, useState } from 'react'
 import { useParams } from 'react-router-dom'
-import { FolderOpen, Loader2, Trash2, Upload } from 'lucide-react'
+import { FolderOpen, Upload } from 'lucide-react'
 import { DocumentList } from '@/widgets/documents/DocumentList'
 import { DocumentUploadDialog } from '@/widgets/documents/DocumentUploadDialog'
+import { useFileActions } from '@/widgets/documents/useFileActions'
 import { ProjectFlowNav } from '@/widgets/project/ProjectFlowNav'
 import { Button } from '@/shared/ui/Button'
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/shared/ui/Dialog'
 import { PageContainer, PageContent, PageHeader } from '@/shared/ui/Page'
 import { useDocuments } from '@/features/documents/useDocuments'
-import { useDocumentsStore } from '@/features/documents/documentsStore'
-import { toast } from '@/features/toast/toastStore'
-import type { Document } from '@/entities/document/types'
-import type { DocumentDeleteImpact } from '@/services/documentService'
+import { useDocumentSelection } from '@/features/documents/useDocumentSelection'
 import { useTranslation } from '@/i18n'
 
 /**
@@ -32,106 +19,23 @@ import { useTranslation } from '@/i18n'
  * tutor roles — homework and professor-practice files have their own pages and
  * were otherwise invisible here. Deleting goes through the document service so
  * derived data is cleaned up and student work is never silently destroyed.
+ * Rows can be multi-selected for the batch actions (2o).
  */
 export function ProjectFilesPage(): JSX.Element {
   const { t } = useTranslation()
   const { id: projectId } = useParams<{ id: string }>()
-  const { documents, loading, remove, rename, moveToFolder } = useDocuments(projectId)
-  const describeDelete = useDocumentsStore((s) => s.describeDelete)
-
+  const { documents, loading, remove } = useDocuments(projectId)
+  const actions = useFileActions(documents)
+  const selection = useDocumentSelection()
   const [uploadOpen, setUploadOpen] = useState(false)
-  const [impact, setImpact] = useState<DocumentDeleteImpact | null>(null)
-  const [deleting, setDeleting] = useState(false)
-  const [moving, setMoving] = useState<Document | null>(null)
-  const [moveValue, setMoveValue] = useState('')
-  const folders = useMemo(() => listFolders(documents), [documents])
+
+  const { prune } = selection
+  useEffect(() => {
+    prune(documents.map((doc) => doc.id))
+  }, [documents, prune])
 
   const pid = projectId
   if (!pid) return <div />
-
-  const confirmMove = async (): Promise<void> => {
-    if (!moving) return
-    try {
-      await moveToFolder(moving.id, normalizeFolderPath(moveValue))
-      toast({ variant: 'success', title: t('files.moved') })
-      setMoving(null)
-    } catch (err) {
-      toast({
-        variant: 'error',
-        title: t('files.moveFailed'),
-        description: (err as Error).message,
-      })
-    }
-  }
-
-  const handleRename = async (id: string, name: string): Promise<void> => {
-    try {
-      await rename(id, name)
-      toast({ variant: 'success', title: t('documents.renamed') })
-    } catch (err) {
-      toast({
-        variant: 'error',
-        title: t('documents.renameFailed'),
-        description: (err as Error).message,
-      })
-    }
-  }
-
-  const requestDelete = async (doc: Document): Promise<void> => {
-    try {
-      setImpact(await describeDelete(doc.id, pid))
-    } catch (err) {
-      toast({
-        variant: 'error',
-        title: t('documents.deleteFailed'),
-        description: (err as Error).message,
-      })
-    }
-  }
-
-  const confirmDelete = async (): Promise<void> => {
-    if (!impact) return
-    setDeleting(true)
-    try {
-      await remove(impact.document.id)
-      toast({ variant: 'success', title: t('documents.deleted') })
-      setImpact(null)
-    } catch (err) {
-      toast({
-        variant: 'error',
-        title: t('documents.deleteFailed'),
-        description: (err as Error).message,
-      })
-    } finally {
-      setDeleting(false)
-    }
-  }
-
-  const removes: string[] = impact
-    ? [
-        impact.removes.chunks > 0
-          ? t('files.removes.chunks', { count: impact.removes.chunks })
-          : '',
-        impact.removes.courseStructures > 0 ? t('files.removes.structures') : '',
-        impact.removes.visualSources > 0
-          ? t('files.removes.visuals', { count: impact.removes.visualSources })
-          : '',
-        impact.removes.homeworkSets > 0 ? t('files.removes.homework') : '',
-        impact.removes.practiceSets > 0 ? t('files.removes.practice') : '',
-        impact.removes.slideLessons > 0
-          ? t('files.removes.slides', { count: impact.removes.slideLessons })
-          : '',
-      ].filter((entry) => entry.length > 0)
-    : []
-
-  const blockedWork = impact
-    ? [
-        impact.studentWork.homeworkAnswers > 0 && t('files.deleteBlockedHomework'),
-        impact.studentWork.practiceAttempts > 0 && t('files.deleteBlockedPractice'),
-      ]
-        .filter(Boolean)
-        .join(' · ')
-    : ''
 
   return (
     <PageContainer>
@@ -153,16 +57,18 @@ export function ProjectFilesPage(): JSX.Element {
           loading={loading}
           projectId={pid}
           onUploadClick={() => setUploadOpen(true)}
-          onRename={handleRename}
+          onRename={async (id, name) => {
+            const doc = documents.find((d) => d.id === id)
+            if (doc) await actions.rename(doc, name)
+          }}
           onDelete={async (id) => remove(id)}
           showMaterialType
           materialFilter
-          onDeleteRequest={requestDelete}
+          onDeleteRequest={actions.requestDelete}
           groupFolders
-          onMoveToFolder={(doc) => {
-            setMoving(doc)
-            setMoveValue(doc.folderPath ?? '')
-          }}
+          onMoveToFolder={actions.requestMove}
+          onChangeMaterialType={actions.requestMaterialType}
+          selection={selection}
         />
       </PageContent>
 
@@ -172,108 +78,7 @@ export function ProjectFilesPage(): JSX.Element {
         onOpenChange={setUploadOpen}
         allowMaterialSelect
       />
-
-      <Dialog
-        open={moving !== null}
-        onOpenChange={(open) => {
-          if (!open) setMoving(null)
-        }}
-      >
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>{t('files.moveTitle', { name: moving?.name ?? '' })}</DialogTitle>
-            <DialogDescription>{t('files.moveHint')}</DialogDescription>
-          </DialogHeader>
-          <Label htmlFor="move-folder">{t('files.folder')}</Label>
-          <Input
-            id="move-folder"
-            list="move-folder-options"
-            value={moveValue}
-            placeholder={t('files.folderPlaceholder')}
-            onChange={(event) => setMoveValue(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === 'Enter') {
-                event.preventDefault()
-                void confirmMove()
-              }
-            }}
-            autoFocus
-          />
-          <datalist id="move-folder-options">
-            {folders.map((folder) => (
-              <option key={folder} value={folder} />
-            ))}
-          </datalist>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setMoving(null)}>
-              {t('common.cancel')}
-            </Button>
-            <Button onClick={() => void confirmMove()} data-move-confirm>
-              {t('files.moveConfirm')}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog
-        open={impact !== null}
-        onOpenChange={(open) => {
-          if (!open && !deleting) setImpact(null)
-        }}
-      >
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>
-              {impact?.blocked ? t('files.deleteBlockedTitle') : t('files.deleteTitle')}
-            </DialogTitle>
-            <DialogDescription>
-              {t('files.deleteIntro', { name: impact?.document.name ?? '' })}
-            </DialogDescription>
-          </DialogHeader>
-
-          {impact?.blocked ? (
-            <p className="text-sm text-muted-foreground">
-              {t('files.deleteBlockedBody', { work: blockedWork })}
-            </p>
-          ) : (
-            <div className="space-y-3 text-sm">
-              <div className="space-y-1">
-                <p className="font-medium">{t('files.deleteRemoves')}</p>
-                {removes.length > 0 ? (
-                  <ul className="list-disc space-y-1 pl-5 text-muted-foreground">
-                    {removes.map((item) => (
-                      <li key={item}>{item}</li>
-                    ))}
-                  </ul>
-                ) : (
-                  <p className="text-muted-foreground">{t('files.removes.none')}</p>
-                )}
-              </div>
-              <p className="text-muted-foreground">{t('files.deleteKeeps')}</p>
-            </div>
-          )}
-
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setImpact(null)} disabled={deleting}>
-              {impact?.blocked ? t('common.close') : t('common.cancel')}
-            </Button>
-            {!impact?.blocked && (
-              <Button
-                variant="destructive"
-                onClick={() => void confirmDelete()}
-                disabled={deleting}
-              >
-                {deleting ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <Trash2 className="h-4 w-4" />
-                )}
-                {t('files.deleteConfirm')}
-              </Button>
-            )}
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {actions.dialogs}
     </PageContainer>
   )
 }

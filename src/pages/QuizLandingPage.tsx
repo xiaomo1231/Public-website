@@ -14,6 +14,7 @@ import {
 import { Button } from '@/shared/ui/Button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/shared/ui/Card'
 import { Badge } from '@/shared/ui/Badge'
+import { examReturnId, withExamReturn } from '@/features/studyPlan/examReturn'
 import { EmptyState } from '@/shared/ui/EmptyState'
 import { LoadingState } from '@/shared/ui/LoadingState'
 import { PageContainer, PageContent, PageHeader } from '@/shared/ui/Page'
@@ -55,6 +56,8 @@ export function QuizLandingPage(): JSX.Element {
   const [continuingId, setContinuingId] = useState<string | null>(null)
   const generation = useGenerationRun()
   const [searchParams, setSearchParams] = useSearchParams()
+  // Opened from a 考试工作台: the quiz it starts returns there too.
+  const fromExam = examReturnId(`?${searchParams.toString()}`)
   const configRef = useRef<HTMLDivElement>(null)
 
   /** Bring the setup panel into view and move focus to it. */
@@ -131,7 +134,7 @@ export function QuizLandingPage(): JSX.Element {
         return
       }
       await bundle.quiz.startQuiz(quiz.id)
-      navigate(`/projects/${projectId}/quiz/${quiz.id}`)
+      navigate(withExamReturn(`/projects/${projectId}/quiz/${quiz.id}`, fromExam))
     } catch (err) {
       if (!isGenerationInterruption(err, run)) {
         toast({
@@ -196,7 +199,7 @@ export function QuizLandingPage(): JSX.Element {
         title: t('quiz.ready'),
         description: t('quiz.readyBody', { count: quizLength(quiz) }),
       })
-      navigate(`/projects/${projectId}/quiz/${quiz.id}`)
+      navigate(withExamReturn(`/projects/${projectId}/quiz/${quiz.id}`, fromExam))
     } catch (err) {
       if (!isGenerationInterruption(err, run)) {
         const msg = friendlyAIError(err)

@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import {
   AlertTriangle,
   ClipboardPaste,
+  LayoutDashboard,
   Pencil,
   NotebookText,
   Plus,
@@ -33,6 +34,7 @@ import { useTranslation } from '@/i18n'
 import { PasteExamImport } from './PasteExamImport'
 import { ExamMaterialsPicker } from './ExamMaterialsPicker'
 import { reviewSheetLink } from './taskLinks'
+import { examWorkspacePath } from '@/features/studyPlan/examReturn'
 import { ExamScopeField, type ScopeValue } from './ExamScopeField'
 import { scopeLabel } from './scopeLabels'
 import { chapterKeysOf, chaptersScopeFromKeys } from '@/entities/studyPlan/scope'
@@ -295,7 +297,13 @@ export function ExamSetup({ projectId }: { projectId?: string }): JSX.Element {
                 <div className="flex flex-wrap items-center gap-3">
                   <div className="min-w-0 flex-1">
                     <p className="text-sm font-medium">
-                      {exam.name}
+                      <Link
+                        to={examWorkspacePath(exam.id)}
+                        className="focus-ring rounded-sm hover:text-primary hover:underline coarse:inline-block coarse:py-2"
+                        data-exam-workspace-link
+                      >
+                        {exam.name}
+                      </Link>
                       <span className="font-normal text-muted-foreground">
                         {' · '}
                         {courseName.get(exam.projectId) ?? ''}
@@ -323,6 +331,16 @@ export function ExamSetup({ projectId }: { projectId?: string }): JSX.Element {
                       </p>
                     )}
                   </div>
+                  <Button asChild size="sm">
+                    <Link
+                      to={examWorkspacePath(exam.id)}
+                      aria-label={t('examWorkspace.enterAria', { name: exam.name })}
+                      data-exam-enter
+                    >
+                      <LayoutDashboard className="h-4 w-4" aria-hidden />
+                      {t('examWorkspace.enter')}
+                    </Link>
+                  </Button>
                   <Button
                     size="sm"
                     variant="outline"
@@ -433,7 +451,7 @@ export function ExamSetup({ projectId }: { projectId?: string }): JSX.Element {
  * 考试范围 and the materials. The course stays (another course = delete and
  * add again). 保存 updates the row and lays the plan out again.
  */
-function SavedExamEditor({
+export function SavedExamEditor({
   exam,
   courseName,
   onSaved,

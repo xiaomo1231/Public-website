@@ -246,8 +246,12 @@ export class OralExamService {
       if (!topic) throw new AppError(t('oral.errors.noTopics'), 'NO_TOPICS')
       return [{ topic: topic.name, topicIds: [topic.id], aiOnly: false }]
     }
-    if (topics.length === 0) throw new AppError(t('oral.errors.noTopics'), 'NO_TOPICS')
-    return shuffled(topics)
+    // An exam's scope (考试工作台) narrows the draw to its topics.
+    const wanted = new Set(config.topicIds ?? [])
+    const scoped = topics.filter((each) => wanted.has(each.id))
+    const pool = scoped.length > 0 ? scoped : topics
+    if (pool.length === 0) throw new AppError(t('oral.errors.noTopics'), 'NO_TOPICS')
+    return shuffled(pool)
       .slice(0, count)
       .map((topic) => ({ topic: topic.name, topicIds: [topic.id], aiOnly: false }))
   }

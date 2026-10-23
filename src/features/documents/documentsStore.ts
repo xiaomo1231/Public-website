@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import type { Document } from '@/entities/document/types'
+import type { Document, LearningMaterialType } from '@/entities/document/types'
 import { DocumentService, type DocumentDeleteImpact } from '@/services/documentService'
 import { ProjectService } from '@/services/projectService'
 import { DocumentRepository } from '@/entities/document/repository'
@@ -35,6 +35,15 @@ interface DocumentsActions {
   rename: (id: string, projectId: string, name: string) => Promise<void>
   /** Move a file to a folder (`''` = out of any folder). */
   moveToFolder: (id: string, projectId: string, folderPath: string) => Promise<void>
+  /**
+   * Change a file's learning-material role (student work blocks it). Returns
+   * whether the file must be reprocessed (it became a textbook).
+   */
+  changeMaterialType: (
+    id: string,
+    projectId: string,
+    materialType: LearningMaterialType,
+  ) => Promise<{ needsReprocess: boolean }>
   /** What deleting a file would remove / invalidate (shown before confirming). */
   describeDelete: (id: string, projectId: string) => Promise<DocumentDeleteImpact>
   reset: () => void
@@ -244,6 +253,22 @@ export const useDocumentsStore = create<DocumentsStore>((set, get) => ({
       },
       byId: s.byId[id] ? { ...s.byId, [id]: updated } : s.byId,
     }))
+  },
+
+  async changeMaterialType(id, projectId, materialType) {
+    const { document: updated, needsReprocess } = await getService().changeMaterialType(
+      id,
+      materialType,
+      projectId,
+    )
+    set((s) => ({
+      byProject: {
+        ...s.byProject,
+        [projectId]: (s.byProject[projectId] ?? []).map((d) => (d.id === id ? updated : d)),
+      },
+      byId: s.byId[id] ? { ...s.byId, [id]: updated } : s.byId,
+    }))
+    return { needsReprocess }
   },
 
   reset() {

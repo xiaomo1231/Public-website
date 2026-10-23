@@ -1,4 +1,5 @@
 import type { AIService } from '@/services/aiService'
+import { buildSuggestion } from '@/entities/document/materialSuggestion'
 import { getDb, type AppDatabase } from '@/infrastructure/db/database'
 import { DocumentRepository } from '@/entities/document/repository'
 import { ChunkRepository } from '@/entities/chunk/repository'
@@ -252,8 +253,11 @@ export class PageTranscriptionService {
       await this.db.chunks.bulkDelete(current.filter(replaced).map((chunk) => chunk.id))
       await this.db.chunks.bulkPut(renumbered)
       const pageList = pages.map(([page]) => page)
+      // The vision reading may show what the file really is (a photographed paper).
+      const latest = await this.documents.get(document.id)
       await this.documents.update(document.id, {
         chunkCount: renumbered.length,
+        suggestedMaterialType: buildSuggestion(latest, renumbered),
         warnings: [
           ...(document.warnings ?? []),
           t('errors.visionTranscribed', { pages: pageList.join(', ') }),

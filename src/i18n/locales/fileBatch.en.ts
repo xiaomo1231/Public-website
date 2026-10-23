@@ -1,0 +1,75 @@
+/** File multi-select + batch actions (2o) and 设置 → 文件管理 (2p) (spread into `en`). */
+export const fileBatchEn = {
+  'fileBatch.barLabel': 'Selected files',
+  'fileBatch.selected': '{count} selected',
+  'fileBatch.selectedCourses': '{count} selected in {courses} courses',
+  'fileBatch.clear': 'Clear selection',
+  'fileBatch.selectFile': 'Select {name}',
+  'fileBatch.selectAll': 'Select all {count} shown',
+  'fileBatch.colSelect': 'Select',
+  'fileBatch.changeType': 'Change material type',
+  'fileBatch.action.delete': 'Delete',
+  'fileBatch.action.materialType': 'Change type',
+  'fileBatch.action.folder': 'Move to folder',
+  'fileBatch.action.reprocess': 'Reprocess',
+  'fileBatch.action.evalRole': 'Evaluation role',
+  'fileBatch.confirmTitle': '{action}: {count} files',
+  'fileBatch.deleteHint':
+    'Each file is deleted with everything derived from it, one at a time. Files with saved student work (homework drafts, hints, messages, practice answers) are skipped and listed afterwards.',
+  'fileBatch.typeHint':
+    'The extracted text follows the new type. What was built from the old type (homework questions, practice questions, the book structure) is rebuilt; files with saved student work keep their type. Files that become a textbook are reprocessed.',
+  'fileBatch.folderHint':
+    'Leave empty to take the files out of any folder. Only the folder label changes.',
+  'fileBatch.folderCrossCourse':
+    'The files come from {courses} courses: each moves into this folder inside its own course. Files cannot move to another course.',
+  'fileBatch.reprocessHint':
+    'The stored files are read again, one at a time (images are read with OCR, which can take a while). Files without stored bytes or still processing are skipped.',
+  'fileBatch.evalRoleHint':
+    'An independent (held-out) file never reaches the AI as course context.',
+  'fileBatch.progress': 'Working {done} / {total}: {name}',
+  'fileBatch.stopping': 'Finishing the current file…',
+  'fileBatch.stop': 'Stop',
+  'fileBatch.resultTitle': '{action}: done',
+  'fileBatch.resultSummary': '{done} done · {skipped} skipped · {failed} failed.',
+  'fileBatch.resultStopped': 'Stopped: {count} not started.',
+  'fileBatch.skipped': 'Skipped: {reason}',
+  'fileBatch.failed': 'Failed: {reason}',
+  'fileBatch.reason.busy': 'still being processed',
+  'fileBatch.reason.noBlob': 'the original file is not stored, so it cannot be read again',
+  'fileBatch.reason.hasWork': 'it has saved work ({work})',
+  'fileBatch.reason.typeHasWork':
+    'it has saved homework or practice work, so its type stays (delete or move that work first)',
+  'fileBatch.typeTitleOne': 'Change the type of {name}',
+  'fileBatch.typeLabel': 'Material type',
+  'fileBatch.typeConfirm': 'Change type',
+  'fileBatch.typeChanged': '{name}: type changed',
+  'fileBatch.typeFailed': 'The type could not be changed',
+
+  'fileManager.title': 'File manager',
+  'fileManager.entryHint':
+    "Every course's files on one page: search, filter, see storage, and change many files at once.",
+  'fileManager.open': 'Open file manager',
+  'fileManager.back': 'Settings',
+  'fileManager.subtitle':
+    'All courses, grouped by course. Select files across courses for batch actions.',
+  'fileManager.storage': 'Storage',
+  'fileManager.storageFiles': '{count} files · {size}',
+  'fileManager.storageStored': 'Stored on this device (files, page images, answer photos): {size}',
+  'fileManager.storageBrowser': 'Browser: {used} of {quota}',
+  'fileManager.searchPlaceholder': 'Search all files…',
+  'fileManager.filter.course': 'Course',
+  'fileManager.filter.allCourses': 'All courses',
+  'fileManager.filter.type': 'File type',
+  'fileManager.filter.status': 'Status',
+  'fileManager.filter.sort': 'Sort',
+  'fileManager.groupBy': 'Group within a course',
+  'fileManager.byFolder': 'By folder',
+  'fileManager.byType': 'By type',
+  'fileManager.selectAllMatches': 'Select all {count} matching files',
+  'fileManager.crossCourseHint':
+    "You can select files from several courses. Moving files to another course isn't supported (their text, course analysis and questions belong to the course) — only into a folder of their own course.",
+  'fileManager.courseStats': '{count} files · {size}',
+  'fileManager.openCourseFiles': 'Course files page',
+  'fileManager.noCourses': 'No courses yet',
+  'fileManager.toCourses': 'Go to courses',
+} as const

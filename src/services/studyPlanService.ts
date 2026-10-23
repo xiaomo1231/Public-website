@@ -8,7 +8,7 @@ import {
   normalizeCalendar,
   weekStart,
 } from '@/entities/studyPlan/calendar'
-import { isAiMockSet, isPastPaperSet } from '@/entities/homework/types'
+import { isAiMockSet, isPastPaperSet, type HomeworkSet } from '@/entities/homework/types'
 import {
   AI_MOCK_MINUTES,
   buildSchedule,
@@ -35,6 +35,7 @@ import {
 import {
   EMPTY_MATERIALS,
   type ExamWeightSetting,
+  type OverflowReport,
   type PlannedExam,
   type PlannedExamMaterials,
   type PlannedExamScope,
@@ -75,6 +76,7 @@ import { analyzePastExams, matchQuestionTopics } from '@/entities/exam/analysis'
 import { scoreMockExam } from '@/entities/exam/scoring'
 import { DEFAULT_EXAM_MINUTES, type MockExamAttempt } from '@/entities/exam/types'
 import { isRetestDue } from '@/entities/mistake/followUp'
+import type { Mistake } from '@/entities/mistake/types'
 import type { KnowledgeMastery } from '@/entities/knowledgeMastery/types'
 import { AppError, NotFoundError } from '@/infrastructure/errors/AppError'
 import { logger } from '@/infrastructure/logger/logger'
@@ -977,6 +979,230 @@ export class StudyPlanService {
     }
     return { weeks, topics }
   }
+
+  // ── 考试工作台 ────────────────────────────────────────────────────────
+  /**
+   * What other pages need to open pre-filled for one exam (quiz, oral
+   * rehearsal, vocabulary, diagnostic): the course, the course topics in
+   * scope (`restricted` = the scope narrows them), a syllabus scope, and the
+   * files picked for the exam. Local only.
+   */
+  async examLink(examId: string): Promise<ExamLinkContext> {
+    const exam = await this.repo.getExam(examId)
+    if (!exam) throw new NotFoundError('Exam', examId)
+    const analyses = new CourseAnalysisRepository(this.db)
+    const [courseTopics, documents] = await Promise.all([
+      analyses.listTopics(exam.projectId),
+      new DocumentRepository(this.db).listByProject(exam.projectId),
+    ])
+    const resolved = await resolveExamScope(this.db, exam, courseTopics, documents)
+    const scoped = (await this.scopedTopics(exam, courseTopics, resolved)).filter(
+      (entry): entry is { id: string; name: string; topic: Topic } => !!entry.topic,
+    )
+    const restricted =
+      resolved.topics !== null || exam.scope.kind === 'topics' || exam.scope.kind === 'syllabus'
+    const picked = resolveExamDocuments(normalizeMaterials(exam.materials), documents)
+    return {
+      exam,
+      topicIds: restricted ? scoped.map((entry) => entry.id) : [],
+      topicNames: restricted ? scoped.map((entry) => entry.name) : [],
+      restricted,
+      ...(exam.scope.kind === 'syllabus'
+        ? { syllabus: { documentId: exam.scope.documentId, scopeId: exam.scope.scopeId } }
+        : {}),
+      documentIds: picked.map((entry) => entry.document.id),
+    }
+  }
+
+  /**
+   * Everything the 考试工作台 shows about one exam: the planner's context,
+   * this exam's tasks (by day), today's, the readiness, the open mistakes in
+   * scope and the overflow of the last layout that concerns it.
+   */
+  async examWorkspace(examId: string, now = Date.now()): Promise<ExamWorkspaceView> {
+    const exam = await this.repo.getExam(examId)
+    if (!exam) throw new NotFoundError('Exam', examId)
+    const allTasks = await this.repo.listTasks()
+    const context = await this.context(exam, now, allTasks)
+    const tasks = allTasks
+      .filter((task) => task.examId === examId)
+      .sort((a, b) => (a.date === b.date ? a.order - b.order : a.date < b.date ? -1 : 1))
+    const today = dayKey(now)
+    const counted = tasks.filter((task) => task.status !== 'skipped')
+    const done = counted.filter((task) => task.status === 'done')
+    const sum = (list: StudyTask[]) => list.reduce((total, task) => total + task.minutes, 0)
+
+    // Open mistakes in scope: the topic's id or one of its knowledge points.
+    const analyses = new CourseAnalysisRepository(this.db)
+    const [concepts, mistakes] = await Promise.all([
+      analyses.listConcepts(exam.projectId),
+      new MistakeService(this.db).list(exam.projectId, { status: 'active' }),
+    ])
+    const link = await this.examLink(examId)
+    let scopedMistakes = mistakes
+    if (link.restricted) {
+      const ids = new Set(link.topicIds)
+      const points = new Set(
+        [
+          ...context.topics.map((topic) => topic.name),
+          ...concepts
+            .filter((concept) => concept.topicIds.some((id) => ids.has(id)))
+            .map((concept) => concept.name),
+        ].map((point) => point.toLowerCase()),
+      )
+      scopedMistakes = mistakes.filter(
+        (m) => (m.topicId && ids.has(m.topicId)) || points.has(m.knowledgePoint.toLowerCase()),
+      )
+    }
+
+    const plan = await this.repo.getPlan()
+    const dropped = (plan.overflow?.dropped ?? []).filter((item) => item.examId === examId)
+    const suggestions = (plan.overflow?.suggestions ?? []).filter(
+      (item) => item.kind !== 'lower_weight' || item.examId === examId,
+    )
+    const left = daysBetween(today, context.date)
+    const hasMockSoon = tasks.some(
+      (task) =>
+        (task.kind === 'mock' || task.kind === 'ai_mock') &&
+        task.date >= today &&
+        task.date <= addDays(today, 6),
+    )
+    const phase: ExamPhase =
+      left <= 0 ? 'exam' : left <= FINAL_DAYS ? 'final' : hasMockSoon ? 'mock' : 'first_pass'
+    return {
+      context,
+      link,
+      tasks,
+      today: tasks.filter((task) => task.date === today),
+      readiness: {
+        tasksDone: done.length,
+        tasksTotal: counted.length,
+        minutesDone: sum(done),
+        minutesTotal: sum(counted),
+        percent: counted.length > 0 ? Math.round((done.length / counted.length) * 100) : 0,
+      },
+      phase,
+      mistakes: scopedMistakes,
+      mistakesDue: scopedMistakes.filter((m) => isRetestDue(m, now)),
+      overflow: { dropped, suggestions },
+    }
+  }
+
+  /**
+   * The 考题 tab: the course's uploaded past papers (picked ones first) with
+   * question / 校对 / professor-answer counts and the latest mock result, and
+   * the AI 模拟卷 written for this exam or from one of its papers.
+   */
+  async examPapers(examId: string): Promise<{ papers: ExamPaperRow[]; aiMocks: ExamAiMockRow[] }> {
+    const exam = await this.repo.getExam(examId)
+    if (!exam) throw new NotFoundError('Exam', examId)
+    const homework = new HomeworkRepository(this.db)
+    const [sets, documents] = await Promise.all([
+      homework.listSets(exam.projectId),
+      new DocumentRepository(this.db).listByProject(exam.projectId),
+    ])
+    const materials = normalizeMaterials(exam.materials)
+    const pickedDocs = new Set(
+      resolveExamDocuments(materials, documents).map((entry) => entry.document.id),
+    )
+    const lastPercent = (set: HomeworkSet): { percent?: number; attempts: number } => {
+      const attempts = [set.exam?.current, ...(set.exam?.attempts ?? [])].filter(
+        (a): a is MockExamAttempt => !!a && a.submittedAt !== undefined,
+      )
+      const checked = attempts
+        .filter((a) => !!a.checkedAt && !!a.results?.length)
+        .sort((a, b) => (b.checkedAt ?? 0) - (a.checkedAt ?? 0))[0]
+      const fraction = checked ? scoreMockExam(checked.results!).fraction : null
+      return {
+        ...(fraction !== null ? { percent: Math.round(fraction * 100) } : {}),
+        attempts: attempts.length,
+      }
+    }
+    const pastSets = sets.filter(isPastPaperSet)
+    const papers: ExamPaperRow[] = []
+    for (const set of pastSets) {
+      const questions = (await homework.listQuestions(set.id)).filter((q) => !q.retired)
+      const result = lastPercent(set)
+      papers.push({
+        set,
+        picked: materials.pastExamSetIds.includes(set.id) || pickedDocs.has(set.documentId),
+        questions: questions.length,
+        verified: questions.filter((q) => q.verifiedAt !== undefined).length,
+        answered: questions.filter((q) => q.answerStatus === 'matched').length,
+        ...(result.percent !== undefined ? { lastPercent: result.percent } : {}),
+        attempts: result.attempts,
+      })
+    }
+    papers.sort((a, b) => Number(b.picked) - Number(a.picked) || b.set.createdAt - a.set.createdAt)
+    const paperIds = new Set(pastSets.map((set) => set.id))
+    const aiMocks: ExamAiMockRow[] = sets
+      .filter(
+        (set) =>
+          isAiMockSet(set) &&
+          (set.exam?.aiMock?.config.examId === exam.id ||
+            (!set.exam?.aiMock?.config.examId &&
+              paperIds.has(set.exam?.aiMock?.config.templateSetId ?? ''))),
+      )
+      .sort((a, b) => b.createdAt - a.createdAt)
+      .map((set) => {
+        const result = lastPercent(set)
+        return { set, ...(result.percent !== undefined ? { lastPercent: result.percent } : {}) }
+      })
+    return { papers, aiMocks }
+  }
+}
+
+/** One past paper in the 考试工作台's 考题 tab. */
+export interface ExamPaperRow {
+  set: HomeworkSet
+  /** Picked for this exam (by set or by file); else a course paper. */
+  picked: boolean
+  questions: number
+  /** Questions checked in 校对. */
+  verified: number
+  /** Questions with a confirmed professor answer. */
+  answered: number
+  /** Latest checked mock exam on it, 0–100. */
+  lastPercent?: number
+  attempts: number
+}
+
+/** One AI 模拟卷 written for this exam (or in the style of its papers). */
+export interface ExamAiMockRow {
+  set: HomeworkSet
+  lastPercent?: number
+}
+
+/** Pre-fill for pages opened from an exam (see `StudyPlanService.examLink`). */
+export interface ExamLinkContext {
+  exam: PlannedExam
+  /** Course topics in scope (empty when the scope does not restrict them). */
+  topicIds: string[]
+  topicNames: string[]
+  restricted: boolean
+  syllabus?: { documentId: string; scopeId: string }
+  /** Files picked for the exam, one by one or by folder. */
+  documentIds: string[]
+}
+
+export interface ExamWorkspaceView {
+  context: ExamContext
+  link: ExamLinkContext
+  /** This exam's tasks, by day then position. */
+  tasks: StudyTask[]
+  today: StudyTask[]
+  readiness: {
+    tasksDone: number
+    tasksTotal: number
+    minutesDone: number
+    minutesTotal: number
+    percent: number
+  }
+  phase: ExamPhase
+  /** Open mistakes in the exam's scope. */
+  mistakes: Mistake[]
+  mistakesDue: Mistake[]
+  overflow: Pick<OverflowReport, 'dropped' | 'suggestions'>
 }
 
 /** Mean credit of practice per week, the last `weeks` weeks, oldest first. */

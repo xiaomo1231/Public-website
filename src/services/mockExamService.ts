@@ -627,10 +627,15 @@ export class MockExamService {
    * 题型与覆盖分析 over every ready past paper of the course, against the
    * course topics and the syllabus exam scopes. Local only.
    */
-  async analysis(projectId: string): Promise<PastExamAnalysis> {
+  async analysis(
+    projectId: string,
+    options: { setIds?: string[] } = {},
+  ): Promise<PastExamAnalysis> {
     // Uploaded past papers only: an AI 模拟卷 says nothing about the professor.
+    // An exam's workspace may narrow it to the papers picked for that exam.
+    const only = options.setIds?.length ? new Set(options.setIds) : null
     const sets = (await this.listExamSets(projectId)).filter(
-      (set) => set.status === 'ready' && isPastPaperSet(set),
+      (set) => set.status === 'ready' && isPastPaperSet(set) && (!only || only.has(set.id)),
     )
     const papers = []
     for (const set of sets) {

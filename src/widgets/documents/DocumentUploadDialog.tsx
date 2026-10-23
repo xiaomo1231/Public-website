@@ -22,8 +22,7 @@ import { ACCEPTED_TYPES } from '@/infrastructure/files/validation'
 import { formatBytes } from '@/shared/lib/format'
 import { cn } from '@/shared/lib/utils'
 import { useBatchUpload } from '@/features/documents/useBatchUpload'
-import { looksLikeSyllabus } from '@/entities/syllabus/parse'
-import { looksLikePastExam } from '@/entities/exam/paper'
+import { groupNameSuggestions } from '@/entities/document/materialSuggestion'
 import {
   MAX_BATCH_FILES,
   type FileIssue,
@@ -148,27 +147,10 @@ export function DocumentUploadDialog({
   const settled = summary.completed + summary.failed + summary.cancelled
   const overall = summary.uploadable > 0 ? Math.round((settled / summary.uploadable) * 100) : 0
   const invalid = summary.unsupported + summary.tooLarge
-  // Files whose name reads like a syllabus / handbook: suggest the role, the
-  // student confirms (never switched silently).
-  const syllabusLike = items.filter(
-    (item) =>
-      item.status === 'queued' &&
-      item.materialType !== 'syllabus' &&
-      item.materialType !== 'homework' &&
-      item.materialType !== 'homework_answer' &&
-      looksLikeSyllabus(item.name),
-  )
-  // Files named like a past paper / mock paper: suggest 往年试卷 (confirmed by the student).
-  const pastExamLike = items.filter(
-    (item) =>
-      item.status === 'queued' &&
-      item.materialType !== 'past_exam' &&
-      item.materialType !== 'syllabus' &&
-      item.materialType !== 'homework_answer' &&
-      item.materialType !== 'walkthrough_import' &&
-      !syllabusLike.includes(item) &&
-      looksLikePastExam(item.name),
-  )
+  // Files whose name / folder reads like another role (a syllabus, a past
+  // paper, an answer key…): suggest it, the student confirms (never switched
+  // silently). One notice per suggested role.
+  const roleSuggestions = groupNameSuggestions(items)
 
   function statusLabel(item: UploadQueueItem): string {
     if (item.issue) return t(ISSUE_KEYS[item.issue])
@@ -424,47 +406,29 @@ export function DocumentUploadDialog({
               ))}
             </ul>
 
-            {!started && syllabusLike.length > 0 && (
-              <div className="flex flex-wrap items-center gap-2 rounded-lg border border-amber-500/40 bg-amber-50/50 px-3 py-2 text-xs dark:bg-amber-950/20">
-                <span className="min-w-0 flex-1">
-                  {t('upload.syllabusSuggest', { count: syllabusLike.length })}
-                </span>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() =>
-                    batch.setMaterial(
-                      syllabusLike.map((item) => item.id),
-                      'syllabus',
-                    )
-                  }
+            {!started &&
+              roleSuggestions.map(({ type, ids }) => (
+                <div
+                  key={type}
+                  data-role-suggestion={type}
+                  className="flex flex-wrap items-center gap-2 rounded-lg border border-amber-500/40 bg-amber-50/50 px-3 py-2 text-xs dark:bg-amber-950/20"
                 >
-                  {t('upload.syllabusAccept')}
-                </Button>
-              </div>
-            )}
-
-            {!started && pastExamLike.length > 0 && (
-              <div className="flex flex-wrap items-center gap-2 rounded-lg border border-amber-500/40 bg-amber-50/50 px-3 py-2 text-xs dark:bg-amber-950/20">
-                <span className="min-w-0 flex-1">
-                  {t('upload.pastExamSuggest', { count: pastExamLike.length })}
-                </span>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() =>
-                    batch.setMaterial(
-                      pastExamLike.map((item) => item.id),
-                      'past_exam',
-                    )
-                  }
-                >
-                  {t('upload.pastExamAccept')}
-                </Button>
-              </div>
-            )}
+                  <span className="min-w-0 flex-1">
+                    {t('upload.roleSuggest', {
+                      count: ids.length,
+                      role: t(MATERIAL_LABEL_KEY[type]),
+                    })}
+                  </span>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => batch.setMaterial(ids, type)}
+                  >
+                    {t('upload.roleAccept', { role: t(MATERIAL_LABEL_KEY[type]) })}
+                  </Button>
+                </div>
+              ))}
 
             {!started && (
               <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">

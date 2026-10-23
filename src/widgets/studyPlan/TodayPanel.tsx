@@ -129,7 +129,7 @@ export function TodayPanel({ projectId }: { projectId?: string }): JSX.Element {
   )
 }
 
-function TaskRow({
+export function TaskRow({
   task,
   examName,
   courseName,
@@ -138,10 +138,13 @@ function TaskRow({
   onMoveOpen,
   onStatus,
   onMove,
+  href,
 }: {
   task: StudyTask
   examName: string | undefined
   courseName: string | undefined
+  /** Where 「开始」 leads (default: the task's page). */
+  href?: string
   busy: boolean
   moving: boolean
   onMoveOpen: () => void
@@ -179,7 +182,7 @@ function TaskRow({
         {!finished ? (
           <>
             <Button asChild size="sm">
-              <Link to={taskLink(task)}>
+              <Link to={href ?? taskLink(task)}>
                 {t('plan.task.open')}
                 <ArrowRight className="h-4 w-4" aria-hidden />
               </Link>

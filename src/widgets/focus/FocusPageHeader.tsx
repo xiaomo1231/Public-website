@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { ArrowLeft } from 'lucide-react'
 import { cn } from '@/shared/lib/utils'
 import { useTranslation } from '@/i18n'
+import { useExamReturn } from '@/features/studyPlan/examReturn'
 
 export interface FocusPageHeaderProps {
   /**
@@ -38,6 +39,10 @@ export function FocusPageHeader({
   className,
 }: FocusPageHeaderProps): JSX.Element {
   const { t } = useTranslation()
+  // Opened from a 考试工作台 (`?fromExam=`): back leads to that exam.
+  const examReturn = useExamReturn()
+  const backHref = backTo && examReturn ? examReturn.to : backTo
+  const backText = backTo && examReturn ? examReturn.label : backLabel
   return (
     <header
       data-focus-header
@@ -47,17 +52,18 @@ export function FocusPageHeader({
       )}
     >
       <div className="flex min-w-0 items-center gap-1.5">
-        {backTo && backLabel ? (
+        {backHref && backText ? (
           <>
-            <nav aria-label={t('focus.backNav')} className="shrink-0">
+            <nav aria-label={t('focus.backNav')} className="min-w-0 shrink-0">
               <Link
-                to={backTo}
+                to={backHref}
                 data-focus-back
+                {...(examReturn && backTo ? { 'data-exam-return': examReturn.examId } : {})}
                 className="focus-ring -ml-2 inline-flex min-h-11 items-center gap-1.5 rounded-md px-2 text-sm text-muted-foreground transition-colors duration-150 hover:text-foreground lecture:rounded-none lab:rounded-sm"
               >
                 <ArrowLeft className="h-4 w-4" aria-hidden />
                 <span className="sr-only">{t('focus.backPrefix')}</span>
-                {backLabel}
+                {backText}
               </Link>
             </nav>
             <span aria-hidden className="text-muted-foreground/70">

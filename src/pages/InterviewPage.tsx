@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Link, useNavigate, useParams } from 'react-router-dom'
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
+import { examReturnId, withExamReturn } from '@/features/studyPlan/examReturn'
 import { ArrowLeft, BookOpen, Loader2, Play, Sparkles, Stethoscope, Trash2 } from 'lucide-react'
 import { Button } from '@/shared/ui/Button'
 import { Badge } from '@/shared/ui/Badge'
@@ -105,7 +106,13 @@ function InterviewLanding({ projectId }: { projectId: string }): JSX.Element {
   const [scenarios, setScenarios] = useState<InterviewScenario[] | null>(null)
   const [phase, setPhase] = useState<'idle' | 'extracting' | 'generating' | 'starting'>('idle')
   const [progress, setProgress] = useState(0)
-  const [examMode, setExamMode] = useState(false)
+  // Opened from a 考试工作台 (`?fromExam=…&examMode=1`): exam mode is preselected
+  // and the session returns to the workspace.
+  const location = useLocation()
+  const fromExam = examReturnId(location.search)
+  const [examMode, setExamMode] = useState(
+    () => new URLSearchParams(location.search).get('examMode') === '1',
+  )
   const [deleting, setDeleting] = useState<InterviewSession | null>(null)
   const [deleteBusy, setDeleteBusy] = useState(false)
   const [extractCounts, setExtractCounts] = useState({ done: 0, total: 0 })
@@ -195,7 +202,7 @@ function InterviewLanding({ projectId }: { projectId: string }): JSX.Element {
     setPhase('starting')
     try {
       const session = await new InterviewService().start(projectId, scenario, { examMode })
-      navigate(`/projects/${projectId}/interview/${session.id}`)
+      navigate(withExamReturn(`/projects/${projectId}/interview/${session.id}`, fromExam))
     } catch (err) {
       toast({
         variant: 'error',

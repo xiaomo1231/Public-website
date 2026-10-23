@@ -55,6 +55,7 @@ import * as EconGraphReadV1 from './econ-graph-read/v1'
 import * as PageTranscribeV1 from './page-transcribe/v1'
 import * as ExamScheduleExtractV1 from './exam-schedule-extract/v1'
 import * as ExamReviewV1 from './exam-review/v1'
+import * as MaterialTypeCheckV1 from './material-type-check/v1'
 
 export const PROMPT_VERSIONS = {
   documentAnalyzer: 'v3',
@@ -108,6 +109,7 @@ export const PROMPT_VERSIONS = {
   pageTranscribe: 'v1',
   examScheduleExtract: 'v1',
   examReview: 'v1',
+  materialTypeCheck: 'v1',
 } as const
 
 export const prompts = {
@@ -169,6 +171,8 @@ export const prompts = {
   examScheduleExtract: ExamScheduleExtractV1,
   /** 复习提纲: one topic of an exam's review sheet, every claim citing chunks. */
   examReview: ExamReviewV1,
+  /** 资料类型按内容自动判断: a close call decided from the first two pages. */
+  materialTypeCheck: MaterialTypeCheckV1,
 } as const
 
 export type { DocumentAnalyzerInput, DocumentAnalysisOutput } from './document-analyzer/v3'

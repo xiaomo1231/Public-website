@@ -46,6 +46,11 @@ export interface QuizConfig {
    * have no course source (labelled as AI-generated).
    */
   examScope?: ExamScopeSelection
+  /**
+   * Mixed review / oral rehearsal restricted to these course topics (a
+   * planned exam's scope, from its 考试工作台). Absent or empty = every topic.
+   */
+  topicIds?: string[]
 }
 
 export interface OralExamSettings {

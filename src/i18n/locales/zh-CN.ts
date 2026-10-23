@@ -5,9 +5,13 @@ import { handwritingZhCN } from './handwriting.zh-CN'
 import { marketZhCN } from './market.zh-CN'
 import { marketQuestionZhCN } from './marketQuestion.zh-CN'
 import { examToolsZhCN } from './examTools.zh-CN'
+import { examWorkspaceZhCN } from './examWorkspace.zh-CN'
+import { fileBatchZhCN } from './fileBatch.zh-CN'
 
 export const zhCN: Record<TranslationKey, string> = {
   ...examToolsZhCN,
+  ...examWorkspaceZhCN,
+  ...fileBatchZhCN,
   ...studyPlanZhCN,
   ...aiMockZhCN,
   ...handwritingZhCN,
@@ -3314,9 +3318,6 @@ export const zhCN: Record<TranslationKey, string> = {
   'materialType.syllabus': '课程大纲 / 考试题目',
   'materialType.walkthrough_import': '导入的讲解',
   'materialType.past_exam': '往年试卷 / 模拟卷',
-  'upload.pastExamSuggest':
-    '有 {count} 个文件看起来像往年试卷或模拟卷。要标为「往年试卷 / 模拟卷」吗？',
-  'upload.pastExamAccept': '标为往年试卷',
   'mockExam.noAttempt': '这份试卷没有进行中的模拟考试。',
   'mockExam.notSubmitted': '交卷后才能检查答案。',
   'mockExam.notFound': '这份试卷不属于本课程。',
@@ -3567,9 +3568,6 @@ export const zhCN: Record<TranslationKey, string> = {
   'materialType.syllabusHint':
     '课程手册、教学大纲或考试题目清单。系统会从中读出考点放进「考点清单」，但它不作为课程内容使用（请另外上传教材、图谱或讲课幻灯片）。',
   'projectDetail.tab.exams': '考点清单',
-  'upload.syllabusSuggest':
-    '有 {count} 个文件看起来像课程大纲或课程手册。要标为「课程大纲 / 考试题目」吗？',
-  'upload.syllabusAccept': '标为课程大纲',
   'question.aiWithoutSource': 'AI 出题 · 无教材出处',
   'questionSource.aiWithoutSource':
     '这道题是 AI 根据教材中未找到的考点出的，没有课程出处。请对照教材或讲义核对。',
@@ -4190,4 +4188,40 @@ export const zhCN: Record<TranslationKey, string> = {
   'evaluation.gradingLine':
     '批改：已批改 n = {graded}，有教师评分 {withTeacher}，一致 {agree}（{share}），无法判定 {uncertain}，失败 {failed}',
   'evaluation.perItem': '逐题结果',
+  'upload.roleSuggest': '有 {count} 个文件按文件名或文件夹看起来像「{role}」。要改为这个类型吗？',
+  'upload.roleAccept': '标为「{role}」',
+  'materialSuggest.notice': '这份看起来是{what}，要改成「{role}」吗？',
+  'materialSuggest.what.past_exam': '考试题',
+  'materialSuggest.what.homework': '作业题',
+  'materialSuggest.what.homework_answer': '答案或解答',
+  'materialSuggest.what.syllabus': '课程大纲',
+  'materialSuggest.change': '改',
+  'materialSuggest.dismiss': '忽略',
+  'materialSuggest.reasons': '依据：{list}',
+  'materialSuggest.reason.numbering': '题号',
+  'materialSuggest.reason.subparts': '(a)(b) 小题',
+  'materialSuggest.reason.marks': '分值',
+  'materialSuggest.reason.options': 'A–E 选项',
+  'materialSuggest.reason.taskVerbs': 'Show that / Calculate / Explain 等设问',
+  'materialSuggest.reason.examCover': '考试封面（考试时间、学号…）',
+  'materialSuggest.reason.solutions': 'Solution / Answer 行',
+  'materialSuggest.reason.answerKey': '答案卷字样',
+  'materialSuggest.reason.markedOptions': '高亮或圈选的选项',
+  'materialSuggest.reason.slides': '幻灯片',
+  'materialSuggest.reason.headings': '章节标题',
+  'materialSuggest.reason.prose': '成段讲解',
+  'materialSuggest.reason.fewQuestions': '题号很少',
+  'materialSuggest.reason.teachingWords': '定义与例子',
+  'materialSuggest.reason.syllabusWording': '大纲字样',
+  'materialSuggest.reason.grading': '成绩构成',
+  'materialSuggest.reason.schedule': '课程安排',
+  'materialSuggest.reason.fileName': '文件名',
+  'materialSuggest.reason.ai': 'AI 读了前两页',
+  'materialSuggest.checking': '正在用 AI 判断资料类型…',
+  'materialSuggest.stop': '停止',
+  'materialSuggest.changed': '已改为「{role}」。',
+  'materialSuggest.changedHomework': '已改为「{role}」。打开作业页即可识别题目。',
+  'materialSuggest.changedAnswer': '已改为「{role}」。在作业页把它关联到对应作业即可使用。',
+  'materialSuggest.changeFailed': '修改类型失败',
+  'materialSuggest.dismissFailed': '「忽略」没有保存',
 }

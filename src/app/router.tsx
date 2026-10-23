@@ -62,9 +62,11 @@ const MistakeBookPage = lazyPage(() => import('@/pages/MistakeBookPage'), 'Mista
 const ReviewCardsPage = lazyPage(() => import('@/pages/ReviewCardsPage'), 'ReviewCardsPage')
 const InterviewPage = lazyPage(() => import('@/pages/InterviewPage'), 'InterviewPage')
 const SettingsPage = lazyPage(() => import('@/pages/SettingsPage'), 'SettingsPage')
+const FileManagerPage = lazyPage(() => import('@/pages/FileManagerPage'), 'FileManagerPage')
 const VocabPage = lazyPage(() => import('@/pages/VocabPage'), 'VocabPage')
 const StudyPlanPage = lazyPage(() => import('@/pages/StudyPlanPage'), 'StudyPlanPage')
 const ExamReviewPage = lazyPage(() => import('@/pages/ExamReviewPage'), 'ExamReviewPage')
+const ExamWorkspacePage = lazyPage(() => import('@/pages/ExamWorkspacePage'), 'ExamWorkspacePage')
 
 /**
  * Every project sub-page sits under `ProjectScope`, which shows one
@@ -122,7 +124,9 @@ export const routes: RouteObject[] = [
           { element: <ProjectScope />, children: projectPages },
           { path: 'vocab', element: <VocabPage /> },
           { path: 'plan', element: <StudyPlanPage /> },
+          { path: 'plan/exams/:examId', element: <ExamWorkspacePage /> },
           { path: 'settings', element: <SettingsPage /> },
+          { path: 'settings/files', element: <FileManagerPage /> },
           // Signed-in users get a "page not found"; locked users are sent to
           // the invite page by RequireAuth first, then return here.
           { path: '*', element: <NotFoundPage /> },

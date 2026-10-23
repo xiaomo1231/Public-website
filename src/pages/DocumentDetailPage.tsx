@@ -41,7 +41,7 @@ import { EmptyState } from '@/shared/ui/EmptyState'
 import { ErrorState } from '@/shared/ui/ErrorState'
 import { Input } from '@/shared/ui/Input'
 import { LoadingState } from '@/shared/ui/LoadingState'
-import { PageContainer, PageContent, PageHeader } from '@/shared/ui/Page'
+import { PageContainer as PageShell, PageContent as PageMain, PageHeader } from '@/shared/ui/Page'
 import { ProgressiveList } from '@/shared/ui/ProgressiveList'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/shared/ui/Tabs'
 import { TruncatedText } from '@/shared/ui/TruncatedText'
@@ -53,8 +53,31 @@ import { formatBytes } from '@/shared/lib/format'
 import { useTranslation } from '@/i18n'
 import { PROCESSING_STATUS_LABEL_KEYS } from '@/entities/document/types'
 
-export function DocumentDetailPage(): JSX.Element {
-  const { id: projectId, did } = useParams<{ id: string; did: string }>()
+export interface EmbeddedDocument {
+  projectId: string
+  documentId: string
+  /** Show this page's chunks first (like `?page=n`). */
+  page?: number
+  /** The file was deleted from inside the view (close the dialog). */
+  onDeleted?: () => void
+}
+
+/** Inside a dialog (考试工作台 资料): no page chrome, no course navigation. */
+function EmbeddedContainer({ children }: { children: React.ReactNode }): JSX.Element {
+  return <div data-document-embedded>{children}</div>
+}
+function EmbeddedContent({ children }: { children: React.ReactNode }): JSX.Element {
+  return <div className="pt-2">{children}</div>
+}
+
+export function DocumentDetailPage({
+  embedded,
+}: { embedded?: EmbeddedDocument } = {}): JSX.Element {
+  const params = useParams<{ id: string; did: string }>()
+  const projectId = embedded?.projectId ?? params.id
+  const did = embedded?.documentId ?? params.did
+  const PageContainer = embedded ? EmbeddedContainer : PageShell
+  const PageContent = embedded ? EmbeddedContent : PageMain
   const navigate = useNavigate()
   const { t } = useTranslation()
   const { document, status, error, refresh } = useDocument(projectId, did)
@@ -72,7 +95,9 @@ export function DocumentDetailPage(): JSX.Element {
   const [search, setSearch] = useState('')
   // `?page=n` (from 错题跟进 / a formula sheet link) shows that page's chunks first.
   const [searchParams, setSearchParams] = useSearchParams()
-  const pageParam = Number(searchParams.get('page'))
+  // Embedded, the page filter is local state (the host page's URL stays).
+  const [embeddedPage, setEmbeddedPage] = useState<number | null>(embedded?.page ?? null)
+  const pageParam = embedded ? (embeddedPage ?? 0) : Number(searchParams.get('page'))
   const pageFilter = Number.isInteger(pageParam) && pageParam > 0 ? pageParam : null
 
   useEffect(() => {
@@ -204,7 +229,8 @@ export function DocumentDetailPage(): JSX.Element {
       await removeDocument(document.id, projectId)
       setDeleteOpen(false)
       toast({ variant: 'success', title: t('documentDetail.deleted'), description: document.name })
-      navigate(`/projects/${projectId}`, { replace: true })
+      if (embedded) embedded.onDeleted?.()
+      else navigate(`/projects/${projectId}`, { replace: true })
     } catch (err) {
       setDeleteOpen(false)
       toast({
@@ -231,11 +257,13 @@ export function DocumentDetailPage(): JSX.Element {
       <PageHeader
         title={
           <div className="flex flex-wrap items-center gap-2">
-            <Button asChild variant="ghost" size="icon" aria-label={t('documentDetail.back')}>
-              <Link to={`/projects/${projectId}`}>
-                <ArrowLeft className="h-4 w-4" />
-              </Link>
-            </Button>
+            {!embedded && (
+              <Button asChild variant="ghost" size="icon" aria-label={t('documentDetail.back')}>
+                <Link to={`/projects/${projectId}`}>
+                  <ArrowLeft className="h-4 w-4" />
+                </Link>
+              </Button>
+            )}
             <TruncatedText text={document.name} className="min-w-0 max-w-full" />
             <Badge variant="outline">{document.type.toUpperCase()}</Badge>
             <Badge
@@ -252,7 +280,9 @@ export function DocumentDetailPage(): JSX.Element {
           </div>
         }
         description={t('documentDetail.subtitle')}
-        nav={<ProjectFlowNav projectId={projectId} active="home" />}
+        {...(embedded
+          ? { className: 'px-0 pt-0 sm:px-0 lg:px-0' }
+          : { nav: <ProjectFlowNav projectId={projectId} active="home" /> })}
         actions={
           <div className="flex flex-wrap items-center gap-2">
             {/* 留作检验: an independent document never reaches the AI as course context. */}
@@ -329,14 +359,16 @@ export function DocumentDetailPage(): JSX.Element {
                   size="sm"
                   variant="ghost"
                   onClick={() =>
-                    setSearchParams(
-                      (prev) => {
-                        const next = new URLSearchParams(prev)
-                        next.delete('page')
-                        return next
-                      },
-                      { replace: true },
-                    )
+                    embedded
+                      ? setEmbeddedPage(null)
+                      : setSearchParams(
+                          (prev) => {
+                            const next = new URLSearchParams(prev)
+                            next.delete('page')
+                            return next
+                          },
+                          { replace: true },
+                        )
                   }
                 >
                   {t('documentDetail.showAllPages')}

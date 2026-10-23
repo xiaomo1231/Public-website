@@ -168,8 +168,22 @@ export async function uploadDocument(
     const { autoTranscribeAfterUpload } = await import('@/services/pageTranscriptionService')
     await autoTranscribeAfterUpload(document.id)
   }
+  startMaterialCheck(document.id)
 
   return document
+}
+
+/**
+ * 资料类型按内容自动判断: a close call is checked by the light model in the
+ * background (one small request, only when AI is configured). Never awaited:
+ * the upload is complete without it.
+ */
+function startMaterialCheck(documentId: string): void {
+  void import('@/services/materialTypeService')
+    .then(({ autoCheckMaterialType }) => autoCheckMaterialType(documentId))
+    .catch((err: unknown) => {
+      logger.debug('Material type check not started', { error: String(err) })
+    })
 }
 
 /**
@@ -192,6 +206,7 @@ export async function reprocessDocument(
     onProgress: (p) =>
       options.onStage?.({ phase: 'processing', progress: p.progress, message: p.stage }),
   })
+  startMaterialCheck(documentId)
 
   return documents.get(documentId)
 }

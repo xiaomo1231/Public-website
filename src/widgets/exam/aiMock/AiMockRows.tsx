@@ -10,6 +10,7 @@ import { ConfirmDialog } from '@/shared/ui/ConfirmDialog'
 import { toast } from '@/features/toast/toastStore'
 import { friendlyAIError } from '@/shared/lib/aiErrors'
 import { useTranslation } from '@/i18n'
+import { withExamReturn } from '@/features/studyPlan/examReturn'
 
 /**
  * The AI 模拟卷 written in the style of one past paper, listed under its card
@@ -21,12 +22,18 @@ export function AiMockRows({
   service,
   onOpen,
   onChanged,
+  fromExam,
+  percentOf,
 }: {
   projectId: string
   sets: HomeworkSet[]
   service: AiMockPaperService | null
   onOpen: (setId: string) => void
   onChanged: () => void
+  /** Listed in a 考试工作台: the mock exam returns there. */
+  fromExam?: string
+  /** The latest checked result of a paper (0–100), when known. */
+  percentOf?: (setId: string) => number | undefined
 }): JSX.Element | null {
   const { t } = useTranslation()
   const [deleting, setDeleting] = useState<HomeworkSet | null>(null)
@@ -51,6 +58,11 @@ export function AiMockRows({
                     {t(`aiMock.difficulty.${info.config.difficulty}` as const)}
                   </span>
                 )}
+                {percentOf?.(set.id) !== undefined && (
+                  <span className="text-xs tabular-nums" data-ai-mock-score>
+                    {t('examWorkspace.lastScore', { percent: percentOf(set.id)! })}
+                  </span>
+                )}
               </div>
               {report && report.missing.length > 0 && set.status === 'ready' && (
                 <p className="text-xs text-amber-700 dark:text-amber-400">
@@ -63,7 +75,12 @@ export function AiMockRows({
               <div className="flex flex-wrap gap-1.5">
                 {set.status === 'ready' ? (
                   <Button asChild size="sm">
-                    <Link to={`/projects/${projectId}/homework/${set.id}/exam`}>
+                    <Link
+                      to={withExamReturn(
+                        `/projects/${projectId}/homework/${set.id}/exam`,
+                        fromExam,
+                      )}
+                    >
                       <Timer className="h-4 w-4" aria-hidden />
                       {t('aiMock.take')}
                     </Link>

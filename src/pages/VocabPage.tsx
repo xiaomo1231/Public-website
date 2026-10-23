@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useSearchParams } from 'react-router-dom'
+import { StudyPlanService } from '@/services/studyPlanService'
 import {
   BookA,
   BookOpen,
@@ -74,6 +76,15 @@ const PANEL_HEAD = 'lecture:px-0 lab:border-b lab:px-3.5 lab:py-3'
 const PANEL_TITLE =
   'text-base lecture:font-heading lecture:text-lg lecture:font-bold lab:font-mono lab:text-[11px] lab:font-normal lab:uppercase lab:tracking-wider lab:text-muted-foreground'
 
+/** The exam a 考试工作台 link opened the page for (`?examId=`). */
+interface ExamVocab {
+  id: string
+  name: string
+  projectId: string
+  /** Files picked for the exam (read for 考卷术语). */
+  documentIds: string[]
+}
+
 export function VocabPage(): JSX.Element {
   const { t } = useTranslation()
   const service = useMemo(() => new VocabService(), [])
@@ -88,6 +99,30 @@ export function VocabPage(): JSX.Element {
   const [importOpen, setImportOpen] = useState(false)
   const [viewing, setViewing] = useState<BookSummary | null>(null)
   const [deleting, setDeleting] = useState<BookSummary | null>(null)
+  // Opened from a 考试工作台 (`?examId=`): the course tab, that course's book
+  // first, and 考卷术语 read from the files picked for the exam.
+  const [params] = useSearchParams()
+  const examParam = params.get('examId')
+  const [examVocab, setExamVocab] = useState<ExamVocab | null>(null)
+  useEffect(() => {
+    if (!examParam) return
+    let alive = true
+    void new StudyPlanService()
+      .examLink(examParam)
+      .then((link) => {
+        if (alive)
+          setExamVocab({
+            id: link.exam.id,
+            name: link.exam.name,
+            projectId: link.exam.projectId,
+            documentIds: link.documentIds,
+          })
+      })
+      .catch(() => undefined)
+    return () => {
+      alive = false
+    }
+  }, [examParam])
 
   const refresh = useCallback(async () => {
     const [s, st, bs] = await Promise.all([service.settings(), service.stats(), service.books()])
@@ -230,7 +265,7 @@ export function VocabPage(): JSX.Element {
               service={service}
               t={t}
             />
-            <Tabs defaultValue="books">
+            <Tabs defaultValue={examParam ? 'course' : 'books'}>
               <TabsList>
                 <TabsTrigger value="books">{t('vocab.tab.books')}</TabsTrigger>
                 <TabsTrigger value="course">{t('vocab.tab.course')}</TabsTrigger>
@@ -256,6 +291,7 @@ export function VocabPage(): JSX.Element {
                   onChoose={(id) => void chooseBook(id)}
                   onView={setViewing}
                   onChanged={() => void refresh()}
+                  exam={examVocab}
                   t={t}
                 />
               </TabsContent>
@@ -711,6 +747,7 @@ function CourseVocabPanel({
   onChoose,
   onView,
   onChanged,
+  exam,
   t,
 }: {
   books: BookSummary[]
@@ -719,9 +756,21 @@ function CourseVocabPanel({
   onChoose: (id: string) => void
   onView: (book: BookSummary) => void
   onChanged: () => void
+  /** Opened from a 考试工作台: its course first, its files for 考卷术语. */
+  exam?: ExamVocab | null
   t: T
 }): JSX.Element {
-  const { projects, loading } = useProjects()
+  const { projects: allProjects, loading } = useProjects()
+  const projects = useMemo(
+    () =>
+      exam
+        ? [...allProjects].sort(
+            (a, b) => Number(b.id === exam.projectId) - Number(a.id === exam.projectId),
+          )
+        : allProjects,
+    [allProjects, exam],
+  )
+  const examBook = exam ? books.find((item) => item.projectId === exam.projectId) : undefined
   const { language } = useTranslation()
   const [running, setRunning] = useState<string | null>(null)
   /** The language course whose textbook word list is being imported. */
@@ -748,6 +797,10 @@ function CourseVocabPanel({
         projects: new ProjectService(),
         ai: withUsageKind(bundle?.ai ?? null, 'vocab'),
       }).extractExamTerms(projectId, {
+        // From an exam: the files picked for it (else the course's papers).
+        ...(exam && exam.projectId === projectId && exam.documentIds.length > 0
+          ? { documentIds: exam.documentIds }
+          : {}),
         control: run,
         onProgress: ({ done, total }) =>
           setGloss({ projectId, done, total, paused: false, kind: 'exam' }),
@@ -842,12 +895,45 @@ function CourseVocabPanel({
       <CardHeader className={PANEL_HEAD}>
         <CardTitle className={PANEL_TITLE}>{t('vocab.course.title')}</CardTitle>
         <CardDescription>{t('vocab.course.hint')}</CardDescription>
+        {exam && (
+          <div
+            className="mt-2 flex flex-wrap items-center gap-2 rounded-md border border-primary/40 bg-primary/5 px-3 py-2 text-sm lab:rounded-none"
+            data-vocab-exam={exam.id}
+          >
+            <p className="min-w-0 flex-1">
+              {t(
+                exam.documentIds.length > 0
+                  ? 'examWorkspace.vocab.focusFiles'
+                  : 'examWorkspace.vocab.focus',
+                { exam: exam.name, count: exam.documentIds.length },
+              )}
+            </p>
+            {examBook && examBook.id !== currentId && (
+              <Button size="sm" onClick={() => onChoose(examBook.id)}>
+                {t('examWorkspace.vocab.useBook')}
+              </Button>
+            )}
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={running !== null}
+              onClick={() => void extractExam(exam.projectId)}
+              data-vocab-exam-extract
+            >
+              <FileText className="h-4 w-4" aria-hidden />
+              {t('examWorkspace.vocab.extract')}
+            </Button>
+          </div>
+        )}
       </CardHeader>
       <CardContent className="divide-y divide-border/70 p-0">
         {projects.map((project) => {
           const book = books.find((item) => item.projectId === project.id)
           return (
-            <div key={project.id}>
+            <div
+              key={project.id}
+              {...(exam?.projectId === project.id ? { 'data-exam-course': true } : {})}
+            >
               <div className="flex flex-wrap items-center gap-3 px-6 py-3 lecture:px-0 lab:px-3.5">
                 <div className="min-w-0 flex-1">
                   <p className="break-words text-sm font-medium lecture:font-heading lecture:text-base lecture:font-bold">

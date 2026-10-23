@@ -36,6 +36,7 @@ import { isAppError } from '@/infrastructure/errors/AppError'
 import { friendlyAIError } from '@/shared/lib/aiErrors'
 import { AIService } from '@/services/aiService'
 import { DataManagementPanel } from '@/widgets/dataManagement/DataManagementPanel'
+import { FileManagerEntry } from '@/widgets/settings/FileManagerEntry'
 import { ModelCombobox } from '@/widgets/settings/ModelCombobox'
 import { UsagePanel } from '@/widgets/settings/UsagePanel'
 import {
@@ -629,6 +630,7 @@ export function SettingsPage(): JSX.Element {
             title={t('settings.group.data')}
             note={t('settings.group.dataNote')}
           >
+            <FileManagerEntry {...SETTINGS_SHELL} />
             <DataManagementPanel onSettingsCleared={onSettingsCleared} {...SETTINGS_SHELL} />
           </SettingsGroup>
           {/* Lets a bug report say which release it came from. */}

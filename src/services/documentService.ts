@@ -1,10 +1,15 @@
 import type { DocumentRepository } from '@/entities/document/repository'
 import type { ProjectService } from './projectService'
 import {
+  resolveMaterialType,
   type CreateDocumentInput,
   type Document,
+  type LearningMaterialType,
   type UpdateDocumentInput,
 } from '@/entities/document/types'
+import type { DocumentChunk } from '@/entities/chunk/types'
+import { CourseStructureRepository } from '@/entities/courseStructure/repository'
+import { localSyllabus } from '@/entities/syllabus/parse'
 import { CourseContentService } from './courseContentService'
 import { getDb, type AppDatabase } from '@/infrastructure/db/database'
 import { ChunkRepository } from '@/entities/chunk/repository'
@@ -106,6 +111,116 @@ export class DocumentService {
 
   update(id: string, patch: UpdateDocumentInput): Promise<Document> {
     return this.repo.update(id, patch)
+  }
+
+  /**
+   * Change a processed file's learning-material role (课件 → 往年试卷 …).
+   * The chunks follow the new role in the same transaction; what was derived
+   * from the old role is cleaned up like a delete would: homework / exam sets,
+   * professor-practice sets, an answer-key link, the textbook structure (and
+   * the chunks' chapter fields that pointed into it). A syllabus reads its
+   * exam topics locally. Student work blocks the change (`FILE_IN_USE`),
+   * re-checked inside the transaction. Becoming a textbook needs the
+   * structure detected from the file, so `needsReprocess` is set when the
+   * stored bytes allow it; the caller reprocesses.
+   */
+  async changeMaterialType(
+    id: string,
+    materialType: LearningMaterialType,
+    projectId?: string,
+  ): Promise<{ document: Document; changed: boolean; needsReprocess: boolean }> {
+    const document = await this.repo.get(id)
+    if (projectId && document.projectId !== projectId) throw new NotFoundError('Document', id)
+    const from = resolveMaterialType(document.materialType)
+    if (from === materialType) return { document, changed: false, needsReprocess: false }
+    if (document.status === 'processing' || document.status === 'uploading') {
+      throw new AppError(t('fileBatch.reason.busy'), 'FILE_BUSY')
+    }
+    const structures = new CourseStructureRepository(this.db)
+    await this.db.transaction(
+      'rw',
+      [
+        this.db.documents,
+        this.db.chunks,
+        this.db.courseStructures,
+        this.db.courseStructureNodes,
+        this.db.homeworkSets,
+        this.db.homeworkQuestions,
+        this.db.homeworkWalkthroughs,
+        this.db.walkthroughNotes,
+        this.db.homeworkAnswerImages,
+        this.db.practiceSets,
+        this.db.practiceQuestions,
+        this.db.practiceAttempts,
+      ],
+      async () => {
+        const work = await this.studentWorkFor(id)
+        if (work.homeworkAnswers > 0 || work.practiceAttempts > 0) {
+          throw new AppError(t('fileBatch.reason.typeHasWork'), 'FILE_IN_USE')
+        }
+        const current = await this.db.documents.get(id)
+        if (!current) throw new NotFoundError('Document', id)
+        if (from === 'homework' || from === 'past_exam') await this.homework.deleteByDocument(id)
+        if (from === 'professor_practice') await this.practice.deleteByDocument(id)
+        if (from === 'homework_answer') {
+          const linked = (await this.db.homeworkSets.toArray()).filter(
+            (set) => set.answerDocumentId === id,
+          )
+          for (const set of linked) {
+            await this.homework.clearAnswerLinks(set.id)
+            await this.db.homeworkSets.update(set.id, {
+              answerDocumentId: undefined,
+              answerEntries: undefined,
+            })
+          }
+        }
+        const leavesTextbook = from === 'textbook'
+        if (leavesTextbook) await structures.deleteByDocument(id)
+        const chunks = await this.db.chunks.where('documentId').equals(id).toArray()
+        const nextChunks = chunks.map((chunk) => {
+          const next: DocumentChunk = { ...chunk, materialType }
+          if (leavesTextbook) {
+            delete next.chapterId
+            delete next.sectionId
+            delete next.chapterNumber
+            delete next.sectionNumber
+            delete next.chapterTitle
+            delete next.sectionTitle
+          }
+          return next
+        })
+        await this.db.chunks.bulkPut(nextChunks)
+        const next: Document = { ...current, materialType }
+        // The student chose a role: an earlier content-based suggestion is settled.
+        delete next.suggestedMaterialType
+        if (materialType === 'syllabus' && !current.syllabus?.editedAt) {
+          next.syllabus = localSyllabus(
+            [...nextChunks]
+              .sort((a, b) => a.order - b.order)
+              .map((chunk) => ({
+                id: chunk.id,
+                text: chunk.text,
+                contentType: chunk.contentType,
+                ...(chunk.pageNumber !== undefined ? { pageNumber: chunk.pageNumber } : {}),
+              })),
+          )
+        }
+        await this.db.documents.put(next)
+      },
+    )
+    try {
+      await this.content.markStale(document.projectId, 'material-type-changed')
+    } catch (err) {
+      logger.debug('markStale after a material-type change failed', { error: String(err) })
+    }
+    const updated = await this.repo.get(id)
+    logger.info('Document material type changed', { id, from, to: materialType })
+    return {
+      document: updated,
+      changed: true,
+      needsReprocess:
+        materialType === 'textbook' && document.hasBlob && document.status === 'ready',
+    }
   }
 
   /**

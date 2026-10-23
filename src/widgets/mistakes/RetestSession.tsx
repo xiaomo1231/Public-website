@@ -19,9 +19,12 @@ import { followUpReasonKey, useFollowUpService } from './followUpHelpers'
 export function RetestBanner({
   projectId,
   onChanged,
+  onlyIds,
 }: {
   projectId: string
   onChanged: () => void
+  /** Only these mistakes (an exam's scope, 考试工作台); absent = all due. */
+  onlyIds?: readonly string[]
 }): JSX.Element | null {
   const { t } = useTranslation()
   const service = useFollowUpService()
@@ -32,10 +35,13 @@ export function RetestBanner({
   const [error, setError] = useState<string | null>(null)
   const run = useGenerationRun({ abortOnUnmount: true })
 
+  const onlyKey = onlyIds ? onlyIds.join(',') : null
   const reload = useCallback(async () => {
     if (!service) return
-    setDue(await service.dueRetests(projectId))
-  }, [service, projectId])
+    const rows = await service.dueRetests(projectId)
+    const only = onlyKey === null ? null : new Set(onlyKey.split(','))
+    setDue(only ? rows.filter((row) => only.has(row.id)) : rows)
+  }, [service, projectId, onlyKey])
 
   useEffect(() => {
     void reload()

@@ -32,7 +32,12 @@ type Proposal = SectionProposal & { selected: boolean }
  * failed item is retried on its own. Each course's part is taken in the quiz
  * page; its results feed the mastery estimates and so the plan.
  */
-export function DiagnosticPanel(): JSX.Element {
+export function DiagnosticPanel({
+  examId,
+}: {
+  /** Opened for one exam (考试工作台): only its course is ticked. */
+  examId?: string | null
+} = {}): JSX.Element {
   const { t } = useTranslation()
   const plans = useStudyPlanService()
   const { diagnostic, hasAI } = useDiagnosticServices()
@@ -58,12 +63,16 @@ export function DiagnosticPanel(): JSX.Element {
 
   useEffect(() => {
     void loadPapers()
-    void plans
-      .contexts()
-      .then((contexts) =>
-        setProposals(contexts.map((context) => ({ ...proposeSection(context), selected: true }))),
-      )
-  }, [plans, loadPapers])
+    void plans.contexts().then((contexts) =>
+      setProposals(
+        contexts.map((context) => ({
+          ...proposeSection(context),
+          selected:
+            !examId || !contexts.some((c) => c.exam.id === examId) || context.exam.id === examId,
+        })),
+      ),
+    )
+  }, [plans, loadPapers, examId])
 
   const current = papers[0]
   const estimate = useMemo(

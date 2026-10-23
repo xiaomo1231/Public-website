@@ -62,7 +62,7 @@ export function StudyPlanPage(): JSX.Element {
             <WeightsPanel />
           </TabsContent>
           <TabsContent value="diagnostic">
-            <DiagnosticPanel />
+            <DiagnosticPanel examId={params.get('examId')} />
           </TabsContent>
         </Tabs>
       </PageContent>

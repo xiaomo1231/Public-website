@@ -1306,8 +1306,12 @@ export class QuizService {
     ]
     if (config.mode !== 'mixed' || config.topicId || config.focusKnowledgePoints?.length)
       return single()
-    const topics = await this.analyses.listTopics(projectId)
-    if (topics.length < 2) return single()
+    const allTopics = await this.analyses.listTopics(projectId)
+    // An exam's scope narrows the mixed review to its topics.
+    const wanted = new Set(config.topicIds ?? [])
+    const scoped = allTopics.filter((each) => wanted.has(each.id))
+    const topics = scoped.length > 0 ? scoped : allTopics
+    if (topics.length === 0 || (topics.length < 2 && scoped.length === 0)) return single()
     const chosen =
       topics.length <= config.count
         ? topics
@@ -1796,7 +1800,11 @@ export class QuizService {
       return config.focusKnowledgePoints.slice(0, 8)
     }
     const concepts = await this.analyses.listConcepts(projectId)
-    const topicIds = config.topicId ? new Set([config.topicId]) : null
+    const topicIds = config.topicId
+      ? new Set([config.topicId])
+      : config.topicIds?.length
+        ? new Set(config.topicIds)
+        : null
     const relevant = concepts.filter((c) =>
       topicIds ? c.topicIds.some((id) => topicIds.has(id)) : true,
     )

@@ -1,6 +1,7 @@
 import type { TranslationKey } from '@/i18n/types'
 import type { SyllabusData } from '@/entities/syllabus/types'
 import type { EvalRole } from '@/entities/evaluation/evalRole'
+import type { MaterialSuggestion } from './materialSuggestion'
 
 export type DocumentType = 'pdf' | 'docx' | 'pptx' | 'image' | 'text'
 
@@ -174,6 +175,13 @@ export interface Document {
    * it later).
    */
   folderPath?: string
+  /**
+   * 资料类型按内容自动判断: the role the processed content reads like, when it
+   * differs from `materialType` (see `materialSuggestion.ts`). Only shown as a
+   * notice in the file list; the role is never changed without the student.
+   * Optional, no Dexie bump; exported with the row.
+   */
+  suggestedMaterialType?: MaterialSuggestion
 }
 
 export interface DocumentBlobRow {
@@ -213,4 +221,6 @@ export interface UpdateDocumentInput {
   syllabus?: SyllabusData | null
   /** Move the file to a folder; `null` / `''` takes it out of any folder. */
   folderPath?: string | null
+  /** `null` removes the content-based role suggestion. */
+  suggestedMaterialType?: MaterialSuggestion | null
 }

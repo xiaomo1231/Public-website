@@ -4,6 +4,7 @@ import type { ProcessingJobRepository } from '@/entities/processingJob/repositor
 import type { ProjectService } from './projectService'
 import { resolveMaterialType, type Document, type DocumentType } from '@/entities/document/types'
 import { localSyllabus } from '@/entities/syllabus/parse'
+import { buildSuggestion } from '@/entities/document/materialSuggestion'
 import { CourseStructureService, type PreparedStructure } from './courseStructureService'
 import type { DocumentChunk, NewChunkInput } from '@/entities/chunk/types'
 import type { VisualSource } from '@/entities/visualSource/types'
@@ -247,6 +248,9 @@ export class ProcessingService {
             )
           : undefined
 
+      // 资料类型按内容自动判断: what the content reads like (a notice only).
+      const suggestion = buildSuggestion(document, storedChunks)
+
       // New documents tolerate a figure-rendering failure. Re-processing
       // keeps the previous complete result when figure preparation fails.
       let visualSources: PreparedVisualSource[] = []
@@ -333,6 +337,7 @@ export class ProcessingService {
               transcribedModel: undefined,
             },
             ...(syllabus ? { syllabus } : {}),
+            suggestedMaterialType: suggestion,
           })
           await this.jobs.setStage(jobId, 'done', 100)
         },

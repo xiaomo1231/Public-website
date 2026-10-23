@@ -20,6 +20,7 @@ import { QuestionHabitsPanel } from '@/widgets/questionHabits/QuestionHabitsPane
 import { GradingRulesPanel } from '@/widgets/project/GradingRulesPanel'
 import { CourseLanguagePanel } from '@/widgets/project/CourseLanguagePanel'
 import { CoursePlanPanel } from '@/widgets/studyPlan/CoursePlanPanel'
+import { CourseExamsPanel } from '@/widgets/examWorkspace/CourseExamsPanel'
 import { useCourseMastery } from '@/widgets/dashboard/useCourseMastery'
 import { useHomeOverview } from '@/features/home/useHomeOverview'
 import { useDocumentsStore } from '@/features/documents/documentsStore'
@@ -39,7 +40,11 @@ export function ProjectDetailPage(): JSX.Element {
   const [searchParams, setSearchParams] = useSearchParams()
   const tabParam = searchParams.get('tab')
   const tab =
-    tabParam === 'analysis' || tabParam === 'exams' || tabParam === 'habits' || tabParam === 'plan'
+    tabParam === 'analysis' ||
+    tabParam === 'exams' ||
+    tabParam === 'habits' ||
+    tabParam === 'plan' ||
+    tabParam === 'exam-list'
       ? tabParam
       : 'documents'
   // Read-only course summary (same counts as the homepage) and the mastery
@@ -208,6 +213,7 @@ export function ProjectDetailPage(): JSX.Element {
             <TabsTrigger value="exams">{t('projectDetail.tab.exams')}</TabsTrigger>
             <TabsTrigger value="habits">{t('projectDetail.tab.habits')}</TabsTrigger>
             <TabsTrigger value="plan">{t('projectDetail.tab.plan')}</TabsTrigger>
+            <TabsTrigger value="exam-list">{t('examWorkspace.courseTab')}</TabsTrigger>
           </TabsList>
 
           <TabsContent value="documents">
@@ -231,6 +237,10 @@ export function ProjectDetailPage(): JSX.Element {
 
           <TabsContent value="plan">
             <CoursePlanPanel projectId={project.id} />
+          </TabsContent>
+
+          <TabsContent value="exam-list">
+            <CourseExamsPanel projectId={project.id} />
           </TabsContent>
 
           <TabsContent value="habits" className="space-y-10">

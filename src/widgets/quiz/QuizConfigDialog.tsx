@@ -9,6 +9,7 @@ import {
   type QuizDifficulty,
 } from '@/entities/quiz/types'
 import { SyllabusService } from '@/services/syllabusService'
+import { StudyPlanService } from '@/services/studyPlanService'
 import type { QuestionType } from '@/entities/question/types'
 import {
   QUESTION_TYPE_LABEL_KEYS,
@@ -73,6 +74,7 @@ export function QuizConfigDialog({
   const availableTypes = questionTypesForSubject(project?.subject, targetLanguage)
   const [analysis, setAnalysis] = useState<CourseAnalysis | null>(null)
   const [topics, setTopics] = useState<Topic[]>([])
+  const topicsRef = useRef<Topic[]>([])
   const [topicId, setTopicId] = useState<string>('__mixed__')
   // Optional: quiz an exam scope of the course syllabus instead of a topic.
   const [examScope, setExamScope] = useState<ExamScopeChoice | null>(null)
@@ -92,6 +94,44 @@ export function QuizConfigDialog({
   const [oral, setOral] = useState(params.get('oral') === '1')
   const [oralCount, setOralCount] = useState(params.get('examTopic') ? 1 : 3)
   const [oralTimer, setOralTimer] = useState(true)
+  // Opened from a 考试工作台 (`?examId=`): quiz that exam's scope. A syllabus
+  // scope comes through the exam-scope picker (`examDoc` / `examScope`); other
+  // scopes restrict the mixed review / oral draw to the exam's topics.
+  const examParam = params.get('examId')
+  const [examFocus, setExamFocus] = useState<{
+    name: string
+    topicIds: string[]
+    syllabus: boolean
+  } | null>(null)
+  useEffect(() => {
+    if (!examParam) return
+    let cancelled = false
+    void new StudyPlanService()
+      .examLink(examParam)
+      .then((link) => {
+        if (cancelled || link.exam.projectId !== projectId) return
+        setExamFocus({
+          name: link.exam.name,
+          topicIds: link.topicIds,
+          syllabus: !!link.syllabus,
+        })
+        // One topic in scope: quiz that topic (once the topics are known).
+        const only = !link.syllabus && link.topicIds.length === 1 ? link.topicIds[0]! : null
+        if (!only) return
+        wantedTopic.current = only
+        setTopicId((current) =>
+          current === '__mixed__' && topicsRef.current.some((each) => each.id === only)
+            ? only
+            : current,
+        )
+      })
+      .catch(() => undefined)
+    return () => {
+      cancelled = true
+    }
+  }, [examParam, projectId])
+  const examTopicIds =
+    examFocus && !examFocus.syllabus && examFocus.topicIds.length > 1 ? examFocus.topicIds : null
   const [hasSyllabus, setHasSyllabus] = useState(false)
   useEffect(() => {
     let cancelled = false
@@ -130,6 +170,7 @@ export function QuizConfigDialog({
         if (cancelled) return
         setAnalysis(a ?? null)
         setTopics(ts)
+        topicsRef.current = ts
         const wanted = wantedTopic.current
         if (wanted && ts.some((each) => each.id === wanted)) setTopicId(wanted)
         availability.current?.(a?.status === 'ready')
@@ -166,7 +207,9 @@ export function QuizConfigDialog({
           ? { topicName: examScope.label, examScope: examScope.selection }
           : topic
             ? { topicId: topic.id, topicName: topic.name }
-            : {}),
+            : examTopicIds && examFocus
+              ? { topicIds: examTopicIds, topicName: examFocus.name }
+              : {}),
       })
       return
     }
@@ -176,7 +219,11 @@ export function QuizConfigDialog({
       difficulty,
       types,
       questionLanguage,
-      ...(topic ? { topicId: topic.id, topicName: topic.name } : {}),
+      ...(topic
+        ? { topicId: topic.id, topicName: topic.name }
+        : examTopicIds && examFocus
+          ? { topicIds: examTopicIds, topicName: examFocus.name }
+          : {}),
     }
     onStart(
       examScope
@@ -230,6 +277,24 @@ export function QuizConfigDialog({
         <CardDescription>{t('quizConfig.description')}</CardDescription>
       </CardHeader>
       <CardContent className="space-y-5">
+        {examFocus && (
+          <div
+            className="flex flex-wrap items-center gap-2 rounded-md border border-primary/40 bg-primary/5 px-3 py-2 text-sm lab:rounded-none"
+            data-quiz-exam-focus
+          >
+            <p className="min-w-0 flex-1">
+              {examFocus.syllabus || !examTopicIds
+                ? t('examWorkspace.quiz.focusScope', { exam: examFocus.name })
+                : t('examWorkspace.quiz.focusTopics', {
+                    exam: examFocus.name,
+                    count: examTopicIds.length,
+                  })}
+            </p>
+            <Button size="sm" variant="ghost" onClick={() => setExamFocus(null)}>
+              {t('examWorkspace.quiz.clearFocus')}
+            </Button>
+          </div>
+        )}
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="space-y-2">
             <Label htmlFor="quiz-topic">{t('quizConfig.topic')}</Label>

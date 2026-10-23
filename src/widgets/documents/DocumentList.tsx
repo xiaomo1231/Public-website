@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useState, type KeyboardEvent } from 'react'
 import { Link } from 'react-router-dom'
 import {
   AlertCircle,
@@ -14,6 +14,7 @@ import {
   Pencil,
   RotateCcw,
   Search,
+  Tags,
   Trash2,
 } from 'lucide-react'
 import {
@@ -25,6 +26,15 @@ import {
   type ProcessingStatus,
 } from '@/entities/document/types'
 import { groupByFolder, type FolderGroup } from '@/entities/document/folders'
+import {
+  filterDocuments,
+  selectionState,
+  type DocumentFilters,
+} from '@/entities/document/selection'
+import type { DocumentSelection } from '@/features/documents/useDocumentSelection'
+import { DocumentBatchBar } from './DocumentBatchBar'
+import { SelectAllCheckbox, RowCheckbox } from './SelectionCheckbox'
+import { isTypingTarget } from '@/shared/lib/typingTarget'
 import { Button } from '@/shared/ui/Button'
 import { EmptyState } from '@/shared/ui/EmptyState'
 import { Input } from '@/shared/ui/Input'
@@ -59,6 +69,7 @@ import { CourseContentService, pausedCourseAnalysis } from '@/services/courseCon
 import { toast } from '@/features/toast/toastStore'
 import { logger } from '@/infrastructure/logger/logger'
 import { useTranslation, type TranslationKey } from '@/i18n'
+import { MaterialSuggestionNotice } from './MaterialSuggestionNotice'
 
 const TYPE_LABEL_KEY: Record<DocumentType, TranslationKey> = {
   pdf: 'docType.pdf',
@@ -125,6 +136,23 @@ export interface DocumentListProps {
   groupFolders?: boolean
   /** Offer 移动到文件夹 in each row's menu. */
   onMoveToFolder?: (doc: Document) => void
+  /** Offer 改资料类型 in each row's menu. */
+  onChangeMaterialType?: (doc: Document) => void
+  /**
+   * Multi-select (2o): row checkboxes, header 全选 over the filtered rows,
+   * Shift range, Space / Ctrl+A / Esc. Share one selection between lists to
+   * select across them (设置 → 文件管理).
+   */
+  selection?: DocumentSelection
+  /** Render the batch bar above the list (default: when `selection` is given). */
+  batchBar?: boolean
+  /**
+   * Controlled filters: the built-in search / filter toolbar is hidden and the
+   * parent renders its own (one toolbar for several lists).
+   */
+  filters?: DocumentFilters
+  /** Group rows by folder (with `groupFolders`) or by material type. */
+  groupBy?: 'folder' | 'material'
 }
 
 export function DocumentList({
@@ -139,6 +167,11 @@ export function DocumentList({
   onDeleteRequest,
   groupFolders = false,
   onMoveToFolder,
+  onChangeMaterialType,
+  selection,
+  batchBar,
+  filters: controlledFilters,
+  groupBy = 'folder',
 }: DocumentListProps): JSX.Element {
   const { t } = useTranslation()
   const { uiStyle } = useUiStyle()
@@ -160,44 +193,63 @@ export function DocumentList({
   // course with thousands of files renders in batches instead of all at once.
   const [revealed, setRevealed] = useState(DOCUMENT_PAGE_SIZE)
 
-  const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase()
-    let list = documents.filter((d) => {
-      if (type !== 'all' && d.type !== type) return false
-      if (material !== 'all' && resolveMaterialType(d.materialType) !== material) return false
-      if (status !== 'all' && d.status !== status) return false
-      if (q && !d.name.toLowerCase().includes(q)) return false
-      return true
-    })
-    list = list.slice().sort((a, b) => {
-      switch (sort) {
-        case 'newest':
-          return b.uploadedAt - a.uploadedAt
-        case 'oldest':
-          return a.uploadedAt - b.uploadedAt
-        case 'name':
-          return a.name.localeCompare(b.name)
-        case 'size':
-          return b.sizeBytes - a.sizeBytes
-        default:
-          return 0
-      }
-    })
-    return list
-  }, [documents, query, type, material, status, sort])
+  const filtered = useMemo(
+    () => filterDocuments(documents, controlledFilters ?? { query, type, material, status, sort }),
+    [documents, controlledFilters, query, type, material, status, sort],
+  )
   const visible = filtered.slice(0, revealed)
   const remaining = filtered.length - visible.length
-  // 按文件夹: collapsible groups when any file sits in a folder.
-  const grouping = groupFolders && documents.some((doc) => doc.folderPath)
-  const folderGroups = grouping
-    ? groupByFolder(visible)
-    : [{ folder: '', documents: visible } as FolderGroup<Document>]
+  // 按文件夹: collapsible groups when any file sits in a folder; 按类型:
+  // one group per material role, in the roles' usual order.
+  const byMaterial = groupBy === 'material'
+  const grouping = byMaterial || (groupFolders && documents.some((doc) => doc.folderPath))
+  const folderGroups: FolderGroup<Document>[] = byMaterial
+    ? LEARNING_MATERIAL_TYPES.map((role) => ({
+        folder: role,
+        documents: visible.filter((doc) => resolveMaterialType(doc.materialType) === role),
+      })).filter((group) => group.documents.length > 0)
+    : grouping
+      ? groupByFolder(visible)
+      : [{ folder: '', documents: visible }]
+  // Multi-select: 全选 covers every filtered row (not only the ones mounted
+  // so far); Shift ranges follow the order the rows are shown in.
+  const filteredIds = useMemo(() => filtered.map((doc) => doc.id), [filtered])
+  const shownIds = folderGroups.flatMap((group) => group.documents.map((doc) => doc.id))
+  const toggleRow = (id: string, range: boolean): void =>
+    selection?.toggle(id, { range, orderedIds: shownIds })
+  const onListKeyDown = (event: KeyboardEvent): void => {
+    if (!selection || isTypingTarget(event.target)) return
+    if ((event.ctrlKey || event.metaKey) && !event.altKey && event.key.toLowerCase() === 'a') {
+      event.preventDefault()
+      selection.setMany(filteredIds, true)
+    } else if (event.key === 'Escape' && selection.count > 0) {
+      event.preventDefault()
+      selection.clear()
+    }
+  }
+  const onRowKeyDown = (event: KeyboardEvent, id: string): void => {
+    // Space on the row's link (or the row itself) toggles it; buttons and the
+    // checkbox keep their own Space.
+    if (!selection || event.key !== ' ' || isTypingTarget(event.target)) return
+    const target = event.target as HTMLElement
+    if (target.closest('button, input, select, [role="menuitem"]')) return
+    event.preventDefault()
+    toggleRow(id, event.shiftKey)
+  }
   const wrapFolder = (group: FolderGroup<Document>, rows: JSX.Element): JSX.Element =>
     grouping ? (
       <details key={group.folder || '-'} open className="mb-3" data-folder-group={group.folder}>
         <summary className="mb-1.5 flex cursor-pointer items-center gap-2 text-sm font-medium coarse:py-2">
-          <Folder className="h-4 w-4 text-muted-foreground" aria-hidden />
-          <span className="min-w-0 break-words">{group.folder || t('files.noFolder')}</span>
+          {byMaterial ? (
+            <Tags className="h-4 w-4 text-muted-foreground" aria-hidden />
+          ) : (
+            <Folder className="h-4 w-4 text-muted-foreground" aria-hidden />
+          )}
+          <span className="min-w-0 break-words">
+            {byMaterial
+              ? t(MATERIAL_LABEL_KEY[group.folder as LearningMaterialType])
+              : group.folder || t('files.noFolder')}
+          </span>
           <span className="data-num text-xs font-normal text-muted-foreground">
             {group.documents.length}
           </span>
@@ -223,86 +275,114 @@ export function DocumentList({
     )
   }
 
+  const headerState = selection ? selectionState(selection.selected, filteredIds) : 'none'
+  const rowCheckbox = (doc: Document): JSX.Element | null =>
+    selection ? (
+      <RowCheckbox
+        checked={selection.isSelected(doc.id)}
+        label={t('fileBatch.selectFile', { name: doc.name })}
+        onToggle={(range) => toggleRow(doc.id, range)}
+      />
+    ) : null
+
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center gap-2">
-        <div className="relative min-w-[200px] flex-1">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder={t('documents.searchPlaceholder')}
-            className="pl-9"
-          />
-        </div>
-        {materialFilter && (
-          <Select value={material} onValueChange={(v) => setMaterial(v as MaterialFilter)}>
-            <SelectTrigger className="w-[150px]" aria-label={t('files.filter.material')}>
+      {selection && (batchBar ?? true) && (
+        <DocumentBatchBar selection={selection} documents={documents} />
+      )}
+      {!controlledFilters && (
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="relative min-w-[200px] flex-1">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder={t('documents.searchPlaceholder')}
+              className="pl-9"
+            />
+          </div>
+          {materialFilter && (
+            <Select value={material} onValueChange={(v) => setMaterial(v as MaterialFilter)}>
+              <SelectTrigger className="w-[150px]" aria-label={t('files.filter.material')}>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">{t('files.filter.material')}</SelectItem>
+                {LEARNING_MATERIAL_TYPES.map((m) => (
+                  <SelectItem key={m} value={m}>
+                    {t(MATERIAL_LABEL_KEY[m])}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+          <Select value={type} onValueChange={(v) => setType(v as TypeFilter)}>
+            <SelectTrigger className="w-[140px]">
+              <Filter className="h-4 w-4" />
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">{t('files.filter.material')}</SelectItem>
-              {LEARNING_MATERIAL_TYPES.map((m) => (
-                <SelectItem key={m} value={m}>
-                  {t(MATERIAL_LABEL_KEY[m])}
-                </SelectItem>
-              ))}
+              <SelectItem value="all">{t('documents.filter.allTypes')}</SelectItem>
+              <SelectItem value="pdf">{t('docType.pdf')}</SelectItem>
+              <SelectItem value="docx">{t('docType.word')}</SelectItem>
+              <SelectItem value="pptx">{t('docType.powerpoint')}</SelectItem>
+              <SelectItem value="image">{t('docType.image')}</SelectItem>
+              <SelectItem value="text">{t('docType.text')}</SelectItem>
             </SelectContent>
           </Select>
-        )}
-        <Select value={type} onValueChange={(v) => setType(v as TypeFilter)}>
-          <SelectTrigger className="w-[140px]">
-            <Filter className="h-4 w-4" />
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">{t('documents.filter.allTypes')}</SelectItem>
-            <SelectItem value="pdf">{t('docType.pdf')}</SelectItem>
-            <SelectItem value="docx">{t('docType.word')}</SelectItem>
-            <SelectItem value="pptx">{t('docType.powerpoint')}</SelectItem>
-            <SelectItem value="image">{t('docType.image')}</SelectItem>
-            <SelectItem value="text">{t('docType.text')}</SelectItem>
-          </SelectContent>
-        </Select>
-        <Select value={status} onValueChange={(v) => setStatus(v as StatusFilter)}>
-          <SelectTrigger className="w-[140px]">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">{t('documents.filter.allStatus')}</SelectItem>
-            <SelectItem value="uploading">{t('docStatus.uploading')}</SelectItem>
-            <SelectItem value="processing">{t('docStatus.processing')}</SelectItem>
-            <SelectItem value="ready">{t('docStatus.ready')}</SelectItem>
-            <SelectItem value="failed">{t('docStatus.failed')}</SelectItem>
-          </SelectContent>
-        </Select>
-        <Select value={sort} onValueChange={(v) => setSort(v as SortKey)}>
-          <SelectTrigger className="w-[140px]">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="newest">{t('documents.sort.newest')}</SelectItem>
-            <SelectItem value="oldest">{t('documents.sort.oldest')}</SelectItem>
-            <SelectItem value="name">{t('documents.sort.name')}</SelectItem>
-            <SelectItem value="size">{t('documents.sort.size')}</SelectItem>
-          </SelectContent>
-        </Select>
-        <Button onClick={onUploadClick}>{t('documents.upload')}</Button>
-      </div>
+          <Select value={status} onValueChange={(v) => setStatus(v as StatusFilter)}>
+            <SelectTrigger className="w-[140px]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">{t('documents.filter.allStatus')}</SelectItem>
+              <SelectItem value="uploading">{t('docStatus.uploading')}</SelectItem>
+              <SelectItem value="processing">{t('docStatus.processing')}</SelectItem>
+              <SelectItem value="ready">{t('docStatus.ready')}</SelectItem>
+              <SelectItem value="failed">{t('docStatus.failed')}</SelectItem>
+            </SelectContent>
+          </Select>
+          <Select value={sort} onValueChange={(v) => setSort(v as SortKey)}>
+            <SelectTrigger className="w-[140px]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="newest">{t('documents.sort.newest')}</SelectItem>
+              <SelectItem value="oldest">{t('documents.sort.oldest')}</SelectItem>
+              <SelectItem value="name">{t('documents.sort.name')}</SelectItem>
+              <SelectItem value="size">{t('documents.sort.size')}</SelectItem>
+            </SelectContent>
+          </Select>
+          <Button onClick={onUploadClick}>{t('documents.upload')}</Button>
+        </div>
+      )}
 
       {filtered.length === 0 ? (
         <EmptyState title={t('documents.noMatches')} description={t('documents.noMatchesHint')} />
       ) : (
         <TooltipProvider delayDuration={300}>
-          <section aria-label={t('documents.title')} className="min-w-0">
-            <p className="data-num mb-2 text-xs text-muted-foreground lab:font-mono lab:text-[11px]">
-              {t('documents.title')} ·{' '}
-              {t('documents.count', {
-                shown: filtered.length,
-                total: documents.length,
-                count: documents.length,
-              })}
-            </p>
+          <section
+            aria-label={t('documents.title')}
+            className="min-w-0"
+            onKeyDown={selection ? onListKeyDown : undefined}
+          >
+            <div className="mb-2 flex flex-wrap items-center gap-2">
+              {selection && (
+                <SelectAllCheckbox
+                  state={headerState}
+                  label={t('fileBatch.selectAll', { count: filteredIds.length })}
+                  onChange={(on) => selection.setMany(filteredIds, on)}
+                />
+              )}
+              <p className="data-num text-xs text-muted-foreground lab:font-mono lab:text-[11px]">
+                {t('documents.title')} ·{' '}
+                {t('documents.count', {
+                  shown: filtered.length,
+                  total: documents.length,
+                  count: documents.length,
+                })}
+              </p>
+            </div>
             {folderGroups.map((group) =>
               wrapFolder(
                 group,
@@ -311,6 +391,11 @@ export function DocumentList({
                     <table className="data-num w-full min-w-[520px] table-fixed border-collapse text-[13px]">
                       <thead className={LAB_TABLE_HEAD_CLASS}>
                         <tr>
+                          {selection && (
+                            <th scope="col" className={cn(LAB_HEAD, 'w-11 px-1')}>
+                              <span className="sr-only">{t('fileBatch.colSelect')}</span>
+                            </th>
+                          )}
                           <th scope="col" className={LAB_HEAD}>
                             {t('documents.col.file')}
                           </th>
@@ -340,8 +425,16 @@ export function DocumentList({
                           return (
                             <tr
                               key={doc.id}
-                              className="transition-colors duration-150 hover:bg-accent/50"
+                              className={cn(
+                                'transition-colors duration-150 hover:bg-accent/50',
+                                selection?.isSelected(doc.id) && 'bg-primary/5',
+                              )}
+                              data-selected={selection?.isSelected(doc.id) || undefined}
+                              onKeyDown={(event) => onRowKeyDown(event, doc.id)}
                             >
+                              {selection && (
+                                <td className={cn(LAB_CELL, 'px-1')}>{rowCheckbox(doc)}</td>
+                              )}
                               <td className={LAB_CELL}>
                                 <span className="flex min-w-0 items-center gap-2.5">
                                   <span className="w-10 shrink-0 truncate font-mono text-[10.5px] uppercase text-muted-foreground">
@@ -349,6 +442,7 @@ export function DocumentList({
                                   </span>
                                   <DocumentLink doc={doc} projectId={projectId} />
                                 </span>
+                                <MaterialSuggestionNotice doc={doc} projectId={projectId} />
                               </td>
                               {showMaterialType && (
                                 <td className={cn(LAB_CELL, 'hidden md:table-cell')}>
@@ -407,6 +501,9 @@ export function DocumentList({
                                   {...(onMoveToFolder
                                     ? { onMoveToFolder: () => onMoveToFolder(doc) }
                                     : {})}
+                                  {...(onChangeMaterialType
+                                    ? { onChangeMaterialType: () => onChangeMaterialType(doc) }
+                                    : {})}
                                 />
                               </td>
                             </tr>
@@ -422,8 +519,14 @@ export function DocumentList({
                       return (
                         <li
                           key={doc.id}
-                          className="flex min-w-0 items-center gap-3 border-b border-border py-2.5"
+                          className={cn(
+                            'flex min-w-0 items-center gap-3 border-b border-border py-2.5',
+                            selection?.isSelected(doc.id) && 'bg-primary/5',
+                          )}
+                          data-selected={selection?.isSelected(doc.id) || undefined}
+                          onKeyDown={(event) => onRowKeyDown(event, doc.id)}
                         >
+                          {rowCheckbox(doc)}
                           <span className="min-w-0 flex-1">
                             <DocumentLink doc={doc} projectId={projectId} />
                             <span className="data-num mt-0.5 flex min-w-0 flex-wrap gap-x-1.5 text-xs text-muted-foreground">
@@ -445,6 +548,7 @@ export function DocumentList({
                                 {relativeTime(doc.uploadedAt)}
                               </span>
                             </span>
+                            <MaterialSuggestionNotice doc={doc} projectId={projectId} />
                           </span>
                           <span
                             className={cn(
@@ -477,6 +581,9 @@ export function DocumentList({
                               : {})}
                             {...(onMoveToFolder
                               ? { onMoveToFolder: () => onMoveToFolder(doc) }
+                              : {})}
+                            {...(onChangeMaterialType
+                              ? { onChangeMaterialType: () => onChangeMaterialType(doc) }
                               : {})}
                           />
                         </li>
@@ -613,11 +720,14 @@ function RowMenu({
   onDelete,
   onImportWordList,
   onMoveToFolder,
+  onChangeMaterialType,
 }: {
   doc: Document
   projectId: string
   onRename: () => void
   onDelete: () => void
+  /** Files pages: change the learning-material role. */
+  onChangeMaterialType?: () => void
   /** Files page: move to another folder. */
   onMoveToFolder?: () => void
   /** Language courses: read this document's word list into the course vocabulary. */
@@ -674,6 +784,12 @@ function RowMenu({
           <DropdownMenuItem onSelect={onMoveToFolder}>
             <FolderInput className="h-4 w-4" />
             {t('files.moveToFolder')}
+          </DropdownMenuItem>
+        )}
+        {onChangeMaterialType && (
+          <DropdownMenuItem onSelect={onChangeMaterialType}>
+            <Tags className="h-4 w-4" />
+            {t('fileBatch.changeType')}
           </DropdownMenuItem>
         )}
         {canReprocess && (

@@ -4,9 +4,13 @@ import { handwritingEn } from './handwriting.en'
 import { marketEn } from './market.en'
 import { marketQuestionEn } from './marketQuestion.en'
 import { examToolsEn } from './examTools.en'
+import { examWorkspaceEn } from './examWorkspace.en'
+import { fileBatchEn } from './fileBatch.en'
 
 export const en = {
   ...examToolsEn,
+  ...examWorkspaceEn,
+  ...fileBatchEn,
   ...studyPlanEn,
   ...aiMockEn,
   ...handwritingEn,
@@ -3561,9 +3565,6 @@ export const en = {
   'materialType.syllabus': 'Syllabus / exam topics',
   'materialType.walkthrough_import': 'Imported walkthrough',
   'materialType.past_exam': 'Past exam / mock paper',
-  'upload.pastExamSuggest':
-    '{count} file(s) look like a past exam or mock paper. Mark them as "Past exam / mock paper"?',
-  'upload.pastExamAccept': 'Mark as past exam',
   'mockExam.noAttempt': 'There is no mock exam in progress for this paper.',
   'mockExam.notSubmitted': 'Submit the paper before it can be checked.',
   'mockExam.notFound': 'This paper is not part of this course.',
@@ -3843,9 +3844,6 @@ export const en = {
   'materialType.syllabusHint':
     'The course handbook, syllabus or list of exam topics. Its exam topics are read into the exam-topic list; it is not used as course content (upload the textbook, atlas or lecture slides for that).',
   'projectDetail.tab.exams': 'Exam topics',
-  'upload.syllabusSuggest':
-    '{count} file(s) look like a syllabus or course handbook. Mark them as "Syllabus / exam topics"?',
-  'upload.syllabusAccept': 'Mark as syllabus',
   'question.aiWithoutSource': 'AI-generated · no course source',
   'questionSource.aiWithoutSource':
     'AI-generated for an exam topic that was not found in your course material — there is no course source. Check it against your textbook or lecture notes.',
@@ -4513,6 +4511,45 @@ export const en = {
   'evaluation.gradingLine':
     'Grading: n = {graded} graded · {withTeacher} with a teacher mark · {agree} agree ({share}) · {uncertain} undecided · {failed} failed',
   'evaluation.perItem': 'Per question',
+  'upload.roleSuggest':
+    '{count} file(s) look like "{role}" by their name or folder. Change them to that type?',
+  'upload.roleAccept': 'Mark as "{role}"',
+  'materialSuggest.notice': 'This looks like {what}. Change it to "{role}"?',
+  'materialSuggest.what.past_exam': 'an exam paper',
+  'materialSuggest.what.homework': 'homework questions',
+  'materialSuggest.what.homework_answer': 'answers or worked solutions',
+  'materialSuggest.what.syllabus': 'a course syllabus',
+  'materialSuggest.change': 'Change',
+  'materialSuggest.dismiss': 'Ignore',
+  'materialSuggest.reasons': 'Based on: {list}',
+  'materialSuggest.reason.numbering': 'numbered questions',
+  'materialSuggest.reason.subparts': '(a)(b) parts',
+  'materialSuggest.reason.marks': 'marks / points',
+  'materialSuggest.reason.options': 'A–E options',
+  'materialSuggest.reason.taskVerbs': 'Show that / Calculate / Explain',
+  'materialSuggest.reason.examCover': 'exam cover (time allowed, student ID…)',
+  'materialSuggest.reason.solutions': 'Solution / Answer lines',
+  'materialSuggest.reason.answerKey': 'answer-key wording',
+  'materialSuggest.reason.markedOptions': 'highlighted or circled options',
+  'materialSuggest.reason.slides': 'slides',
+  'materialSuggest.reason.headings': 'chapter headings',
+  'materialSuggest.reason.prose': 'paragraphs of explanation',
+  'materialSuggest.reason.fewQuestions': 'few question numbers',
+  'materialSuggest.reason.teachingWords': 'definitions and examples',
+  'materialSuggest.reason.syllabusWording': 'syllabus wording',
+  'materialSuggest.reason.grading': 'grading breakdown',
+  'materialSuggest.reason.schedule': 'course schedule',
+  'materialSuggest.reason.fileName': 'the file name',
+  'materialSuggest.reason.ai': 'AI check of the first two pages',
+  'materialSuggest.checking': 'Checking the file type with AI…',
+  'materialSuggest.stop': 'Stop',
+  'materialSuggest.changed': 'Changed to "{role}".',
+  'materialSuggest.changedHomework':
+    'Changed to "{role}". Open Homework to recognise its questions.',
+  'materialSuggest.changedAnswer':
+    'Changed to "{role}". Link it to its assignment on the Homework page.',
+  'materialSuggest.changeFailed': 'Could not change the file type',
+  'materialSuggest.dismissFailed': 'Could not save "Ignore"',
 } as const
 
 export type TranslationKey = keyof typeof en

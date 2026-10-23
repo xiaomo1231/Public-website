@@ -12,6 +12,7 @@ import {
 import { useProjects } from '@/features/project/useProjects'
 import { useExamActive } from '@/features/focus/examMode'
 import { cn } from '@/shared/lib/utils'
+import { examWorkspacePath } from '@/features/studyPlan/examReturn'
 import { useTranslation } from '@/i18n'
 
 const URGENCY_CLASS: Record<CountdownUrgency, string> = {
@@ -26,7 +27,7 @@ const URGENCY_CLASS: Record<CountdownUrgency, string> = {
  * Thin bar with the nearest exam and the time left (「线代期中 · 还有 12 天 6
  * 小时」). Colour follows the urgency; the last 3 days get extra weight.
  * Hidden while the student sits an exam (mock exam, quiz, interview,
- * self-test) and when no exam is planned. Clicking opens all exams.
+ * self-test) and when no exam is planned. Clicking opens that exam's 考试工作台.
  */
 export function CountdownBar(): JSX.Element | null {
   const { t } = useTranslation()
@@ -53,7 +54,7 @@ export function CountdownBar(): JSX.Element | null {
   const others = exams.filter((other) => other.at > now).length - 1
   return (
     <Link
-      to="/plan?tab=exams"
+      to={examWorkspacePath(exam.id)}
       data-countdown={urgency}
       className={cn(
         'focus-ring flex min-h-8 items-center gap-2 px-4 py-1 text-xs transition-colors hover:opacity-90 coarse:min-h-11',
