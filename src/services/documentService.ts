@@ -1,9 +1,11 @@
-import type { DocumentRepository } from '@/entities/document/repository'
+import { blobToArrayBuffer, type DocumentRepository } from '@/entities/document/repository'
 import type { ProjectService } from './projectService'
 import {
   resolveMaterialType,
   type CreateDocumentInput,
   type Document,
+  type DocumentBlobRow,
+  type DocumentType,
   type LearningMaterialType,
   type UpdateDocumentInput,
 } from '@/entities/document/types'
@@ -221,6 +223,93 @@ export class DocumentService {
       needsReprocess:
         materialType === 'textbook' && document.hasBlob && document.status === 'ready',
     }
+  }
+
+  /**
+   * 上传重复文件 → 覆盖: replace a file's stored bytes, keeping its id, name,
+   * folder, role and every reference to it (exam selections, answer-key links).
+   * The document row and its blob change in one transaction; what was derived
+   * from the old content and holds no student work (homework / exam sets,
+   * professor-practice sets, slide lessons) is removed so it is recognised
+   * again from the new file. The caller then reprocesses the document. Student
+   * work blocks the replace (`FILE_IN_USE`, re-checked inside the
+   * transaction): the caller keeps both files instead.
+   */
+  async replaceFile(
+    id: string,
+    input: {
+      blob: Blob | ArrayBuffer
+      type: DocumentType
+      sizeBytes: number
+      mimeType?: string
+      sourceModifiedAt?: number
+      photoPages?: number
+    },
+    projectId?: string,
+  ): Promise<Document> {
+    const document = await this.repo.get(id)
+    if (projectId && document.projectId !== projectId) throw new NotFoundError('Document', id)
+    if (document.status === 'processing' || document.status === 'uploading') {
+      throw new AppError(t('fileBatch.reason.busy'), 'FILE_BUSY')
+    }
+    // Read the bytes before the transaction (no async boundary inside it).
+    const bytes =
+      input.blob instanceof ArrayBuffer ? input.blob : await blobToArrayBuffer(input.blob)
+    const mimeType =
+      (input.blob instanceof Blob ? input.blob.type : '') ||
+      input.mimeType ||
+      'application/octet-stream'
+    await this.db.transaction(
+      'rw',
+      [
+        this.db.documents,
+        this.db.documentBlobs,
+        this.db.homeworkSets,
+        this.db.homeworkQuestions,
+        this.db.homeworkWalkthroughs,
+        this.db.walkthroughNotes,
+        this.db.homeworkAnswerImages,
+        this.db.slideLessons,
+        this.db.practiceSets,
+        this.db.practiceQuestions,
+        this.db.practiceAttempts,
+      ],
+      async () => {
+        const work = await this.studentWorkFor(id)
+        if (work.homeworkAnswers > 0 || work.practiceAttempts > 0) {
+          throw new AppError(t('batch.duplicate.replaceBlocked'), 'FILE_IN_USE')
+        }
+        const current = await this.db.documents.get(id)
+        if (!current) throw new NotFoundError('Document', id)
+        await this.homework.deleteByDocument(id)
+        await this.practice.deleteByDocument(id)
+        await this.db.slideLessons.where('documentId').equals(id).delete()
+        const blob: DocumentBlobRow = { id, projectId: current.projectId, bytes, mimeType }
+        await this.db.documentBlobs.put(blob)
+        const next: Document = {
+          ...current,
+          type: input.type,
+          sizeBytes: input.sizeBytes,
+          hasBlob: true,
+          // Processed again from scratch, like a new upload.
+          status: 'uploading',
+          errorMessage: '',
+          warnings: [],
+          uploadedAt: Date.now(),
+        }
+        if (input.mimeType !== undefined) next.mimeType = input.mimeType
+        else delete next.mimeType
+        if (input.sourceModifiedAt !== undefined) next.sourceModifiedAt = input.sourceModifiedAt
+        else delete next.sourceModifiedAt
+        if (input.photoPages && input.photoPages > 0) next.photoPages = input.photoPages
+        else delete next.photoPages
+        // The earlier content-based suggestion was about the old file.
+        delete next.suggestedMaterialType
+        await this.db.documents.put(next)
+      },
+    )
+    logger.info('Document file replaced', { id, projectId: document.projectId })
+    return this.repo.get(id)
   }
 
   /**

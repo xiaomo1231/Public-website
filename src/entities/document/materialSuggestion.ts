@@ -17,9 +17,15 @@ import {
  */
 
 /** What the content reads like. */
-export type ContentKind = 'questions' | 'answers' | 'lecture' | 'syllabus'
+export type ContentKind = 'questions' | 'answers' | 'lecture' | 'syllabus' | 'reading'
 
-export const CONTENT_KINDS: readonly ContentKind[] = ['questions', 'answers', 'lecture', 'syllabus']
+export const CONTENT_KINDS: readonly ContentKind[] = [
+  'questions',
+  'answers',
+  'lecture',
+  'syllabus',
+  'reading',
+]
 
 /** Machine-readable evidence behind a score (shown translated). */
 export type SuggestionReason =
@@ -41,6 +47,9 @@ export type SuggestionReason =
   | 'grading'
   | 'schedule'
   | 'fileName'
+  | 'publisher'
+  | 'articleProse'
+  | 'byline'
   | 'ai'
 
 export type SuggestionConfidence = 'high' | 'medium' | 'low'
@@ -81,6 +90,7 @@ export const SUGGESTABLE_TO: ReadonlySet<LearningMaterialType> = new Set([
   'past_exam',
   'homework_answer',
   'syllabus',
+  'reading',
 ])
 
 export interface ScoreChunk {
@@ -129,6 +139,12 @@ const TEACHING_WORD =
   /\b(?:definition|theorem|example|for\s+example|in\s+summary|key\s+concepts?|learning\s+objectives?|recall|note\s+that|lemma|corollary)\b|定义|定理|例如|本章|小结/gi
 const GRADING =
   /\d{1,3}\s*%.{0,60}(?:grade|grading|assessment|final|midterm|exam|homework|assignment|participation|quiz|project|成绩|平时|期末|期中|作业|考勤)|(?:grade|grading|assessment|final|midterm|exam|homework|assignment|participation|quiz|project|成绩|平时|期末|期中|作业|考勤).{0,60}\d{1,3}\s*%/gi
+/** Newspapers / magazines an article file usually names (file name or first page). */
+const PUBLISHER =
+  /\b(?:the\s+economist|economist\.com|new\s+york\s+times|nytimes|nyt\b|financial\s+times|ft\.com|wall\s+street\s+journal|wsj\b|washington\s+post|the\s+guardian|bloomberg|reuters|associated\s+press|the\s+atlantic|the\s+new\s+yorker|harvard\s+business\s+review|forbes|time\s+magazine|bbc\s+news|npr\b|vox\b|project\s+syndicate|op-?ed|opinion\s+column|newspaper|magazine)\b|新闻|报道|日报|晚报|周刊|杂志|社论|评论文章|阅读材料/i
+/** Bylines and datelines ("By Jane Doe", "Updated 3 May 2024", "Mar 4th 2024 | London"). */
+const BYLINE =
+  /^\s*by\s+[A-Z][a-z]+(?:\s+[A-Z][a-z.]+){0,3}\s*$|^\s*(?:updated|published)\b|\b(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s+\d{1,2}(?:st|nd|rd|th)?,?\s+\d{4}\s*\||(?:记者|作者|来源)\s*[:：]/im
 const SCHEDULE =
   /\bweek\s*\d{1,2}\b|第\s*\d{1,2}\s*周|office\s*hours?|instructor|prerequisites?|required\s+text(?:book)?|course\s+(?:objectives|description|schedule|policies)|academic\s+(?:integrity|honesty)|late\s+(?:policy|submission)|教学目标|课程安排|任课教师|考核方式/gi
 
@@ -173,12 +189,19 @@ export function firstPagesText(chunks: readonly ScoreChunk[], pages = 2): string
 
 /** Local content scores for each kind (higher = more like it). */
 export function scoreMaterialContent(input: ScoreInput): ContentScores {
-  const scores: Record<ContentKind, number> = { questions: 0, answers: 0, lecture: 0, syllabus: 0 }
+  const scores: Record<ContentKind, number> = {
+    questions: 0,
+    answers: 0,
+    lecture: 0,
+    syllabus: 0,
+    reading: 0,
+  }
   const reasons: Record<ContentKind, SuggestionReason[]> = {
     questions: [],
     answers: [],
     lecture: [],
     syllabus: [],
+    reading: [],
   }
   let text = ''
   for (const chunk of input.chunks) {
@@ -253,6 +276,20 @@ export function scoreMaterialContent(input: ScoreInput): ContentScores {
   if (schedule >= 3) add(scores, reasons, 'syllabus', 2, 'schedule')
   if (schedule >= 6) add(scores, reasons, 'syllabus', 1, 'schedule')
 
+  // ---- reading (an article) ---------------------------------------------
+  // Running prose with no chapter headings and no question numbering, often
+  // naming its newspaper / magazine. Never a slide deck.
+  if (input.type !== 'pptx') {
+    if (PUBLISHER.test(input.name) || PUBLISHER.test(head))
+      add(scores, reasons, 'reading', 3, 'publisher')
+    if (proseRatio >= 0.5 && headings === 0 && numbered <= 2 && marks === 0 && chars >= 1500)
+      add(scores, reasons, 'reading', 2.5, 'articleProse')
+    if (BYLINE.test(head)) add(scores, reasons, 'reading', 1, 'byline')
+    // Without article prose, a publisher name alone (a slide citing The
+    // Economist) says little.
+    if (!reasons.reading.includes('articleProse')) scores.reading = Math.min(scores.reading, 3)
+  }
+
   // ---- the file name agrees ---------------------------------------------
   const byName = suggestMaterialType(input.name, input.folderPath ?? '')
   const nameKind = kindOfRole(byName)
@@ -285,6 +322,8 @@ export function kindOfRole(type: LearningMaterialType): ContentKind | undefined 
     case 'user_notes':
     case 'lecture_transcript':
       return 'lecture'
+    case 'reading':
+      return 'reading'
     default:
       return undefined
   }
@@ -301,6 +340,8 @@ export function roleOfKind(kind: ContentKind, exam: boolean): LearningMaterialTy
       return 'syllabus'
     case 'lecture':
       return 'textbook'
+    case 'reading':
+      return 'reading'
   }
 }
 

@@ -18,6 +18,7 @@ const ROLE_KEY: Partial<Record<LearningMaterialType, TranslationKey>> = {
   homework: 'materialType.homework',
   homework_answer: 'materialType.homework_answer',
   syllabus: 'materialType.syllabus',
+  reading: 'materialType.reading',
 }
 
 const WHAT_KEY: Partial<Record<LearningMaterialType, TranslationKey>> = {
@@ -25,6 +26,7 @@ const WHAT_KEY: Partial<Record<LearningMaterialType, TranslationKey>> = {
   homework: 'materialSuggest.what.homework',
   homework_answer: 'materialSuggest.what.homework_answer',
   syllabus: 'materialSuggest.what.syllabus',
+  reading: 'materialSuggest.what.reading',
 }
 
 /** Reasons shown under the notice (at most this many). */

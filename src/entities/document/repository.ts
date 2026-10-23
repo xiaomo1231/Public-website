@@ -15,7 +15,7 @@ function normalizeName(name: string): string {
   return name.trim()
 }
 
-async function blobToArrayBuffer(blob: Blob): Promise<ArrayBuffer> {
+export async function blobToArrayBuffer(blob: Blob): Promise<ArrayBuffer> {
   // jsdom 25's Blob.prototype.arrayBuffer is a stub that returns an empty
   // buffer regardless of the underlying data. Use FileReader as a portable
   // fallback so tests work the same way as real browsers.
@@ -83,6 +83,7 @@ export class DocumentRepository {
     if (input.sourceModifiedAt !== undefined) document.sourceModifiedAt = input.sourceModifiedAt
     const folder = normalizeFolderPath(input.folderPath)
     if (folder) document.folderPath = folder
+    if (input.photoPages && input.photoPages > 0) document.photoPages = input.photoPages
 
     // Read blob bytes OUTSIDE the transaction so Dexie's transaction scope
     // never has to wait on an async boundary (FileReader, fetch, etc.).

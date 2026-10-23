@@ -1,6 +1,6 @@
 import { marketFeedback } from './marketFeedback'
 import { aiConcurrency, type AIService } from './aiService'
-import { hasPromptCorrection } from '@/entities/homework/proofread'
+import { hasPromptCorrection, proofreadAnswerText } from '@/entities/homework/proofread'
 import type { AppDatabase } from '@/infrastructure/db/database'
 import { getDb } from '@/infrastructure/db/database'
 import type { ChatMessage } from '@/infrastructure/ai/types'
@@ -70,6 +70,12 @@ import {
   planAnalyzerBatches,
 } from '@/entities/homework/analyzerBatching'
 import { locateQuestionExcerpt, resolveSourceChunkIds } from '@/entities/homework/sourceGrounding'
+import {
+  attachMarkedAnswers,
+  inlineAnswerFields,
+  validateInlineAnswer,
+  type InlineAnswer,
+} from '@/entities/homework/inlineAnswer'
 import {
   buildAnswerLines,
   cleanProfessorAnswerText,
@@ -221,6 +227,12 @@ export interface HomeworkRunResult {
   summary: ReanalysisSummary
   paused?: boolean
 }
+
+/** How often a running read refreshes its set's `updatedAt` (see `startHeartbeat`). */
+export const RECOGNITION_HEARTBEAT_MS = 20_000
+
+/** An `analyzing` set with no run and no heartbeat for this long was interrupted. */
+export const RECOGNITION_STALE_MS = 90_000
 
 /** Options for a run the student can pause or stop. */
 export interface HomeworkRunOptions {
@@ -838,6 +850,73 @@ export class HomeworkService {
     return setRuns.has(setId)
   }
 
+  /**
+   * Whether this tab is reading (or preparing) the set: a first-time read runs
+   * under its document, a re-read or 继续 under the set.
+   */
+  isRecognitionRunning(set: Pick<HomeworkSet, 'id' | 'documentId'>): boolean {
+    return setRuns.has(set.id) || documentRuns.has(set.documentId)
+  }
+
+  /**
+   * A set still `analyzing` with no run in this tab and no heartbeat for
+   * `RECOGNITION_STALE_MS` was interrupted (the page was closed or reloaded):
+   * it becomes `paused`, keeping how far it got, so 「继续」 is offered
+   * instead of a progress bar that never moves. Never calls the AI.
+   */
+  async recoverInterrupted(projectId: string, now = Date.now()): Promise<number> {
+    let recovered = 0
+    for (const set of await this.homework.listSets(projectId)) {
+      if (set.status !== 'analyzing' || isDerivedSet(set)) continue
+      if (this.isRecognitionRunning(set)) continue
+      const seen = Math.max(set.updatedAt, set.progress?.updatedAt ?? 0)
+      if (now - seen < RECOGNITION_STALE_MS) continue
+      const changed = await this.db.transaction('rw', this.db.homeworkSets, async () => {
+        const current = await this.homework.getSet(set.id)
+        if (!current || current.status !== 'analyzing') return false
+        if (
+          now - Math.max(current.updatedAt, current.progress?.updatedAt ?? 0) <
+          RECOGNITION_STALE_MS
+        )
+          return false
+        await this.homework.upsertSet({
+          ...current,
+          status: 'paused',
+          progress: current.progress ?? { stage: 'identifying', completed: 0, updatedAt: now },
+          updatedAt: now,
+        })
+        return true
+      })
+      if (changed) recovered += 1
+    }
+    return recovered
+  }
+
+  /**
+   * Keep an in-flight run's `updatedAt` fresh, so another page (or a reload)
+   * can tell a slow batch from an interrupted run. Only touches a set that is
+   * still `analyzing`.
+   */
+  private startHeartbeat(setId: string): () => void {
+    const timer = setInterval(() => {
+      void this.db
+        .transaction('rw', this.db.homeworkSets, async () => {
+          const current = await this.homework.getSet(setId)
+          if (!current || current.status !== 'analyzing') return
+          const now = Date.now()
+          await this.homework.upsertSet({
+            ...current,
+            ...(current.progress ? { progress: { ...current.progress, updatedAt: now } } : {}),
+            updatedAt: now,
+          })
+        })
+        .catch(() => {
+          /* best effort: the next beat retries */
+        })
+    }, RECOGNITION_HEARTBEAT_MS)
+    return () => clearInterval(timer)
+  }
+
   /** True when any question in the set holds the learner's own work. */
   private async setHasStudentWork(setId: string): Promise<boolean> {
     const questions = await this.homework.listQuestions(setId)
@@ -988,8 +1067,12 @@ export class HomeworkService {
     if (question.answerStatus !== 'matched' || !question.answerChunkIds?.length) return []
     const set = await this.homework.getSet(question.setId)
     if (!set || set.projectId !== question.projectId) return []
-    const document = await this.getAnswerDocument(set.id)
-    if (!document || document.type !== 'pdf') return []
+    // 教授答案（卷内附带） is on the paper's own pages.
+    const document =
+      question.answerSource === 'inline'
+        ? await this.loadDocumentOrNull(set.documentId)
+        : await this.getAnswerDocument(set.id)
+    if (!document || document.type !== 'pdf' || document.projectId !== set.projectId) return []
     const allowed = new Set(question.answerChunkIds)
     const chunks = await this.chunks.listByDocument(document.id)
     const pages = [
@@ -1440,6 +1523,20 @@ export class HomeworkService {
     const set = await this.homework.getSet(setId)
     if (!set) return undefined
     if (set.progress?.stage !== 'generating') return this.runRetry(setId, control)
+    const stopBeat = this.startHeartbeat(setId)
+    try {
+      return await this.runResumeGenerating(set, control)
+    } finally {
+      stopBeat()
+    }
+  }
+
+  private async runResumeGenerating(
+    set: HomeworkSet,
+    control: GenerationControl,
+  ): Promise<HomeworkRunResult | undefined> {
+    const setId = set.id
+    if (set.progress?.stage !== 'generating') return undefined
     const pendingIds = (await this.listQuestions(setId))
       .filter((question) => question.generationStatus === 'pending')
       .map((question) => question.id)
@@ -1623,6 +1720,12 @@ export class HomeworkService {
   ): Promise<HomeworkRunResult | undefined> {
     const existing = await this.homework.getSet(setId)
     if (!existing) return undefined
+    // The first read of its document is still running in this tab: join it.
+    const first = documentRuns.get(existing.documentId)
+    if (first) {
+      const set = await first
+      return { set, summary: EMPTY_REANALYSIS_SUMMARY }
+    }
     // A practice set has no document of its own to re-read.
     if (isDerivedSet(existing))
       throw new AppError(t('practiceSet.notFromPractice'), 'VALIDATION_ERROR')
@@ -1650,6 +1753,19 @@ export class HomeworkService {
   }
 
   private async runAnalysis(
+    set: HomeworkSet,
+    control: GenerationControl,
+    previous?: HomeworkSet,
+  ): Promise<HomeworkRunResult> {
+    const stopBeat = this.startHeartbeat(set.id)
+    try {
+      return await this.runAnalysisSteps(set, control, previous)
+    } finally {
+      stopBeat()
+    }
+  }
+
+  private async runAnalysisSteps(
     set: HomeworkSet,
     control: GenerationControl,
     previous?: HomeworkSet,
@@ -2080,7 +2196,12 @@ export class HomeworkService {
     if (droppedChunks > 0) failedRanges += 1
 
     return {
-      questions: dedupeByKey(collected, (question) => normalizePrompt(question.prompt)),
+      // `Answer n: (c)` lines for highlighted options sit after the pages, often
+      // in another batch: they are paired by printed number, locally.
+      questions: attachMarkedAnswers(
+        dedupeByKey(collected, (question) => normalizePrompt(question.prompt)),
+        chunks,
+      ),
       invalidSourceRanges,
       failedRanges,
       ...(firstError !== undefined ? { firstError } : {}),
@@ -2185,17 +2306,19 @@ export class HomeworkService {
             const prior = retiredRows[revived.oldIndex]!
             // Text the student corrected in 导入校对 outlives a re-read.
             const kept = hasPromptCorrection(prior)
-            const unchanged = kept || prior.contentFingerprint === fingerprint
+            const number = kept ? prior.number : question.number
+            const answer = answerAfterRead(prior, question.inlineAnswer, number)
+            const unchanged = (kept || prior.contentFingerprint === fingerprint) && !answer.changed
             const next: HomeworkQuestion = {
               ...prior,
               order: index,
-              number: kept ? prior.number : question.number,
+              number,
               prompt: kept ? prior.prompt : question.prompt,
               sourceRefs: question.sourceRefs,
               contentFingerprint: kept ? prior.contentFingerprint : fingerprint,
               retired: false,
               retiredAt: undefined,
-              answerStatus: answerKeptForMatch(prior, question.number),
+              ...answer.fields,
               updatedAt: now,
             }
             // A row left `pending` / `failed` by an earlier paused or interrupted
@@ -2213,15 +2336,17 @@ export class HomeworkService {
             const prior = active[pair.oldIndex]!
             // Text the student corrected in 导入校对 outlives a re-read.
             const kept = hasPromptCorrection(prior)
-            const unchanged = kept || prior.contentFingerprint === fingerprint
+            const number = kept ? prior.number : question.number
+            const answer = answerAfterRead(prior, question.inlineAnswer, number)
+            const unchanged = (kept || prior.contentFingerprint === fingerprint) && !answer.changed
             const next: HomeworkQuestion = {
               ...prior,
               order: index,
-              number: kept ? prior.number : question.number,
+              number,
               prompt: kept ? prior.prompt : question.prompt,
               sourceRefs: question.sourceRefs,
               contentFingerprint: kept ? prior.contentFingerprint : fingerprint,
-              answerStatus: answerKeptForMatch(prior, question.number),
+              ...answer.fields,
               updatedAt: now,
             }
             if (unchanged && !needsGeneration(prior)) {
@@ -2254,6 +2379,15 @@ export class HomeworkService {
             solutionRevealed: false,
             messages: [],
             contentFingerprint: fingerprint,
+            ...(question.inlineAnswer
+              ? {
+                  inlineAnswer: question.inlineAnswer,
+                  ...inlineAnswerFields({
+                    inlineAnswer: question.inlineAnswer,
+                    number: question.number,
+                  }),
+                }
+              : {}),
             createdAt: now,
             updatedAt: now,
           }
@@ -2946,6 +3080,55 @@ function answerKeptForMatch(
   return before === after ? 'matched' : 'needs_review'
 }
 
+/**
+ * The professor-answer fields of a re-read question. A linked answer file's
+ * answer wins (only the stored inline copy is refreshed, and its link is
+ * checked as before); otherwise the answer printed in the material is used:
+ * the same text keeps the row's answer (a 校对 correction included), a new
+ * text replaces it, and none clears an earlier inline answer. `changed`: the
+ * answer the help is written from changed.
+ */
+function answerAfterRead(
+  prior: HomeworkQuestion,
+  inline: InlineAnswer | undefined,
+  number: string | undefined,
+): { fields: Partial<HomeworkQuestion>; changed: boolean } {
+  if (prior.answerStatus && prior.answerSource !== 'inline') {
+    return {
+      fields: { inlineAnswer: inline, answerStatus: answerKeptForMatch(prior, number) },
+      changed: false,
+    }
+  }
+  if (!inline) {
+    if (prior.answerSource !== 'inline')
+      return { fields: { inlineAnswer: undefined }, changed: false }
+    return {
+      fields: { inlineAnswer: undefined, ...inlineAnswerFields({ number }), answerBased: false },
+      changed: true,
+    }
+  }
+  if (prior.answerSource === 'inline' && prior.inlineAnswer?.text.trim() === inline.text.trim()) {
+    return {
+      fields: {
+        inlineAnswer: inline,
+        answerChunkIds: [...inline.chunkIds],
+        answerStatus: answerKeptForMatch(prior, number),
+      },
+      changed: false,
+    }
+  }
+  const corrected = proofreadAnswerText(prior, inline.text)
+  return {
+    fields: {
+      inlineAnswer: inline,
+      ...inlineAnswerFields({ inlineAnswer: inline, number }),
+      ...(corrected !== undefined ? { answerText: corrected } : {}),
+      answerBased: false,
+    },
+    changed: true,
+  }
+}
+
 /** Help that never finished (paused, interrupted or failed) is redone on a re-read. */
 function needsGeneration(question: HomeworkQuestion): boolean {
   return question.generationStatus === 'pending' || question.generationStatus === 'failed'
@@ -3039,6 +3222,8 @@ interface NormalizedQuestion {
   number?: string
   prompt: string
   sourceRefs: SourceReference[]
+  /** 教授答案（卷内附带）, found verbatim in its cited chunks (`inlineAnswer.ts`). */
+  inlineAnswer?: InlineAnswer
 }
 
 /**
@@ -3089,10 +3274,24 @@ export function normalizeQuestions(
       )
       if (located.length === 1) sourceRefs = [toSourceRef(located[0]!, document, prompt, number)]
     }
+    // An answer printed with the question is kept only when it is found
+    // verbatim in the passages it cites (or, citing none, the question's own).
+    const answerIds = resolveSourceChunkIds(
+      asStringArray(entry.answerSourceChunkIds),
+      new Set(byId.keys()),
+    )
+    const inlineAnswer = validateInlineAnswer(entry.answer, {
+      prompt,
+      cited: answerIds.map((id) => byId.get(id)!),
+      questionChunks: sourceRefs
+        .map((ref) => (ref.chunkId ? byId.get(ref.chunkId) : undefined))
+        .filter((chunk): chunk is DocumentChunk => chunk !== undefined),
+    })
     out.push({
       ...(number ? { number } : {}),
       prompt,
       sourceRefs,
+      ...(inlineAnswer ? { inlineAnswer } : {}),
     })
   }
   return out

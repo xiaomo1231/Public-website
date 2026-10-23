@@ -81,6 +81,24 @@ const PRACTICE_HINT =
   /(?:^|[^a-z])(?:practice|worksheet|drill|review\s*problems?)(?:[^a-z]|$)|练习|习题/i
 const NOTES_HINT = /(?:^|[^a-z])(?:notes?|cheat\s*sheet|summary|review)(?:[^a-z]|$)|笔记|总结|复习/i
 const TRANSCRIPT_HINT = /(?:^|[^a-z])(?:transcript|recording|captions?)(?:[^a-z]|$)|文字稿|录音/i
+/** A name that says it is the paper itself (大题 / 选择题 / 题目 / 试卷 / exam paper…). */
+const PAPER_HINT =
+  /大题|选择题|填空题|判断题|简答题|计算题|论述题|题目|试卷|试题|考卷|真题|模拟卷|(?:^|[^a-z])(?:exam|question|test)\s*paper(?:s)?(?:[^a-z]|$)/i
+// "带答案和评分" / "含答案" / "with answers" describe a paper that includes
+// its answers — not an answer key. Removed before looking for answer words.
+const ZH_ANSWER_PART = '(?:参考)?(?:答案|解答|解析|评分(?:标准)?)'
+const EN_ANSWER_PART =
+  '(?:the\\s+)?(?:answers?|solutions?|marking(?:\\s*scheme)?|mark\\s*scheme|keys?)'
+const INCLUDED_ANSWERS = new RegExp(
+  `(?:带|含|附带?|包含|有)\\s*${ZH_ANSWER_PART}(?:\\s*(?:和|及|与|、|\\+|&)\\s*${ZH_ANSWER_PART})*` +
+    `|(?:^|[^a-z])(?:with|incl(?:uding|\\.)?|plus|\\+)\\s*${EN_ANSWER_PART}(?:\\s*(?:and|&|\\+)\\s*${EN_ANSWER_PART})*(?=[^a-z]|$)`,
+  'gi',
+)
+
+/** The name without "带答案 / with answers" phrases (a paper that includes them). */
+function withoutIncludedAnswers(text: string): string {
+  return text.replace(INCLUDED_ANSWERS, ' ')
+}
 
 /**
  * Suggest a role from a file name and its folder ("Past exams/2024.pdf",
@@ -89,17 +107,26 @@ const TRANSCRIPT_HINT = /(?:^|[^a-z])(?:transcript|recording|captions?)(?:[^a-z]
  */
 export function suggestMaterialType(name: string, folderPath = ''): LearningMaterialType {
   const base = name.replace(/\.[a-z0-9]+$/i, '')
-  const both = `${normalizeFolderPath(folderPath)} ${base}`
+  // "大题（带答案和评分）" is a paper with its answers, not an answer key: only a
+  // name that is just answers / solutions / key counts as one.
+  const plain = withoutIncludedAnswers(base)
+  const folderPlain = withoutIncludedAnswers(folderPath)
+  const answers = ANSWER_HINT.test(plain)
+  const both = `${normalizeFolderPath(folderPlain)} ${plain}`
   if (looksLikeSyllabus(base)) return 'syllabus'
-  if (ANSWER_HINT.test(base)) return 'homework_answer'
-  if (looksLikePastExam(base) || (looksLikePastExam(folderPath) && !ANSWER_HINT.test(both)))
+  if (PAPER_HINT.test(base) && !answers) return 'past_exam'
+  if (answers) return 'homework_answer'
+  if (
+    looksLikePastExam(plain) ||
+    ((looksLikePastExam(folderPlain) || PAPER_HINT.test(folderPath)) && !ANSWER_HINT.test(both))
+  )
     return 'past_exam'
   if (HOMEWORK_HINT.test(base)) return 'homework'
   if (PRACTICE_HINT.test(base)) return 'professor_practice'
   if (TRANSCRIPT_HINT.test(base)) return 'lecture_transcript'
   if (NOTES_HINT.test(base)) return 'user_notes'
   // The folder decides only when the name itself says nothing.
-  if (ANSWER_HINT.test(folderPath)) return 'homework_answer'
+  if (ANSWER_HINT.test(folderPlain)) return 'homework_answer'
   if (HOMEWORK_HINT.test(folderPath)) return 'homework'
   if (PRACTICE_HINT.test(folderPath)) return 'professor_practice'
   if (NOTES_HINT.test(folderPath)) return 'user_notes'

@@ -76,8 +76,9 @@ export const studyPlanEn = {
   'plan.exams.updated': 'Exam updated and the plan laid out again',
   'plan.exams.courseFixed':
     'Course: {course} (the course can’t be changed; to move the exam to another course, delete it and add it again)',
-  'plan.review.scopeChanged': 'The scope changed — the review sheet can be generated again',
-  'plan.review.scopeChangedAction': 'Lay out topics for the new scope',
+  'plan.review.scopeChanged':
+    'The scope or the chosen materials changed — the review sheet can be laid out again',
+  'plan.review.scopeChangedAction': 'Lay out the knowledge points again',
   'plan.scope.course': 'Whole course',
   'plan.scope.syllabus': 'Syllabus scope',
   'plan.scope.syllabusItem': 'Syllabus: {label} ({count} topics)',

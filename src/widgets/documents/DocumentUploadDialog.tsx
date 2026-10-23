@@ -24,6 +24,12 @@ import { cn } from '@/shared/lib/utils'
 import { useBatchUpload } from '@/features/documents/useBatchUpload'
 import { groupNameSuggestions } from '@/entities/document/materialSuggestion'
 import {
+  DuplicateBulkNotice,
+  DuplicateChoiceControl,
+  PhotoGroupNotices,
+} from './UploadQueueOptions'
+import { duplicateStatusText, isUndecidedDuplicate } from './uploadQueueText'
+import {
   MAX_BATCH_FILES,
   type FileIssue,
   type UploadQueueItem,
@@ -55,6 +61,7 @@ const MATERIAL_LABEL_KEY: Record<LearningMaterialType, TranslationKey> = {
   syllabus: 'materialType.syllabus',
   walkthrough_import: 'materialType.walkthrough_import',
   past_exam: 'materialType.past_exam',
+  reading: 'materialType.reading',
 }
 
 const TEXT_TAB = 'text' as const
@@ -81,6 +88,7 @@ const ISSUE_KEYS: Record<FileIssue, TranslationKey> = {
 const STAGE_KEYS: Record<string, TranslationKey> = {
   validating: 'batch.stage.validating',
   saving: 'batch.stage.saving',
+  merging: 'batch.stage.merging',
   extracting: 'batch.stage.extracting',
   chunking: 'batch.stage.chunking',
   indexing: 'batch.stage.indexing',
@@ -153,7 +161,11 @@ export function DocumentUploadDialog({
   const roleSuggestions = groupNameSuggestions(items)
 
   function statusLabel(item: UploadQueueItem): string {
-    if (item.issue) return t(ISSUE_KEYS[item.issue])
+    // 上传重复文件可选: what a replaced / kept duplicate will do or did.
+    const duplicate = item.status === 'completed' || item.status === 'queued'
+    const choice = duplicate ? duplicateStatusText(item, t) : null
+    if (choice) return choice
+    if (item.issue && item.status === 'skipped') return t(ISSUE_KEYS[item.issue])
     if ((item.status === 'uploading' || item.status === 'processing') && item.phase) {
       const stageKey = STAGE_KEYS[item.phase]
       if (stageKey) return t(stageKey)
@@ -353,13 +365,26 @@ export function DocumentUploadDialog({
               aria-label={t('batch.queue')}
             >
               {items.map((item) => (
-                <li key={item.id} className="flex items-center gap-2 rounded px-1.5 py-1 text-sm">
+                <li
+                  key={item.id}
+                  className="flex flex-wrap items-center gap-2 rounded px-1.5 py-1 text-sm"
+                  {...(item.mergeKey ? { 'data-merged-item': item.name } : {})}
+                >
                   <ItemIcon item={item} />
                   <span
                     className="min-w-0 flex-1 truncate"
-                    title={item.name || t('upload.tab.text')}
+                    title={
+                      item.mergeNames
+                        ? item.mergeNames.join('\n')
+                        : item.name || t('upload.tab.text')
+                    }
                   >
                     {item.name || t('upload.tab.text')}
+                    {item.mergeNames && (
+                      <span className="ml-1.5 text-xs text-muted-foreground">
+                        {t('batch.merge.mergedFrom', { count: item.mergeNames.length })}
+                      </span>
+                    )}
                   </span>
                   {item.materialType && item.materialType !== material && (
                     <span className="shrink-0 rounded border px-1 text-[11px] text-muted-foreground">
@@ -369,7 +394,13 @@ export function DocumentUploadDialog({
                   <span className="shrink-0 text-xs text-muted-foreground">
                     {item.sizeBytes > 0 ? formatBytes(item.sizeBytes) : null}
                   </span>
-                  {item.duplicateOf ? (
+                  {!started && isUndecidedDuplicate(item) && (
+                    <DuplicateChoiceControl
+                      item={item}
+                      onChoose={(choice) => batch.setDuplicateChoice([item.id], choice)}
+                    />
+                  )}
+                  {item.duplicateOf && item.status === 'skipped' ? (
                     <Link
                       to={`/projects/${projectId}/documents/${item.duplicateOf.documentId}`}
                       title={item.duplicateOf.name}
@@ -405,6 +436,11 @@ export function DocumentUploadDialog({
                 </li>
               ))}
             </ul>
+
+            {!started && (
+              <PhotoGroupNotices groups={batch.photoGroups} onToggle={batch.setMergeGroup} />
+            )}
+            {!started && <DuplicateBulkNotice items={items} onAll={batch.setAllDuplicates} />}
 
             {!started &&
               roleSuggestions.map(({ type, ids }) => (

@@ -11,6 +11,7 @@ import { getDb } from '@/infrastructure/db/database'
 import { logger } from '@/infrastructure/logger/logger'
 import { t } from '@/i18n'
 import { reprocessDocument } from './uploadPipeline'
+import { mergePhotoDocuments, type PhotoMergeDeps } from './photoMerge'
 
 /**
  * Batch file operations (2o): one action over many files, one file at a time.
@@ -27,6 +28,11 @@ export type DocumentBatchAction =
   | { kind: 'folder'; folderPath: string }
   | { kind: 'reprocess' }
   | { kind: 'evalRole'; evalRole: EvalRole | undefined }
+  /**
+   * 合并为一份试卷: the selected photos (one course) become one PDF document;
+   * the originals are deleted on request (never those with student work).
+   */
+  | { kind: 'mergePhotos'; name?: string; deleteOriginals: boolean }
 
 export type DocumentBatchStatus = 'done' | 'skipped' | 'failed' | 'not-run'
 
@@ -47,6 +53,8 @@ export interface DocumentBatchResult {
   stopped: boolean
   /** Courses whose files changed (refresh their lists). */
   projectIds: string[]
+  /** 合并为一份试卷: the new merged document. */
+  merged?: Document
 }
 
 export interface DocumentBatchProgress {
@@ -65,6 +73,8 @@ export interface DocumentBatchDeps {
   setEvalRole: (documentId: string, role: EvalRole | undefined) => Promise<void>
   /** After the batch: start the course analysis for reprocessed courses. */
   analyze?: (projectId: string) => void
+  /** 合并为一份试卷 (defaults to the real pipeline). */
+  merge?: PhotoMergeDeps
 }
 
 export interface DocumentBatchOptions {
@@ -156,6 +166,9 @@ async function runOne(
         await deps.setEvalRole(doc.id, action.evalRole)
         return { document: doc, status: 'done' }
       }
+      case 'mergePhotos':
+        // Not a per-file action (see `runPhotoMerge`).
+        return { document: doc, status: 'not-run' }
     }
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)
@@ -175,6 +188,7 @@ export async function runDocumentBatch(
   options: DocumentBatchOptions = {},
 ): Promise<DocumentBatchResult> {
   const deps = options.deps ?? defaultDeps()
+  if (action.kind === 'mergePhotos') return runPhotoMerge(documents, action, deps, options)
   const outcomes: DocumentBatchOutcome[] = []
   const reprocessed = new Set<string>()
   const projectIds = new Set<string>()
@@ -201,5 +215,60 @@ export async function runDocumentBatch(
     failed: count('failed'),
     stopped,
     projectIds: [...projectIds],
+  }
+}
+
+/** 合并为一份试卷 as a batch result: originals deleted = done, kept = skipped. */
+async function runPhotoMerge(
+  documents: readonly Document[],
+  action: Extract<DocumentBatchAction, { kind: 'mergePhotos' }>,
+  deps: DocumentBatchDeps,
+  options: DocumentBatchOptions,
+): Promise<DocumentBatchResult> {
+  options.onProgress?.({ completed: 0, total: documents.length, current: documents[0] })
+  const base = {
+    action,
+    stopped: false,
+    projectIds: [...new Set(documents.map((d) => d.projectId))],
+  }
+  try {
+    const result = await mergePhotoDocuments(documents, {
+      ...(action.name ? { name: action.name } : {}),
+      deleteOriginals: action.deleteOriginals,
+      ...(deps.merge ? { deps: deps.merge } : {}),
+    })
+    options.onProgress?.({ completed: documents.length, total: documents.length })
+    const deleted = new Set(result.deleted.map((d) => d.id))
+    const kept = new Map(result.kept.map((k) => [k.document.id, k.reason]))
+    const outcomes: DocumentBatchOutcome[] = documents.map((doc) =>
+      kept.has(doc.id)
+        ? { document: doc, status: 'skipped', reason: kept.get(doc.id)! }
+        : { document: doc, status: 'done' },
+    )
+    for (const projectId of base.projectIds) deps.analyze?.(projectId)
+    return {
+      ...base,
+      outcomes,
+      done: action.deleteOriginals ? deleted.size : documents.length,
+      skipped: kept.size,
+      failed: 0,
+      merged: result.document,
+    }
+  } catch (err) {
+    const reason = err instanceof Error ? err.message : String(err)
+    logger.warn('Merging photos into one paper failed', { count: documents.length })
+    options.onProgress?.({ completed: documents.length, total: documents.length })
+    return {
+      ...base,
+      // One reason for the whole merge; nothing else ran.
+      outcomes: documents.map((doc, index) =>
+        index === 0
+          ? { document: doc, status: 'failed' as const, reason }
+          : { document: doc, status: 'not-run' as const },
+      ),
+      done: 0,
+      skipped: 0,
+      failed: 1,
+    }
   }
 }

@@ -13,16 +13,35 @@ import {
   identityOfDocument,
   identityOfFile,
   MAX_BATCH_FILES,
+  planQueue,
+  queuePhotoGroups,
   retryableItems,
   runBatchQueue,
+  sourceIdsOf,
   summarizeBatch,
+  type DuplicateChoice,
   type FileQueueOptions,
   type UploadQueueItem,
 } from './batchUpload'
-import { reprocessDocument, uploadDocument } from './uploadPipeline'
+import type { PhotoGroup } from '@/entities/document/photoGroups'
+import { replaceDocumentFile, reprocessDocument, uploadDocument } from './uploadPipeline'
+
+/** A photo group the queue can merge, with the student's on / off choice. */
+export interface QueuePhotoGroup extends PhotoGroup {
+  merge: boolean
+}
 
 export interface UseBatchUploadResult {
+  /** The queue as it will be uploaded (photo groups merged, choices applied). */
   items: UploadQueueItem[]
+  /** Photo groups (≥2 numbered photos with one stem) and whether each is merged. */
+  photoGroups: QueuePhotoGroup[]
+  /** 「合并成一份试卷」 on / off for one group. */
+  setMergeGroup: (key: string, merge: boolean) => void
+  /** 跳过 / 覆盖 / 保留两份 for duplicates (planned ids). */
+  setDuplicateChoice: (ids: string[], choice: DuplicateChoice) => void
+  /** 全部跳过 / 全部覆盖: every duplicate (覆盖 only where a stored file exists). */
+  setAllDuplicates: (choice: DuplicateChoice) => void
   summary: ReturnType<typeof summarizeBatch>
   running: boolean
   addFiles: (
@@ -59,7 +78,12 @@ export interface UseBatchUploadResult {
  * five files produces five independent documents.
  */
 export function useBatchUpload(projectId: string): UseBatchUploadResult {
+  // Raw queue: one row per picked file until the upload starts, when the plan
+  // (merged photo groups, duplicate choices) is committed into it.
   const [items, setItems] = useState<UploadQueueItem[]>([])
+  const [mergeOff, setMergeOff] = useState<ReadonlySet<string>>(() => new Set())
+  const [choices, setChoices] = useState<Readonly<Record<string, DuplicateChoice>>>({})
+  const [existing, setExisting] = useState<ReadonlyArray<{ id: string; name: string }>>([])
   const [running, setRunning] = useState(false)
   // The run in progress. Each run owns its cancel flag, so closing the dialog
   // (reset) detaches a run that is still finishing its current file: its late
@@ -97,6 +121,7 @@ export function useBatchUpload(projectId: string): UseBatchUploadResult {
       }
 
       const documents = await new DocumentRepository(getDb()).listByProject(projectId)
+      setExisting(documents.map((doc) => ({ id: doc.id, name: doc.name })))
       // Files already waiting in this dialog count as present too, so the same
       // file dropped twice is not uploaded (and analysed) twice.
       const queued = itemsRef.current
@@ -127,16 +152,73 @@ export function useBatchUpload(projectId: string): UseBatchUploadResult {
     [],
   )
 
-  const removeItem = useCallback((id: string) => {
-    setItems((prev) => prev.filter((item) => item.id !== id))
+  const planned = useMemo(
+    () => planQueue(items, { mergeOff, choices, existing }),
+    [items, mergeOff, choices, existing],
+  )
+  const plannedRef = useRef(planned)
+  plannedRef.current = planned
+
+  /** Raw ids behind planned ids (a merged row stands for its photos). */
+  const rawIds = useCallback((ids: string[]): Set<string> => {
+    const out = new Set<string>()
+    for (const id of ids) {
+      const item = plannedRef.current.find((p) => p.id === id)
+      for (const raw of item ? sourceIdsOf(item) : [id]) out.add(raw)
+    }
+    return out
   }, [])
 
-  const setMaterial = useCallback((ids: string[], materialType: LearningMaterialType) => {
-    setItems((prev) =>
-      prev.map((item) =>
-        ids.includes(item.id) && item.status === 'queued' ? { ...item, materialType } : item,
-      ),
-    )
+  const removeItem = useCallback(
+    (id: string) => {
+      const remove = rawIds([id])
+      setItems((prev) => prev.filter((item) => !remove.has(item.id)))
+    },
+    [rawIds],
+  )
+
+  const setMaterial = useCallback(
+    (ids: string[], materialType: LearningMaterialType) => {
+      const target = rawIds(ids)
+      setItems((prev) =>
+        prev.map((item) =>
+          target.has(item.id) && (item.status === 'queued' || item.issue === 'duplicate')
+            ? { ...item, materialType }
+            : item,
+        ),
+      )
+    },
+    [rawIds],
+  )
+
+  const setMergeGroup = useCallback((key: string, merge: boolean) => {
+    setMergeOff((prev) => {
+      const next = new Set(prev)
+      if (merge) next.delete(key)
+      else next.add(key)
+      return next
+    })
+  }, [])
+
+  const setDuplicateChoice = useCallback((ids: string[], choice: DuplicateChoice) => {
+    setChoices((prev) => {
+      const next = { ...prev }
+      for (const id of ids) next[id] = choice
+      return next
+    })
+  }, [])
+
+  const setAllDuplicates = useCallback((choice: DuplicateChoice) => {
+    setChoices((prev) => {
+      const next = { ...prev }
+      for (const item of plannedRef.current) {
+        if (item.issue !== 'duplicate' || item.documentId) continue
+        if (item.status !== 'queued' && item.status !== 'skipped') continue
+        // 全部覆盖: a duplicate inside this selection has nothing to replace.
+        next[item.id] = choice === 'replace' && !item.duplicateOf ? 'skip' : choice
+      }
+      return next
+    })
   }, [])
 
   const run = useCallback(
@@ -156,7 +238,7 @@ export function useBatchUpload(projectId: string): UseBatchUploadResult {
             if (runRef.current === token) update(id, patch)
           },
           isCancelled: () => token.cancelled,
-          worker: async (item, { report, setDocumentId }) => {
+          worker: async (item, { report, setDocumentId, patch }) => {
             const isCancelled = () => token.cancelled
             const onStage = (stage: {
               phase: 'validating' | 'saving' | 'processing'
@@ -177,6 +259,16 @@ export function useBatchUpload(projectId: string): UseBatchUploadResult {
               return
             }
 
+            // 考卷照片合并: build the PDF from the photos (in page order) now.
+            let file = item.file
+            let photoPages: number | undefined
+            if (item.mergeFiles && item.mergeFiles.length > 0) {
+              report({ phase: 'saving', message: 'merging' })
+              const { buildPhotoPdfFile } = await import('@/infrastructure/files/photoPdf')
+              file = await buildPhotoPdfFile(item.mergeFiles, item.name)
+              photoPages = item.mergeFiles.length
+            }
+
             const input =
               item.kind === 'text'
                 ? {
@@ -190,16 +282,26 @@ export function useBatchUpload(projectId: string): UseBatchUploadResult {
                     projectId,
                     type: item.type ?? 'text',
                     materialType: item.materialType ?? 'textbook',
-                    file: item.file,
-                    name: item.name,
+                    file,
+                    name: item.saveAs ?? item.name,
                     ...(item.folderPath ? { folderPath: item.folderPath } : {}),
+                    ...(photoPages ? { photoPages } : {}),
                   }
+            const pipeline = { isCancelled, onStage, onDocumentCreated: setDocumentId }
 
-            await uploadDocument(input, {
-              isCancelled,
-              onStage,
-              onDocumentCreated: setDocumentId,
-            })
+            // 覆盖: replace the stored file (falls back to 保留两份 when the old
+            // file holds student work).
+            if (item.duplicateChoice === 'replace' && item.duplicateOf && item.kind === 'file') {
+              const result = await replaceDocumentFile(item.duplicateOf.documentId, input, pipeline)
+              patch({
+                outcome: result.outcome === 'replaced' ? 'replaced' : 'fallback-kept-both',
+                ...(result.outcome === 'kept-both' ? { saveAs: result.document.name } : {}),
+              })
+              return
+            }
+
+            await uploadDocument(input, pipeline)
+            if (item.duplicateChoice === 'keep') patch({ outcome: 'kept-both' })
           },
         })
       } finally {
@@ -231,7 +333,7 @@ export function useBatchUpload(projectId: string): UseBatchUploadResult {
   const addTextAndStart = useCallback(
     async (input: { text: string; name?: string; materialType?: LearningMaterialType }) => {
       const item = createTextQueueItem(input)
-      const next = [...itemsRef.current, item]
+      const next = [...plannedRef.current, item]
       setItems(next)
       await run(next)
     },
@@ -239,7 +341,10 @@ export function useBatchUpload(projectId: string): UseBatchUploadResult {
   )
 
   const start = useCallback(async () => {
-    await run(itemsRef.current)
+    // Commit the plan: merged photo groups become one row, choices are applied.
+    const next = plannedRef.current
+    setItems(next)
+    await run(next)
   }, [run])
 
   const retryFailed = useCallback(async () => {
@@ -263,12 +368,22 @@ export function useBatchUpload(projectId: string): UseBatchUploadResult {
     runRef.current = null
     setRunning(false)
     setItems([])
+    setMergeOff(new Set())
+    setChoices({})
   }, [])
 
-  const summary = useMemo(() => summarizeBatch(items), [items])
+  const summary = useMemo(() => summarizeBatch(planned), [planned])
+  const photoGroups = useMemo(
+    () => queuePhotoGroups(items).map((group) => ({ ...group, merge: !mergeOff.has(group.key) })),
+    [items, mergeOff],
+  )
 
   return {
-    items,
+    items: planned,
+    photoGroups,
+    setMergeGroup,
+    setDuplicateChoice,
+    setAllDuplicates,
     summary,
     running,
     addFiles,

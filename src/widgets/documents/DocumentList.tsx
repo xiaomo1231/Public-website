@@ -109,6 +109,7 @@ const MATERIAL_LABEL_KEY: Record<LearningMaterialType, TranslationKey> = {
   syllabus: 'materialType.syllabus',
   walkthrough_import: 'materialType.walkthrough_import',
   past_exam: 'materialType.past_exam',
+  reading: 'materialType.reading',
 }
 
 type SortKey = 'newest' | 'oldest' | 'name' | 'size'

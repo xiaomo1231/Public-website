@@ -22,9 +22,15 @@ export class SettingsRepository {
     try {
       const row = await this.db.settings.get('singleton')
       if (row) return row
-      const seed: AISettingsRow = { ...DEFAULT_AI_SETTINGS, updatedAt: Date.now() }
-      await this.db.settings.add(seed)
-      return seed
+      // Two first reads at once (two services built together) must not both
+      // add the row: the check and the insert share one transaction.
+      return await this.db.transaction('rw', this.db.settings, async () => {
+        const existing = await this.db.settings.get('singleton')
+        if (existing) return existing
+        const seed: AISettingsRow = { ...DEFAULT_AI_SETTINGS, updatedAt: Date.now() }
+        await this.db.settings.add(seed)
+        return seed
+      })
     } catch (err) {
       logger.error('SettingsRepository.getRow failed', undefined, err)
       throw new StorageError(t('storage.failedToReadSettings'), err)

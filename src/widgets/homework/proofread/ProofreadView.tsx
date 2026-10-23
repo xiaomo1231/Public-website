@@ -531,6 +531,11 @@ export function ProofreadView({
               <div className="space-y-2" data-proofread-answer>
                 <label htmlFor={`proofread-answer-${question.id}`} className="text-sm font-medium">
                   {t('proofread.answerText', { number: question.answerNumber ?? '—' })}
+                  {question.answerSource === 'inline' && (
+                    <span className="ml-2 text-xs font-normal text-muted-foreground">
+                      {t('homework.answer.professorInline')}
+                    </span>
+                  )}
                 </label>
                 <Textarea
                   id={`proofread-answer-${question.id}`}

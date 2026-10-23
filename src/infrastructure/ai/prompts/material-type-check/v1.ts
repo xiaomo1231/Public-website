@@ -25,6 +25,8 @@ export const ROLE_DESCRIPTIONS: Record<string, string> = {
   homework_answer: 'an answer key or solutions: the answers / worked solutions to questions',
   syllabus:
     'a course syllabus / handbook / exam-topic list: schedule, grading, policies or exam topics',
+  reading:
+    'supplementary reading: a newspaper / magazine article, essay or case study (running prose, no chapters or questions)',
 }
 
 export interface MaterialTypeCheckInput {

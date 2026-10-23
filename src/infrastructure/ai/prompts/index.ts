@@ -16,7 +16,7 @@ import * as ProfessorProfileV1 from './professor-profile/v1'
 import * as MistakeAnalyzerV2 from './mistake-analyzer/v2'
 import * as QuizGeneratorV10 from './quiz-generator/v10'
 import * as VisualizationGeneratorV11 from './visualization-generator/v11'
-import * as HomeworkAnalyzerV2 from './homework-analyzer/v2'
+import * as HomeworkAnalyzerV3 from './homework-analyzer/v3'
 import * as HomeworkQuestionV5 from './homework-question/v5'
 import * as HomeworkQaV1 from './homework-qa/v1'
 import * as HomeworkReviewV1 from './homework-review/v1'
@@ -54,7 +54,8 @@ import * as HandwritingTranscribeV1 from './handwriting-transcribe/v1'
 import * as EconGraphReadV1 from './econ-graph-read/v1'
 import * as PageTranscribeV1 from './page-transcribe/v1'
 import * as ExamScheduleExtractV1 from './exam-schedule-extract/v1'
-import * as ExamReviewV1 from './exam-review/v1'
+import * as ExamReviewV2 from './exam-review/v2'
+import * as ExamReviewOutlineV1 from './exam-review-outline/v1'
 import * as MaterialTypeCheckV1 from './material-type-check/v1'
 
 export const PROMPT_VERSIONS = {
@@ -70,7 +71,7 @@ export const PROMPT_VERSIONS = {
   mistakeAnalyzer: 'v2',
   quizGenerator: 'v10',
   visualizationGenerator: 'v11',
-  homeworkAnalyzer: 'v2',
+  homeworkAnalyzer: 'v3',
   homeworkQuestion: 'v5',
   homeworkQa: 'v1',
   homeworkReview: 'v1',
@@ -108,7 +109,8 @@ export const PROMPT_VERSIONS = {
   econGraphRead: 'v1',
   pageTranscribe: 'v1',
   examScheduleExtract: 'v1',
-  examReview: 'v1',
+  examReview: 'v2',
+  examReviewOutline: 'v1',
   materialTypeCheck: 'v1',
 } as const
 
@@ -125,7 +127,7 @@ export const prompts = {
   mistakeAnalyzer: MistakeAnalyzerV2,
   quizGenerator: QuizGeneratorV10,
   visualizationGenerator: VisualizationGeneratorV11,
-  homeworkAnalyzer: HomeworkAnalyzerV2,
+  homeworkAnalyzer: HomeworkAnalyzerV3,
   homeworkQuestion: HomeworkQuestionV5,
   homeworkQa: HomeworkQaV1,
   homeworkReview: HomeworkReviewV1,
@@ -169,8 +171,10 @@ export const prompts = {
   pageTranscribe: PageTranscribeV1,
   /** 粘贴识别: exam dates from pasted text or a screenshot (local parser first). */
   examScheduleExtract: ExamScheduleExtractV1,
-  /** 复习提纲: one topic of an exam's review sheet, every claim citing chunks. */
-  examReview: ExamReviewV1,
+  /** 复习提纲: one knowledge point of an exam's review sheet, every claim citing aliases. */
+  examReview: ExamReviewV2,
+  /** 复习提纲: the sheet's knowledge points across files (one request per sheet). */
+  examReviewOutline: ExamReviewOutlineV1,
   /** 资料类型按内容自动判断: a close call decided from the first two pages. */
   materialTypeCheck: MaterialTypeCheckV1,
 } as const
@@ -191,7 +195,7 @@ export type {
   QuizQuestionType,
 } from './quiz-generator/v9'
 export type { VisualizationInput, VisualizationOutput } from './visualization-generator/v11'
-export type { HomeworkAnalyzerInput, HomeworkAnalyzerOutput } from './homework-analyzer/v1'
+export type { HomeworkAnalyzerInput, HomeworkAnalyzerOutput } from './homework-analyzer/v3'
 export type { HomeworkQuestionInput, HomeworkQuestionOutput } from './homework-question/v5'
 export type { HomeworkQaInput, HomeworkQaHistoryItem } from './homework-qa/v1'
 export type { SlideLessonInput, SlideLessonOutput } from './slide-lesson/v1'

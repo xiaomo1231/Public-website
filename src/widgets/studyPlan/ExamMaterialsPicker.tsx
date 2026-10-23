@@ -16,6 +16,12 @@ import type { PlannedExamMaterials } from '@/entities/studyPlan/types'
 import type { MaterialOption } from '@/services/studyPlanService'
 import { useBatchUpload } from '@/features/documents/useBatchUpload'
 import {
+  DuplicateBulkNotice,
+  DuplicateChoiceControl,
+  PhotoGroupNotices,
+} from '@/widgets/documents/UploadQueueOptions'
+import { duplicateStatusText, isUndecidedDuplicate } from '@/widgets/documents/uploadQueueText'
+import {
   filesFromDataTransfer,
   filesFromInput,
   MAX_FOLDER_FILES,
@@ -24,7 +30,8 @@ import {
 import { useTranslation, type TranslationKey } from '@/i18n'
 
 /** The picker's role groups (课件/教材, 往年卷, 教授练习, 作业, 大纲, 复习资料, 其它). */
-type RoleGroup = 'lecture' | 'past' | 'practice' | 'homework' | 'syllabus' | 'review' | 'other'
+type RoleGroup =
+  'lecture' | 'past' | 'practice' | 'homework' | 'syllabus' | 'review' | 'reading' | 'other'
 
 const ROLE_GROUPS: RoleGroup[] = [
   'lecture',
@@ -33,6 +40,7 @@ const ROLE_GROUPS: RoleGroup[] = [
   'homework',
   'syllabus',
   'review',
+  'reading',
   'other',
 ]
 
@@ -43,6 +51,7 @@ const GROUP_KEYS: Record<RoleGroup, TranslationKey> = {
   homework: 'plan.materials.group.homework',
   syllabus: 'plan.materials.group.syllabus',
   review: 'plan.materials.group.review',
+  reading: 'plan.materials.group.reading',
   other: 'plan.materials.group.other',
 }
 
@@ -60,6 +69,8 @@ function roleGroupOf(type: LearningMaterialType): RoleGroup {
       return 'syllabus'
     case 'user_notes':
       return 'review'
+    case 'reading':
+      return 'reading'
     default:
       return 'other'
   }
@@ -75,6 +86,7 @@ const MATERIAL_KEYS: Record<LearningMaterialType, TranslationKey> = {
   syllabus: 'materialType.syllabus',
   walkthrough_import: 'materialType.walkthrough_import',
   past_exam: 'materialType.past_exam',
+  reading: 'materialType.reading',
 }
 
 /**
@@ -422,6 +434,10 @@ function MaterialUpload({
           }}
         />
       </div>
+      {!batch.running && (
+        <PhotoGroupNotices groups={batch.photoGroups} onToggle={batch.setMergeGroup} />
+      )}
+      {!batch.running && <DuplicateBulkNotice items={batch.items} onAll={batch.setAllDuplicates} />}
       {batch.items.length > 0 && (
         <ul
           className="max-h-56 space-y-1 overflow-y-auto text-sm"
@@ -434,7 +450,18 @@ function MaterialUpload({
                   <span className="text-muted-foreground">{item.folderPath}/</span>
                 ) : null}
                 {item.name}
+                {item.mergeNames && (
+                  <span className="ml-1.5 text-xs text-muted-foreground">
+                    {t('batch.merge.mergedFrom', { count: item.mergeNames.length })}
+                  </span>
+                )}
               </span>
+              {!batch.running && isUndecidedDuplicate(item) && (
+                <DuplicateChoiceControl
+                  item={item}
+                  onChoose={(choice) => batch.setDuplicateChoice([item.id], choice)}
+                />
+              )}
               {item.status === 'queued' ? (
                 <select
                   aria-label={t('plan.materials.roleOf', { name: item.name })}
@@ -455,7 +482,8 @@ function MaterialUpload({
                   {(item.status === 'uploading' || item.status === 'processing') && (
                     <Loader2 className="h-3 w-3 animate-spin" aria-hidden />
                   )}
-                  {t(`plan.materials.status.${item.status}` as TranslationKey)}
+                  {duplicateStatusText(item, t) ??
+                    t(`plan.materials.status.${item.status}` as TranslationKey)}
                 </span>
               )}
             </li>

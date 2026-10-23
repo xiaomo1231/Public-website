@@ -8,6 +8,7 @@ import { WalkthroughRepository } from './walkthroughRepository'
 import { AnswerImageRepository } from './answerImageRepository'
 import { answerImageKey } from './answerImages'
 import { proofreadAnswerText } from './proofread'
+import { inlineAnswerFields } from './inlineAnswer'
 
 /**
  * Persistence for homework assignments and their questions.
@@ -261,12 +262,12 @@ export class HomeworkRepository {
     return this.db.transaction('rw', this.questions(), async () => {
       const rows = await this.questions().where('setId').equals(setId).toArray()
       for (const row of rows) {
+        // An inline answer (教授答案（卷内附带）) is not the file's: it stays.
+        if (row.answerSource === 'inline') continue
+        // …and comes back where the answer file's link goes.
         const next: HomeworkQuestion = {
           ...row,
-          answerText: undefined,
-          answerNumber: undefined,
-          answerChunkIds: undefined,
-          answerStatus: undefined,
+          ...inlineAnswerFields(row),
           answerBased: undefined,
           previousSolution: undefined,
           updatedAt: Date.now(),
@@ -305,6 +306,8 @@ export class HomeworkRepository {
         const answerText = link.answer
           ? (proofreadAnswerText(existing, link.answer.answerText) ?? link.answer.answerText)
           : undefined
+        // No file answer chosen for a question answered in the paper: unchanged.
+        if (!link.answer && existing.answerSource === 'inline') continue
         const next: HomeworkQuestion = link.answer
           ? {
               ...existing,
@@ -314,6 +317,8 @@ export class HomeworkRepository {
               answerNumber: link.answer.answerNumber,
               answerChunkIds: link.answer.answerChunkIds,
               answerStatus: 'matched',
+              // The linked answer file's answer takes the place of an inline one.
+              answerSource: undefined,
               // An edited answer must not leave old AI help labelled as based
               // on the new answer. Student work and the old help stay intact.
               answerBased:
@@ -325,12 +330,9 @@ export class HomeworkRepository {
             }
           : {
               ...existing,
-              answerText: undefined,
-              answerNumber: undefined,
-              answerChunkIds: undefined,
-              answerStatus: undefined,
+              // No file answer for it: the answer printed in the paper, if any.
+              ...inlineAnswerFields(existing),
               answerBased: false,
-              answerLinkStale: undefined,
               updatedAt: Date.now(),
             }
         if (link.answer) matched += 1

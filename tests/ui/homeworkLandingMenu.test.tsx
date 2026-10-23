@@ -63,6 +63,8 @@ beforeEach(() => {
     createFromDocument: vi.fn(async () => holder.sets[0]!),
     retrySet: vi.fn(async () => ({ set: holder.sets[0]!, summary: {} })),
     isSetRunning: vi.fn(() => false),
+    isRecognitionRunning: vi.fn(() => false),
+    recoverInterrupted: vi.fn(async () => 0),
     reconcileSets: vi.fn(async () => ({ removed: 0, ambiguous: [] })),
     deleteAssignment: vi.fn(async () => undefined),
   } as unknown as HomeworkService
@@ -121,6 +123,7 @@ describe('HomeworkLandingPage card menu', () => {
   it('does not start a re-analysis while one is already running', async () => {
     holder.sets = [{ ...readySet(), status: 'failed', errorMessage: 'AI request timed out' }]
     holder.service.isSetRunning = vi.fn(() => true)
+    holder.service.isRecognitionRunning = vi.fn(() => true)
     renderPage()
 
     const retry = await screen.findByRole('button', { name: 'Retry analysis' })

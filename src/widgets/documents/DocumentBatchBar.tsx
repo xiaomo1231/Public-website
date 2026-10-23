@@ -2,6 +2,7 @@ import { useMemo, useRef, useState } from 'react'
 import {
   FlaskConical,
   FolderInput,
+  Layers,
   Loader2,
   RotateCcw,
   Square,
@@ -39,6 +40,7 @@ import {
   type DocumentBatchProgress,
   type DocumentBatchResult,
 } from '@/features/documents/documentBatch'
+import { canMergePhotos, defaultMergedName } from '@/features/documents/photoMerge'
 import { useTranslation, type TranslationKey } from '@/i18n'
 import { MaterialTypeSelect } from './MaterialTypeSelect'
 
@@ -59,7 +61,8 @@ export interface DocumentBatchBarProps {
   className?: string
 }
 
-type Pending = 'delete' | 'materialType' | 'folder' | 'reprocess' | 'evalRole' | null
+type Pending =
+  'delete' | 'materialType' | 'folder' | 'reprocess' | 'evalRole' | 'mergePhotos' | null
 
 const ACTION_TITLE: Record<DocumentBatchAction['kind'], TranslationKey> = {
   delete: 'fileBatch.action.delete',
@@ -67,6 +70,7 @@ const ACTION_TITLE: Record<DocumentBatchAction['kind'], TranslationKey> = {
   folder: 'fileBatch.action.folder',
   reprocess: 'fileBatch.action.reprocess',
   evalRole: 'fileBatch.action.evalRole',
+  mergePhotos: 'fileBatch.action.mergePhotos',
 }
 
 export function DocumentBatchBar({
@@ -82,6 +86,8 @@ export function DocumentBatchBar({
   const [materialType, setMaterialType] = useState<LearningMaterialType>('textbook')
   const [folder, setFolder] = useState('')
   const [evalRole, setEvalRole] = useState<EvalRole | ''>('')
+  const [mergeName, setMergeName] = useState('')
+  const [deleteOriginals, setDeleteOriginals] = useState(false)
   const [progress, setProgress] = useState<DocumentBatchProgress | null>(null)
   const [stopping, setStopping] = useState(false)
   const [result, setResult] = useState<DocumentBatchResult | null>(null)
@@ -97,6 +103,8 @@ export function DocumentBatchBar({
     return listFolders(documents.filter((d) => courses.has(d.projectId)))
   }, [chosen, documents])
 
+  // 合并为一份试卷: ≥2 photos of one course.
+  const mergeable = useMemo(() => canMergePhotos(chosen), [chosen])
   const running = progress !== null
   const showBar = chosen.length > 0 || running
   if (!showBar && !result) return null
@@ -114,7 +122,7 @@ export function DocumentBatchBar({
         onProgress: setProgress,
       })
       await Promise.all(outcome.projectIds.map((pid) => refresh(pid).catch(() => undefined)))
-      if (action.kind === 'delete') {
+      if (action.kind === 'delete' || (action.kind === 'mergePhotos' && action.deleteOriginals)) {
         selection.setMany(
           outcome.outcomes.filter((o) => o.status === 'done').map((o) => o.document.id),
           false,
@@ -226,6 +234,22 @@ export function DocumentBatchBar({
                     <FlaskConical className="h-4 w-4" />
                     {t('fileBatch.action.evalRole')}
                   </Button>
+                  {mergeable && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className={btn}
+                      onClick={() => {
+                        setMergeName(defaultMergedName(chosen))
+                        setDeleteOriginals(false)
+                        setPending('mergePhotos')
+                      }}
+                      data-batch-merge
+                    >
+                      <Layers className="h-4 w-4" />
+                      {t('fileBatch.action.mergePhotos')}
+                    </Button>
+                  )}
                   <Button
                     variant="outline"
                     size="sm"
@@ -277,6 +301,7 @@ export function DocumentBatchBar({
               {pending === 'folder' && t('fileBatch.folderHint')}
               {pending === 'reprocess' && t('fileBatch.reprocessHint')}
               {pending === 'evalRole' && t('fileBatch.evalRoleHint')}
+              {pending === 'mergePhotos' && t('fileBatch.mergeHint')}
             </DialogDescription>
           </DialogHeader>
           {pending === 'materialType' && (
@@ -329,6 +354,34 @@ export function DocumentBatchBar({
               </select>
             </div>
           )}
+          {pending === 'mergePhotos' && (
+            <div className="space-y-3" data-merge-form>
+              <div className="space-y-1.5">
+                <Label htmlFor="batch-merge-name">{t('fileBatch.merge.name')}</Label>
+                <Input
+                  id="batch-merge-name"
+                  value={mergeName}
+                  onChange={(event) => setMergeName(event.target.value)}
+                  autoFocus
+                />
+              </div>
+              <label className="flex cursor-pointer items-start gap-2 text-sm coarse:min-h-11">
+                <input
+                  type="checkbox"
+                  checked={deleteOriginals}
+                  onChange={(event) => setDeleteOriginals(event.target.checked)}
+                  className="mt-0.5 h-4 w-4 shrink-0 accent-primary coarse:h-5 coarse:w-5"
+                  data-merge-delete-originals
+                />
+                <span>
+                  {t('fileBatch.merge.deleteOriginals')}
+                  <span className="block text-xs text-muted-foreground">
+                    {t('fileBatch.merge.deleteOriginalsHint')}
+                  </span>
+                </span>
+              </label>
+            </div>
+          )}
           <DialogFooter>
             <Button variant="outline" onClick={() => setPending(null)}>
               {t('common.cancel')}
@@ -344,6 +397,12 @@ export function DocumentBatchBar({
                 else if (pending === 'reprocess') void start({ kind: 'reprocess' })
                 else if (pending === 'evalRole') {
                   void start({ kind: 'evalRole', evalRole: evalRole || undefined })
+                } else if (pending === 'mergePhotos') {
+                  void start({
+                    kind: 'mergePhotos',
+                    deleteOriginals,
+                    ...(mergeName.trim() ? { name: mergeName.trim() } : {}),
+                  })
                 }
               }}
             >
@@ -373,6 +432,9 @@ export function DocumentBatchBar({
                   skipped: result.skipped,
                   failed: result.failed,
                 })}
+              {result?.merged
+                ? ` ${t('fileBatch.merge.created', { name: result.merged.name })}`
+                : ''}
               {result?.stopped
                 ? ` ${t('fileBatch.resultStopped', {
                     count: result.outcomes.filter((o) => o.status === 'not-run').length,

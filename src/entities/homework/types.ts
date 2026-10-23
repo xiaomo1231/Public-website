@@ -261,6 +261,20 @@ export interface HomeworkQuestion {
    */
   answerStatus?: HomeworkQuestionAnswerStatus
   /**
+   * `inline` — the answer above is 教授答案（卷内附带）: printed in the
+   * assignment / paper itself and split out while recognising it
+   * (`entities/homework/inlineAnswer.ts`). Absent means it came from a linked
+   * answer file (or there is none).
+   */
+  answerSource?: 'inline'
+  /**
+   * The answer printed with this question in the material, verbatim and
+   * checked locally against the cited chunks of the question's own document.
+   * Kept even while a linked answer file's answer is in use, so removing that
+   * link brings it back. Absent when the material printed none.
+   */
+  inlineAnswer?: { text: string; chunkIds: string[] }
+  /**
    * True when the current hints + solution were generated from the professor
    * answer. Absent/false means they are the ordinary AI walkthrough.
    */
@@ -366,6 +380,6 @@ export const HOMEWORK_MESSAGE_LIMIT = 40
 /** Cap on hints returned/accepted per question. */
 export const HOMEWORK_MAX_HINTS = 4
 
-export const HOMEWORK_ANALYZER_PROMPT_VERSION = 'v2'
+export const HOMEWORK_ANALYZER_PROMPT_VERSION = 'v3'
 export const HOMEWORK_QUESTION_PROMPT_VERSION = 'v3'
 export const HOMEWORK_QA_PROMPT_VERSION = 'v1'

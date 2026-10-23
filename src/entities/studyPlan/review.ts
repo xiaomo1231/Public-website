@@ -41,9 +41,40 @@ export interface ReviewMistakeNote {
   mistakeIds: string[]
 }
 
+/** A past-paper / homework / practice question a knowledge point is tested by. */
+export interface ReviewQuestionRef {
+  questionId: string
+  /** The homework / exam set (absent for a professor practice question). */
+  setId?: string
+  documentId: string
+  /** The paper's / assignment's title. */
+  paper: string
+  number?: string
+  /** Printed marks of the whole question, when stated. */
+  marks?: number
+  kind: 'past' | 'homework' | 'practice'
+}
+
+/** Which questions test the point, and how to answer them (v2). */
+export interface ReviewExamQuestionNote {
+  text: string
+  questionIds: string[]
+}
+
+/** How the professor gave marks, quoted from an answer key (v2). */
+export interface ReviewMarkingNote {
+  text: string
+  /** Verbatim from the professor's answer (checked locally). */
+  quote: string
+  questionIds: string[]
+}
+
 export interface ReviewSection {
   id: string
-  /** Course topic id, or `exam:<id>` for an exam topic no course topic covers. */
+  /**
+   * Course topic id, `unit:<id>` for a chapter / file of the scope, `kp:<n>`
+   * for a knowledge point of a consolidated outline, or `exam:<id>`.
+   */
   topicId?: string
   title: string
   order: number
@@ -62,6 +93,35 @@ export interface ReviewSection {
   /** Claims dropped because no citation could be verified. */
   dropped?: number
   generatedAt?: number
+  /**
+   * Consolidated sheet: the chunks (across files) the point was laid out
+   * with, and the questions that test it. Absent on older sheets.
+   */
+  chunkIds?: string[]
+  questionIds?: string[]
+  /** Merged chapters / files of a sheet laid out without AI or course topics. */
+  unitIds?: string[]
+  /** The questions above, for labels and links (paper · number · marks). */
+  questionRefs?: Record<string, ReviewQuestionRef>
+  examQuestions?: ReviewExamQuestionNote[]
+  marking?: ReviewMarkingNote[]
+}
+
+/** 考试概览: local statistics over the chosen past papers. */
+export interface ReviewOverview {
+  papers: number
+  questions: number
+  questionsWithMarks: number
+  totalMarks: number
+  byKind: Array<{ kind: string; questions: number; marks: number }>
+  /** Knowledge points tested most (by marks, then questions). */
+  topPoints: Array<{ sectionId: string; title: string; questions: number; marks: number }>
+}
+
+/** The files a sheet is written from (用哪些资料). */
+export interface ReviewSources {
+  documentIds: string[]
+  updatedAt: number
 }
 
 export interface ExamReview {
@@ -77,6 +137,11 @@ export interface ExamReview {
    * (the sheet is kept; laying it out again clears this).
    */
   scopeChangedAt?: number
+  /** The student's choice of files; absent = the defaults (`defaultReviewSources`). */
+  sources?: ReviewSources
+  /** Laid out by knowledge point across files (`exam-review-outline/v1`) or locally. */
+  layout?: 'outline' | 'local'
+  overview?: ReviewOverview
 }
 
 /** Topics on one sheet. */
@@ -226,9 +291,32 @@ export interface ValidatedReview {
   keyPoints: ReviewKeyPoint[]
   questionTypes: ReviewClaim[]
   mistakes: ReviewMistakeNote[]
+  /** v2: questions testing the point, and the professor's marking. */
+  examQuestions: ReviewExamQuestionNote[]
+  marking: ReviewMarkingNote[]
   /** Chunk ids actually cited. */
   cited: string[]
   dropped: number
+}
+
+/** The question / answer aliases of a v2 request (closed sets). */
+export interface ReviewReplyAliases {
+  /** `q1` → question id. */
+  questions?: ReadonlyMap<string, string>
+  /** `a1` → the answer's question id and its text (a quote must be in it). */
+  answers?: ReadonlyMap<string, { questionId: string; text: string }>
+}
+
+/** Text compared for a verbatim quote: NFKC, lower case, one space, plain quotes / dashes. */
+export function quoteKey(text: string): string {
+  return text
+    .normalize('NFKC')
+    .toLowerCase()
+    .replace(/[‘’`´]/g, "'")
+    .replace(/[“”]/g, '"')
+    .replace(/[‐‑‒–—−]/g, '-')
+    .replace(/\s+/g, ' ')
+    .trim()
 }
 
 /**
@@ -242,6 +330,7 @@ export function validateReviewReply(
   raw: unknown,
   chunkAliases: ReadonlyMap<string, string>,
   mistakeAliases: ReadonlyMap<string, string>,
+  extra: ReviewReplyAliases = {},
 ): ValidatedReview {
   const obj = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>
   let dropped = 0
@@ -305,12 +394,69 @@ export function validateReviewReply(
     }
     mistakes.push({ text, mistakeIds: ids })
   }
-  return { summary, keyPoints, questionTypes, mistakes, cited: [...cited], dropped }
+
+  // v2: questions that test the point (closed set of question aliases).
+  const examQuestions: ReviewExamQuestionNote[] = []
+  const questionMap = extra.questions
+  if (questionMap) {
+    const used = new Set<string>()
+    for (const item of list(obj.examQuestions ?? obj.exam_questions)) {
+      const row = (item && typeof item === 'object' ? item : {}) as Record<string, unknown>
+      const ids = [
+        ...new Set(
+          aliasesOf(row.questions ?? row.question ?? row.sources)
+            .map((alias) => questionMap.get(alias))
+            .filter((id): id is string => !!id),
+        ),
+      ].filter((id) => !used.has(id))
+      if (ids.length === 0) {
+        dropped += 1
+        continue
+      }
+      for (const id of ids) used.add(id)
+      examQuestions.push({ text: str(row.text), questionIds: ids })
+    }
+  }
+
+  // v2: the professor's marking, quoted word for word from a listed answer.
+  const marking: ReviewMarkingNote[] = []
+  const answerMap = extra.answers
+  if (answerMap) {
+    for (const item of list(obj.marking ?? obj.markScheme)) {
+      const row = (item && typeof item === 'object' ? item : {}) as Record<string, unknown>
+      const answer = answerMap.get(aliasesOf(row.answer ?? row.source)[0] ?? '')
+      const quote = str(row.quote)
+      const text = str(row.text)
+      const key = quoteKey(quote)
+      if (!answer || key.length < 4 || !quoteKey(answer.text).includes(key)) {
+        dropped += 1
+        continue
+      }
+      marking.push({ text, quote, questionIds: [answer.questionId] })
+    }
+  }
+
+  return {
+    summary,
+    keyPoints,
+    questionTypes,
+    mistakes,
+    examQuestions,
+    marking,
+    cited: [...cited],
+    dropped,
+  }
 }
 
 /** True when a validated reply has anything to show. */
 export function hasReviewContent(reply: ValidatedReview): boolean {
-  return reply.summary.length + reply.keyPoints.length + reply.questionTypes.length > 0
+  return (
+    reply.summary.length +
+      reply.keyPoints.length +
+      reply.questionTypes.length +
+      reply.examQuestions.length >
+    0
+  )
 }
 
 export interface ReviewMarkdownLabels {
@@ -321,6 +467,18 @@ export interface ReviewMarkdownLabels {
   formula: string
   definition: string
   sources: string
+  /** v2 parts (consolidated sheets). */
+  examQuestions?: string
+  marking?: string
+}
+
+/** "Midterm 2023 Q3 (10 marks)" for a question reference. */
+export function questionRefLabel(
+  ref: ReviewQuestionRef,
+  marksLabel: (marks: number) => string = (marks) => `${marks} marks`,
+): string {
+  const number = ref.number ? ` Q${ref.number.replace(/^Q/i, '')}` : ''
+  return `${ref.paper}${number}${ref.marks !== undefined ? ` (${marksLabel(ref.marks)})` : ''}`
 }
 
 /** One topic as Markdown (print / PDF), with its sources as "file p. n". */
@@ -354,6 +512,22 @@ export function reviewSectionMarkdown(
   if (section.questionTypes?.length) {
     out.push('', `**${labels.questionTypes}**`, '')
     for (const item of section.questionTypes) out.push(`- ${item.text}${cite(item)}`)
+  }
+  if (section.examQuestions?.length) {
+    out.push('', `**${labels.examQuestions ?? 'Exam questions'}**`, '')
+    for (const item of section.examQuestions) {
+      const where = item.questionIds
+        .map((id) => section.questionRefs?.[id])
+        .filter((ref): ref is ReviewQuestionRef => !!ref)
+        .map((ref) => questionRefLabel(ref))
+        .join('; ')
+      out.push(`- ${where ? `${where}${item.text ? ': ' : ''}` : ''}${item.text}`)
+    }
+  }
+  if (section.marking?.length) {
+    out.push('', `**${labels.marking ?? 'Marking'}**`, '')
+    for (const item of section.marking)
+      out.push(`- ${item.text}${item.text ? ' — ' : ''}“${item.quote}”`)
   }
   if (section.mistakes?.length) {
     out.push('', `**${labels.mistakes}**`, '')

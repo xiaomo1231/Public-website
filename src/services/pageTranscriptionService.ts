@@ -290,11 +290,14 @@ async function defaultRender(bytes: ArrayBuffer, page: number): Promise<PageImag
  * key configured, and 手写识别方式 not set to on-device only.
  */
 export function shouldAutoTranscribe(
-  document: Pick<Document, 'type' | 'materialType' | 'status'>,
+  document: Pick<Document, 'type' | 'materialType' | 'status' | 'photoPages'>,
   setup: { hasAI: boolean; mode: 'auto' | 'local' | 'online' | undefined },
 ): boolean {
+  // A PDF merged from photos (考卷照片合并) is read like the photos themselves.
+  const photographed =
+    document.type === 'image' || (document.type === 'pdf' && (document.photoPages ?? 0) > 0)
   return (
-    document.type === 'image' &&
+    photographed &&
     document.status === 'ready' &&
     setup.hasAI &&
     setup.mode !== 'local' &&

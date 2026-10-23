@@ -2,6 +2,7 @@ import type { ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import {
   BookA,
+  BookOpenText,
   CalendarClock,
   ClipboardCheck,
   ListChecks,
@@ -88,6 +89,13 @@ export function OverviewTab({
       ? t('examWorkspace.quick.openReview')
       : t('examWorkspace.quick.review'),
     onClick: () => onTab('review'),
+  })
+  // 考题与讲解: the papers and homework with 完整讲解 / 做题 / 引导练习.
+  actions.push({
+    key: 'walkthroughs',
+    icon: <BookOpenText className="h-4 w-4" aria-hidden />,
+    label: t('examWorkspace.quick.papers'),
+    onClick: () => onTab('papers'),
   })
   actions.push({
     key: 'diagnostic',

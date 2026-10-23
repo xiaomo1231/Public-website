@@ -1,5 +1,6 @@
 import type { ExamLinkContext } from '@/services/studyPlanService'
 import type { PlannedExam } from '@/entities/studyPlan/types'
+import type { HomeworkSet } from '@/entities/homework/types'
 import { withExamReturn, withParams } from '@/features/studyPlan/examReturn'
 
 /**
@@ -46,4 +47,25 @@ export function examInterviewLink(exam: ExamRef): string {
 /** 摸底卷 with only this exam's course ticked. */
 export function examDiagnosticLink(exam: ExamRef): string {
   return withParams('/plan?tab=diagnostic', { examId: exam.id })
+}
+
+/** The homework-page views a paper / assignment opens in, from this exam. */
+export function paperEntryLinks(
+  exam: ExamRef,
+  row: { set: Pick<HomeworkSet, 'id' | 'status'>; kind: 'exam' | 'homework' },
+): Array<{ key: 'walkthrough' | 'practice' | 'guided' | 'proofread' | 'mock'; to: string }> {
+  const base = `/projects/${exam.projectId}/homework/${row.set.id}`
+  const links: Array<{
+    key: 'walkthrough' | 'practice' | 'guided' | 'proofread' | 'mock'
+    to: string
+  }> = []
+  if (row.kind === 'exam' && row.set.status === 'ready')
+    links.push({ key: 'mock', to: fromWorkspace(exam, `${base}/exam`) })
+  links.push(
+    { key: 'walkthrough', to: fromWorkspace(exam, `${base}?view=walkthrough`) },
+    { key: 'practice', to: fromWorkspace(exam, base) },
+    { key: 'guided', to: fromWorkspace(exam, `${base}?view=guided`) },
+    { key: 'proofread', to: fromWorkspace(exam, `${base}?view=proofread`) },
+  )
+  return links
 }

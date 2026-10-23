@@ -7,10 +7,11 @@ import { ProjectService } from '@/services/projectService'
 import { getDb } from '@/infrastructure/db/database'
 import { validateFile, validateTextInput } from '@/infrastructure/files/validation'
 import { ensureStorageFor, isQuotaError } from '@/infrastructure/files/storageSpace'
-import { ValidationError } from '@/infrastructure/errors/AppError'
+import { NotFoundError, ValidationError } from '@/infrastructure/errors/AppError'
 import { logger } from '@/infrastructure/logger/logger'
 import { t } from '@/i18n'
 import type { Document, DocumentType, LearningMaterialType } from '@/entities/document/types'
+import { keepBothName } from '@/entities/document/photoGroups'
 
 export interface UploadDocumentInput {
   projectId: string
@@ -22,6 +23,8 @@ export interface UploadDocumentInput {
   name?: string
   /** Folder of a folder upload (`Document.folderPath`). */
   folderPath?: string
+  /** A PDF merged from this many photos (`Document.photoPages`). */
+  photoPages?: number
 }
 
 /** Coarse phases of a single upload. `processing` is driven by the pipeline. */
@@ -116,7 +119,8 @@ export async function uploadDocument(
     if (!input.file) throw new Error(t('upload.noFile'))
     type = validateFile(input.file)
     blob = input.file
-    name = input.file.name
+    // A caller-chosen name ("保留两份" → "name (2).ext") wins over the file's.
+    name = input.name?.trim() || input.file.name
     mimeType = input.file.type
     sizeBytes = input.file.size
     sourceModifiedAt = input.file.lastModified
@@ -138,6 +142,7 @@ export async function uploadDocument(
       ...(mimeType !== undefined ? { mimeType } : {}),
       ...(sourceModifiedAt !== undefined ? { sourceModifiedAt } : {}),
       ...(input.folderPath ? { folderPath: input.folderPath } : {}),
+      ...(input.photoPages ? { photoPages: input.photoPages } : {}),
       ...(blob ? { blob } : {}),
     })
   } catch (err) {
@@ -162,15 +167,100 @@ export async function uploadDocument(
     onProgress: (p) => onStage?.({ phase: 'processing', progress: p.progress, message: p.stage }),
   })
 
-  // A photographed exam / homework page: read it with the vision model when
-  // the settings allow (local OCR text stays when that is not possible).
-  if (type === 'image') {
-    const { autoTranscribeAfterUpload } = await import('@/services/pageTranscriptionService')
-    await autoTranscribeAfterUpload(document.id)
-  }
-  startMaterialCheck(document.id)
+  await afterProcessing(document.id, type, input.photoPages)
 
   return document
+}
+
+/**
+ * A photographed exam / homework page (or a PDF merged from such photos):
+ * read it with the vision model when the settings allow (local OCR text stays
+ * when that is not possible). Then the background material-type check.
+ */
+async function afterProcessing(
+  documentId: string,
+  type: DocumentType,
+  photoPages?: number,
+): Promise<void> {
+  if (type === 'image' || (type === 'pdf' && (photoPages ?? 0) > 0)) {
+    const { autoTranscribeAfterUpload } = await import('@/services/pageTranscriptionService')
+    await autoTranscribeAfterUpload(documentId)
+  }
+  startMaterialCheck(documentId)
+}
+
+export interface ReplaceDocumentResult {
+  document: Document
+  /**
+   * `replaced`: the stored file was replaced and reprocessed (same id).
+   * `kept-both`: the old file has student work, so the new one was uploaded
+   * as a second document (`name (2).ext`) instead.
+   */
+  outcome: 'replaced' | 'kept-both'
+}
+
+/**
+ * 上传重复文件 → 覆盖: replace the bytes of `documentId` with `input.file` and
+ * reprocess it through the normal pipeline, keeping the document's id, name,
+ * folder, role and exam selections. When the old file holds student work the
+ * replace is refused and the file is kept as a second copy instead.
+ */
+export async function replaceDocumentFile(
+  documentId: string,
+  input: UploadDocumentInput,
+  options: UploadDocumentOptions = {},
+): Promise<ReplaceDocumentResult> {
+  const { documents, documentService, processing } = buildServices()
+  const { onStage } = options
+  onStage?.({ phase: 'validating' })
+  if (!input.file) throw new Error(t('upload.noFile'))
+  const type = validateFile(input.file)
+  const existing = await documents.get(documentId)
+  if (existing.projectId !== input.projectId) throw new NotFoundError('Document', documentId)
+
+  const keepBoth = async (): Promise<ReplaceDocumentResult> => {
+    const taken = (await documents.listByProject(input.projectId)).map((doc) => doc.name)
+    const document = await uploadDocument(
+      { ...input, name: keepBothName(input.name ?? input.file!.name, taken) },
+      options,
+    )
+    return { document, outcome: 'kept-both' }
+  }
+
+  const impact = await documentService.getDeleteImpact(documentId, input.projectId)
+  if (impact.blocked) return keepBoth()
+
+  await ensureStorageFor(input.file.size)
+  if (isCancelled(options)) throw new UploadCancelledError()
+
+  onStage?.({ phase: 'saving' })
+  try {
+    await documentService.replaceFile(
+      documentId,
+      {
+        blob: input.file,
+        type,
+        sizeBytes: input.file.size,
+        ...(input.file.type ? { mimeType: input.file.type } : {}),
+        sourceModifiedAt: input.file.lastModified,
+        ...(input.photoPages ? { photoPages: input.photoPages } : {}),
+      },
+      input.projectId,
+    )
+  } catch (err) {
+    // Student work saved meanwhile (re-checked in the transaction).
+    if ((err as { code?: unknown })?.code === 'FILE_IN_USE') return keepBoth()
+    if (isQuotaError(err)) throw new ValidationError(t('errors.storageFull'))
+    throw err
+  }
+  options.onDocumentCreated?.(documentId)
+
+  onStage?.({ phase: 'processing', progress: 0 })
+  await processing.process(documentId, {
+    onProgress: (p) => onStage?.({ phase: 'processing', progress: p.progress, message: p.stage }),
+  })
+  await afterProcessing(documentId, type, input.photoPages)
+  return { document: await documents.get(documentId), outcome: 'replaced' }
 }
 
 /**

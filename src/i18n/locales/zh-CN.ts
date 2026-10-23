@@ -7,11 +7,13 @@ import { marketQuestionZhCN } from './marketQuestion.zh-CN'
 import { examToolsZhCN } from './examTools.zh-CN'
 import { examWorkspaceZhCN } from './examWorkspace.zh-CN'
 import { fileBatchZhCN } from './fileBatch.zh-CN'
+import { uploadExtrasZhCN } from './uploadExtras.zh-CN'
 
 export const zhCN: Record<TranslationKey, string> = {
   ...examToolsZhCN,
   ...examWorkspaceZhCN,
   ...fileBatchZhCN,
+  ...uploadExtrasZhCN,
   ...studyPlanZhCN,
   ...aiMockZhCN,
   ...handwritingZhCN,
@@ -3318,6 +3320,7 @@ export const zhCN: Record<TranslationKey, string> = {
   'materialType.syllabus': '课程大纲 / 考试题目',
   'materialType.walkthrough_import': '导入的讲解',
   'materialType.past_exam': '往年试卷 / 模拟卷',
+  'materialType.reading': '阅读材料',
   'mockExam.noAttempt': '这份试卷没有进行中的模拟考试。',
   'mockExam.notSubmitted': '交卷后才能检查答案。',
   'mockExam.notFound': '这份试卷不属于本课程。',
@@ -4066,9 +4069,6 @@ export const zhCN: Record<TranslationKey, string> = {
   'homework.mode.selfTest': '自测',
   'proofread.title': '导入校对',
   'proofread.empty': '还没有可校对的题目。',
-  'proofread.banner': '建议先校对识别结果（{count} 题未核对）。',
-  'proofread.bannerDismiss': '暂不',
-  'proofread.unverifiedCount': '{total} 题中 {count} 题未核对',
   'proofread.questionList': '题目',
   'proofread.chipVerified': '第 {n} 题，已核对',
   'proofread.chipUnverified': '第 {n} 题，未核对',
@@ -4081,7 +4081,6 @@ export const zhCN: Record<TranslationKey, string> = {
   'proofread.recognisedSource': '识别出的原文',
   'proofread.number': '题号',
   'proofread.verified': '已核对',
-  'proofread.notVerified': '未核对',
   'proofread.editCount': '已修改 {count} 处',
   'proofread.questionText': '题目文字',
   'proofread.preview': '预览',
@@ -4195,6 +4194,7 @@ export const zhCN: Record<TranslationKey, string> = {
   'materialSuggest.what.homework': '作业题',
   'materialSuggest.what.homework_answer': '答案或解答',
   'materialSuggest.what.syllabus': '课程大纲',
+  'materialSuggest.what.reading': '报刊文章或阅读材料',
   'materialSuggest.change': '改',
   'materialSuggest.dismiss': '忽略',
   'materialSuggest.reasons': '依据：{list}',
@@ -4216,6 +4216,9 @@ export const zhCN: Record<TranslationKey, string> = {
   'materialSuggest.reason.grading': '成绩构成',
   'materialSuggest.reason.schedule': '课程安排',
   'materialSuggest.reason.fileName': '文件名',
+  'materialSuggest.reason.publisher': '报刊来源（如 The Economist）',
+  'materialSuggest.reason.articleProse': '成段文章、无章节与题号',
+  'materialSuggest.reason.byline': '作者或日期行',
   'materialSuggest.reason.ai': 'AI 读了前两页',
   'materialSuggest.checking': '正在用 AI 判断资料类型…',
   'materialSuggest.stop': '停止',

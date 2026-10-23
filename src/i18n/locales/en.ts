@@ -6,11 +6,13 @@ import { marketQuestionEn } from './marketQuestion.en'
 import { examToolsEn } from './examTools.en'
 import { examWorkspaceEn } from './examWorkspace.en'
 import { fileBatchEn } from './fileBatch.en'
+import { uploadExtrasEn } from './uploadExtras.en'
 
 export const en = {
   ...examToolsEn,
   ...examWorkspaceEn,
   ...fileBatchEn,
+  ...uploadExtrasEn,
   ...studyPlanEn,
   ...aiMockEn,
   ...handwritingEn,
@@ -3565,6 +3567,7 @@ export const en = {
   'materialType.syllabus': 'Syllabus / exam topics',
   'materialType.walkthrough_import': 'Imported walkthrough',
   'materialType.past_exam': 'Past exam / mock paper',
+  'materialType.reading': 'Reading (articles)',
   'mockExam.noAttempt': 'There is no mock exam in progress for this paper.',
   'mockExam.notSubmitted': 'Submit the paper before it can be checked.',
   'mockExam.notFound': 'This paper is not part of this course.',
@@ -4382,9 +4385,6 @@ export const en = {
   'homework.mode.selfTest': 'Self-test',
   'proofread.title': 'Proofread recognition',
   'proofread.empty': 'No questions to proofread yet.',
-  'proofread.banner': 'Proofread the recognised questions first ({count} not yet checked).',
-  'proofread.bannerDismiss': 'Not now',
-  'proofread.unverifiedCount': '{count} of {total} not yet checked',
   'proofread.questionList': 'Questions',
   'proofread.chipVerified': 'Question {n}, checked',
   'proofread.chipUnverified': 'Question {n}, not checked',
@@ -4399,7 +4399,6 @@ export const en = {
   'proofread.recognisedSource': 'Recognised source text',
   'proofread.number': 'Number',
   'proofread.verified': 'Checked',
-  'proofread.notVerified': 'Not checked',
   'proofread.editCount': '{count} corrections',
   'proofread.questionText': 'Question text',
   'proofread.preview': 'Preview',
@@ -4519,6 +4518,7 @@ export const en = {
   'materialSuggest.what.homework': 'homework questions',
   'materialSuggest.what.homework_answer': 'answers or worked solutions',
   'materialSuggest.what.syllabus': 'a course syllabus',
+  'materialSuggest.what.reading': 'a news / magazine article or other reading',
   'materialSuggest.change': 'Change',
   'materialSuggest.dismiss': 'Ignore',
   'materialSuggest.reasons': 'Based on: {list}',
@@ -4540,6 +4540,9 @@ export const en = {
   'materialSuggest.reason.grading': 'grading breakdown',
   'materialSuggest.reason.schedule': 'course schedule',
   'materialSuggest.reason.fileName': 'the file name',
+  'materialSuggest.reason.publisher': 'a newspaper / magazine name (e.g. The Economist)',
+  'materialSuggest.reason.articleProse': 'running article prose, no chapters or question numbers',
+  'materialSuggest.reason.byline': 'a byline or dateline',
   'materialSuggest.reason.ai': 'AI check of the first two pages',
   'materialSuggest.checking': 'Checking the file type with AI…',
   'materialSuggest.stop': 'Stop',

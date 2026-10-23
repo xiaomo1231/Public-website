@@ -91,6 +91,10 @@ export function HomeworkQuestionView({
   const { t, language } = useTranslation()
   const deferredAnswer =
     question.answerStatus === 'matched' && isDeferredProfessorAnswer(question.answerText ?? '')
+  // 教授答案（卷内附带）: the answer printed in the paper itself.
+  const inlineAnswer = question.answerSource === 'inline' && question.answerStatus === 'matched'
+  /** The file holding the professor answer in use (the paper itself when inline). */
+  const answerFileId = inlineAnswer ? question.documentId : answerDocumentId
 
   const [draft, setDraft] = useState(question.draftText)
   const graphImport = useEconGraphImport(question.projectId)
@@ -176,7 +180,7 @@ export function HomeworkQuestionView({
     if (
       mode !== 'review' ||
       !originalAnswerOpen ||
-      !answerDocumentId ||
+      !answerFileId ||
       question.answerStatus !== 'matched'
     )
       return
@@ -196,7 +200,7 @@ export function HomeworkQuestionView({
       cancelled = true
       urls.forEach((url) => URL.revokeObjectURL(url))
     }
-  }, [answerDocumentId, mode, originalAnswerOpen, question, service])
+  }, [answerFileId, mode, originalAnswerOpen, question, service])
 
   useEffect(() => {
     let cancelled = false
@@ -510,7 +514,11 @@ export function HomeworkQuestionView({
           >
             <summary className="flex cursor-pointer items-center gap-2 text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
               <ClipboardCheck className="h-4 w-4" aria-hidden />
-              {t('homework.answer.professorOriginal')}
+              <span data-answer-source={inlineAnswer ? 'inline' : 'file'}>
+                {inlineAnswer
+                  ? t('homework.answer.professorInline')
+                  : t('homework.answer.professorOriginal')}
+              </span>
             </summary>
             <div className="space-y-3 pt-3">
               <p className="text-xs text-muted-foreground">{t('homework.answer.verifyNote')}</p>
@@ -551,9 +559,9 @@ export function HomeworkQuestionView({
                   paragraphClassName="whitespace-pre-wrap text-[15px] leading-relaxed"
                 />
               </details>
-              {answerDocumentId && (
+              {answerFileId && (
                 <Button variant="outline" size="sm" asChild>
-                  <Link to={`/projects/${question.projectId}/documents/${answerDocumentId}`}>
+                  <Link to={`/projects/${question.projectId}/documents/${answerFileId}`}>
                     <ExternalLink className="h-4 w-4" />
                     {t('homework.answer.openFile')}
                   </Link>
@@ -818,7 +826,7 @@ export function HomeworkQuestionView({
                     <Lightbulb className="h-4 w-4 text-muted-foreground" aria-hidden />
                     {t('homework.hintOf', { current: revealed, total: hints.length })}
                   </CardTitle>
-                  {answerDocumentId && (
+                  {answerFileId && (
                     <p className="text-xs text-muted-foreground">
                       {question.answerBased
                         ? t('homework.answer.aiExplanation')
@@ -1026,7 +1034,7 @@ export function HomeworkQuestionView({
                     {t('homework.solutionTitle')}
                   </CardTitle>
                   <p className="text-xs text-muted-foreground">{t('homework.aiGenerated')}</p>
-                  {answerDocumentId && (
+                  {answerFileId && (
                     <p className="text-xs text-muted-foreground">
                       {question.answerBased
                         ? t('homework.answer.aiExplanation')

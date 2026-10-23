@@ -8,7 +8,13 @@ import {
   normalizeCalendar,
   weekStart,
 } from '@/entities/studyPlan/calendar'
-import { isAiMockSet, isPastPaperSet, type HomeworkSet } from '@/entities/homework/types'
+import {
+  isAiMockSet,
+  isDerivedSet,
+  isExamSet,
+  isPastPaperSet,
+  type HomeworkSet,
+} from '@/entities/homework/types'
 import {
   AI_MOCK_MINUTES,
   buildSchedule,
@@ -334,7 +340,9 @@ export class StudyPlanService {
         ...(duration && duration > 0 && duration <= 720
           ? { durationMinutes: Math.round(duration) }
           : {}),
-        ...(scopeChanged && exam.review ? { review: { ...exam.review, scopeChangedAt: now } } : {}),
+        ...(scopeChanged && exam.review?.sections.length
+          ? { review: { ...exam.review, scopeChangedAt: now } }
+          : {}),
       }
     })
     if (!next) throw new NotFoundError('Exam', id)
@@ -1089,11 +1097,14 @@ export class StudyPlanService {
   }
 
   /**
-   * The 考题 tab: the course's uploaded past papers (picked ones first) with
-   * question / 校对 / professor-answer counts and the latest mock result, and
-   * the AI 模拟卷 written for this exam or from one of its papers.
+   * The 考题与讲解 tab: the course's uploaded past papers (picked ones first)
+   * and the homework picked for this exam — whatever their status, so a paper
+   * still being read shows its progress — with question / 校对 /
+   * professor-answer counts and the latest mock result; the past-paper and
+   * picked homework files not read yet; and the AI 模拟卷 written for this
+   * exam or from one of its papers.
    */
-  async examPapers(examId: string): Promise<{ papers: ExamPaperRow[]; aiMocks: ExamAiMockRow[] }> {
+  async examPapers(examId: string): Promise<ExamPapersView> {
     const exam = await this.repo.getExam(examId)
     if (!exam) throw new NotFoundError('Exam', examId)
     const homework = new HomeworkRepository(this.db)
@@ -1118,22 +1129,59 @@ export class StudyPlanService {
         attempts: attempts.length,
       }
     }
+    const rowOf = async (
+      set: HomeworkSet,
+      kind: ExamPaperRow['kind'],
+      picked: boolean,
+    ): Promise<ExamPaperRow> => {
+      const questions = (await homework.listQuestions(set.id)).filter((q) => !q.retired)
+      const matched = questions.filter((q) => q.answerStatus === 'matched')
+      const result = lastPercent(set)
+      return {
+        set,
+        kind,
+        picked,
+        questions: questions.length,
+        verified: questions.filter((q) => q.verifiedAt !== undefined).length,
+        answered: matched.length,
+        answeredInline: matched.filter((q) => q.answerSource === 'inline').length,
+        ...(result.percent !== undefined ? { lastPercent: result.percent } : {}),
+        attempts: result.attempts,
+      }
+    }
     const pastSets = sets.filter(isPastPaperSet)
     const papers: ExamPaperRow[] = []
     for (const set of pastSets) {
-      const questions = (await homework.listQuestions(set.id)).filter((q) => !q.retired)
-      const result = lastPercent(set)
-      papers.push({
-        set,
-        picked: materials.pastExamSetIds.includes(set.id) || pickedDocs.has(set.documentId),
-        questions: questions.length,
-        verified: questions.filter((q) => q.verifiedAt !== undefined).length,
-        answered: questions.filter((q) => q.answerStatus === 'matched').length,
-        ...(result.percent !== undefined ? { lastPercent: result.percent } : {}),
-        attempts: result.attempts,
-      })
+      const picked = materials.pastExamSetIds.includes(set.id) || pickedDocs.has(set.documentId)
+      papers.push(await rowOf(set, 'exam', picked))
     }
     papers.sort((a, b) => Number(b.picked) - Number(a.picked) || b.set.createdAt - a.set.createdAt)
+    // Homework picked for this exam (by set or by file); practice sets and
+    // AI 模拟卷 are the platform's, not uploaded assignments.
+    const assignments: ExamPaperRow[] = []
+    for (const set of sets) {
+      if (isExamSet(set) || isDerivedSet(set)) continue
+      if (!materials.homeworkSetIds.includes(set.id) && !pickedDocs.has(set.documentId)) continue
+      assignments.push(await rowOf(set, 'homework', true))
+    }
+    assignments.sort((a, b) => b.set.createdAt - a.set.createdAt)
+    // Files not read yet: every past paper of the course, and the homework
+    // files picked for this exam.
+    const readDocs = new Set(sets.filter((set) => !isDerivedSet(set)).map((set) => set.documentId))
+    const pending: ExamPendingPaper[] = []
+    for (const document of documents) {
+      if (readDocs.has(document.id)) continue
+      const role = resolveMaterialType(document.materialType)
+      if (role === 'past_exam') {
+        pending.push({ document, kind: 'exam', picked: pickedDocs.has(document.id) })
+      } else if (role === 'homework' && pickedDocs.has(document.id)) {
+        pending.push({ document, kind: 'homework', picked: true })
+      }
+    }
+    pending.sort(
+      (a, b) =>
+        Number(b.picked) - Number(a.picked) || b.document.uploadedAt - a.document.uploadedAt,
+    )
     const paperIds = new Set(pastSets.map((set) => set.id))
     const aiMocks: ExamAiMockRow[] = sets
       .filter(
@@ -1148,13 +1196,33 @@ export class StudyPlanService {
         const result = lastPercent(set)
         return { set, ...(result.percent !== undefined ? { lastPercent: result.percent } : {}) }
       })
-    return { papers, aiMocks }
+    return { papers, homework: assignments, pending, aiMocks }
   }
+}
+
+/** What the 考试工作台's 考题与讲解 tab lists. */
+export interface ExamPapersView {
+  /** Uploaded past papers of the course, any status (picked first). */
+  papers: ExamPaperRow[]
+  /** Homework sets picked for this exam, any status. */
+  homework: ExamPaperRow[]
+  /** Past-paper / picked homework files with no recognised set yet. */
+  pending: ExamPendingPaper[]
+  aiMocks: ExamAiMockRow[]
+}
+
+/** A past paper or picked homework file that has not been read yet. */
+export interface ExamPendingPaper {
+  document: Document
+  kind: 'exam' | 'homework'
+  picked: boolean
 }
 
 /** One past paper in the 考试工作台's 考题 tab. */
 export interface ExamPaperRow {
   set: HomeworkSet
+  /** A past paper, or an assignment picked for the exam. */
+  kind: 'exam' | 'homework'
   /** Picked for this exam (by set or by file); else a course paper. */
   picked: boolean
   questions: number
@@ -1162,6 +1230,8 @@ export interface ExamPaperRow {
   verified: number
   /** Questions with a confirmed professor answer. */
   answered: number
+  /** …of which printed in the paper itself (教授答案（卷内附带）). */
+  answeredInline: number
   /** Latest checked mock exam on it, 0–100. */
   lastPercent?: number
   attempts: number

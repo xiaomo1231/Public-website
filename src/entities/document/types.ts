@@ -45,6 +45,13 @@ export type LearningMaterialType =
    * reference only — never a knowledge source.
    */
   | 'past_exam'
+  /**
+   * Supplementary reading (阅读材料): a newspaper / magazine article, an essay,
+   * a case study. Kept for the student to read, but reference only — never a
+   * knowledge source for analysis, quizzes, the tutor, course vocabulary or
+   * the review sheet, and never a chapter source.
+   */
+  | 'reading'
 
 export const LEARNING_MATERIAL_TYPES: readonly LearningMaterialType[] = [
   'textbook',
@@ -56,6 +63,7 @@ export const LEARNING_MATERIAL_TYPES: readonly LearningMaterialType[] = [
   'syllabus',
   'walkthrough_import',
   'past_exam',
+  'reading',
 ]
 
 /**
@@ -69,7 +77,8 @@ export function isReferenceOnlyMaterial(value: unknown): boolean {
     type === 'homework_answer' ||
     type === 'syllabus' ||
     type === 'walkthrough_import' ||
-    type === 'past_exam'
+    type === 'past_exam' ||
+    type === 'reading'
   )
 }
 
@@ -182,6 +191,13 @@ export interface Document {
    * Optional, no Dexie bump; exported with the row.
    */
   suggestedMaterialType?: MaterialSuggestion
+  /**
+   * 考卷照片合并: a PDF built in the browser from this many photos (one per
+   * page, no text layer). Read like a photo file: local OCR, then — for a
+   * paper / homework / answer key — the vision model (`shouldAutoTranscribe`).
+   * Optional, no Dexie bump; exported with the row.
+   */
+  photoPages?: number
 }
 
 export interface DocumentBlobRow {
@@ -206,6 +222,8 @@ export interface CreateDocumentInput {
   sourceModifiedAt?: number
   /** Folder from a folder upload (see `Document.folderPath`). */
   folderPath?: string
+  /** A PDF merged from photos (see `Document.photoPages`). */
+  photoPages?: number
 }
 
 export interface UpdateDocumentInput {

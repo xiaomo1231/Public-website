@@ -61,6 +61,7 @@ export const examToolsEn = {
   'plan.materials.group.homework': 'Homework',
   'plan.materials.group.syllabus': 'Syllabus',
   'plan.materials.group.review': 'Review notes',
+  'plan.materials.group.reading': 'Reading',
   'plan.materials.group.other': 'Other',
   'plan.materials.uploadFiles': 'Upload files',
   'plan.materials.uploadFolder': 'Upload a folder',
@@ -85,8 +86,8 @@ export const examToolsEn = {
   'plan.review.back': 'Exams',
   'plan.review.print': 'Print / save as PDF',
   'plan.review.intro':
-    'A review sheet lists the topics in this exam’s scope, most marks and weakest first, each with a short summary, key formulas and definitions, typical question types and your common mistakes. It is written by your AI provider from the exam’s materials (or the whole course when none are picked), one request per topic; every claim cites its source, and claims without a source that can be checked are left out.',
-  'plan.review.plan': 'Lay out the topics',
+    'A review sheet merges the materials you choose (slides / textbook, past papers, answer keys, homework…) into one sheet organised by knowledge point: your AI provider first reads the chosen files’ titles and questions and groups them into knowledge points (not one section per file), then writes each point — summary, key formulas and definitions, typical questions, the past questions on it, how the professor gave marks and your common mistakes. Every claim cites its source; claims without a source that can be checked are left out. Without AI the sheet is laid out locally by course topic or chapter.',
+  'plan.review.plan': 'Lay out the knowledge points',
   'plan.review.progress': '{done} of {total} topics written · {failed} failed',
   'plan.review.progressAria': 'Review sheet progress',
   'plan.review.estimate':
@@ -96,7 +97,7 @@ export const examToolsEn = {
   'plan.review.retryFailed': 'Retry {count} failed topic(s)',
   'plan.review.retry': 'Retry',
   'plan.review.needsAI': 'Needs an AI provider in Settings.',
-  'plan.review.replan': 'Lay out the topics again',
+  'plan.review.replan': 'Lay out the knowledge points again',
   'plan.review.remove': 'Delete the sheet',
   'plan.review.removeTitle': 'Delete this review sheet?',
   'plan.review.removeHint': 'The topics and their text are removed; the exam and its plan stay.',
@@ -130,6 +131,44 @@ export const examToolsEn = {
   'plan.review.errors.unverifiable':
     'The reply cited no material that could be checked. Retry, or pick more materials for the exam.',
   'plan.review.errors.examMissing': 'This exam no longer exists.',
+  'plan.review.planning':
+    'Reading the chosen files’ titles and questions, laying out the knowledge points…',
+  'plan.review.stopPlanning': 'Stop',
+  'plan.review.layout.outline':
+    'Knowledge points merged across the chosen files (AI read the titles and questions)',
+  'plan.review.layout.local':
+    'Laid out locally by course topic or chapter (chapters with the same title merged)',
+  'plan.review.sources.title': 'Materials to use',
+  'plan.review.sources.hint':
+    'Tick the files the sheet is written from. By default: slides / textbook, notes, past papers, answer keys, homework and practice; reading and the syllabus are unticked.',
+  'plan.review.sources.count': '{count} of {total} files chosen',
+  'plan.review.sources.all': 'All',
+  'plan.review.sources.none': 'None',
+  'plan.review.sources.inExam': 'exam material',
+  'plan.review.sources.empty': 'This course has no processed files yet.',
+  'plan.review.sources.group.lecture': 'Slides / textbook',
+  'plan.review.sources.group.past': 'Past papers',
+  'plan.review.sources.group.answers': 'Answer keys',
+  'plan.review.sources.group.homework': 'Homework',
+  'plan.review.sources.group.practice': 'Professor practice',
+  'plan.review.sources.group.notes': 'Notes / transcripts',
+  'plan.review.sources.group.reading': 'Reading',
+  'plan.review.sources.group.syllabus': 'Syllabus',
+  'plan.review.overview.title': 'Exam overview',
+  'plan.review.overview.papers': '{papers} past paper(s) · {questions} question(s)',
+  'plan.review.overview.marks': '{count} with printed marks, {marks} marks in all',
+  'plan.review.overview.byKind': 'Question types',
+  'plan.review.overview.kindRow': '{questions} question(s) · {marks} marks',
+  'plan.review.overview.top': 'Most-tested knowledge points',
+  'plan.review.overview.topRow': '{questions} question(s) · {marks} marks',
+  'plan.review.overview.none':
+    'No past paper among the chosen files, so no question statistics yet.',
+  'plan.review.overview.note':
+    'Counts the chosen past papers only; it does not predict the next exam.',
+  'plan.review.examQuestions': 'Past questions on this point',
+  'plan.review.marking': 'How the professor gave marks',
+  'plan.review.markingQuote': 'From the answer key',
+  'plan.review.marks': '{marks} marks',
 
   'files.noFolder': 'Not in a folder',
   'files.moveToFolder': 'Move to folder',

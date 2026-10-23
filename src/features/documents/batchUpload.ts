@@ -1,5 +1,6 @@
 import { classifyFile } from '@/infrastructure/files/validation'
 import type { DocumentType, LearningMaterialType } from '@/entities/document/types'
+import { detectPhotoGroups, keepBothName, type PhotoGroup } from '@/entities/document/photoGroups'
 import { UploadCancelledError } from './uploadPipeline'
 
 /**
@@ -13,6 +14,16 @@ export type UploadStatus =
   'queued' | 'uploading' | 'processing' | 'completed' | 'failed' | 'cancelled' | 'skipped'
 
 export type FileIssue = 'unsupported' | 'too-large' | 'duplicate'
+
+/**
+ * What to do with a duplicate (上传重复文件可选): `skip` (default), `replace`
+ * the stored file (same document id; only for a duplicate of a stored
+ * document) or `keep` both (the new one saved as "name (2).ext").
+ */
+export type DuplicateChoice = 'skip' | 'replace' | 'keep'
+
+/** How a duplicate actually ended up (shown after the upload). */
+export type DuplicateOutcome = 'replaced' | 'kept-both' | 'fallback-kept-both'
 
 export interface UploadQueueItem {
   id: string
@@ -41,6 +52,21 @@ export interface UploadQueueItem {
    * only saying "already uploaded".
    */
   duplicateOf?: { documentId: string; name: string }
+  /** The student's choice for a duplicate (`skip` when absent). */
+  duplicateChoice?: DuplicateChoice
+  /** "保留两份": the name the new copy is saved under. */
+  saveAs?: string
+  /** How a duplicate ended up, once uploaded. */
+  outcome?: DuplicateOutcome
+  /**
+   * 考卷照片合并: this item is one PDF built from these photos (page order) at
+   * upload time; `mergeKey` is the photo group's key, `mergeNames` their names.
+   */
+  mergeFiles?: File[]
+  mergeNames?: string[]
+  mergeKey?: string
+  /** Queue ids of the photos merged into this item. */
+  mergeIds?: string[]
 }
 
 /** Local-first: PDF/OCR extraction is CPU heavy and IndexedDB is shared. */
@@ -158,6 +184,142 @@ export function createTextQueueItem(input: {
   }
 }
 
+/** Ids that a planned merged item stands for (itself otherwise). */
+export function sourceIdsOf(item: UploadQueueItem): string[] {
+  return item.mergeIds && item.mergeIds.length > 0 ? item.mergeIds : [item.id]
+}
+
+export interface QueuePlanOptions {
+  /** Photo groups the student chose not to merge (by group key). */
+  mergeOff?: ReadonlySet<string>
+  /** Duplicate choices by (planned) item id. */
+  choices?: Readonly<Record<string, DuplicateChoice>>
+  /** Documents already in the project (merged PDFs are matched by name). */
+  existing?: ReadonlyArray<{ id: string; name: string }>
+}
+
+function notStarted(item: UploadQueueItem): boolean {
+  return item.status === 'queued' || (item.status === 'skipped' && item.issue === 'duplicate')
+}
+
+/** Photo groups among the queued photos (for the 「合并成一份试卷」 notices). */
+export function queuePhotoGroups(raw: ReadonlyArray<UploadQueueItem>): PhotoGroup[] {
+  return detectPhotoGroups(
+    raw
+      .filter(
+        (item) =>
+          item.kind === 'file' &&
+          item.file &&
+          item.type === 'image' &&
+          !item.documentId &&
+          !item.mergeKey &&
+          notStarted(item),
+      )
+      .map((item) => ({
+        id: item.id,
+        name: item.name,
+        ...(item.folderPath ? { folderPath: item.folderPath } : {}),
+      })),
+  )
+}
+
+/**
+ * The queue as it will be uploaded: photo groups merged into one PDF item
+ * each (unless switched off), duplicate choices applied (status `queued` for
+ * replace / keep, `skipped` for skip) and "保留两份" names assigned. Pure; the
+ * hook shows this view and commits it when the upload starts.
+ */
+export function planQueue(
+  raw: ReadonlyArray<UploadQueueItem>,
+  options: QueuePlanOptions = {},
+): UploadQueueItem[] {
+  const mergeOff = options.mergeOff ?? new Set<string>()
+  const choices = options.choices ?? {}
+  const existing = options.existing ?? []
+
+  // 1. Photo groups among files not uploaded yet.
+  const groups = queuePhotoGroups(raw).filter((group) => !mergeOff.has(group.key))
+  const byId = new Map(raw.map((item) => [item.id, item]))
+  const groupOf = new Map<string, PhotoGroup>()
+  for (const group of groups) for (const id of group.ids) groupOf.set(id, group)
+
+  let planned: UploadQueueItem[] = []
+  const emitted = new Set<string>()
+  for (const item of raw) {
+    const group = groupOf.get(item.id)
+    if (!group) {
+      planned.push(item)
+      continue
+    }
+    if (emitted.has(group.key)) continue
+    emitted.add(group.key)
+    const members = group.ids
+      .map((id) => byId.get(id))
+      .filter((m): m is UploadQueueItem => Boolean(m?.file))
+    const roles = new Set(members.map((m) => m.materialType ?? 'textbook'))
+    planned.push({
+      id: `merge:${group.key}`,
+      kind: 'file',
+      name: group.name,
+      sizeBytes: members.reduce((sum, m) => sum + m.sizeBytes, 0),
+      type: 'pdf',
+      materialType: roles.size === 1 ? [...roles][0]! : (members[0]?.materialType ?? 'textbook'),
+      ...(group.folderPath ? { folderPath: group.folderPath } : {}),
+      status: 'queued',
+      mergeFiles: members.map((m) => m.file!),
+      mergeNames: members.map((m) => m.name),
+      mergeKey: group.key,
+      mergeIds: members.map((m) => m.id),
+    })
+  }
+
+  // 2. A merged PDF named like a stored file (or another queued file) is a duplicate.
+  const seen = new Set<string>()
+  planned = planned.map((item) => {
+    const key = item.name.trim().toLowerCase()
+    if (item.mergeKey && item.status === 'queued' && !item.issue && !item.documentId) {
+      const stored = existing.find((doc) => doc.name.trim().toLowerCase() === key)
+      if (stored || seen.has(key)) {
+        return {
+          ...item,
+          status: 'skipped' as const,
+          issue: 'duplicate' as const,
+          ...(stored ? { duplicateOf: { documentId: stored.id, name: stored.name } } : {}),
+        }
+      }
+    }
+    if (item.status !== 'skipped') seen.add(key)
+    return item
+  })
+
+  // 3. Duplicate choices.
+  planned = planned.map((item) => {
+    if (item.issue !== 'duplicate' || !notStarted(item) || item.documentId) return item
+    let choice: DuplicateChoice = choices[item.id] ?? 'skip'
+    if (choice === 'replace' && !item.duplicateOf) choice = 'skip'
+    const next: UploadQueueItem = {
+      ...item,
+      duplicateChoice: choice,
+      status: choice === 'skip' ? 'skipped' : 'queued',
+    }
+    delete next.saveAs
+    return next
+  })
+
+  // 4. "保留两份" names, unique against stored files and everything queued.
+  const taken = new Set<string>(existing.map((doc) => doc.name.trim().toLowerCase()))
+  for (const item of planned) {
+    if (item.status !== 'skipped' && item.duplicateChoice !== 'keep')
+      taken.add(item.name.trim().toLowerCase())
+  }
+  return planned.map((item) => {
+    if (item.duplicateChoice !== 'keep' || item.status !== 'queued' || item.documentId) return item
+    const saveAs = keepBothName(item.name, taken)
+    taken.add(saveAs.toLowerCase())
+    return { ...item, saveAs }
+  })
+}
+
 export interface BatchSummary {
   total: number
   /** Everything that is not pre-flight rejected. */
@@ -184,7 +346,8 @@ export function summarizeBatch(items: UploadQueueItem[]): BatchSummary {
     total: items.length,
     uploadable: items.length - skipped,
     queued: count((i) => i.status === 'queued'),
-    duplicates: count((i) => i.issue === 'duplicate'),
+    // Duplicates the student still skips (replace / keep ones are uploadable).
+    duplicates: count((i) => i.issue === 'duplicate' && i.status === 'skipped'),
     unsupported: count((i) => i.issue === 'unsupported'),
     tooLarge: count((i) => i.issue === 'too-large'),
     completed: count((i) => i.status === 'completed'),
@@ -210,6 +373,8 @@ export interface WorkerContext {
    * processing, so a failure still leaves the id available for a retry.
    */
   setDocumentId: (documentId: string) => void
+  /** Record extra facts about the item (e.g. how a duplicate ended up). */
+  patch: (patch: Partial<UploadQueueItem>) => void
 }
 
 export type BatchWorker = (item: UploadQueueItem, context: WorkerContext) => Promise<void>
@@ -273,6 +438,7 @@ export async function runBatchQueue(
       const context: WorkerContext = {
         report,
         setDocumentId: (documentId) => onUpdate(item.id, { documentId }),
+        patch: (patch) => onUpdate(item.id, patch),
       }
 
       try {
