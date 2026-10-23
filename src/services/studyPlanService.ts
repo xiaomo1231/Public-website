@@ -79,6 +79,8 @@ import type { KnowledgeMastery } from '@/entities/knowledgeMastery/types'
 import { AppError, NotFoundError } from '@/infrastructure/errors/AppError'
 import { logger } from '@/infrastructure/logger/logger'
 import { t } from '@/i18n'
+import type { ChapterOption, ScopeUnit } from '@/entities/studyPlan/scope'
+import { loadChapterOptions, resolveExamScope, type ResolvedExamScope } from './examScope'
 
 /** Minutes assumed for a homework set / a professor practice set. */
 const HOMEWORK_MINUTES = 40
@@ -119,6 +121,12 @@ export interface ExamContext {
   reviewDocs: SchedulerMaterial[]
   /** Generated 复习提纲 topics to read. */
   reviewSheets: SchedulerMaterial[]
+  /**
+   * Chapters / files of a 「按所选资料」 / 「按章节」 scope (empty for the other
+   * kinds). While no topic is in scope they are planned as 复习资料 tasks and
+   * the 复习提纲 is written per unit.
+   */
+  scopeUnits: ScopeUnit[]
   mistakesDue: number
   openMistakes: number
   cardsDue: number
@@ -138,6 +146,12 @@ export interface CourseOptions {
   homework: Array<{ id: string; title: string }>
   practiceSets: Array<{ id: string; title: string }>
   reviewDocuments: Array<{ id: string; title: string }>
+  /** Chapters / sections / whole files for 「按章节」 (from processing; no analysis needed). */
+  chapters: ChapterOption[]
+  /** Course analysis: topics exist (`ready`), running, or not done. */
+  analysis: 'ready' | 'running' | 'none'
+  /** A file has the syllabus role (its scopes may still be empty). */
+  hasSyllabus: boolean
   /** Every file of the course, for the materials picker (by folder and role). */
   documents: MaterialOption[]
 }
@@ -279,22 +293,49 @@ export class StudyPlanService {
     return exams
   }
 
+  /**
+   * Edit a saved exam in place (the course stays: moving an exam to another
+   * course = delete and add again). Read-modify-write in one transaction, so a
+   * 复习提纲 topic finishing meanwhile is not lost. When the scope or the
+   * materials change, an existing 复习提纲 is kept but marked
+   * (`review.scopeChangedAt`) until it is laid out again.
+   */
   async updateExam(
     id: string,
     patch: Partial<
       Pick<PlannedExam, 'name' | 'at' | 'scope' | 'materials' | 'location' | 'durationMinutes'>
     >,
+    now = Date.now(),
   ): Promise<PlannedExam> {
-    const exam = await this.repo.getExam(id)
-    if (!exam) throw new NotFoundError('Exam', id)
-    const next: PlannedExam = {
-      ...exam,
-      ...patch,
-      ...(patch.name !== undefined ? { name: patch.name.trim() || exam.name } : {}),
-      ...(patch.materials ? { materials: normalizeMaterials(patch.materials) } : {}),
-      updatedAt: Date.now(),
-    }
-    await this.repo.putExams([next])
+    if (patch.at !== undefined && !Number.isFinite(patch.at))
+      throw new AppError(t('plan.errors.dateRequired'), 'VALIDATION_ERROR')
+    const next = await this.repo.updateExam(id, (exam) => {
+      const materials = patch.materials ? normalizeMaterials(patch.materials) : exam.materials
+      const scope = patch.scope ?? exam.scope
+      const scopeChanged =
+        JSON.stringify(scope) !== JSON.stringify(exam.scope) ||
+        JSON.stringify(normalizeMaterials(materials)) !==
+          JSON.stringify(normalizeMaterials(exam.materials))
+      const { location: _location, durationMinutes: _duration, ...rest } = exam
+      void _location
+      void _duration
+      const location = patch.location !== undefined ? patch.location.trim() : exam.location
+      const duration =
+        patch.durationMinutes !== undefined ? patch.durationMinutes : exam.durationMinutes
+      return {
+        ...rest,
+        ...(patch.name !== undefined ? { name: patch.name.trim() || exam.name } : {}),
+        ...(patch.at !== undefined ? { at: patch.at } : {}),
+        scope,
+        materials,
+        ...(location ? { location: location.slice(0, 80) } : {}),
+        ...(duration && duration > 0 && duration <= 720
+          ? { durationMinutes: Math.round(duration) }
+          : {}),
+        ...(scopeChanged && exam.review ? { review: { ...exam.review, scopeChangedAt: now } } : {}),
+      }
+    })
+    if (!next) throw new NotFoundError('Exam', id)
     notifyStudyPlanChanged()
     return next
   }
@@ -306,15 +347,28 @@ export class StudyPlanService {
 
   /** What the exam form offers for a course: topics, syllabus scopes, materials. */
   async courseOptions(projectId: string): Promise<CourseOptions> {
-    const [topics, syllabi, sets, practiceSets, documents] = await Promise.all([
-      new CourseAnalysisRepository(this.db).listTopics(projectId),
+    const analyses = new CourseAnalysisRepository(this.db)
+    const [topics, analysis, syllabi, sets, practiceSets, documents] = await Promise.all([
+      analyses.listTopics(projectId),
+      analyses.getByProject(projectId),
       new SyllabusService({ db: this.db }).listSyllabi(projectId),
       new HomeworkRepository(this.db).listSets(projectId),
       new PracticeRepository(this.db).listSets(projectId),
       new DocumentRepository(this.db).listByProject(projectId),
     ])
+    const chapters = await loadChapterOptions(this.db, projectId, documents)
     return {
       topics: topics.map((topic) => ({ id: topic.id, name: topic.name })),
+      chapters,
+      analysis:
+        topics.length > 0
+          ? 'ready'
+          : analysis && (analysis.status === 'analyzing' || analysis.status === 'pending')
+            ? 'running'
+            : 'none',
+      hasSyllabus: documents.some(
+        (doc) => resolveMaterialType(doc.materialType) === 'syllabus' && !isHeldOut(doc),
+      ),
       scopes: syllabi.flatMap(({ document, data }) =>
         data.scopes.map((scope) => ({
           documentId: document.id,
@@ -421,7 +475,8 @@ export class StudyPlanService {
     }
 
     // Topics in scope: course topics, plus exam topics no course topic covers.
-    const scoped = await this.scopedTopics(exam, courseTopics)
+    const resolved = await resolveExamScope(this.db, exam, courseTopics, documents)
+    const scoped = await this.scopedTopics(exam, courseTopics, resolved)
     const progress = topicProgress(tasks, exam.id)
     const handled = handledMaterials(tasks, exam.id)
 
@@ -574,6 +629,21 @@ export class StudyPlanService {
         minutes: reviewMaterialMinutes(document),
         done: handled.has(document.id),
       }))
+    // 按所选资料 / 按章节 before any topic is in scope: each chapter / file is
+    // one 复习资料 task (a file picked as review material is already there).
+    if (topics.length === 0) {
+      const present = new Set(reviewDocs.map((doc) => doc.id))
+      for (const unit of resolved.units) {
+        if (present.has(unit.id)) continue
+        present.add(unit.id)
+        reviewDocs.push({
+          id: unit.id,
+          title: unit.title,
+          minutes: unit.minutes,
+          done: handled.has(unit.id),
+        })
+      }
+    }
     // 读复习提纲: one task per generated topic of the sheet.
     const reviewSheets: SchedulerMaterial[] = (exam.review?.sections ?? [])
       .filter((section) => section.status === 'done')
@@ -603,6 +673,7 @@ export class StudyPlanService {
       sets: setsMaterial,
       reviewDocs,
       reviewSheets,
+      scopeUnits: resolved.units,
       mistakesDue: mistakes.filter((m) => isRetestDue(m, now)).length,
       openMistakes: mistakes.length,
       cardsDue: dueCards.length,
@@ -625,8 +696,11 @@ export class StudyPlanService {
   private async scopedTopics(
     exam: PlannedExam,
     courseTopics: Topic[],
+    resolved: ResolvedExamScope,
   ): Promise<Array<{ id: string; name: string; topic?: Topic }>> {
     const scope = exam.scope
+    if (resolved.topics)
+      return resolved.topics.map((topic) => ({ id: topic.id, name: topic.name, topic }))
     if (scope.kind === 'topics') {
       const wanted = new Set(scope.topicIds)
       return courseTopics

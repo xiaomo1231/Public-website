@@ -203,6 +203,19 @@ export function ExamReviewPage(): JSX.Element {
                 value={(done / sections.length) * 100}
                 aria-label={t('plan.review.progressAria')}
               />
+              {exam.review?.scopeChangedAt !== undefined && (
+                <div
+                  className="flex flex-wrap items-center gap-2 rounded-md border border-amber-500/60 px-3 py-2 text-sm text-amber-800 lab:rounded-none dark:text-amber-300"
+                  data-review-outdated
+                >
+                  <p className="flex-1">{t('plan.review.scopeChanged')}</p>
+                  {!running && (
+                    <Button size="sm" variant="outline" onClick={() => void plan(true)}>
+                      {t('plan.review.scopeChangedAction')}
+                    </Button>
+                  )}
+                </div>
+              )}
               {!running && done < sections.length && (
                 <div className="space-y-2">
                   {estimate && estimate.requests > 0 && (

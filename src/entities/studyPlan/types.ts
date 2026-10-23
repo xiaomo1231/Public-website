@@ -46,6 +46,16 @@ export type PlannedExamScope =
   /** A scope of the course's 考点清单 (syllabus document + scope id). */
   | { kind: 'syllabus'; documentId: string; scopeId: string }
   | { kind: 'topics'; topicIds: string[] }
+  /**
+   * 按所选资料: what the files / folders picked in `materials` hold (see
+   * `scope.ts`); nothing picked = the whole course.
+   */
+  | { kind: 'materials' }
+  /**
+   * 按章节: detected chapters / sections (`CourseStructureNode` ids), and whole
+   * files without a structure (slides, notes).
+   */
+  | { kind: 'chapters'; chapterIds: string[]; sectionIds?: string[]; documentIds?: string[] }
 
 /** Materials the student picked for this exam (ids within the course). */
 export interface PlannedExamMaterials {

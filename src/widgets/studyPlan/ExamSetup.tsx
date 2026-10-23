@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import {
   AlertTriangle,
   ClipboardPaste,
-  FileStack,
+  Pencil,
   NotebookText,
   Plus,
   Sparkles,
@@ -30,16 +30,13 @@ import { inferCourse } from '@/entities/project/subjectInference'
 import { countdownParts } from '@/entities/studyPlan/countdown'
 import { cn, formatDateTime } from '@/shared/lib/utils'
 import { useTranslation } from '@/i18n'
-import type { TranslationKey } from '@/i18n/types'
 import { PasteExamImport } from './PasteExamImport'
 import { ExamMaterialsPicker } from './ExamMaterialsPicker'
 import { reviewSheetLink } from './taskLinks'
-
-const SCOPE_KEYS: Record<PlannedExamScope['kind'], TranslationKey> = {
-  course: 'plan.scope.course',
-  syllabus: 'plan.scope.syllabus',
-  topics: 'plan.scope.topics',
-}
+import { ExamScopeField, type ScopeValue } from './ExamScopeField'
+import { scopeLabel } from './scopeLabels'
+import { chapterKeysOf, chaptersScopeFromKeys } from '@/entities/studyPlan/scope'
+import { dayKey } from '@/entities/studyPlan/calendar'
 
 interface Draft {
   key: string
@@ -47,9 +44,11 @@ interface Draft {
   name: string
   date: string
   time: string
-  /** `course`, `topics`, or `syllabus:<documentId>:<scopeId>`. */
+  /** `course`, `materials`, `chapters`, `topics`, or `syllabus:<documentId>:<scopeId>`. */
   scope: string
   topicIds: string[]
+  /** Chosen chapters (`chapter:` / `section:` / `file:` keys). */
+  chapterKeys: string[]
   materials: PlannedExamMaterials
   location?: string
   durationMinutes?: number
@@ -68,6 +67,7 @@ function newDraft(projectId = ''): Draft {
     time: '09:00',
     scope: 'course',
     topicIds: [],
+    chapterKeys: [],
     materials: { ...EMPTY_MATERIALS },
   }
 }
@@ -86,13 +86,37 @@ function draftFromPaste(exam: PastedExam, fixedProject: string | undefined): Dra
   }
 }
 
-function scopeOf(draft: Draft): PlannedExamScope {
+function scopeOf(draft: ScopeValue): PlannedExamScope {
   if (draft.scope === 'topics') return { kind: 'topics', topicIds: draft.topicIds }
+  if (draft.scope === 'materials') return { kind: 'materials' }
+  if (draft.scope === 'chapters') return chaptersScopeFromKeys(draft.chapterKeys)
   if (draft.scope.startsWith('syllabus:')) {
     const [, documentId, scopeId] = draft.scope.split(':')
     return { kind: 'syllabus', documentId: documentId!, scopeId: scopeId! }
   }
   return { kind: 'course' }
+}
+
+/** The form value of a stored scope. */
+function scopeValueOf(scope: PlannedExamScope): ScopeValue {
+  const base: ScopeValue = { scope: 'course', topicIds: [], chapterKeys: [] }
+  switch (scope.kind) {
+    case 'topics':
+      return { ...base, scope: 'topics', topicIds: [...scope.topicIds] }
+    case 'syllabus':
+      return { ...base, scope: `syllabus:${scope.documentId}:${scope.scopeId}` }
+    case 'materials':
+      return { ...base, scope: 'materials' }
+    case 'chapters':
+      return { ...base, scope: 'chapters', chapterKeys: chapterKeysOf(scope) }
+    default:
+      return base
+  }
+}
+
+function timeOf(at: number): string {
+  const date = new Date(at)
+  return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`
 }
 
 /** A course's files etc. for the forms, reloaded on demand (after an upload). */
@@ -283,12 +307,21 @@ export function ExamSetup({ projectId }: { projectId?: string }): JSX.Element {
                         ? t('plan.exams.past')
                         : t('plan.countdown.daysHours', { days: left.days, hours: left.hours })}
                       {' · '}
-                      {t(SCOPE_KEYS[exam.scope.kind])}
+                      {scopeLabel(exam.scope, t)}
                       {exam.location ? ` · ${exam.location}` : ''}
                       {exam.durationMinutes
                         ? ` · ${t('plan.exams.duration', { minutes: exam.durationMinutes })}`
                         : ''}
                     </p>
+                    {exam.review?.scopeChangedAt !== undefined && (
+                      <p
+                        className="flex items-center gap-1.5 text-xs text-amber-700 dark:text-amber-400"
+                        data-review-outdated
+                      >
+                        <AlertTriangle className="h-3.5 w-3.5" aria-hidden />
+                        {t('plan.review.scopeChanged')}
+                      </p>
+                    )}
                   </div>
                   <Button
                     size="sm"
@@ -296,8 +329,8 @@ export function ExamSetup({ projectId }: { projectId?: string }): JSX.Element {
                     aria-expanded={editing === exam.id}
                     onClick={() => setEditing((id) => (id === exam.id ? null : exam.id))}
                   >
-                    <FileStack className="h-4 w-4" aria-hidden />
-                    {t('plan.materials.edit')}
+                    <Pencil className="h-4 w-4" aria-hidden />
+                    {t('plan.exams.edit')}
                   </Button>
                   <Button asChild size="sm" variant="outline">
                     <Link to={reviewSheetLink(exam)} data-review-link>
@@ -327,8 +360,10 @@ export function ExamSetup({ projectId }: { projectId?: string }): JSX.Element {
                   </Button>
                 </div>
                 {editing === exam.id && (
-                  <SavedMaterials
+                  <SavedExamEditor
                     exam={exam}
+                    courseName={courseName.get(exam.projectId) ?? ''}
+                    onCancel={() => setEditing(null)}
                     onSaved={() => {
                       setEditing(null)
                       refresh()
@@ -393,22 +428,124 @@ export function ExamSetup({ projectId }: { projectId?: string }): JSX.Element {
   )
 }
 
-/** Edit the materials of a saved exam (saved and re-planned on 保存资料). */
-function SavedMaterials({
+/**
+ * Edit a saved exam in place: name, date and time, location and length, the
+ * 考试范围 and the materials. The course stays (another course = delete and
+ * add again). 保存 updates the row and lays the plan out again.
+ */
+function SavedExamEditor({
   exam,
+  courseName,
   onSaved,
+  onCancel,
 }: {
   exam: PlannedExam
+  courseName: string
   onSaved: () => void
+  onCancel: () => void
 }): JSX.Element {
   const { t } = useTranslation()
   const service = useStudyPlanService()
   const { options, reload } = useCourseOptions(exam.projectId)
+  const [name, setName] = useState(exam.name)
+  const [date, setDate] = useState(dayKey(exam.at))
+  const [time, setTime] = useState(timeOf(exam.at))
+  const [location, setLocation] = useState(exam.location ?? '')
+  const [duration, setDuration] = useState<number | undefined>(exam.durationMinutes)
+  const [scope, setScope] = useState<ScopeValue>(() => scopeValueOf(exam.scope))
   const [materials, setMaterials] = useState(() => normalizeMaterials(exam.materials))
   const [saving, setSaving] = useState(false)
+  const id = (field: string) => `edit-${exam.id}-${field}`
   if (!options) return <p className="text-sm text-muted-foreground">{t('common.loading')}</p>
+
+  async function save() {
+    if (!name.trim() || !date) {
+      toast({ variant: 'warning', title: t('plan.exams.incomplete') })
+      return
+    }
+    setSaving(true)
+    try {
+      await service.updateExam(exam.id, {
+        name,
+        at: new Date(`${date}T${time || '09:00'}`).getTime(),
+        location,
+        durationMinutes: duration ?? 0,
+        scope: scopeOf(scope),
+        materials,
+      })
+      await service.replan()
+      toast({ variant: 'success', title: t('plan.exams.updated') })
+      onSaved()
+    } catch (err) {
+      toast({
+        variant: 'error',
+        title: t('plan.errors.actionFailed'),
+        description: err instanceof Error ? err.message : String(err),
+      })
+    } finally {
+      setSaving(false)
+    }
+  }
+
   return (
-    <div className="space-y-3 border-t pt-3">
+    <div className="space-y-3 border-t pt-3" data-exam-editor>
+      <p className="text-xs text-muted-foreground" data-course-fixed>
+        {t('plan.exams.courseFixed', { course: courseName })}
+      </p>
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="space-y-1">
+          <Label htmlFor={id('name')}>{t('plan.exams.name')}</Label>
+          <Input id={id('name')} value={name} onChange={(event) => setName(event.target.value)} />
+        </div>
+        <div className="space-y-1">
+          <Label htmlFor={id('date')}>{t('plan.exams.date')}</Label>
+          <Input
+            id={id('date')}
+            type="date"
+            value={date}
+            onChange={(event) => setDate(event.target.value)}
+          />
+        </div>
+        <div className="space-y-1">
+          <Label htmlFor={id('time')}>{t('plan.exams.time')}</Label>
+          <Input
+            id={id('time')}
+            type="time"
+            value={time}
+            onChange={(event) => setTime(event.target.value)}
+          />
+        </div>
+        <div className="space-y-1">
+          <Label htmlFor={id('location')}>{t('plan.exams.location')}</Label>
+          <Input
+            id={id('location')}
+            value={location}
+            onChange={(event) => setLocation(event.target.value)}
+          />
+        </div>
+        <div className="space-y-1">
+          <Label htmlFor={id('duration')}>{t('plan.exams.durationLabel')}</Label>
+          <Input
+            id={id('duration')}
+            type="number"
+            min={5}
+            max={720}
+            value={duration ?? ''}
+            onChange={(event) => {
+              const value = Number(event.target.value)
+              setDuration(value > 0 ? value : undefined)
+            }}
+          />
+        </div>
+      </div>
+      <ExamScopeField
+        id={id('scope')}
+        projectId={exam.projectId}
+        options={options}
+        value={scope}
+        materials={materials}
+        onChange={setScope}
+      />
       <ExamMaterialsPicker
         projectId={exam.projectId}
         idPrefix={`saved-${exam.id}`}
@@ -417,29 +554,14 @@ function SavedMaterials({
         onChange={setMaterials}
         onUploaded={reload}
       />
-      <Button
-        size="sm"
-        disabled={saving}
-        onClick={async () => {
-          setSaving(true)
-          try {
-            await service.updateExam(exam.id, { materials })
-            await service.replan()
-            toast({ variant: 'success', title: t('plan.materials.saved') })
-            onSaved()
-          } catch (err) {
-            toast({
-              variant: 'error',
-              title: t('plan.errors.actionFailed'),
-              description: err instanceof Error ? err.message : String(err),
-            })
-          } finally {
-            setSaving(false)
-          }
-        }}
-      >
-        {t('plan.materials.save')}
-      </Button>
+      <div className="flex flex-wrap gap-2">
+        <Button size="sm" disabled={saving} onClick={() => void save()} data-exam-edit-save>
+          {t('plan.exams.saveEdit')}
+        </Button>
+        <Button size="sm" variant="ghost" disabled={saving} onClick={onCancel}>
+          {t('common.cancel')}
+        </Button>
+      </div>
     </div>
   )
 }
@@ -510,6 +632,7 @@ function DraftRow({
                 projectId: event.target.value,
                 scope: 'course',
                 topicIds: [],
+                chapterKeys: [],
                 materials: { ...EMPTY_MATERIALS },
               })
             }
@@ -587,48 +710,15 @@ function DraftRow({
         </div>
       </div>
 
-      {options && (
-        <div className="space-y-1">
-          <Label htmlFor={id('scope')}>{t('plan.exams.scope')}</Label>
-          <select
-            id={id('scope')}
-            className="focus-ring h-10 w-full rounded-md border bg-background px-2 text-sm lab:rounded-none sm:w-auto"
-            value={draft.scope}
-            onChange={(event) => onChange({ ...draft, scope: event.target.value })}
-          >
-            <option value="course">{t('plan.scope.course')}</option>
-            {options.scopes.map((scope) => (
-              <option
-                key={`${scope.documentId}:${scope.scopeId}`}
-                value={`syllabus:${scope.documentId}:${scope.scopeId}`}
-              >
-                {t('plan.scope.syllabusItem', { label: scope.label, count: scope.topics })}
-              </option>
-            ))}
-            {options.topics.length > 0 && <option value="topics">{t('plan.scope.topics')}</option>}
-          </select>
-          {draft.scope === 'topics' && (
-            <div className="mt-2 flex max-h-48 flex-wrap gap-x-4 gap-y-1 overflow-y-auto">
-              {options.topics.map((topic) => (
-                <label key={topic.id} className="flex items-center gap-2 text-sm">
-                  <input
-                    type="checkbox"
-                    checked={draft.topicIds.includes(topic.id)}
-                    onChange={() =>
-                      onChange({
-                        ...draft,
-                        topicIds: draft.topicIds.includes(topic.id)
-                          ? draft.topicIds.filter((each) => each !== topic.id)
-                          : [...draft.topicIds, topic.id],
-                      })
-                    }
-                  />
-                  {topic.name}
-                </label>
-              ))}
-            </div>
-          )}
-        </div>
+      {options && draft.projectId && (
+        <ExamScopeField
+          id={id('scope')}
+          projectId={draft.projectId}
+          options={options}
+          value={draft}
+          materials={draft.materials}
+          onChange={(value) => onChange({ ...draft, ...value })}
+        />
       )}
 
       {options && draft.projectId && (

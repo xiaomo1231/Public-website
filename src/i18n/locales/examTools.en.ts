@@ -41,9 +41,6 @@ export const examToolsEn = {
     'Looks like “{name}”, which is already planned. Remove this row if it is the same exam.',
   'plan.paste.newCourse': 'Create the course “{name}”',
 
-  'plan.materials.edit': 'Materials',
-  'plan.materials.save': 'Save materials',
-  'plan.materials.saved': 'Materials saved and the plan updated',
   'plan.materials.selected': '{files} file(s) · {folders} folder(s) picked',
   'plan.materials.view': 'How to list the files',
   'plan.materials.byFolder': 'By folder',

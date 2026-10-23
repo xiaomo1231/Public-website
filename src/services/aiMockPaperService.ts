@@ -1,3 +1,4 @@
+import { resolveExamScope } from './examScope'
 import { aiConcurrency, type AIService } from './aiService'
 import { createAdaptivePool, isOverloadError, type PoolTaskContext } from '@/shared/lib/concurrency'
 import { getDb, type AppDatabase } from '@/infrastructure/db/database'
@@ -1193,7 +1194,12 @@ export class AiMockPaperService {
   ): Promise<MockTopicInput[]> {
     const courseTopics = await new CourseAnalysisRepository(this.db).listTopics(projectId)
     const syllabi = await new SyllabusService({ db: this.db }).listSyllabi(projectId)
-    const ids = examTopicIds(exam, syllabi, scope)
+    // 按所选资料 / 按章节: the topics whose sources lie in those files / chapters.
+    const ids =
+      !scope && exam && (exam.scope.kind === 'materials' || exam.scope.kind === 'chapters')
+        ? ((await resolveExamScope(this.db, exam, courseTopics)).topics?.map((topic) => topic.id) ??
+          null)
+        : examTopicIds(exam, syllabi, scope)
     const inScope = ids ? courseTopics.filter((topic) => ids.includes(topic.id)) : courseTopics
     const scoped = inScope.length > 0 ? inScope : courseTopics
     // Marks per topic over the uploaded past papers (not AI mocks, not held out).

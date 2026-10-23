@@ -71,10 +71,44 @@ export const studyPlanEn = {
   'plan.exams.deleteTitle': 'Delete this exam?',
   'plan.exams.deleteHint':
     '“{name}” and its planned tasks are removed. Your practice records stay.',
+  'plan.exams.edit': 'Edit',
+  'plan.exams.saveEdit': 'Save changes',
+  'plan.exams.updated': 'Exam updated and the plan laid out again',
+  'plan.exams.courseFixed':
+    'Course: {course} (the course can’t be changed; to move the exam to another course, delete it and add it again)',
+  'plan.review.scopeChanged': 'The scope changed — the review sheet can be generated again',
+  'plan.review.scopeChangedAction': 'Lay out topics for the new scope',
   'plan.scope.course': 'Whole course',
   'plan.scope.syllabus': 'Syllabus scope',
   'plan.scope.syllabusItem': 'Syllabus: {label} ({count} topics)',
   'plan.scope.topics': 'Chosen topics',
+  'plan.scope.materials': 'Picked materials',
+  'plan.scope.chapters': 'Chapters',
+  'plan.scope.chaptersCount': 'Chapters ({count})',
+  'plan.scope.topicsCount': 'Chosen topics ({count})',
+  'plan.scope.hint.materials':
+    'The exam covers the files and folders picked under “Materials to use” below. Once the course is analysed the plan follows their topics; until then it schedules review tasks per file.',
+  'plan.scope.hint.materialsEmpty':
+    'No materials picked yet: pick files or folders below. With none picked, the whole course counts.',
+  'plan.scope.hint.chapters':
+    'Tick the chapters or sections the exam covers (files without detected chapters count as a whole). Before course analysis, review tasks are scheduled per chapter.',
+  'plan.scope.hint.chaptersEmpty':
+    'No chapter ticked yet. With none ticked, the whole course counts.',
+  'plan.scope.hint.noChapters':
+    'No chapters to choose yet: upload and process a textbook or slides to choose by chapter.',
+  'plan.scope.hint.noSyllabus': 'Upload the course syllabus to choose a midterm / final scope.',
+  'plan.scope.hint.syllabusNoScopes':
+    'No exam scope was found in the syllabus yet. Re-read it or add one in the exam topic list.',
+  'plan.scope.hint.analysisRunning':
+    'Course analysis is running. Topics can be chosen when it finishes.',
+  'plan.scope.hint.noAnalysis': 'Analyse the course to choose by topic.',
+  'plan.scope.link.syllabus': 'Open the exam topic list',
+  'plan.scope.link.analysis': 'Open course analysis',
+  'plan.scope.chapterList': 'Chapters in the exam',
+  'plan.scope.topicList': 'Topics in the exam',
+  'plan.scope.wholeFile': 'Whole file',
+  'plan.scope.pages': 'pp. {start}–{end}',
+  'plan.scope.page': 'p. {start}',
   'plan.materials.title': 'Materials to use',
   'plan.materials.pastExams': 'Past / mock papers',
   'plan.materials.review': 'Review material',

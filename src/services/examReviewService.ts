@@ -10,6 +10,7 @@ import {
   hasReviewContent,
   planReviewSections,
   REVIEW_CHUNK_CHARS,
+  REVIEW_CHUNKS_PER_TOPIC,
   REVIEW_MISTAKES_PER_TOPIC,
   reviewStatus,
   selectReviewChunks,
@@ -95,6 +96,19 @@ async function reviewLanguage(projectId: string, db: AppDatabase): Promise<strin
   return course.mode
 }
 
+/** A 复习提纲 section written for a chapter / file of the scope (no topic yet). */
+export function unitSectionId(unitId: string): string {
+  return `unit:${unitId}`
+}
+
+/** Up to `limit` chunks spread evenly over a chapter / file, in reading order. */
+export function spreadChunks<T>(chunks: readonly T[], limit = REVIEW_CHUNKS_PER_TOPIC): T[] {
+  if (chunks.length <= limit) return [...chunks]
+  const out: T[] = []
+  for (let i = 0; i < limit; i++) out.push(chunks[Math.floor((i * chunks.length) / limit)]!)
+  return out
+}
+
 interface TopicWork {
   section: ReviewSection
   chunks: ChunkCandidate[]
@@ -141,7 +155,17 @@ export class ExamReviewService {
     if (existing.review?.sections.length && !options.replace) return existing
     if (runningReviews.has(examId)) throw new AppError(t('plan.review.errors.running'), 'BUSY')
     const context = await this.plans.examContext(examId, now)
-    const planned = planReviewSections(context.topics)
+    // 按所选资料 / 按章节 before course analysis: one section per chapter / file.
+    const planned = planReviewSections(
+      context.topics.length > 0
+        ? context.topics
+        : context.scopeUnits.map((unit) => ({
+            id: unitSectionId(unit.id),
+            name: unit.title,
+            mastery: null,
+            openMistakes: 0,
+          })),
+    )
     if (planned.length === 0) throw new AppError(t('plan.review.errors.noTopics'), 'NO_TOPICS')
     const language = await reviewLanguage(existing.projectId, this.db)
     const updated = await this.repo.updateExam(examId, (exam) => {
@@ -432,7 +456,20 @@ export class ExamReviewService {
     const all = new Map(usable.map((chunk) => [chunk.id, toCandidate(chunk)]))
     const topicById = new Map(topics.map((topic) => [topic.id, topic]))
     const marks = new Map((context?.topics ?? []).map((topic) => [topic.id, topic.marksShare]))
+    const units = new Map((context?.scopeUnits ?? []).map((unit) => [unitSectionId(unit.id), unit]))
     return sections.map((section) => {
+      const unit = section.topicId ? units.get(section.topicId) : undefined
+      if (section.topicId?.startsWith('unit:')) {
+        // A chapter / file: its own chunks, spread over it (no topic to match).
+        const wanted = unit?.chunkIds ? new Set(unit.chunkIds) : null
+        const own = unit
+          ? usable
+              .filter((c) => (wanted ? wanted.has(c.id) : c.documentId === unit.documentId))
+              .sort((a, b) => a.order - b.order)
+              .map(toCandidate)
+          : []
+        return { section, chunks: spreadChunks(own), mistakes: [] }
+      }
       const topic = section.topicId ? topicById.get(section.topicId) : undefined
       const sourceIds = topic?.sourceChunkIds ?? []
       const candidates = [

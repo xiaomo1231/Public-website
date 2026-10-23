@@ -72,6 +72,11 @@ export interface ExamReview {
   createdAt: number
   updatedAt: number
   sections: ReviewSection[]
+  /**
+   * The exam's scope or materials were edited after the sheet was laid out
+   * (the sheet is kept; laying it out again clears this).
+   */
+  scopeChangedAt?: number
 }
 
 /** Topics on one sheet. */

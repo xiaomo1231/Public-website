@@ -1,6 +1,7 @@
 import type { StudyTask, StudyTaskKind } from '@/entities/studyPlan/types'
 import type { TranslationKey } from '@/i18n/types'
 import { parseReviewSheetRef } from '@/entities/studyPlan/review'
+import { parseChapterRef } from '@/entities/studyPlan/scope'
 
 /** Where a study task is done: an existing page of the app. */
 export function taskLink(
@@ -35,8 +36,12 @@ export function taskLink(
       return task.refId ? `${base}/homework/${task.refId}?view=guided` : `${base}/homework`
     case 'practice_set':
       return `${base}/practice`
-    case 'review_material':
+    case 'review_material': {
+      // A chapter of a 「按章节」 scope (`chapter:<documentId>:<nodeId>`): its file.
+      const chapter = parseChapterRef(task.refId)
+      if (chapter) return `${base}/documents/${chapter.documentId}`
       return task.refId ? `${base}/documents/${task.refId}` : `${base}/files`
+    }
     case 'review_sheet': {
       const ref = parseReviewSheetRef(task.refId)
       return ref

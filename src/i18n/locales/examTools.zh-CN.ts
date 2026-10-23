@@ -39,9 +39,6 @@ export const examToolsZhCN: Record<keyof typeof examToolsEn, string> = {
   'plan.paste.duplicate': '与已有的「{name}」重复。如果是同一场考试，请移除这一行。',
   'plan.paste.newCourse': '新建课程「{name}」',
 
-  'plan.materials.edit': '资料',
-  'plan.materials.save': '保存资料',
-  'plan.materials.saved': '资料已保存，计划已更新',
   'plan.materials.selected': '已选 {files} 个文件 · {folders} 个文件夹',
   'plan.materials.view': '文件的列出方式',
   'plan.materials.byFolder': '按文件夹',
