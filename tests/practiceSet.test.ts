@@ -45,6 +45,9 @@ function stubAI(handler: Handler) {
   }
 }
 
+/** Fixed draws for the locally built systems, so each run builds the same set. */
+const SEED = 'practice-test'
+
 const reviewIds = (user: string): string[] =>
   [...user.matchAll(/\[(p\d+)\] mode/g)].map((match) => match[1]!)
 
@@ -236,6 +239,20 @@ describe('linear-system constructor', () => {
       expect(eliminationFractions(augmented)).toBeLessThanOrEqual(2)
     }
   })
+
+  it('builds inconsistent systems on seeds whose target used to be unreduced', () => {
+    // The `0 = 1` row makes the right-hand side a pivot column; a target that
+    // kept other right-hand sides never matched rref(A), and these seeds ran
+    // out of tries (the slot then fell back to the AI).
+    for (const seed of [43, 528, 593, 757, 855]) {
+      const built = buildLinearSystem(
+        { rows: 3, vars: 3, solution: 'none', free: 0 },
+        createRng(`seed${seed}`),
+      )
+      expect(built).not.toBeNull()
+      expect(solutionKind(built!.reduced)).toBe('none')
+    }
+  })
 })
 
 describe('local grading of practice answers', () => {
@@ -277,7 +294,7 @@ describe('local grading of practice answers', () => {
 describe('building practice sets', () => {
   it('完整版 mirrors the assignment: same questions, sub-parts and solution types', async () => {
     const { ai, calls } = stubAI(writer)
-    const service = new PracticeSetService({ ai, db })
+    const service = new PracticeSetService({ ai, db, seed: SEED })
     const result = await service.create(parentId, 'full')
     expect(result).toMatchObject({ paused: false, created: 2, dropped: 0 })
     // One request writes the AI question, one reviews every question (local ones too).
@@ -318,7 +335,7 @@ describe('building practice sets', () => {
   it('精简版 asks one question per summary category plus an integrative one', async () => {
     expect(compactCount(summaryKnowledge(SUMMARY), 2)).toBe(4)
     const { ai, calls } = stubAI(writer)
-    const result = await new PracticeSetService({ ai, db }).create(parentId, 'compact')
+    const result = await new PracticeSetService({ ai, db, seed: SEED }).create(parentId, 'compact')
     expect(result.created).toBe(4)
     // All linear-system knowledge points: built locally, only reviewed by the AI.
     expect(calls.map((call) => call.kind)).toEqual(['review'])
@@ -341,7 +358,7 @@ describe('building practice sets', () => {
         })),
       }
     })
-    const result = await new PracticeSetService({ ai, db }).create(parentId, 'full')
+    const result = await new PracticeSetService({ ai, db, seed: SEED }).create(parentId, 'full')
     expect(calls.map((call) => call.kind)).toEqual(['generate', 'review', 'generate', 'review'])
     expect(calls[2]!.user).toContain('Rejected before: too easy')
     expect(result).toMatchObject({ created: 1, dropped: 1 })
@@ -379,7 +396,7 @@ describe('building practice sets', () => {
         ],
       }
     })
-    const result = await new PracticeSetService({ ai, db }).create(parentId, 'full')
+    const result = await new PracticeSetService({ ai, db, seed: SEED }).create(parentId, 'full')
     expect(result).toMatchObject({ created: 1, dropped: 1 })
     const set = await repo.getSet(result.set.id)
     expect(set!.practice!.droppedReasons![0]).toContain('2')
@@ -392,7 +409,7 @@ describe('building practice sets', () => {
       signal: new AbortController().signal,
       shouldContinue: () => allowed,
     }
-    const service = new PracticeSetService({ ai, db })
+    const service = new PracticeSetService({ ai, db, seed: SEED })
     const first = service.create(parentId, 'full', {
       control,
       onProgress: (progress) => {
@@ -414,7 +431,7 @@ describe('building practice sets', () => {
 
   it('is listed under its assignment, exported, deleted on its own or with the assignment', async () => {
     const { ai } = stubAI(writer)
-    const service = new PracticeSetService({ ai, db })
+    const service = new PracticeSetService({ ai, db, seed: SEED })
     const { set } = await service.create(parentId, 'full')
     expect((await service.listPracticeSets(parentId)).map((item) => item.id)).toEqual([set.id])
 
@@ -444,7 +461,7 @@ describe('building practice sets', () => {
 
   it('checks practice answers locally and records them in mastery and the mistake book', async () => {
     const { ai } = stubAI(writer)
-    const { set } = await new PracticeSetService({ ai, db }).create(parentId, 'compact')
+    const { set } = await new PracticeSetService({ ai, db, seed: SEED }).create(parentId, 'compact')
     const [first] = await repo.listQuestions(set.id)
     const homework = new HomeworkService({ ai: null, db })
     const check = await homework.checkAnswer(first!.id, '有唯一解 x1 = 999, x2 = 0, x3 = 0', 'zh')

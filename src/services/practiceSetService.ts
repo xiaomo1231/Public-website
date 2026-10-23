@@ -145,10 +145,16 @@ export class PracticeSetService {
   private ai: AIService | null
   private db: AppDatabase
   private homework: HomeworkRepository
+  private seed: string | undefined
 
-  constructor(deps: { ai: AIService | null; db?: AppDatabase }) {
+  /**
+   * `seed` fixes the random draws of the locally built systems (tests);
+   * without it each practice set is seeded by its own id.
+   */
+  constructor(deps: { ai: AIService | null; db?: AppDatabase; seed?: string }) {
     this.ai = deps.ai
     this.db = deps.db ?? getDb()
+    this.seed = deps.seed
     this.homework = new HomeworkRepository(this.db)
   }
 
@@ -363,7 +369,7 @@ export class PracticeSetService {
     language: PracticeLanguage,
     hints: LinearStyleHints = {},
   ): PracticeCandidate | null {
-    const rng = createRng(`${seed}:${slot.id}:${attempt}`)
+    const rng = createRng(`${this.seed ?? seed}:${slot.id}:${attempt}`)
     // A full-version question mirrors its original; a compact one follows the
     // professor's usual presentation and sizes (教授出题习惯) when known.
     const compact = slot.mode === 'compact'

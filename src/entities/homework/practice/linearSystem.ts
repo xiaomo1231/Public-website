@@ -137,7 +137,13 @@ function targetRref(spec: SystemSpec, rng: Rng): { matrix: Rational[][]; pivots:
     }
     matrix[row]![vars] = rational.of(BigInt(rng.int(-6, 6)))
   })
-  if (spec.solution === 'none') matrix[rank]![vars] = rational.of(1n)
+  if (spec.solution === 'none') {
+    // In an inconsistent RREF the right-hand side is a pivot column (the
+    // `0 = 1` row), so it is cleared in every other row. A target with other
+    // right-hand sides is not reduced and never matches `rref(A)`.
+    for (let row = 0; row < rank; row += 1) matrix[row]![vars] = rational.of(0n)
+    matrix[rank]![vars] = rational.of(1n)
+  }
   return { matrix, pivots }
 }
 

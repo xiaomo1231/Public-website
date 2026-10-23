@@ -686,12 +686,18 @@ describe('practice sets with the profile', () => {
       statement: 'Linear systems are 4×4 (four equations, four unknowns)',
     })
     const on = practiceAI()
-    const full = await new PracticeSetService({ ai: on.ai, db }).create(parentId, 'full')
+    const full = await new PracticeSetService({ ai: on.ai, db, seed: 'habits' }).create(
+      parentId,
+      'full',
+    )
     expect(full.created).toBeGreaterThan(0)
     expect(on.users[0]).toContain('PROFESSOR HABITS')
     expect(on.users[0]).toContain('Linear systems are 4×4')
 
-    const compact = await new PracticeSetService({ ai: on.ai, db }).create(parentId, 'compact')
+    const compact = await new PracticeSetService({ ai: on.ai, db, seed: 'habits' }).create(
+      parentId,
+      'compact',
+    )
     const local = (await repo.listQuestions(compact.set.id)).filter(
       (q) => q.practice?.origin === 'local',
     )
@@ -705,7 +711,7 @@ describe('practice sets with the profile', () => {
 
     await habits.setEnabled(projectId, false)
     const off = practiceAI()
-    await new PracticeSetService({ ai: off.ai, db }).create(parentId, 'full')
+    await new PracticeSetService({ ai: off.ai, db, seed: 'habits' }).create(parentId, 'full')
     expect(off.users[0]).not.toContain('PROFESSOR HABITS')
   })
 })
