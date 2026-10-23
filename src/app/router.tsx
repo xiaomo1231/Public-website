@@ -64,6 +64,7 @@ const InterviewPage = lazyPage(() => import('@/pages/InterviewPage'), 'Interview
 const SettingsPage = lazyPage(() => import('@/pages/SettingsPage'), 'SettingsPage')
 const VocabPage = lazyPage(() => import('@/pages/VocabPage'), 'VocabPage')
 const StudyPlanPage = lazyPage(() => import('@/pages/StudyPlanPage'), 'StudyPlanPage')
+const ExamReviewPage = lazyPage(() => import('@/pages/ExamReviewPage'), 'ExamReviewPage')
 
 /**
  * Every project sub-page sits under `ProjectScope`, which shows one
@@ -93,6 +94,7 @@ const projectPages: RouteObject[] = [
   { path: 'projects/:id/interview', element: <InterviewPage /> },
   { path: 'projects/:id/interview/:sessionId', element: <InterviewPage /> },
   { path: 'projects/:id/documents/:did', element: <DocumentDetailPage /> },
+  { path: 'projects/:id/exam-review/:examId', element: <ExamReviewPage /> },
 ]
 
 export const routes: RouteObject[] = [

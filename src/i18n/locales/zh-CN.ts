@@ -4,8 +4,10 @@ import { aiMockZhCN } from './aiMock.zh-CN'
 import { handwritingZhCN } from './handwriting.zh-CN'
 import { marketZhCN } from './market.zh-CN'
 import { marketQuestionZhCN } from './marketQuestion.zh-CN'
+import { examToolsZhCN } from './examTools.zh-CN'
 
 export const zhCN: Record<TranslationKey, string> = {
+  ...examToolsZhCN,
   ...studyPlanZhCN,
   ...aiMockZhCN,
   ...handwritingZhCN,

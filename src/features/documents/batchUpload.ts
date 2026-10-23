@@ -25,6 +25,8 @@ export interface UploadQueueItem {
   type: DocumentType | null
   /** Role in the tutor; carried into the document row. */
   materialType?: LearningMaterialType
+  /** Folder of a folder upload; carried into `Document.folderPath`. */
+  folderPath?: string
   status: UploadStatus
   issue?: FileIssue
   /** Raw pipeline stage name while processing. */
@@ -85,6 +87,12 @@ export function isSameFile(a: FileIdentity, b: FileIdentity): boolean {
   return true
 }
 
+/** Per-file folder and role (a folder upload with role suggestions). */
+export interface FileQueueOptions {
+  folderOf?: (file: File) => string | undefined
+  roleOf?: (file: File) => LearningMaterialType | undefined
+}
+
 /**
  * Validate every selected file independently and mark duplicates.
  *
@@ -95,10 +103,12 @@ export function createFileQueueItems(
   files: File[],
   existing: FileIdentity[] = [],
   materialType: LearningMaterialType = 'textbook',
+  options: FileQueueOptions = {},
 ): UploadQueueItem[] {
   const known = existing.slice()
   return files.map((file) => {
     const classification = classifyFile(file)
+    const folderPath = options.folderOf?.(file)
     const base: UploadQueueItem = {
       id: crypto.randomUUID(),
       kind: 'file',
@@ -106,7 +116,8 @@ export function createFileQueueItems(
       name: file.name,
       sizeBytes: file.size,
       type: classification.ok ? classification.type : null,
-      materialType,
+      materialType: options.roleOf?.(file) ?? materialType,
+      ...(folderPath ? { folderPath } : {}),
       status: 'queued',
     }
     if (!classification.ok) {

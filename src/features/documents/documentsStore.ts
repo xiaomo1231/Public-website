@@ -33,6 +33,8 @@ interface DocumentsActions {
   refresh: (projectId: string) => Promise<void>
   remove: (id: string, projectId: string) => Promise<void>
   rename: (id: string, projectId: string, name: string) => Promise<void>
+  /** Move a file to a folder (`''` = out of any folder). */
+  moveToFolder: (id: string, projectId: string, folderPath: string) => Promise<void>
   /** What deleting a file would remove / invalidate (shown before confirming). */
   describeDelete: (id: string, projectId: string) => Promise<DocumentDeleteImpact>
   reset: () => void
@@ -224,6 +226,17 @@ export const useDocumentsStore = create<DocumentsStore>((set, get) => ({
 
   async rename(id, projectId, name) {
     const updated = await getService().rename(id, name)
+    set((s) => ({
+      byProject: {
+        ...s.byProject,
+        [projectId]: (s.byProject[projectId] ?? []).map((d) => (d.id === id ? updated : d)),
+      },
+      byId: s.byId[id] ? { ...s.byId, [id]: updated } : s.byId,
+    }))
+  },
+
+  async moveToFolder(id, projectId, folderPath) {
+    const updated = await getService().moveToFolder(id, folderPath)
     set((s) => ({
       byProject: {
         ...s.byProject,

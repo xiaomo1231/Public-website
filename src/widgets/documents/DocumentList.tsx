@@ -6,6 +6,8 @@ import {
   ChevronDown,
   FileText,
   Filter,
+  Folder,
+  FolderInput,
   Loader2,
   ListPlus,
   MoreHorizontal,
@@ -22,6 +24,7 @@ import {
   type LearningMaterialType,
   type ProcessingStatus,
 } from '@/entities/document/types'
+import { groupByFolder, type FolderGroup } from '@/entities/document/folders'
 import { Button } from '@/shared/ui/Button'
 import { EmptyState } from '@/shared/ui/EmptyState'
 import { Input } from '@/shared/ui/Input'
@@ -118,6 +121,10 @@ export interface DocumentListProps {
    * opening the built-in dialog — used to show the full delete impact.
    */
   onDeleteRequest?: (doc: Document) => void
+  /** Group the rows by `Document.folderPath` (collapsible) when any file has one. */
+  groupFolders?: boolean
+  /** Offer 移动到文件夹 in each row's menu. */
+  onMoveToFolder?: (doc: Document) => void
 }
 
 export function DocumentList({
@@ -130,6 +137,8 @@ export function DocumentList({
   showMaterialType = false,
   materialFilter = false,
   onDeleteRequest,
+  groupFolders = false,
+  onMoveToFolder,
 }: DocumentListProps): JSX.Element {
   const { t } = useTranslation()
   const { uiStyle } = useUiStyle()
@@ -178,6 +187,26 @@ export function DocumentList({
   }, [documents, query, type, material, status, sort])
   const visible = filtered.slice(0, revealed)
   const remaining = filtered.length - visible.length
+  // 按文件夹: collapsible groups when any file sits in a folder.
+  const grouping = groupFolders && documents.some((doc) => doc.folderPath)
+  const folderGroups = grouping
+    ? groupByFolder(visible)
+    : [{ folder: '', documents: visible } as FolderGroup<Document>]
+  const wrapFolder = (group: FolderGroup<Document>, rows: JSX.Element): JSX.Element =>
+    grouping ? (
+      <details key={group.folder || '-'} open className="mb-3" data-folder-group={group.folder}>
+        <summary className="mb-1.5 flex cursor-pointer items-center gap-2 text-sm font-medium coarse:py-2">
+          <Folder className="h-4 w-4 text-muted-foreground" aria-hidden />
+          <span className="min-w-0 break-words">{group.folder || t('files.noFolder')}</span>
+          <span className="data-num text-xs font-normal text-muted-foreground">
+            {group.documents.length}
+          </span>
+        </summary>
+        {rows}
+      </details>
+    ) : (
+      <div key="all">{rows}</div>
+    )
 
   if (loading) {
     return <LoadingState label={t('documents.loading')} />
@@ -274,170 +303,188 @@ export function DocumentList({
                 count: documents.length,
               })}
             </p>
-            {uiStyle === 'lab' ? (
-              <div className="overflow-x-auto border border-border bg-card">
-                <table className="data-num w-full min-w-[520px] table-fixed border-collapse text-[13px]">
-                  <thead className={LAB_TABLE_HEAD_CLASS}>
-                    <tr>
-                      <th scope="col" className={LAB_HEAD}>
-                        {t('documents.col.file')}
-                      </th>
-                      {showMaterialType && (
-                        <th scope="col" className={cn(LAB_HEAD, 'hidden w-36 md:table-cell')}>
-                          {t('documents.col.role')}
-                        </th>
-                      )}
-                      <th scope="col" className={cn(LAB_HEAD, 'hidden w-24 sm:table-cell')}>
-                        {t('documents.col.size')}
-                      </th>
-                      <th scope="col" className={cn(LAB_HEAD, 'w-28')}>
-                        {t('documents.col.status')}
-                      </th>
-                      <th scope="col" className={cn(LAB_HEAD, 'hidden w-28 lg:table-cell')}>
-                        {t('documents.col.uploaded')}
-                      </th>
-                      <th scope="col" className={cn(LAB_HEAD, 'w-11')}>
-                        <span className="sr-only">{t('documents.actions')}</span>
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {visible.map((doc) => {
-                      const busy = doc.status === 'processing' || doc.status === 'uploading'
-                      const StatusIcon = STATUS_ICON[doc.status]
-                      return (
-                        <tr
-                          key={doc.id}
-                          className="transition-colors duration-150 hover:bg-accent/50"
-                        >
-                          <td className={LAB_CELL}>
-                            <span className="flex min-w-0 items-center gap-2.5">
-                              <span className="w-10 shrink-0 truncate font-mono text-[10.5px] uppercase text-muted-foreground">
-                                {doc.type}
-                              </span>
-                              <DocumentLink doc={doc} projectId={projectId} />
-                            </span>
-                          </td>
+            {folderGroups.map((group) =>
+              wrapFolder(
+                group,
+                uiStyle === 'lab' ? (
+                  <div className="overflow-x-auto border border-border bg-card">
+                    <table className="data-num w-full min-w-[520px] table-fixed border-collapse text-[13px]">
+                      <thead className={LAB_TABLE_HEAD_CLASS}>
+                        <tr>
+                          <th scope="col" className={LAB_HEAD}>
+                            {t('documents.col.file')}
+                          </th>
                           {showMaterialType && (
-                            <td className={cn(LAB_CELL, 'hidden md:table-cell')}>
-                              <span className={LAB_CHIP_CLASS}>
-                                {t(MATERIAL_LABEL_KEY[resolveMaterialType(doc.materialType)])}
-                              </span>
-                            </td>
+                            <th scope="col" className={cn(LAB_HEAD, 'hidden w-36 md:table-cell')}>
+                              {t('documents.col.role')}
+                            </th>
                           )}
-                          <td
-                            className={cn(
-                              LAB_CELL,
-                              'hidden font-mono text-xs text-muted-foreground sm:table-cell',
-                            )}
-                          >
-                            {formatBytes(doc.sizeBytes)}
-                          </td>
-                          <td className={LAB_CELL}>
-                            <span
-                              className={cn(
-                                LAB_CHIP_CLASS,
-                                'gap-1',
-                                doc.status === 'ready' && 'border-primary/40 text-primary',
-                                doc.status === 'failed' && 'border-destructive/40 text-destructive',
-                              )}
-                            >
-                              <StatusIcon
-                                aria-hidden
-                                className={cn('h-3 w-3', busy && 'motion-safe:animate-spin')}
-                              />
-                              {t(STATUS_BADGE[doc.status].labelKey)}
-                            </span>
-                          </td>
-                          <td
-                            className={cn(
-                              LAB_CELL,
-                              'hidden font-mono text-xs text-muted-foreground lg:table-cell',
-                            )}
-                          >
-                            {relativeTime(doc.uploadedAt)}
-                          </td>
-                          <td className={cn(LAB_CELL, 'px-1 text-right')}>
-                            <RowMenu
-                              doc={doc}
-                              projectId={projectId}
-                              onRename={() => {
-                                setRenaming(doc)
-                                setRenameValue(doc.name)
-                              }}
-                              onDelete={() =>
-                                onDeleteRequest ? onDeleteRequest(doc) : setDeleting(doc)
-                              }
-                              {...(languageCourse && doc.status === 'ready'
-                                ? { onImportWordList: () => setWordListDoc(doc) }
-                                : {})}
-                            />
-                          </td>
+                          <th scope="col" className={cn(LAB_HEAD, 'hidden w-24 sm:table-cell')}>
+                            {t('documents.col.size')}
+                          </th>
+                          <th scope="col" className={cn(LAB_HEAD, 'w-28')}>
+                            {t('documents.col.status')}
+                          </th>
+                          <th scope="col" className={cn(LAB_HEAD, 'hidden w-28 lg:table-cell')}>
+                            {t('documents.col.uploaded')}
+                          </th>
+                          <th scope="col" className={cn(LAB_HEAD, 'w-11')}>
+                            <span className="sr-only">{t('documents.actions')}</span>
+                          </th>
                         </tr>
+                      </thead>
+                      <tbody>
+                        {group.documents.map((doc) => {
+                          const busy = doc.status === 'processing' || doc.status === 'uploading'
+                          const StatusIcon = STATUS_ICON[doc.status]
+                          return (
+                            <tr
+                              key={doc.id}
+                              className="transition-colors duration-150 hover:bg-accent/50"
+                            >
+                              <td className={LAB_CELL}>
+                                <span className="flex min-w-0 items-center gap-2.5">
+                                  <span className="w-10 shrink-0 truncate font-mono text-[10.5px] uppercase text-muted-foreground">
+                                    {doc.type}
+                                  </span>
+                                  <DocumentLink doc={doc} projectId={projectId} />
+                                </span>
+                              </td>
+                              {showMaterialType && (
+                                <td className={cn(LAB_CELL, 'hidden md:table-cell')}>
+                                  <span className={LAB_CHIP_CLASS}>
+                                    {t(MATERIAL_LABEL_KEY[resolveMaterialType(doc.materialType)])}
+                                  </span>
+                                </td>
+                              )}
+                              <td
+                                className={cn(
+                                  LAB_CELL,
+                                  'hidden font-mono text-xs text-muted-foreground sm:table-cell',
+                                )}
+                              >
+                                {formatBytes(doc.sizeBytes)}
+                              </td>
+                              <td className={LAB_CELL}>
+                                <span
+                                  className={cn(
+                                    LAB_CHIP_CLASS,
+                                    'gap-1',
+                                    doc.status === 'ready' && 'border-primary/40 text-primary',
+                                    doc.status === 'failed' &&
+                                      'border-destructive/40 text-destructive',
+                                  )}
+                                >
+                                  <StatusIcon
+                                    aria-hidden
+                                    className={cn('h-3 w-3', busy && 'motion-safe:animate-spin')}
+                                  />
+                                  {t(STATUS_BADGE[doc.status].labelKey)}
+                                </span>
+                              </td>
+                              <td
+                                className={cn(
+                                  LAB_CELL,
+                                  'hidden font-mono text-xs text-muted-foreground lg:table-cell',
+                                )}
+                              >
+                                {relativeTime(doc.uploadedAt)}
+                              </td>
+                              <td className={cn(LAB_CELL, 'px-1 text-right')}>
+                                <RowMenu
+                                  doc={doc}
+                                  projectId={projectId}
+                                  onRename={() => {
+                                    setRenaming(doc)
+                                    setRenameValue(doc.name)
+                                  }}
+                                  onDelete={() =>
+                                    onDeleteRequest ? onDeleteRequest(doc) : setDeleting(doc)
+                                  }
+                                  {...(languageCourse && doc.status === 'ready'
+                                    ? { onImportWordList: () => setWordListDoc(doc) }
+                                    : {})}
+                                  {...(onMoveToFolder
+                                    ? { onMoveToFolder: () => onMoveToFolder(doc) }
+                                    : {})}
+                                />
+                              </td>
+                            </tr>
+                          )
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <ul className="border-t border-border">
+                    {group.documents.map((doc) => {
+                      const busy = doc.status === 'processing' || doc.status === 'uploading'
+                      return (
+                        <li
+                          key={doc.id}
+                          className="flex min-w-0 items-center gap-3 border-b border-border py-2.5"
+                        >
+                          <span className="min-w-0 flex-1">
+                            <DocumentLink doc={doc} projectId={projectId} />
+                            <span className="data-num mt-0.5 flex min-w-0 flex-wrap gap-x-1.5 text-xs text-muted-foreground">
+                              {showMaterialType && (
+                                <>
+                                  <span>
+                                    {t(MATERIAL_LABEL_KEY[resolveMaterialType(doc.materialType)])}
+                                  </span>
+                                  <span aria-hidden>·</span>
+                                </>
+                              )}
+                              <span>{t(TYPE_LABEL_KEY[doc.type])}</span>
+                              <span aria-hidden>·</span>
+                              <span>{formatBytes(doc.sizeBytes)}</span>
+                              <span aria-hidden className="hidden sm:inline">
+                                ·
+                              </span>
+                              <span className="hidden sm:inline">
+                                {relativeTime(doc.uploadedAt)}
+                              </span>
+                            </span>
+                          </span>
+                          <span
+                            className={cn(
+                              'inline-flex shrink-0 items-center gap-1 text-xs',
+                              doc.status === 'ready' && 'text-primary',
+                              doc.status === 'failed' && 'text-destructive',
+                              busy && 'text-muted-foreground',
+                            )}
+                          >
+                            {busy && (
+                              <Loader2 aria-hidden className="h-3 w-3 motion-safe:animate-spin" />
+                            )}
+                            {doc.status === 'failed' && (
+                              <AlertCircle aria-hidden className="h-3 w-3" />
+                            )}
+                            {t(STATUS_BADGE[doc.status].labelKey)}
+                          </span>
+                          <RowMenu
+                            doc={doc}
+                            projectId={projectId}
+                            onRename={() => {
+                              setRenaming(doc)
+                              setRenameValue(doc.name)
+                            }}
+                            onDelete={() =>
+                              onDeleteRequest ? onDeleteRequest(doc) : setDeleting(doc)
+                            }
+                            {...(languageCourse && doc.status === 'ready'
+                              ? { onImportWordList: () => setWordListDoc(doc) }
+                              : {})}
+                            {...(onMoveToFolder
+                              ? { onMoveToFolder: () => onMoveToFolder(doc) }
+                              : {})}
+                          />
+                        </li>
                       )
                     })}
-                  </tbody>
-                </table>
-              </div>
-            ) : (
-              <ul className="border-t border-border">
-                {visible.map((doc) => {
-                  const busy = doc.status === 'processing' || doc.status === 'uploading'
-                  return (
-                    <li
-                      key={doc.id}
-                      className="flex min-w-0 items-center gap-3 border-b border-border py-2.5"
-                    >
-                      <span className="min-w-0 flex-1">
-                        <DocumentLink doc={doc} projectId={projectId} />
-                        <span className="data-num mt-0.5 flex min-w-0 flex-wrap gap-x-1.5 text-xs text-muted-foreground">
-                          {showMaterialType && (
-                            <>
-                              <span>
-                                {t(MATERIAL_LABEL_KEY[resolveMaterialType(doc.materialType)])}
-                              </span>
-                              <span aria-hidden>·</span>
-                            </>
-                          )}
-                          <span>{t(TYPE_LABEL_KEY[doc.type])}</span>
-                          <span aria-hidden>·</span>
-                          <span>{formatBytes(doc.sizeBytes)}</span>
-                          <span aria-hidden className="hidden sm:inline">
-                            ·
-                          </span>
-                          <span className="hidden sm:inline">{relativeTime(doc.uploadedAt)}</span>
-                        </span>
-                      </span>
-                      <span
-                        className={cn(
-                          'inline-flex shrink-0 items-center gap-1 text-xs',
-                          doc.status === 'ready' && 'text-primary',
-                          doc.status === 'failed' && 'text-destructive',
-                          busy && 'text-muted-foreground',
-                        )}
-                      >
-                        {busy && (
-                          <Loader2 aria-hidden className="h-3 w-3 motion-safe:animate-spin" />
-                        )}
-                        {doc.status === 'failed' && <AlertCircle aria-hidden className="h-3 w-3" />}
-                        {t(STATUS_BADGE[doc.status].labelKey)}
-                      </span>
-                      <RowMenu
-                        doc={doc}
-                        projectId={projectId}
-                        onRename={() => {
-                          setRenaming(doc)
-                          setRenameValue(doc.name)
-                        }}
-                        onDelete={() => (onDeleteRequest ? onDeleteRequest(doc) : setDeleting(doc))}
-                        {...(languageCourse && doc.status === 'ready'
-                          ? { onImportWordList: () => setWordListDoc(doc) }
-                          : {})}
-                      />
-                    </li>
-                  )
-                })}
-              </ul>
+                  </ul>
+                ),
+              ),
             )}
             {remaining > 0 && (
               <div className="flex justify-center pt-3">
@@ -565,11 +612,14 @@ function RowMenu({
   onRename,
   onDelete,
   onImportWordList,
+  onMoveToFolder,
 }: {
   doc: Document
   projectId: string
   onRename: () => void
   onDelete: () => void
+  /** Files page: move to another folder. */
+  onMoveToFolder?: () => void
   /** Language courses: read this document's word list into the course vocabulary. */
   onImportWordList?: () => void
 }): JSX.Element {
@@ -620,6 +670,12 @@ function RowMenu({
           <Pencil className="h-4 w-4" />
           {t('documents.rename')}
         </DropdownMenuItem>
+        {onMoveToFolder && (
+          <DropdownMenuItem onSelect={onMoveToFolder}>
+            <FolderInput className="h-4 w-4" />
+            {t('files.moveToFolder')}
+          </DropdownMenuItem>
+        )}
         {canReprocess && (
           <DropdownMenuItem onSelect={() => void reprocess()}>
             <RotateCcw className="h-4 w-4" />

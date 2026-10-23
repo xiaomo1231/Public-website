@@ -81,7 +81,7 @@ export const studyPlanEn = {
   'plan.materials.practice': 'Professor practice',
   'plan.materials.homework': 'Homework',
   'plan.materials.hint':
-    'Without a choice, every past paper of the course is used for mock exams and topic marks.',
+    'Without past papers picked, every past paper of the course is used for mock exams and topic marks. Picked notes, slides and textbook files become review-reading tasks; past papers, homework and practice files bring their recognised sets. A picked folder also includes files added to it later.',
 
   'plan.dayType.class': 'Class day',
   'plan.dayType.weekend': 'Weekend',

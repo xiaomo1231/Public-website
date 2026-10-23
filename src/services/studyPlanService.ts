@@ -56,7 +56,19 @@ import { VocabRepository } from '@/entities/vocab/repository'
 import { CourseContextRepository } from '@/entities/courseContext/repository'
 import { SyllabusService } from './syllabusService'
 import { DocumentRepository } from '@/entities/document/repository'
-import { resolveMaterialType } from '@/entities/document/types'
+import {
+  resolveMaterialType,
+  type Document,
+  type LearningMaterialType,
+} from '@/entities/document/types'
+import {
+  isReviewMaterial,
+  normalizeMaterials,
+  resolveExamDocuments,
+  reviewMaterialMinutes,
+} from '@/entities/studyPlan/materials'
+import { REVIEW_SHEET_MINUTES, reviewSheetRef } from '@/entities/studyPlan/review'
+import { isHeldOut } from '@/entities/evaluation/evalRole'
 import { FocusService, lastDaysRange } from './focusService'
 import { examTopicCoverage, type CoverageInput } from '@/entities/syllabus/coverage'
 import { analyzePastExams, matchQuestionTopics } from '@/entities/exam/analysis'
@@ -87,6 +99,8 @@ export interface ExamInput {
   at: number
   scope?: PlannedExamScope
   materials?: Partial<PlannedExamMaterials>
+  location?: string
+  durationMinutes?: number
 }
 
 /** Everything the scheduler and the weights need about one upcoming exam. */
@@ -101,6 +115,10 @@ export interface ExamContext {
   /** The AI 模拟卷 task: generate one (`ai-mock:<examId>`) or take the latest. */
   aiMock: SchedulerMaterial
   sets: SchedulerExam['sets']
+  /** Picked review files (复习资料). */
+  reviewDocs: SchedulerMaterial[]
+  /** Generated 复习提纲 topics to read. */
+  reviewSheets: SchedulerMaterial[]
   mistakesDue: number
   openMistakes: number
   cardsDue: number
@@ -120,6 +138,19 @@ export interface CourseOptions {
   homework: Array<{ id: string; title: string }>
   practiceSets: Array<{ id: string; title: string }>
   reviewDocuments: Array<{ id: string; title: string }>
+  /** Every file of the course, for the materials picker (by folder and role). */
+  documents: MaterialOption[]
+}
+
+export interface MaterialOption {
+  id: string
+  name: string
+  folderPath?: string
+  materialType: LearningMaterialType
+  status: Document['status']
+  /** Pages / slides when known. */
+  pages?: number
+  uploadedAt: number
 }
 
 export interface WeightsView {
@@ -233,8 +264,12 @@ export class StudyPlanService {
         projectId: input.projectId,
         name,
         at: input.at,
+        ...(input.location?.trim() ? { location: input.location.trim().slice(0, 80) } : {}),
+        ...(input.durationMinutes && input.durationMinutes > 0 && input.durationMinutes <= 720
+          ? { durationMinutes: Math.round(input.durationMinutes) }
+          : {}),
         scope: input.scope ?? { kind: 'course' },
-        materials: { ...EMPTY_MATERIALS, ...input.materials },
+        materials: normalizeMaterials({ ...EMPTY_MATERIALS, ...input.materials }),
         createdAt: now,
         updatedAt: now,
       })
@@ -246,7 +281,9 @@ export class StudyPlanService {
 
   async updateExam(
     id: string,
-    patch: Partial<Pick<PlannedExam, 'name' | 'at' | 'scope' | 'materials'>>,
+    patch: Partial<
+      Pick<PlannedExam, 'name' | 'at' | 'scope' | 'materials' | 'location' | 'durationMinutes'>
+    >,
   ): Promise<PlannedExam> {
     const exam = await this.repo.getExam(id)
     if (!exam) throw new NotFoundError('Exam', id)
@@ -254,6 +291,7 @@ export class StudyPlanService {
       ...exam,
       ...patch,
       ...(patch.name !== undefined ? { name: patch.name.trim() || exam.name } : {}),
+      ...(patch.materials ? { materials: normalizeMaterials(patch.materials) } : {}),
       updatedAt: Date.now(),
     }
     await this.repo.putExams([next])
@@ -296,6 +334,20 @@ export class StudyPlanService {
           return type === 'textbook' || type === 'user_notes' || type === 'lecture_transcript'
         })
         .map((doc) => ({ id: doc.id, title: doc.name })),
+      documents: documents
+        .filter((doc) => !isHeldOut(doc))
+        .map((doc): MaterialOption => {
+          const pages = doc.metadata?.pageCount ?? doc.metadata?.slideCount
+          return {
+            id: doc.id,
+            name: doc.name,
+            ...(doc.folderPath ? { folderPath: doc.folderPath } : {}),
+            materialType: resolveMaterialType(doc.materialType),
+            status: doc.status,
+            ...(pages ? { pages } : {}),
+            uploadedAt: doc.uploadedAt,
+          }
+        }),
     }
   }
 
@@ -315,21 +367,47 @@ export class StudyPlanService {
     return out
   }
 
+  /** What the planner knows about one exam (also a past one). */
+  async examContext(examId: string, now = Date.now()): Promise<ExamContext> {
+    const exam = await this.repo.getExam(examId)
+    if (!exam) throw new NotFoundError('Exam', examId)
+    return this.context(exam, now, await this.repo.listTasks())
+  }
+
+  getExam(id: string): Promise<PlannedExam | undefined> {
+    return this.repo.getExam(id)
+  }
+
   private async context(exam: PlannedExam, now: number, tasks: StudyTask[]): Promise<ExamContext> {
     const projectId = exam.projectId
     const project = await new ProjectRepository(this.db).get(projectId)
     const analyses = new CourseAnalysisRepository(this.db)
-    const [analysis, courseTopics, concepts, masteryRows, mistakes, dueCards, sets, practiceSets] =
-      await Promise.all([
-        analyses.getByProject(projectId),
-        analyses.listTopics(projectId),
-        analyses.listConcepts(projectId),
-        new MasteryService(this.db).listByProject(projectId),
-        new MistakeService(this.db).list(projectId, { status: 'active' }),
-        new ReviewCardRepository(this.db).listDue(projectId, now),
-        new HomeworkRepository(this.db).listSets(projectId),
-        new PracticeRepository(this.db).listSets(projectId),
-      ])
+    const [
+      analysis,
+      courseTopics,
+      concepts,
+      masteryRows,
+      mistakes,
+      dueCards,
+      sets,
+      practiceSets,
+      documents,
+    ] = await Promise.all([
+      analyses.getByProject(projectId),
+      analyses.listTopics(projectId),
+      analyses.listConcepts(projectId),
+      new MasteryService(this.db).listByProject(projectId),
+      new MistakeService(this.db).list(projectId, { status: 'active' }),
+      new ReviewCardRepository(this.db).listDue(projectId, now),
+      new HomeworkRepository(this.db).listSets(projectId),
+      new PracticeRepository(this.db).listSets(projectId),
+      new DocumentRepository(this.db).listByProject(projectId),
+    ])
+    const materials = normalizeMaterials(exam.materials)
+    // Files picked one by one or by folder: a past paper / homework /
+    // practice file brings its recognised set, the others are review reading.
+    const pickedDocs = resolveExamDocuments(materials, documents)
+    const pickedDocIds = new Set(pickedDocs.map((entry) => entry.document.id))
     const pointsByTopic = new Map<string, string[]>(
       courseTopics.map((topic) => [
         topic.id,
@@ -350,10 +428,10 @@ export class StudyPlanService {
     // Past papers: marks per topic, difficulty, mock exams and their results.
     // Uploaded past papers; AI 模拟卷 are planned on their own (below).
     const examSets = sets.filter(isPastPaperSet)
-    const chosenPapers =
-      exam.materials.pastExamSetIds.length > 0
-        ? examSets.filter((set) => exam.materials.pastExamSetIds.includes(set.id))
-        : examSets
+    const pickedPapers = examSets.filter(
+      (set) => materials.pastExamSetIds.includes(set.id) || pickedDocIds.has(set.documentId),
+    )
+    const chosenPapers = pickedPapers.length > 0 ? pickedPapers : examSets
     const homework = new HomeworkRepository(this.db)
     const papers = await Promise.all(
       chosenPapers.map(async (set) => ({
@@ -462,7 +540,11 @@ export class StudyPlanService {
 
     const setsMaterial: SchedulerExam['sets'] = [
       ...sets
-        .filter((set) => exam.materials.homeworkSetIds.includes(set.id))
+        .filter(
+          (set) =>
+            (!set.kind || set.kind === 'assignment') &&
+            (materials.homeworkSetIds.includes(set.id) || pickedDocIds.has(set.documentId)),
+        )
         .map((set) => ({
           id: set.id,
           title: set.title,
@@ -471,7 +553,9 @@ export class StudyPlanService {
           done: handled.has(set.id),
         })),
       ...practiceSets
-        .filter((set) => exam.materials.practiceSetIds.includes(set.id))
+        .filter(
+          (set) => materials.practiceSetIds.includes(set.id) || pickedDocIds.has(set.documentId),
+        )
         .map((set) => ({
           id: set.id,
           title: set.name,
@@ -480,6 +564,23 @@ export class StudyPlanService {
           done: handled.has(set.id),
         })),
     ]
+
+    // 复习资料: picked review files (a folder pick names the folder too).
+    const reviewDocs: SchedulerMaterial[] = pickedDocs
+      .filter((entry) => isReviewMaterial(entry.document) && !isHeldOut(entry.document))
+      .map(({ document, viaFolder }) => ({
+        id: document.id,
+        title: viaFolder ? `${viaFolder} / ${document.name}` : document.name,
+        minutes: reviewMaterialMinutes(document),
+        done: handled.has(document.id),
+      }))
+    // 读复习提纲: one task per generated topic of the sheet.
+    const reviewSheets: SchedulerMaterial[] = (exam.review?.sections ?? [])
+      .filter((section) => section.status === 'done')
+      .map((section) => {
+        const id = reviewSheetRef(exam.id, section.id)
+        return { id, title: section.title, minutes: REVIEW_SHEET_MINUTES, done: handled.has(id) }
+      })
 
     const known = topics.filter((topic) => topic.mastery !== null)
     const heavy = past.byKind
@@ -500,6 +601,8 @@ export class StudyPlanService {
       mocks,
       aiMock,
       sets: setsMaterial,
+      reviewDocs,
+      reviewSheets,
       mistakesDue: mistakes.filter((m) => isRetestDue(m, now)).length,
       openMistakes: mistakes.length,
       cardsDue: dueCards.length,
@@ -603,6 +706,8 @@ export class StudyPlanService {
       topics: c.topics,
       mocks: c.mocks,
       sets: c.sets,
+      reviewDocs: c.reviewDocs,
+      reviewSheets: c.reviewSheets,
       aiMock: c.aiMock,
       mistakesDue: c.mistakesDue,
       openMistakes: c.openMistakes,

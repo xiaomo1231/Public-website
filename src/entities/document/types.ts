@@ -165,6 +165,15 @@ export interface Document {
    * chunks (`DocumentChunk.evalRole`) so chunk filters need no join.
    */
   evalRole?: EvalRole
+  /**
+   * Folder the file sits in, `/`-separated without leading or trailing slash
+   * ("Week 3/Slides"). Kept from a folder upload (its relative path) and
+   * editable on the files page; absent = not in a folder. Optional, no Dexie
+   * bump; exported with the row. Nothing else depends on it except the
+   * study plan's folder selection (a selected folder includes files added to
+   * it later).
+   */
+  folderPath?: string
 }
 
 export interface DocumentBlobRow {
@@ -187,6 +196,8 @@ export interface CreateDocumentInput {
   blob?: Blob | ArrayBuffer
   /** `File.lastModified`, forwarded for duplicate detection. */
   sourceModifiedAt?: number
+  /** Folder from a folder upload (see `Document.folderPath`). */
+  folderPath?: string
 }
 
 export interface UpdateDocumentInput {
@@ -200,4 +211,6 @@ export interface UpdateDocumentInput {
   processedAt?: number
   /** `null` removes the exam-topic list. */
   syllabus?: SyllabusData | null
+  /** Move the file to a folder; `null` / `''` takes it out of any folder. */
+  folderPath?: string | null
 }

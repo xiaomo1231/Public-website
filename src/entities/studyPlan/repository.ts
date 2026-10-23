@@ -54,6 +54,20 @@ export class StudyPlanRepository {
     await this.db.exams.bulkPut(exams)
   }
 
+  /** Read-modify-write of one exam (review topics finish concurrently). */
+  async updateExam(
+    id: string,
+    fn: (exam: PlannedExam) => PlannedExam,
+  ): Promise<PlannedExam | undefined> {
+    return this.db.transaction('rw', this.db.exams, async () => {
+      const row = await this.db.exams.get(id)
+      if (!row) return undefined
+      const next = { ...fn(row), id: row.id, updatedAt: Date.now() }
+      await this.db.exams.put(next)
+      return next
+    })
+  }
+
   /** The exam, its tasks, and its sections of diagnostic papers. */
   async deleteExam(id: string): Promise<void> {
     await this.db.transaction(

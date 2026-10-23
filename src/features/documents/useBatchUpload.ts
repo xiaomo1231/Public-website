@@ -16,6 +16,7 @@ import {
   retryableItems,
   runBatchQueue,
   summarizeBatch,
+  type FileQueueOptions,
   type UploadQueueItem,
 } from './batchUpload'
 import { reprocessDocument, uploadDocument } from './uploadPipeline'
@@ -24,7 +25,11 @@ export interface UseBatchUploadResult {
   items: UploadQueueItem[]
   summary: ReturnType<typeof summarizeBatch>
   running: boolean
-  addFiles: (files: File[], materialType?: LearningMaterialType) => Promise<UploadQueueItem[]>
+  addFiles: (
+    files: File[],
+    materialType?: LearningMaterialType,
+    options?: FileQueueOptions & { limit?: number },
+  ) => Promise<UploadQueueItem[]>
   addText: (input: {
     text: string
     name?: string
@@ -75,18 +80,20 @@ export function useBatchUpload(projectId: string): UseBatchUploadResult {
     async (
       files: File[],
       materialType: LearningMaterialType = 'textbook',
+      options: FileQueueOptions & { limit?: number } = {},
     ): Promise<UploadQueueItem[]> => {
       if (files.length === 0) return []
 
       let accepted = files
-      const remaining = MAX_BATCH_FILES - itemsRef.current.length
+      const max = options.limit ?? MAX_BATCH_FILES
+      const remaining = max - itemsRef.current.length
       if (remaining <= 0) {
-        toast({ variant: 'error', title: t('batch.tooMany', { max: MAX_BATCH_FILES }) })
+        toast({ variant: 'error', title: t('batch.tooMany', { max }) })
         return []
       }
       if (files.length > remaining) {
         accepted = files.slice(0, remaining)
-        toast({ variant: 'info', title: t('batch.tooMany', { max: MAX_BATCH_FILES }) })
+        toast({ variant: 'info', title: t('batch.tooMany', { max }) })
       }
 
       const documents = await new DocumentRepository(getDb()).listByProject(projectId)
@@ -99,6 +106,7 @@ export function useBatchUpload(projectId: string): UseBatchUploadResult {
         accepted,
         [...documents.map(identityOfDocument), ...queued],
         materialType,
+        options,
       )
       setItems((prev) => [...prev, ...created])
       return created
@@ -184,6 +192,7 @@ export function useBatchUpload(projectId: string): UseBatchUploadResult {
                     materialType: item.materialType ?? 'textbook',
                     file: item.file,
                     name: item.name,
+                    ...(item.folderPath ? { folderPath: item.folderPath } : {}),
                   }
 
             await uploadDocument(input, {

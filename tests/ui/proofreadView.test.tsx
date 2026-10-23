@@ -100,7 +100,8 @@ describe('ProofreadView', () => {
       </MemoryRouter>,
     )
     await screen.findByText('原图 · 第 2 页')
-    expect(fake.renderPage).toHaveBeenCalledWith('d', 2)
+    // The page image loads in an effect after the label renders.
+    await waitFor(() => expect(fake.renderPage).toHaveBeenCalledWith('d', 2))
     expect(container.querySelector('[data-compare-image]')).not.toBeNull()
     expect(container.querySelector('[data-risk="minus_sign"]')).not.toBeNull()
     expect(container.querySelector('[data-risk="matrix"]')).not.toBeNull()

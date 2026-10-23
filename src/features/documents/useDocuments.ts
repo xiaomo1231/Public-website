@@ -11,6 +11,7 @@ export function useDocuments(projectId: string | undefined): {
   refresh: () => Promise<void>
   remove: (id: string) => Promise<void>
   rename: (id: string, name: string) => Promise<void>
+  moveToFolder: (id: string, folderPath: string) => Promise<void>
 } {
   const store = useDocumentsStore()
 
@@ -37,6 +38,10 @@ export function useDocuments(projectId: string | undefined): {
     rename: async (id, name) => {
       if (!projectId) return
       await store.rename(id, projectId, name)
+    },
+    moveToFolder: async (id, folderPath) => {
+      if (!projectId) return
+      await store.moveToFolder(id, projectId, folderPath)
     },
   }
 }

@@ -15,6 +15,8 @@ import type { DayType, PlanSuggestion, StudyCalendar, StudyTaskKind } from './ty
  * - **Final days** (the last 3 before an exam): weak spots and mistakes only,
  *   no new material.
  * - Every study day ends with a short practice block on that day's topics.
+ * - The review files picked for an exam (复习资料) and the topics of its
+ *   generated 复习提纲 sit in the first-pass queue among the topics.
  *
  * A day is never filled past its minutes. What does not fit is reported with
  * suggested trade-offs. Exams share each day by their weight (the sliders)
@@ -33,6 +35,9 @@ export const LEARN_BASE_MINUTES = 40
 /** Mastery at or above this with enough attempts = confirmed: no first pass. */
 export const CONFIRMED_MASTERY = 0.85
 export const CONFIRMED_ATTEMPTS = 5
+/** Queue priority of a 复习提纲 topic / a picked review file (topics are ~0.5–2). */
+export const REVIEW_SHEET_PRIORITY = 0.9
+export const REVIEW_MATERIAL_PRIORITY = 0.7
 
 export interface SchedulerTopic {
   id: string
@@ -75,6 +80,10 @@ export interface SchedulerExam {
   mocks: SchedulerMaterial[]
   /** Homework and professor practice sets picked as materials. */
   sets: Array<SchedulerMaterial & { kind: 'homework' | 'practice_set' }>
+  /** Review files picked as materials (复习资料：文件名 / 文件夹), `id` = document id. */
+  reviewDocs?: SchedulerMaterial[]
+  /** Topics of the generated 复习提纲 to read (`id` = `review:<examId>:<sectionId>`). */
+  reviewSheets?: SchedulerMaterial[]
   /** Plan a slot for an AI mock paper (to generate; see `aiMock`). */
   aiMockSlot?: boolean
   /**
@@ -177,7 +186,7 @@ function closeness(daysLeft: number): number {
 }
 
 interface QueueItem {
-  kind: 'learn' | 'homework' | 'practice_set'
+  kind: 'learn' | 'homework' | 'practice_set' | 'review_material' | 'review_sheet'
   id: string
   label: string
   minutes: number
@@ -241,6 +250,27 @@ function initialState(exam: SchedulerExam, today: string): ExamState {
       label: set.title,
       minutes: set.minutes,
       priority: 0.8,
+    })
+  }
+  // The review sheet is short and sums the exam up: read before the files.
+  for (const sheet of exam.reviewSheets ?? []) {
+    if (sheet.done) continue
+    queue.push({
+      kind: 'review_sheet',
+      id: sheet.id,
+      label: sheet.title,
+      minutes: sheet.minutes,
+      priority: REVIEW_SHEET_PRIORITY,
+    })
+  }
+  for (const doc of exam.reviewDocs ?? []) {
+    if (doc.done) continue
+    queue.push({
+      kind: 'review_material',
+      id: doc.id,
+      label: doc.title,
+      minutes: doc.minutes,
+      priority: REVIEW_MATERIAL_PRIORITY,
     })
   }
   queue.sort(byPriority)

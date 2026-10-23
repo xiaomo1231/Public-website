@@ -11,6 +11,7 @@ import { ChunkRepository } from '@/entities/chunk/repository'
 import { CourseAnalysisRepository } from '@/entities/courseAnalysis/repository'
 import { StudyPlanRepository } from '@/entities/studyPlan/repository'
 import type { PlannedExam } from '@/entities/studyPlan/types'
+import { resolveExamDocuments } from '@/entities/studyPlan/materials'
 import type { Topic } from '@/entities/courseAnalysis/types'
 import type { KnowledgeMastery } from '@/entities/knowledgeMastery/types'
 import {
@@ -290,6 +291,21 @@ export class AiMockPaperService {
   }
 
   /** Past papers that can be mirrored: ready, uploaded, not held out, with questions. */
+  private async examPastPaperSetIds(projectId: string, exam: PlannedExam): Promise<string[]> {
+    const documents = await this.db.documents.where('projectId').equals(projectId).toArray()
+    const picked = new Set(
+      resolveExamDocuments(exam.materials, documents).map((item) => item.document.id),
+    )
+    const sets = await this.homework.listSets(projectId)
+    return sets
+      .filter(
+        (set) =>
+          isPastPaperSet(set) &&
+          (exam.materials.pastExamSetIds.includes(set.id) || picked.has(set.documentId)),
+      )
+      .map((set) => set.id)
+  }
+
   async templates(projectId: string): Promise<MockTemplateOption[]> {
     const sets = (await this.homework.listSets(projectId)).filter(
       (set) => isPastPaperSet(set) && set.status === 'ready' && !isHeldOut(set),
@@ -362,7 +378,8 @@ export class AiMockPaperService {
       ? await new StudyPlanRepository(this.db).getExam(options.examId)
       : undefined
     const templates = await this.templates(projectId)
-    const preferred = exam?.materials.pastExamSetIds ?? []
+    // Past papers chosen for the exam, as recognised sets or as picked files / folders.
+    const preferred = exam ? await this.examPastPaperSetIds(projectId, exam) : []
     const chosen =
       templates.find((item) => item.setId === options.templateSetId) ??
       templates.find((item) => preferred.includes(item.setId)) ??

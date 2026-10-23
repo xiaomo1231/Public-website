@@ -9,6 +9,8 @@
  * removes its exams, tasks and diagnostic sections.
  */
 
+import type { ExamReview } from './review'
+
 /** How a calendar day is used. `off` = no study that day. */
 export type DayType = 'class' | 'weekend' | 'holiday' | 'off'
 
@@ -55,6 +57,17 @@ export interface PlannedExamMaterials {
   practiceSetIds: string[]
   /** Homework sets (`HomeworkSet`). */
   homeworkSetIds: string[]
+  /**
+   * Files picked in the materials picker (any role). A past paper, homework
+   * or professor-practice file brings its recognised set; other files are
+   * read as review material. Absent on older rows (= none).
+   */
+  documentIds?: string[]
+  /**
+   * Folders picked whole (`Document.folderPath`): every file in the folder or
+   * below it counts, including files added to the folder later.
+   */
+  folderPaths?: string[]
 }
 
 export const EMPTY_MATERIALS: PlannedExamMaterials = {
@@ -62,6 +75,8 @@ export const EMPTY_MATERIALS: PlannedExamMaterials = {
   reviewDocumentIds: [],
   practiceSetIds: [],
   homeworkSetIds: [],
+  documentIds: [],
+  folderPaths: [],
 }
 
 export interface PlannedExam {
@@ -70,8 +85,17 @@ export interface PlannedExam {
   name: string
   /** Start of the exam (epoch ms). */
   at: number
+  /** Where it is written, when known (粘贴识别 or typed). */
+  location?: string
+  /** Length in minutes, when known. */
+  durationMinutes?: number
   scope: PlannedExamScope
   materials: PlannedExamMaterials
+  /**
+   * 复习提纲 generated for this exam (see `review.ts`). Stored on the row (no
+   * table of its own), so it is exported and deleted with the exam.
+   */
+  review?: ExamReview
   createdAt: number
   updatedAt: number
 }
@@ -142,6 +166,10 @@ export type StudyTaskKind =
   | 'practice_set'
   /** Final days: weak spots only. */
   | 'weak_spots'
+  /** A review file the student picked for the exam (`refId` = document id). */
+  | 'review_material'
+  /** Read one topic of the exam's 复习提纲 (`refId` = `review:<examId>:<sectionId>`). */
+  | 'review_sheet'
 
 export type StudyTaskStatus = 'pending' | 'done' | 'skipped'
 

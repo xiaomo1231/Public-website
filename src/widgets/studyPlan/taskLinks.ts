@@ -1,5 +1,6 @@
 import type { StudyTask, StudyTaskKind } from '@/entities/studyPlan/types'
 import type { TranslationKey } from '@/i18n/types'
+import { parseReviewSheetRef } from '@/entities/studyPlan/review'
 
 /** Where a study task is done: an existing page of the app. */
 export function taskLink(
@@ -34,7 +35,20 @@ export function taskLink(
       return task.refId ? `${base}/homework/${task.refId}?view=guided` : `${base}/homework`
     case 'practice_set':
       return `${base}/practice`
+    case 'review_material':
+      return task.refId ? `${base}/documents/${task.refId}` : `${base}/files`
+    case 'review_sheet': {
+      const ref = parseReviewSheetRef(task.refId)
+      return ref
+        ? `${base}/exam-review/${ref.examId}#${encodeURIComponent(ref.sectionId)}`
+        : '/plan?tab=exams'
+    }
   }
+}
+
+/** The 复习提纲 page of an exam. */
+export function reviewSheetLink(exam: { id: string; projectId: string }): string {
+  return `/projects/${exam.projectId}/exam-review/${exam.id}`
 }
 
 export const TASK_KIND_KEYS: Record<StudyTaskKind, TranslationKey> = {
@@ -49,4 +63,6 @@ export const TASK_KIND_KEYS: Record<StudyTaskKind, TranslationKey> = {
   homework: 'plan.task.homework',
   practice_set: 'plan.task.practice_set',
   weak_spots: 'plan.task.weak_spots',
+  review_material: 'plan.task.review_material',
+  review_sheet: 'plan.task.review_sheet',
 }

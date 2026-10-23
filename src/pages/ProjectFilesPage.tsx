@@ -1,4 +1,7 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
+import { Input } from '@/shared/ui/Input'
+import { Label } from '@/shared/ui/Label'
+import { listFolders, normalizeFolderPath } from '@/entities/document/folders'
 import { useParams } from 'react-router-dom'
 import { FolderOpen, Loader2, Trash2, Upload } from 'lucide-react'
 import { DocumentList } from '@/widgets/documents/DocumentList'
@@ -33,15 +36,33 @@ import { useTranslation } from '@/i18n'
 export function ProjectFilesPage(): JSX.Element {
   const { t } = useTranslation()
   const { id: projectId } = useParams<{ id: string }>()
-  const { documents, loading, remove, rename } = useDocuments(projectId)
+  const { documents, loading, remove, rename, moveToFolder } = useDocuments(projectId)
   const describeDelete = useDocumentsStore((s) => s.describeDelete)
 
   const [uploadOpen, setUploadOpen] = useState(false)
   const [impact, setImpact] = useState<DocumentDeleteImpact | null>(null)
   const [deleting, setDeleting] = useState(false)
+  const [moving, setMoving] = useState<Document | null>(null)
+  const [moveValue, setMoveValue] = useState('')
+  const folders = useMemo(() => listFolders(documents), [documents])
 
   const pid = projectId
   if (!pid) return <div />
+
+  const confirmMove = async (): Promise<void> => {
+    if (!moving) return
+    try {
+      await moveToFolder(moving.id, normalizeFolderPath(moveValue))
+      toast({ variant: 'success', title: t('files.moved') })
+      setMoving(null)
+    } catch (err) {
+      toast({
+        variant: 'error',
+        title: t('files.moveFailed'),
+        description: (err as Error).message,
+      })
+    }
+  }
 
   const handleRename = async (id: string, name: string): Promise<void> => {
     try {
@@ -137,6 +158,11 @@ export function ProjectFilesPage(): JSX.Element {
           showMaterialType
           materialFilter
           onDeleteRequest={requestDelete}
+          groupFolders
+          onMoveToFolder={(doc) => {
+            setMoving(doc)
+            setMoveValue(doc.folderPath ?? '')
+          }}
         />
       </PageContent>
 
@@ -146,6 +172,48 @@ export function ProjectFilesPage(): JSX.Element {
         onOpenChange={setUploadOpen}
         allowMaterialSelect
       />
+
+      <Dialog
+        open={moving !== null}
+        onOpenChange={(open) => {
+          if (!open) setMoving(null)
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{t('files.moveTitle', { name: moving?.name ?? '' })}</DialogTitle>
+            <DialogDescription>{t('files.moveHint')}</DialogDescription>
+          </DialogHeader>
+          <Label htmlFor="move-folder">{t('files.folder')}</Label>
+          <Input
+            id="move-folder"
+            list="move-folder-options"
+            value={moveValue}
+            placeholder={t('files.folderPlaceholder')}
+            onChange={(event) => setMoveValue(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') {
+                event.preventDefault()
+                void confirmMove()
+              }
+            }}
+            autoFocus
+          />
+          <datalist id="move-folder-options">
+            {folders.map((folder) => (
+              <option key={folder} value={folder} />
+            ))}
+          </datalist>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setMoving(null)}>
+              {t('common.cancel')}
+            </Button>
+            <Button onClick={() => void confirmMove()} data-move-confirm>
+              {t('files.moveConfirm')}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog
         open={impact !== null}

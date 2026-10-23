@@ -20,6 +20,8 @@ export interface UploadDocumentInput {
   file?: File
   text?: string
   name?: string
+  /** Folder of a folder upload (`Document.folderPath`). */
+  folderPath?: string
 }
 
 /** Coarse phases of a single upload. `processing` is driven by the pipeline. */
@@ -135,6 +137,7 @@ export async function uploadDocument(
       sizeBytes,
       ...(mimeType !== undefined ? { mimeType } : {}),
       ...(sourceModifiedAt !== undefined ? { sourceModifiedAt } : {}),
+      ...(input.folderPath ? { folderPath: input.folderPath } : {}),
       ...(blob ? { blob } : {}),
     })
   } catch (err) {

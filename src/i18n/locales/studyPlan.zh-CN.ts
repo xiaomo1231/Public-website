@@ -81,7 +81,8 @@ export const studyPlanZhCN: Record<keyof typeof studyPlanEn, string> = {
   'plan.materials.review': '复习资料',
   'plan.materials.practice': '教授练习',
   'plan.materials.homework': '作业',
-  'plan.materials.hint': '不勾选时，本课程全部往年试卷都用于模拟考试与主题分值。',
+  'plan.materials.hint':
+    '没有选往年卷时，本课程全部往年试卷都用于模拟考试与主题分值。选中的课件、教材与笔记会排成「复习资料」任务；往年卷、作业与教授练习带上已识别的题目。选中的文件夹也包括以后放进去的文件。',
 
   'plan.dayType.class': '上课日',
   'plan.dayType.weekend': '周末',

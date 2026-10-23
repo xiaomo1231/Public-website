@@ -6,6 +6,7 @@ import {
   type DocumentBlobRow,
   type UpdateDocumentInput,
 } from './types'
+import { normalizeFolderPath } from './folders'
 import { NotFoundError, StorageError, ValidationError } from '@/infrastructure/errors/AppError'
 import { logger } from '@/infrastructure/logger/logger'
 import { t } from '@/i18n'
@@ -80,6 +81,8 @@ export class DocumentRepository {
     }
     if (input.mimeType !== undefined) document.mimeType = input.mimeType
     if (input.sourceModifiedAt !== undefined) document.sourceModifiedAt = input.sourceModifiedAt
+    const folder = normalizeFolderPath(input.folderPath)
+    if (folder) document.folderPath = folder
 
     // Read blob bytes OUTSIDE the transaction so Dexie's transaction scope
     // never has to wait on an async boundary (FileReader, fetch, etc.).
@@ -132,6 +135,11 @@ export class DocumentRepository {
     if (patch.processedAt !== undefined) next.processedAt = patch.processedAt
     if (patch.syllabus === null) delete next.syllabus
     else if (patch.syllabus !== undefined) next.syllabus = patch.syllabus
+    if (patch.folderPath !== undefined) {
+      const folder = normalizeFolderPath(patch.folderPath)
+      if (folder) next.folderPath = folder
+      else delete next.folderPath
+    }
     await this.db.documents.put(next)
     return next
   }

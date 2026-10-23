@@ -3,8 +3,10 @@ import { aiMockEn } from './aiMock.en'
 import { handwritingEn } from './handwriting.en'
 import { marketEn } from './market.en'
 import { marketQuestionEn } from './marketQuestion.en'
+import { examToolsEn } from './examTools.en'
 
 export const en = {
+  ...examToolsEn,
   ...studyPlanEn,
   ...aiMockEn,
   ...handwritingEn,

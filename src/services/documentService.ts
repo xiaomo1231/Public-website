@@ -99,6 +99,11 @@ export class DocumentService {
     return this.repo.update(id, { name: name.trim() })
   }
 
+  /** Move a file to a folder (`''` = out of any folder). Only the label changes. */
+  moveToFolder(id: string, folderPath: string): Promise<Document> {
+    return this.repo.update(id, { folderPath: folderPath || null })
+  }
+
   update(id: string, patch: UpdateDocumentInput): Promise<Document> {
     return this.repo.update(id, patch)
   }

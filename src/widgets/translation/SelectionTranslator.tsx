@@ -684,7 +684,7 @@ function parseTopicRoute(pathname: string): { projectId: string; topicId: string
 }
 
 function parseProjectRoute(pathname: string): string | null {
-  return /^\/projects\/([^/]+)\/homework\/[^/]+/.exec(pathname)?.[1] ?? null
+  return /^\/projects\/([^/]+)\/(?:homework|exam-review)\/[^/]+/.exec(pathname)?.[1] ?? null
 }
 
 function readWalkthroughSelection(range: Range): WalkthroughSelection | undefined {

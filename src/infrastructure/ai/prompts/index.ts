@@ -53,6 +53,8 @@ import * as StudyPlanSummaryV1 from './study-plan-summary/v1'
 import * as HandwritingTranscribeV1 from './handwriting-transcribe/v1'
 import * as EconGraphReadV1 from './econ-graph-read/v1'
 import * as PageTranscribeV1 from './page-transcribe/v1'
+import * as ExamScheduleExtractV1 from './exam-schedule-extract/v1'
+import * as ExamReviewV1 from './exam-review/v1'
 
 export const PROMPT_VERSIONS = {
   documentAnalyzer: 'v3',
@@ -104,6 +106,8 @@ export const PROMPT_VERSIONS = {
   handwritingTranscribe: 'v1',
   econGraphRead: 'v1',
   pageTranscribe: 'v1',
+  examScheduleExtract: 'v1',
+  examReview: 'v1',
 } as const
 
 export const prompts = {
@@ -161,6 +165,10 @@ export const prompts = {
   econGraphRead: EconGraphReadV1,
   /** A photographed / scanned page read by the vision model (instead of local OCR). */
   pageTranscribe: PageTranscribeV1,
+  /** 粘贴识别: exam dates from pasted text or a screenshot (local parser first). */
+  examScheduleExtract: ExamScheduleExtractV1,
+  /** 复习提纲: one topic of an exam's review sheet, every claim citing chunks. */
+  examReview: ExamReviewV1,
 } as const
 
 export type { DocumentAnalyzerInput, DocumentAnalysisOutput } from './document-analyzer/v3'
