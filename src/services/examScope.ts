@@ -11,6 +11,7 @@ import {
 } from '@/entities/studyPlan/materials'
 import {
   chapterOptionsFrom,
+  chaptersScopeFromKeys,
   chapterUnits,
   isChapterSourceDocument,
   topicsFromMaterials,
@@ -71,13 +72,26 @@ export async function resolveExamScope(
   documents?: readonly Document[],
 ): Promise<ResolvedExamScope> {
   const scope = exam.scope
-  if (scope.kind !== 'materials' && scope.kind !== 'chapters') return { topics: null, units: [] }
+  // Before course analysis there are no topics to work with: a scope that
+  // does not name chapters or files (整门课, a syllabus scope, nothing picked)
+  // falls back to every chapter / file of the course.
+  const wholeCourse = async (): Promise<ResolvedExamScope> => {
+    if (courseTopics.length > 0) return { topics: null, units: [] }
+    const docs = documents ?? (await new DocumentRepository(db).listByProject(exam.projectId))
+    const options = await loadChapterOptions(db, exam.projectId, docs)
+    const top = options.filter((option) => option.kind !== 'section')
+    return {
+      topics: null,
+      units: chapterUnits(chaptersScopeFromKeys(top.map((o) => o.key)), options, docs),
+    }
+  }
+  if (scope.kind !== 'materials' && scope.kind !== 'chapters') return wholeCourse()
   const docs = documents ?? (await new DocumentRepository(db).listByProject(exam.projectId))
   const chunkDocument = await chunkDocuments(db, courseTopics)
   if (scope.kind === 'materials') {
     const picked = resolveExamDocuments(normalizeMaterials(exam.materials), docs)
     // Nothing picked yet: the whole course.
-    if (picked.length === 0) return { topics: null, units: [] }
+    if (picked.length === 0) return wholeCourse()
     const ids = new Set(picked.map((entry) => entry.document.id))
     return {
       topics: topicsFromMaterials(ids, courseTopics, chunkDocument),

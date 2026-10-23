@@ -310,6 +310,22 @@ describe('exam scope by chapters / materials — planner, review sheet, AI mock'
     expect(context.scopeUnits.map((u) => u.id)).toEqual([slides.id])
   })
 
+  it('without analysis: 整门课 / nothing picked fall back to every chapter / file of the course', async () => {
+    const { project, book, slides } = await seed()
+    const service = new StudyPlanService({ db })
+    for (const scope of [{ kind: 'course' as const }, { kind: 'materials' as const }]) {
+      const exam = await addExam(project.id, scope)
+      const units = (await service.examContext(exam.id, NOW)).scopeUnits.map((u) => u.id)
+      expect(units).toEqual(
+        expect.arrayContaining([`chapter:${book.id}:n1`, `chapter:${book.id}:n2`, slides.id]),
+      )
+      // Chapters only — sections are not separate units.
+      expect(units.some((id) => id.endsWith(':n1s'))).toBe(false)
+      const planned = await new ExamReviewService({ db, ai: null }).plan(exam.id, { now: NOW })
+      expect(planned.review!.sections.length).toBe(units.length)
+    }
+  })
+
   it('with analysis: topics come from the chosen chapters / files', async () => {
     const { project, book, slides } = await seed()
     await addTopics(project.id, book.id, slides.id)

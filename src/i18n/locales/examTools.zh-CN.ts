@@ -116,7 +116,8 @@ export const examToolsZhCN: Record<keyof typeof examToolsEn, string> = {
   'plan.review.status.generating': '编写中…',
   'plan.review.status.failed': '未写成：{reason}',
   'plan.review.errors.running': '这份复习提纲正在编写中。',
-  'plan.review.errors.noTopics': '没有可复习的主题：请先在课程页运行课程分析，或设置考试范围。',
+  'plan.review.errors.noTopics':
+    '这场考试还没有可以复习的资料：请先给这门课上传课件或教材（处理完成后会按章节生成），或在考试范围里选章节 / 资料。',
   'plan.review.errors.preflight': 'AI 服务没有通过连接检查：{reason}',
   'plan.review.errors.notPlanned': '请先列出主题。',
   'plan.review.errors.noSources':

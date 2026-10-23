@@ -122,7 +122,7 @@ export const examToolsEn = {
   'plan.review.status.failed': 'Not written: {reason}',
   'plan.review.errors.running': 'This review sheet is already being written.',
   'plan.review.errors.noTopics':
-    'No topics to review: run the course analysis on the course page, or choose the exam’s scope.',
+    'Nothing to review for this exam yet: upload the course’s slides or textbook (once processed, the sheet is built per chapter), or pick chapters / files in the exam scope.',
   'plan.review.errors.preflight': 'The AI provider did not answer the connection check: {reason}',
   'plan.review.errors.notPlanned': 'Lay out the topics first.',
   'plan.review.errors.noSources':
