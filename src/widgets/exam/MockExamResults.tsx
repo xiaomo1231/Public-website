@@ -2,6 +2,8 @@ import { Link } from 'react-router-dom'
 import { Badge } from '@/shared/ui/Badge'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/shared/ui/Card'
 import { RichText } from '@/shared/ui/RichText'
+import { formatMarketDraft } from '@/entities/econ/graphAnswerText'
+import { QuestionMarketFigure } from '@/widgets/econ/QuestionMarketFigure'
 import type { MockExamAttempt, MockExamQuestionResult } from '@/entities/exam/types'
 import { scoreMockExam } from '@/entities/exam/scoring'
 import { formatHomeworkQuestion } from '@/entities/homework/formatQuestion'
@@ -120,6 +122,7 @@ export function MockExamResults({
                 className="space-y-2"
                 paragraphClassName="text-sm"
               />
+              <QuestionMarketFigure question={view.question} />
               <dl className="grid gap-2 text-sm sm:grid-cols-2">
                 <div className="rounded-md border p-2" data-professor-scheme>
                   <dt className="text-xs font-medium" data-scheme-source={view.schemeSource}>
@@ -177,7 +180,7 @@ export function MockExamResults({
               <div className="space-y-1 text-sm">
                 <p className="text-xs font-medium">{t('mockExam.yourAnswer')}</p>
                 <RichText
-                  text={answer.trim() || t('quizResult.blank')}
+                  text={formatMarketDraft(answer).trim() || t('quizResult.blank')}
                   format="markdown"
                   paragraphClassName="text-sm"
                 />

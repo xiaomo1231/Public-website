@@ -20,6 +20,7 @@ import {
   previewExpression,
 } from '@/infrastructure/math/expressionEvaluator'
 import { compareQuantity, splitQuantity } from '@/infrastructure/math/quantityAnswer'
+import { compareEconNumber, readEconNumber } from '@/infrastructure/math/economicsAnswer'
 import { compareEquations, parseEquation } from '@/infrastructure/chemistry/equation'
 import type { GuidedBlank } from '@/entities/homework/guided'
 import { blankAccepted, normalizeProgramOutput } from './answerEvaluationService'
@@ -35,9 +36,21 @@ export interface BlankGrade {
   reason?: BlankReason
 }
 
-export function gradeBlank(blank: GuidedBlank, given: string): BlankGrade {
+export function gradeBlank(
+  blank: GuidedBlank,
+  given: string,
+  /** `economics`: number blanks read money and percentages (`$1,800`, `10%`, `60k`). */
+  options: { economics?: boolean } = {},
+): BlankGrade {
   const answer = given.trim()
   if (!answer) return { verdict: 'empty' }
+  if (options.economics && blank.kind === 'number') {
+    const outcome = compareEconNumber(answer, blank.answer).outcome
+    if (outcome !== 'unreadable') return { verdict: outcome === 'correct' ? 'correct' : 'wrong' }
+    return readEconNumber(blank.answer) && !readEconNumber(answer)
+      ? { verdict: 'wrong', reason: 'unreadable' }
+      : { verdict: 'unverified', reason: 'unreadable' }
+  }
   switch (blank.kind) {
     case 'expression': {
       const result = compareMath(answer, blank.answer).equivalent

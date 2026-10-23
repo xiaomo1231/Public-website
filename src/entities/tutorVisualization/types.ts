@@ -18,6 +18,7 @@ import type {
   Shuttle,
   StarlingForces,
 } from './medicine'
+import type { MarketSpec, QuantityScale } from '@/entities/econ/market'
 
 /**
  * Structured 2D mathematical visualizations attached to a `TutorLesson`.
@@ -50,10 +51,11 @@ import type {
  * computer science (sorting, BSTs); v10 added the medical figures (membrane
  * and action potentials, oxygen binding, the cardiac PV loop, lung volumes,
  * renal filtration, acid–base, amino acids, energy yield, pharmacokinetics,
- * the dental chart, timelines, neural pathways and anatomy tables). Older
- * rows are still read and rendered unchanged.
+ * the dental chart, timelines, neural pathways and anatomy tables); v11 added
+ * the economics market diagram `market_2d`. Older rows are still read and
+ * rendered unchanged.
  */
-export const TUTOR_VISUALIZATION_SCHEMA_VERSION = 10
+export const TUTOR_VISUALIZATION_SCHEMA_VERSION = 11
 
 export type TutorVisualizationType =
   | 'function_2d'
@@ -105,6 +107,7 @@ export type TutorVisualizationType =
   | 'timeline_2d'
   | 'neural_pathway_2d'
   | 'anatomy_table_2d'
+  | 'market_2d'
 
 export type VisualizationRelation = '=' | '<' | '<=' | '>' | '>='
 
@@ -737,6 +740,35 @@ export interface AnatomyTableVisualization extends TutorVisualizationBase {
   rows: Array<{ name: string; cells: string[] }>
 }
 
+/** Optional names for the curves of a market diagram (defaults D, S, D₂, S₂). */
+export interface MarketCurveLabels {
+  demand?: string
+  supply?: string
+  newDemand?: string
+  newSupply?: string
+}
+
+/** One market of a `market_2d` figure: the lesson's curves and scenario only. */
+export interface MarketPanel {
+  title?: string
+  spec: MarketSpec
+  labels?: MarketCurveLabels
+}
+
+/**
+ * A linear supply-and-demand diagram (schema v11). Only the lesson's curves
+ * and scenario are stored; equilibria, prices, areas, incidence and
+ * elasticities are recomputed exactly by `entities/econ/market.ts`. Two
+ * panels compare markets side by side (e.g. elastic vs inelastic demand).
+ */
+export interface MarketVisualization extends TutorVisualizationBase {
+  type: 'market_2d'
+  panels: MarketPanel[]
+  priceUnit?: string
+  quantityUnit?: string
+  quantityScale?: QuantityScale
+}
+
 export type TutorVisualization =
   | LineVisualization
   | PointsVisualization
@@ -757,7 +789,7 @@ export type TutorVisualization =
   | ChiSquareTestVisualization
   | SubjectVisualization
 
-/** Figures for the other science subjects (schema v9). */
+/** Figures for the other science subjects (schema v9, v10, v11). */
 export type SubjectVisualization =
   | FormulaVisualization
   | TangentVisualization
@@ -776,6 +808,7 @@ export type SubjectVisualization =
   | SortingVisualization
   | BstVisualization
   | MedicalVisualization
+  | MarketVisualization
 
 /** Figures for the basic medical sciences (schema v10). */
 export type MedicalVisualization =
@@ -833,6 +866,7 @@ export const SCIENCE_VISUALIZATION_TYPES = [
   'timeline_2d',
   'neural_pathway_2d',
   'anatomy_table_2d',
+  'market_2d',
 ] as const
 
 export type ScienceVisualization =
@@ -1042,6 +1076,15 @@ export interface VisualizationDraft {
   title?: unknown
   columns?: unknown
   rows?: unknown
+  // v11 market figure
+  demand?: unknown
+  supply?: unknown
+  scenario?: unknown
+  panels?: unknown
+  labels?: unknown
+  priceUnit?: unknown
+  quantityUnit?: unknown
+  quantityScale?: unknown
   // placement (all types)
   placement?: unknown
 }

@@ -8,13 +8,19 @@
  * checking that part against the original page (「建议对照原图校对」).
  * The flags never change the text and never block anything.
  */
-export type LayoutWarning = 'fraction' | 'table' | 'superscript' | 'matrix'
+export type LayoutWarning = 'fraction' | 'table' | 'superscript' | 'matrix' | 'ocr'
 
+/**
+ * `ocr`: the page had no text layer (a scan, or glyphs drawn as paths), so
+ * the whole text was recognised from a picture of the page — every line is
+ * low confidence, not just one region.
+ */
 export const LAYOUT_WARNINGS: readonly LayoutWarning[] = [
   'fraction',
   'table',
   'superscript',
   'matrix',
+  'ocr',
 ]
 
 /** The distinct, known layout warnings carried by one or more chunks, in a stable order. */

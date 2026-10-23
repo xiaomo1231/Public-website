@@ -10,5 +10,6 @@ export {
   type ExpressionPreview,
 } from '@/infrastructure/math/expressionEvaluator'
 export { previewQuantity, type QuantityPreview } from '@/infrastructure/math/quantityAnswer'
+export { previewEconNumber } from '@/infrastructure/math/economicsAnswer'
 export { previewEquation, type EquationPreview } from '@/infrastructure/chemistry/equation'
 export { orderingItems, shuffledForDisplay } from '@/infrastructure/math/orderingAnswer'

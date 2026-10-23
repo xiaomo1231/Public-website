@@ -113,6 +113,13 @@ export interface DocumentMetadata {
   modifiedAt?: number
   language?: 'zh' | 'en' | 'mixed' | 'unknown'
   ocrConfidence?: number
+  /**
+   * Pages whose text was read by the student's vision model instead of local
+   * OCR (`page-transcribe/v1`); 1 for an image file. Cleared on re-processing.
+   */
+  transcribedPages?: number[]
+  /** Model that read them. */
+  transcribedModel?: string
 }
 
 export interface Document {

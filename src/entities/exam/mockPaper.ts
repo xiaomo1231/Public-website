@@ -2,6 +2,7 @@ import { walkthroughSubparts } from '@/entities/homework/splitQuestion'
 import type { PracticePart } from '@/entities/homework/practice/types'
 import { classifyExamQuestion, type ExamQuestionKind } from './analysis'
 import { parseQuestionMarks } from './marks'
+import { detectFigureGroups } from './figureGroups'
 
 /**
  * AI 模拟卷 (planning, local and pure): a mock paper written by the platform
@@ -50,6 +51,52 @@ export interface MockSlotSpec {
   optionCount?: number
   /** The past paper's question at this position (a style reference only). */
   templateQuestionId?: string
+  /**
+   * Several questions of the paper share ONE figure (e.g. three multiple
+   * choice on one supply-and-demand graph; `detectFigureGroups`). Grouped
+   * slots get the same topic; when a figure engine draws the shared figure
+   * (`AiMockInfo.figures`), each question is written about it. Without one
+   * they are written as ordinary questions.
+   */
+  figureGroup?: MockFigureGroup
+}
+
+/** What a figure engine is asked to draw: one figure for one figure group. */
+export interface MockFigureRequest {
+  groupId: string
+  topic: { id: string; name: string }
+  /** The group's slots, in order (with their parts, marks and option counts). */
+  slots: Array<Pick<MockSlotSpec, 'id' | 'label' | 'kind' | 'parts' | 'marks' | 'optionCount'>>
+  language: MockLanguage
+  /** The course subject (an engine draws only the figures of its subject). */
+  subject?: string
+}
+
+/**
+ * Draws the shared figure of a figure group (e.g. a market diagram), or
+ * returns null when it cannot. Optional: without an engine the group's
+ * questions are written as ordinary questions.
+ */
+export type MockFigureEngine = (request: MockFigureRequest) => Promise<MockFigureSpec | null>
+
+/** A slot's place in a figure group. */
+export interface MockFigureGroup {
+  /** `g1`, `g2` … (unique within the paper). */
+  id: string
+  /** 0-based position in the group. */
+  position: number
+  size: number
+}
+
+/**
+ * A figure drawn for a figure group by a figure engine (e.g. a market
+ * diagram). `kind` and `spec` belong to the engine; `description` is the
+ * text the question writer is given (axes, curves, labelled points).
+ */
+export interface MockFigureSpec {
+  kind: string
+  spec: unknown
+  description: string
 }
 
 export interface PaperStructure {
@@ -85,10 +132,14 @@ export function mirrorStructure(input: {
   minutes?: number
   hasFormulaSheet: boolean
   questions: readonly TemplateQuestion[]
+  /** The professor's habit "several questions share one figure" (looser grouping). */
+  figureGroups?: boolean
 }): PaperStructure {
   const slots: MockSlotSpec[] = []
+  const prompts: string[] = []
   for (const question of input.questions) {
     if (question.heldOut || !question.prompt.trim()) continue
+    prompts.push(question.prompt)
     const marks = parseQuestionMarks(question.prompt)
     const subparts = walkthroughSubparts(question.prompt)
     const kind = classifyExamQuestion(question.prompt)
@@ -110,7 +161,60 @@ export function mirrorStructure(input: {
       templateQuestionId: question.id,
     })
   }
+  const groups = detectFigureGroups(
+    slots.map((slot, index) => ({
+      label: slot.label,
+      prompt: prompts[index]!,
+      multipleChoice: slot.kind === 'multiple_choice',
+    })),
+    { loose: Boolean(input.figureGroups) },
+  )
+  groups.forEach((members, group) => {
+    members.forEach((index, position) => {
+      slots[index] = {
+        ...slots[index]!,
+        figureGroup: { id: `g${group + 1}`, position, size: members.length },
+      }
+    })
+  })
   return finishStructure({ ...input, slots })
+}
+
+/**
+ * Figure groups after slots were picked or repeated: consecutive slots of the
+ * same source group stay a group (renumbered); a lone member is ungrouped.
+ */
+function regroup(slots: MockSlotSpec[]): MockSlotSpec[] {
+  const out: MockSlotSpec[] = []
+  let count = 0
+  let index = 0
+  while (index < slots.length) {
+    const source = slots[index]!.figureGroup?.id
+    let end = index + 1
+    if (source) {
+      while (
+        end < slots.length &&
+        slots[end]!.figureGroup?.id === source &&
+        slots[end]!.figureGroup!.position > slots[end - 1]!.figureGroup!.position
+      )
+        end++
+    }
+    const run = slots.slice(index, end)
+    if (source && run.length >= 2) {
+      count++
+      run.forEach((slot, position) =>
+        out.push({ ...slot, figureGroup: { id: `g${count}`, position, size: run.length } }),
+      )
+    } else {
+      for (const slot of run) {
+        const { figureGroup: _group, ...rest } = slot
+        void _group
+        out.push(rest)
+      }
+    }
+    index = end
+  }
+  return out
 }
 
 function finishStructure(input: {
@@ -152,12 +256,14 @@ export function resizeStructure(structure: PaperStructure, count: number): Paper
     n < source.length
       ? Array.from({ length: n }, (_, i) => source[Math.floor((i * source.length) / n)]!)
       : Array.from({ length: n }, (_, i) => source[i % source.length]!)
-  const slots = picked.map((slot, index) => ({
-    ...slot,
-    id: `s${index + 1}`,
-    index,
-    label: String(index + 1),
-  }))
+  const slots = regroup(
+    picked.map((slot, index) => ({
+      ...slot,
+      id: `s${index + 1}`,
+      index,
+      label: String(index + 1),
+    })),
+  )
   const minutes =
     structure.minutes !== undefined
       ? Math.max(5, Math.round((structure.minutes * n) / source.length / 5) * 5)
@@ -273,7 +379,7 @@ export function topicWeight(topic: MockTopicInput, count: number): number {
  * when given, replace the scope. Deterministic.
  */
 export function allocateTopics(
-  slots: readonly Pick<MockSlotSpec, 'id' | 'marks'>[],
+  slots: readonly Pick<MockSlotSpec, 'id' | 'marks' | 'figureGroup'>[],
   topics: readonly MockTopicInput[],
   focusIds: readonly string[] = [],
 ): Map<string, MockTopicInput> {
@@ -283,11 +389,26 @@ export function allocateTopics(
   if (pool.length === 0 || slots.length === 0) return out
   const weights = pool.map((topic) => topicWeight(topic, pool.length))
   const weightSum = weights.reduce((a, b) => a + b, 0)
-  const size = (slot: Pick<MockSlotSpec, 'marks'>) => slot.marks ?? 1
-  const total = slots.reduce((sum, slot) => sum + size(slot), 0)
+  // A figure group is one unit (one figure, one topic) with the marks of its members.
+  const units: Array<{ ids: string[]; marks: number }> = []
+  const byGroup = new Map<string, { ids: string[]; marks: number }>()
+  for (const slot of slots) {
+    const key = slot.figureGroup?.id
+    const existing = key ? byGroup.get(key) : undefined
+    if (existing) {
+      existing.ids.push(slot.id)
+      existing.marks += slot.marks ?? 1
+      continue
+    }
+    const unit = { ids: [slot.id], marks: slot.marks ?? 1 }
+    units.push(unit)
+    if (key) byGroup.set(key, unit)
+  }
+  const size = (unit: { marks: number }) => unit.marks
+  const total = units.reduce((sum, unit) => sum + size(unit), 0)
   const target = weights.map((weight) => (weight / weightSum) * total)
   const given = pool.map(() => 0)
-  const order = slots
+  const order = units
     .map((slot, index) => ({ slot, index }))
     .sort((a, b) => size(b.slot) - size(a.slot) || a.index - b.index)
   for (const { slot } of order) {
@@ -302,7 +423,7 @@ export function allocateTopics(
         best = i
     }
     given[best]! += size(slot)
-    out.set(slot.id, pool[best]!)
+    for (const id of slot.ids) out.set(id, pool[best]!)
   }
   return out
 }
@@ -382,6 +503,11 @@ export interface AiMockInfo {
   /** A run stopped by an account error (quota, key): what to fix. */
   error?: string
   generatedAt?: number
+  /**
+   * Shared figures of the figure groups, by group id (`g1`), when a figure
+   * engine drew them. Absent ⇒ grouped slots are written as ordinary questions.
+   */
+  figures?: Record<string, MockFigureSpec>
 }
 
 export interface MockStructureReport {

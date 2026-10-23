@@ -1,6 +1,9 @@
 import type { RubricSource } from './origin'
 import type { SigFigBasis } from './answerDimensions'
 import type { VectorSpec } from '@/infrastructure/math/vectorAnswer'
+import type { EconNumberSpec } from '@/infrastructure/math/economicsAnswer'
+import type { MarketQuestion } from '@/entities/econ/graphQuestion'
+import { formatMarketAnswerCode, isMarketQuestionType } from '@/entities/econ/graphAnswerText'
 import type { NomenclatureSpec } from '@/infrastructure/chemistry/nomenclature'
 import { formatForceAnswer, formatForces, type ForceSpec } from './forceList'
 import { formatVectorSpec } from '@/infrastructure/math/vectorAnswer'
@@ -35,6 +38,10 @@ export type QuestionType =
   | 'vector'
   | 'nomenclature'
   | 'force_list'
+  /** Economics graph questions (a supply-and-demand diagram graded by the market engine). */
+  | 'shift_id'
+  | 'area_read'
+  | 'draw_diagram'
 
 export const QUESTION_TYPES: QuestionType[] = [
   'multiple_choice',
@@ -53,6 +60,9 @@ export const QUESTION_TYPES: QuestionType[] = [
   'vector',
   'nomenclature',
   'force_list',
+  'shift_id',
+  'area_read',
+  'draw_diagram',
 ]
 
 export const QUESTION_TYPE_LABEL_KEYS: Record<QuestionType, TranslationKey> = {
@@ -72,6 +82,9 @@ export const QUESTION_TYPE_LABEL_KEYS: Record<QuestionType, TranslationKey> = {
   vector: 'questionType.vector',
   nomenclature: 'questionType.nomenclature',
   force_list: 'questionType.forceList',
+  shift_id: 'questionType.shiftId',
+  area_read: 'questionType.areaRead',
+  draw_diagram: 'questionType.drawDiagram',
 }
 
 /** One scoring point of a short-answer question. */
@@ -142,12 +155,25 @@ export interface Question {
   sigFigs?: number
   /** Why `sigFigs` is required, for the feedback. */
   sigFigsBasis?: SigFigBasis
+  /**
+   * Numeric without a unit, economics: how the answer is read (absolute-value
+   * elasticity, amounts stated in thousands, a percentage). Economics courses
+   * also read it from the question text (`econSpecFromText`); this field wins.
+   */
+  econ?: EconNumberSpec
   /** Vector only: the reference vector (components, unit). */
   vector?: VectorSpec
   /** Nomenclature only: the compound, which way it is asked, and accepted names. */
   nomenclature?: NomenclatureSpec
   /** Free-body diagram only: the forces acting on the body. */
   forces?: ForceSpec[]
+  /**
+   * Economics graph questions (`shift_id`, `area_read`, `draw_diagram`) only:
+   * the market (curves + scenario), what the figure shows and what is asked.
+   * The expected answer is always recomputed from it (`gradeMarketQuestion`);
+   * `correctAnswer` is only the reference text shown to the student.
+   */
+  market?: MarketQuestion
   /**
    * Ordering only: the items in the CORRECT order. `correctAnswer` is the same
    * items joined by newlines; the field shows them shuffled.
@@ -197,9 +223,11 @@ export interface NewQuestionInput {
   rubricSource?: RubricSource
   sigFigs?: number
   sigFigsBasis?: SigFigBasis
+  econ?: EconNumberSpec
   vector?: VectorSpec
   nomenclature?: NomenclatureSpec
   forces?: ForceSpec[]
+  market?: MarketQuestion
   orderItems?: string[]
   matchItems?: string[]
   blanks?: string[][]
@@ -310,6 +338,7 @@ export function displayAnswer(
       .join('；')
   }
   if (question.type === 'force_list') return formatForceAnswer(userAnswer)
+  if (isMarketQuestionType(question.type)) return formatMarketAnswerCode(userAnswer)
   if (question.type === 'fill_blank')
     return userAnswer
       .split('\n')
@@ -337,6 +366,7 @@ export function questionTypesForSubject(
       (type !== 'chem_equation' || subject === 'chemistry') &&
       (type !== 'nomenclature' || subject === 'chemistry') &&
       (type !== 'force_list' || subject === 'physics') &&
+      (!isMarketQuestionType(type) || subject === 'economics') &&
       (type !== 'vector' || VECTOR_SUBJECTS.includes(subject as Subject)) &&
       (type !== 'paradigm_table' || subject === 'language') &&
       (type !== 'article_gender' || (subject === 'language' && targetLanguage === 'de')),

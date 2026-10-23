@@ -44,6 +44,7 @@ import { friendlyAIError } from '@/shared/lib/aiErrors'
 import { isGenerationInterruption } from '@/shared/lib/generationControl'
 import { useGenerationRun } from '@/shared/lib/useGenerationRun'
 import { GenerationControls } from '@/shared/ui/GenerationControls'
+import { VisionTranscribeButton } from '@/widgets/documents/VisionTranscribeButton'
 import { useTranslation, type TranslationKey } from '@/i18n'
 
 const NONE = '__none__'
@@ -962,6 +963,16 @@ export function HomeworkAnswerDialog({
                       {t('homework.answer.reprocess')}
                     </Button>
                   ))}
+                {/* A scanned / photographed key: the vision model reads it again,
+                    marked MC options included; the result is proposed here. */}
+                {set.answerDocumentId && documentStatus === 'ready' && (
+                  <VisionTranscribeButton
+                    documentId={set.answerDocumentId}
+                    refreshKey={entries.length}
+                    size="sm"
+                    onDone={() => void load()}
+                  />
+                )}
                 <Button variant="outline" size="sm" onClick={onRequestUpload} disabled={busy}>
                   {t('homework.answer.replace')}
                 </Button>

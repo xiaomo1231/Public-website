@@ -26,7 +26,7 @@ const input = {
 
 describe('quiz-generator v9', () => {
   it('is v8 word for word without its options, new types or conventions', () => {
-    expect(prompts.quizGenerator.VERSION).toBe('v9')
+    expect(prompts.quizGenerator.VERSION).toBe('v10')
     expect(QuizV9.buildSystemPrompt()).toBe(QuizV8.buildSystemPrompt())
     for (const types of [['multiple_choice'], ['numeric', 'short_answer']] as const)
       expect(QuizV9.buildSystemPrompt({ types: [...types] })).toBe(

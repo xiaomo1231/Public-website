@@ -1,6 +1,7 @@
 import type { AppDatabase } from '@/infrastructure/db/database'
 import { getDb } from '@/infrastructure/db/database'
 import { PracticeRepository } from '@/entities/practice/repository'
+import { formatRubricItem, parseRubricItems } from '@/entities/exam/marks'
 import { QuestionAttemptRepository } from '@/entities/questionAttempt/repository'
 import type {
   PracticeAttempt,
@@ -520,6 +521,23 @@ export class PracticeService {
     signal?: AbortSignal,
   ): Promise<RubricPoint[] | undefined> {
     const answer = question.expectedAnswer?.trim()
+    // A professor rubric box printed with the answer ("2 pts: …") is the
+    // professor's own scoring points: read locally, no AI split needed.
+    const box = parseRubricItems(answer)
+    if (answer && box.length >= 2) {
+      const boxHash = fnv1a(`rubric-box|${answer}`)
+      if (question.rubric?.length && question.rubricAnswerHash === boxHash) return question.rubric
+      const rubric = box.map((item, index) => ({
+        id: `p${index + 1}`,
+        text: formatRubricItem(item),
+      }))
+      await this.practice.updateQuestion(question.id, {
+        rubric,
+        rubricAnswerHash: boxHash,
+        rubricSource: 'professor',
+      })
+      return rubric
+    }
     if (!answer || !this.ai) return question.rubric
     const hash = fnv1a(`${prompts.rubricExtractor.VERSION}|${answer}`)
     if (question.rubric?.length && question.rubricAnswerHash === hash) return question.rubric

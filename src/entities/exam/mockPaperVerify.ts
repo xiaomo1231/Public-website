@@ -42,6 +42,8 @@ export interface MockVerifyContext {
   noneOption?: string
   /** Seed of the option order (reproducible). */
   seed: string
+  /** Economics course: numeric answers are money / percentages (`$1,800`, `10%`). */
+  economics?: boolean
 }
 
 const LETTERS = 'ABCDEF'
@@ -216,6 +218,7 @@ export function verifyMockQuestion(
         },
         undefined,
         language,
+        ctx.economics ? { economics: true } : {},
       )
       if (!verified.ok)
         return {

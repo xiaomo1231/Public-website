@@ -113,6 +113,9 @@ describe('ProcessingService — visual source preservation', () => {
     projectId = project.id
   })
 
+  /** Local OCR of text-less pages (tesseract cannot run here): reads nothing by default. */
+  const ocrPages = vi.fn(async (blobs: readonly Blob[]) => blobs.map(() => null))
+
   function service(renderer = fakeRenderer) {
     return new ProcessingService({
       documents,
@@ -121,6 +124,7 @@ describe('ProcessingService — visual source preservation', () => {
       projects,
       visuals,
       renderPageImage: renderer,
+      ocrPages,
     })
   }
 
@@ -261,6 +265,7 @@ describe('ProcessingService — visual source preservation', () => {
       projects,
       visuals,
       openPageImages: open,
+      ocrPages,
     }).process(doc.id)
 
     expect(open).toHaveBeenCalledTimes(1)
@@ -288,6 +293,52 @@ describe('ProcessingService — visual source preservation', () => {
       openPageImages: open,
     }).process(doc.id)
     expect(open).not.toHaveBeenCalled()
+  })
+
+  it('reads a page without a text layer with OCR and keeps its rendering', async () => {
+    // Glyphs drawn as vector paths: no text items and no images on the page.
+    pdfState.pages = [
+      { text: '', imageOps: [] },
+      { text: 'Part B: Multiple-choice questions, each worth 3 points.', imageOps: [] },
+      { text: '', imageOps: [] },
+    ]
+    const read = vi.fn(async (blobs: readonly Blob[]) =>
+      blobs.map((_, i) =>
+        i === 0 ? { text: 'Question A.1 (10 marks)\nDraw the market.', confidence: 81 } : null,
+      ),
+    )
+    const doc = await documents.create({
+      projectId,
+      type: 'pdf',
+      name: 'midterm.pdf',
+      sizeBytes: 0,
+      blob: PDF_BLOB(),
+    })
+    await new ProcessingService({
+      documents,
+      chunks,
+      jobs,
+      projects,
+      visuals,
+      renderPageImage: fakeRenderer,
+      ocrPages: read,
+    }).process(doc.id)
+
+    // Pages 1 and 3 were rendered once each, and read in one OCR session.
+    expect(fakeRenderer.mock.calls.map((call) => call[0].pageNumber)).toEqual([1, 3])
+    expect(read).toHaveBeenCalledTimes(1)
+    const stored = (await chunks.listByDocument(doc.id)).sort((a, b) => a.order - b.order)
+    const ocr = stored.filter((chunk) => chunk.pageNumber === 1)
+    expect(ocr.map((chunk) => chunk.contentType)).toEqual(['ocr'])
+    expect(ocr[0]!.text).toBe('Question A.1 (10 marks)\nDraw the market.')
+    expect(ocr[0]!.layoutWarnings).toEqual(['ocr'])
+    // The read page keeps its picture; the blank page 3 keeps nothing.
+    const figures = await visuals.listByDocument(doc.id)
+    expect(figures.map((figure) => [figure.pageNumber, figure.type])).toEqual([[1, 'screenshot']])
+    expect(figures[0]!.sourceChunkIds).toEqual(ocr.map((chunk) => chunk.id))
+    const updated = await documents.get(doc.id)
+    expect(updated.warnings?.join(' ')).toMatch(/1/)
+    expect(updated.warnings?.some((w) => /文字层|text layer/.test(w))).toBe(true)
   })
 })
 

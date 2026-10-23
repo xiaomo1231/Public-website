@@ -1,12 +1,22 @@
 import JSZip from 'jszip'
+import { ommlToLatex } from './omml'
+import { describeDrawings, type DrawingBox, type DrawingElement } from './pptxDrawing'
 
 export interface PptxSlide {
   slideNumber: number
   title?: string
+  /** Slide text without the labels of drawn diagrams (those are in `figures`). */
   body: string
   notes: string
   tables: string[][][]
   imageCount: number
+  /**
+   * One structured caption per diagram drawn with shapes on the slide
+   * (`[图：2 条实线（…），坐标轴 2，…，标签：…]`, see `pptxDrawing.ts`).
+   */
+  figures?: string[]
+  /** PowerPoint equations converted to inline `$…$` LaTeX. */
+  equations?: number
 }
 
 export interface PptxExtractionResult {
@@ -36,18 +46,265 @@ function textOf(parent: Element | null): string {
   return out
 }
 
+/** An Office Math element (`m:oMathPara` / `m:oMath`) inside a run container. */
+function mathIn(el: Element): Element | undefined {
+  const all = Array.from(el.getElementsByTagName('*'))
+  return all.find((c) => localName(c) === 'oMathPara') ?? all.find((c) => localName(c) === 'oMath')
+}
+
 function collectParagraphText(p: Element): string {
   let out = ''
   for (const node of Array.from(p.childNodes)) {
     if (node.nodeType === 3) out += node.nodeValue ?? ''
     else if (node.nodeType === 1) {
-      const tag = localName(node as Element)
-      if (tag === 't') out += textOf(node as Element)
+      const el = node as Element
+      const tag = localName(el)
+      if (tag === 't') out += textOf(el)
       else if (tag === 'br') out += '\n'
-      else if (tag === 'r') out += collectParagraphText(node as Element)
+      else if (tag === 'r' || tag === 'fld') out += collectParagraphText(el)
+      else if (tag === 'm' || tag === 'oMathPara' || tag === 'oMath') {
+        // PowerPoint equation (`a14:m`): written inline as LaTeX.
+        const math = tag === 'm' ? mathIn(el) : el
+        const latex = math ? ommlToLatex(math) : ''
+        if (latex) out += `${out && !/\s$/.test(out) ? ' ' : ''}$${latex}$`
+      }
     }
   }
   return out
+}
+
+/** EMU per point. */
+const EMU = 12700
+
+interface Affine {
+  sx: number
+  sy: number
+  tx: number
+  ty: number
+}
+
+const IDENTITY: Affine = { sx: 1, sy: 1, tx: 0, ty: 0 }
+
+function directChild(el: Element | undefined, name: string): Element | undefined {
+  if (!el) return undefined
+  return Array.from(el.childNodes).find(
+    (node): node is Element => node.nodeType === 1 && localName(node as Element) === name,
+  )
+}
+
+function numberAttr(el: Element | undefined, name: string): number {
+  const value = Number(el?.getAttribute(name) ?? 0)
+  return Number.isFinite(value) ? value : 0
+}
+
+/** The `a:xfrm` of a shape / group, in its parent's coordinates (EMU). */
+function readXfrm(xfrm: Element | undefined): {
+  box: DrawingBox
+  child?: DrawingBox
+  flipH: boolean
+  flipV: boolean
+} | null {
+  if (!xfrm) return null
+  const off = directChild(xfrm, 'off')
+  const ext = directChild(xfrm, 'ext')
+  if (!off || !ext) return null
+  const chOff = directChild(xfrm, 'chOff')
+  const chExt = directChild(xfrm, 'chExt')
+  return {
+    box: {
+      x: numberAttr(off, 'x'),
+      y: numberAttr(off, 'y'),
+      w: numberAttr(ext, 'cx'),
+      h: numberAttr(ext, 'cy'),
+    },
+    ...(chOff && chExt
+      ? {
+          child: {
+            x: numberAttr(chOff, 'x'),
+            y: numberAttr(chOff, 'y'),
+            w: numberAttr(chExt, 'cx'),
+            h: numberAttr(chExt, 'cy'),
+          },
+        }
+      : {}),
+    flipH: xfrm.getAttribute('flipH') === '1',
+    flipV: xfrm.getAttribute('flipV') === '1',
+  }
+}
+
+function applyAffine(t: Affine, box: DrawingBox): DrawingBox {
+  return {
+    x: (t.sx * box.x + t.tx) / EMU,
+    y: (t.sy * box.y + t.ty) / EMU,
+    w: (t.sx * box.w) / EMU,
+    h: (t.sy * box.h) / EMU,
+  }
+}
+
+/** Compose a group's child-space mapping onto its parent's transform. */
+function groupAffine(parent: Affine, xfrm: ReturnType<typeof readXfrm>): Affine {
+  if (!xfrm?.child || xfrm.child.w === 0 || xfrm.child.h === 0) return parent
+  const kx = xfrm.box.w / xfrm.child.w
+  const ky = xfrm.box.h / xfrm.child.h
+  // child c → group space: off + (c - chOff) * k ; then parent transform.
+  return {
+    sx: parent.sx * kx,
+    sy: parent.sy * ky,
+    tx: parent.sx * (xfrm.box.x - xfrm.child.x * kx) + parent.tx,
+    ty: parent.sy * (xfrm.box.y - xfrm.child.y * ky) + parent.ty,
+  }
+}
+
+/** `mc:AlternateContent`: the branch we can read — the maths choice, else the fallback. */
+function alternateBranch(el: Element): Element | undefined {
+  const branches = Array.from(el.childNodes).filter((node): node is Element => node.nodeType === 1)
+  const choice = branches.find(
+    (b) => localName(b) === 'Choice' && /\ba14\b/.test(b.getAttribute('Requires') ?? ''),
+  )
+  return (
+    choice ??
+    branches.find((b) => localName(b) === 'Fallback') ??
+    branches.find((b) => localName(b) === 'Choice')
+  )
+}
+
+const LINE_GEOMETRY = /^(?:line|straightConnector\d*|bentConnector\d|curvedConnector\d|arc)$/
+const ARROW_GEOMETRY = /arrow/i
+
+interface OutlineStyle {
+  visible: boolean
+  dashed: boolean
+  color?: string
+  arrowHead: boolean
+}
+
+function readOutline(spPr: Element | undefined): OutlineStyle {
+  const ln = directChild(spPr, 'ln')
+  if (!ln) return { visible: true, dashed: false, arrowHead: false }
+  const visible = !directChild(ln, 'noFill')
+  const dash = directChild(ln, 'prstDash')?.getAttribute('val') ?? 'solid'
+  const color =
+    directChild(directChild(ln, 'solidFill'), 'srgbClr')?.getAttribute('val') ?? undefined
+  const end = (name: string) => {
+    const type = directChild(ln, name)?.getAttribute('type')
+    return !!type && type !== 'none'
+  }
+  return {
+    visible,
+    dashed: dash !== 'solid',
+    ...(color ? { color } : {}),
+    arrowHead: end('headEnd') || end('tailEnd'),
+  }
+}
+
+function tableRows(tbl: Element): string[][] {
+  const rows: string[][] = []
+  for (const tr of Array.from(tbl.getElementsByTagNameNS(NS.a, 'tr'))) {
+    const row: string[] = []
+    for (const tc of Array.from(tr.getElementsByTagNameNS(NS.a, 'tc'))) {
+      const paras = Array.from(tc.getElementsByTagNameNS(NS.a, 'p'))
+      row.push(paras.map(collectParagraphText).join(' ').trim())
+    }
+    rows.push(row)
+  }
+  return rows
+}
+
+interface SlideWalk {
+  elements: DrawingElement[]
+  /** Reading-order index → text, title / placeholder flags. */
+  texts: Map<number, { text: string; title: boolean }>
+  tables: string[][][]
+  imageCount: number
+  equations: number
+  /** Equation objects kept only as a picture (MathType / OLE). */
+  oleEquations: number
+  nextGroup: number
+}
+
+function walkTree(container: Element, affine: Affine, group: number | undefined, walk: SlideWalk) {
+  for (const node of Array.from(container.childNodes)) {
+    if (node.nodeType !== 1) continue
+    const el = node as Element
+    const name = localName(el)
+    if (name === 'AlternateContent') {
+      const branch = alternateBranch(el)
+      if (branch) walkTree(branch, affine, group, walk)
+      continue
+    }
+    if (name === 'grpSp') {
+      const xfrm = readXfrm(directChild(directChild(el, 'grpSpPr'), 'xfrm'))
+      const id = group ?? walk.nextGroup++
+      walkTree(el, groupAffine(affine, xfrm), id, walk)
+      continue
+    }
+    if (name === 'pic') {
+      walk.imageCount += el.getElementsByTagNameNS(NS.a, 'blip').length || 1
+      continue
+    }
+    if (name === 'graphicFrame') {
+      const tables = Array.from(el.getElementsByTagNameNS(NS.a, 'tbl'))
+      for (const tbl of tables) walk.tables.push(tableRows(tbl))
+      const ole = Array.from(el.getElementsByTagName('*')).find((c) => localName(c) === 'oleObj')
+      if (ole && /equation/i.test(`${ole.getAttribute('progId')} ${ole.getAttribute('name')}`))
+        walk.oleEquations++
+      walk.imageCount += el.getElementsByTagNameNS(NS.a, 'blip').length
+      continue
+    }
+    if (name !== 'sp' && name !== 'cxnSp') continue
+
+    const spPr = directChild(el, 'spPr')
+    const xfrm = readXfrm(directChild(spPr, 'xfrm'))
+    const box = xfrm ? applyAffine(affine, xfrm.box) : { x: 0, y: 0, w: 0, h: 0 }
+    const index = walk.elements.length
+    const geometry = directChild(spPr, 'prstGeom')?.getAttribute('prst') ?? ''
+    const custom = !!directChild(spPr, 'custGeom')
+    const nv = directChild(el, 'nvSpPr')
+    const ph = nv ? nv.getElementsByTagNameNS(NS.p, 'ph')[0] : undefined
+    const placeholderType = ph?.getAttribute('type') ?? (ph ? 'body' : '')
+    const txBody = directChild(el, 'txBody')
+    const paragraphs = txBody ? Array.from(txBody.getElementsByTagNameNS(NS.a, 'p')) : []
+    walk.equations += txBody
+      ? Array.from(txBody.getElementsByTagName('*')).filter((c) => localName(c) === 'oMath').length
+      : 0
+    // The slide number and date placeholders are page furniture, not content.
+    if (placeholderType === 'sldNum' || placeholderType === 'dt') continue
+    const text = paragraphs.map(collectParagraphText).join('\n').trim()
+    walk.imageCount += el.getElementsByTagNameNS(NS.a, 'blip').length
+    const outline = readOutline(spPr)
+    const base = {
+      index,
+      box,
+      ...(group !== undefined ? { group } : {}),
+    }
+    if (text) {
+      const title = placeholderType === 'title' || placeholderType === 'ctrTitle'
+      walk.texts.set(index, { text, title })
+      walk.elements.push({
+        ...base,
+        kind: 'text',
+        text,
+        ...(ph ? { placeholder: true } : {}),
+      })
+      continue
+    }
+    const isLine = name === 'cxnSp' || LINE_GEOMETRY.test(geometry) || custom
+    if (isLine && outline.visible) {
+      walk.elements.push({
+        ...base,
+        kind: 'line',
+        ...(outline.dashed ? { dashed: true } : {}),
+        ...(outline.color ? { color: outline.color } : {}),
+        ...(outline.arrowHead ? { arrowHead: true } : {}),
+        ...(xfrm && xfrm.flipH !== xfrm.flipV ? { flipped: true } : {}),
+        ...(custom || /^(?:curvedConnector\d|arc)$/.test(geometry) ? { curve: true } : {}),
+      })
+    } else if (ARROW_GEOMETRY.test(geometry)) {
+      walk.elements.push({ ...base, kind: 'arrow' })
+    } else if (!ph) {
+      walk.elements.push({ ...base, kind: 'shape' })
+    }
+  }
 }
 
 function parseSlide(slideXml: string): {
@@ -55,55 +312,54 @@ function parseSlide(slideXml: string): {
   body: string
   tables: string[][][]
   imageCount: number
+  figures: string[]
+  equations: number
 } {
   const parser = new DOMParser()
   const xmlDoc = parser.parseFromString(slideXml, 'application/xml')
   if (xmlDoc.getElementsByTagName('parsererror').length > 0) {
-    return { body: '', tables: [], imageCount: 0 }
+    return { body: '', tables: [], imageCount: 0, figures: [], equations: 0 }
   }
 
   const spTree = xmlDoc.getElementsByTagNameNS(NS.p, 'spTree')[0]
-  const shapeList = spTree ? Array.from(spTree.getElementsByTagNameNS(NS.p, 'sp')) : []
-  const tables: string[][][] = []
+  const walk: SlideWalk = {
+    elements: [],
+    texts: new Map(),
+    tables: [],
+    imageCount: 0,
+    equations: 0,
+    oleEquations: 0,
+    nextGroup: 0,
+  }
+  if (spTree) walkTree(spTree, IDENTITY, undefined, walk)
+
+  // Short labels of a drawn diagram leave the body and are described once,
+  // in the figure caption.
+  const drawings = describeDrawings(walk.elements)
+  const labelIndexes = new Set(drawings.flatMap((figure) => figure.labelIndexes))
+
   let title: string | undefined
   const bodyParts: string[] = []
-
-  for (const sp of shapeList) {
-    const nvSpPr = sp.getElementsByTagNameNS(NS.p, 'nvSpPr')[0]
-    const placeholder = nvSpPr ? nvSpPr.getElementsByTagNameNS(NS.p, 'ph')[0] : undefined
-    const placeholderType = placeholder?.getAttribute('type') ?? ''
-    const txBody = sp.getElementsByTagNameNS(NS.p, 'txBody')[0]
-    if (!txBody) continue
-    const paragraphs = Array.from(txBody.getElementsByTagNameNS(NS.a, 'p'))
-    const text = paragraphs.map(collectParagraphText).join('\n').trim()
-    if (placeholderType === 'title' || placeholderType === 'ctrTitle') {
+  for (const [index, { text, title: isTitle }] of walk.texts) {
+    if (isTitle) {
       title = title ?? text
-    } else if (text) {
-      bodyParts.push(text)
+      continue
     }
+    if (labelIndexes.has(index)) continue
+    bodyParts.push(text)
   }
+  const figures = drawings.map((figure) => figure.caption)
+  if (walk.oleEquations > 0)
+    figures.push(`[公式：${walk.oleEquations} 个公式对象只有图片，未能转为文字]`)
 
-  // Tables (a:tbl)
-  const tableEls = spTree ? Array.from(spTree.getElementsByTagNameNS(NS.a, 'tbl')) : []
-  for (const tbl of tableEls) {
-    const rows: string[][] = []
-    const trEls = tbl.getElementsByTagNameNS(NS.a, 'tr')
-    for (const tr of Array.from(trEls)) {
-      const row: string[] = []
-      const tcEls = tr.getElementsByTagNameNS(NS.a, 'tc')
-      for (const tc of Array.from(tcEls)) {
-        const paras = Array.from(tc.getElementsByTagNameNS(NS.a, 'p'))
-        row.push(paras.map(collectParagraphText).join(' ').trim())
-      }
-      rows.push(row)
-    }
-    tables.push(rows)
+  return {
+    title,
+    body: bodyParts.join('\n\n'),
+    tables: walk.tables,
+    imageCount: walk.imageCount,
+    figures,
+    equations: walk.equations,
   }
-
-  // Images via blip references
-  const imageCount = spTree ? spTree.getElementsByTagNameNS(NS.a, 'blip').length : 0
-
-  return { title, body: bodyParts.join('\n\n'), tables, imageCount }
 }
 
 /** Relationship type suffixes (the namespace prefix differs between OOXML editions). */
@@ -227,6 +483,8 @@ export async function extractPptx(blob: Blob): Promise<PptxExtractionResult> {
         notes,
         tables: parsed.tables,
         imageCount: parsed.imageCount,
+        ...(parsed.figures.length > 0 ? { figures: parsed.figures } : {}),
+        ...(parsed.equations > 0 ? { equations: parsed.equations } : {}),
       })
     } catch (err) {
       warnings.push(`Slide ${num} failed: ${(err as Error).message}`)
@@ -261,8 +519,48 @@ export async function extractPptx(blob: Blob): Promise<PptxExtractionResult> {
 /** An image embedded in a slide, extracted verbatim from the .pptx media. */
 export interface PptxSlideImage {
   slideNumber: number
+  /** Empty for an image the browser cannot display (`unsupportedFormat`). */
   bytes: ArrayBuffer
   mimeType: string
+  /**
+   * The slide's image is an EMF / WMF / TIFF picture no browser can show and
+   * the file has no displayable fallback for it. `bytes` is empty unless
+   * `substitute` is set.
+   */
+  unsupportedFormat?: string
+  /**
+   * The bytes are not the picture itself but the presentation's own
+   * thumbnail of slide 1 (`docProps/thumbnail.jpeg`), used in its place.
+   */
+  substitute?: 'thumbnail'
+}
+
+/** Picture formats PowerPoint embeds that no browser can display. */
+const UNDISPLAYABLE_IMAGE = /\.(emf|wmf|emz|wmz|tiff?)$/i
+
+/**
+ * Relationship ids of unsupported pictures that have a displayable twin in
+ * the same `mc:AlternateContent` (a PNG fallback of an EMF): those need no
+ * "cannot display" note, the twin is extracted as an ordinary image.
+ */
+function coveredRelIds(slideXml: string | undefined, targets: Map<string, string>): Set<string> {
+  const covered = new Set<string>()
+  if (!slideXml) return covered
+  const doc = new DOMParser().parseFromString(slideXml, 'application/xml')
+  if (doc.getElementsByTagName('parsererror').length > 0) return covered
+  for (const alt of Array.from(doc.getElementsByTagName('*')).filter(
+    (el) => localName(el) === 'AlternateContent',
+  )) {
+    const ids = Array.from(alt.getElementsByTagName('*'))
+      .map((el) => el.getAttributeNS(NS.r, 'embed') ?? el.getAttribute('r:embed') ?? '')
+      .filter(Boolean)
+    const displayable = ids.some((id) => {
+      const path = targets.get(id)
+      return !!path && !!mimeFromPath(path)
+    })
+    if (displayable) for (const id of ids) covered.add(id)
+  }
+  return covered
 }
 
 /** Only formats a browser can display inline; EMF/WMF/TIFF are skipped. */
@@ -326,14 +624,33 @@ export async function extractPptxSlideImages(
     if (doc.getElementsByTagName('parsererror').length > 0) continue
 
     const candidates: PptxSlideImage[] = []
-    for (const rel of Array.from(doc.getElementsByTagName('Relationship'))) {
-      const type = rel.getAttribute('Type') ?? ''
-      if (!type.endsWith('/image')) continue
+    const imageRels = Array.from(doc.getElementsByTagName('Relationship')).filter((rel) => {
       const target = rel.getAttribute('Target')
-      if (!target || /^https?:/i.test(target)) continue
-      const path = resolvePart(dirOf(name), target)
+      return (
+        (rel.getAttribute('Type') ?? '').endsWith('/image') &&
+        !!target &&
+        !/^https?:/i.test(target) &&
+        (rel.getAttribute('TargetMode') ?? '').toLowerCase() !== 'external'
+      )
+    })
+    const targets = new Map(
+      imageRels.map((rel) => [
+        rel.getAttribute('Id') ?? '',
+        resolvePart(dirOf(name), rel.getAttribute('Target')!),
+      ]),
+    )
+    const unsupported: string[] = []
+    let covered: Set<string> | undefined
+    for (const rel of imageRels) {
+      const id = rel.getAttribute('Id') ?? ''
+      const path = targets.get(id)!
       const mimeType = mimeFromPath(path)
-      if (!mimeType) continue
+      if (!mimeType) {
+        if (!UNDISPLAYABLE_IMAGE.test(path) || !zip.file(path)) continue
+        covered ??= coveredRelIds(await zip.file(name)?.async('text'), targets)
+        if (!covered.has(id)) unsupported.push(path.slice(path.lastIndexOf('.') + 1).toLowerCase())
+        continue
+      }
       const file = zip.file(path)
       if (!file) continue
       const bytes = await file.async('arraybuffer')
@@ -343,6 +660,27 @@ export async function extractPptxSlideImages(
 
     candidates.sort((a, b) => b.bytes.byteLength - a.bytes.byteLength)
     out.push(...candidates.slice(0, maxPerSlide))
+
+    // An EMF / WMF picture: kept as a figure the browser cannot show, so the
+    // slide says a picture is there. Slide 1 may use the deck's own thumbnail.
+    if (unsupported.length > 0) {
+      const format = unsupported[0]!.replace(/z$/, 'f')
+      const thumbnail =
+        slideNumber === 1 && candidates.length === 0
+          ? await zip.file('docProps/thumbnail.jpeg')?.async('arraybuffer')
+          : undefined
+      out.push(
+        thumbnail && thumbnail.byteLength > 0
+          ? {
+              slideNumber,
+              bytes: thumbnail,
+              mimeType: 'image/jpeg',
+              unsupportedFormat: format,
+              substitute: 'thumbnail',
+            }
+          : { slideNumber, bytes: new ArrayBuffer(0), mimeType: '', unsupportedFormat: format },
+      )
+    }
   }
 
   return out

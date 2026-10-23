@@ -1,11 +1,15 @@
 import { studyPlanEn } from './studyPlan.en'
 import { aiMockEn } from './aiMock.en'
 import { handwritingEn } from './handwriting.en'
+import { marketEn } from './market.en'
+import { marketQuestionEn } from './marketQuestion.en'
 
 export const en = {
   ...studyPlanEn,
   ...aiMockEn,
   ...handwritingEn,
+  ...marketEn,
+  ...marketQuestionEn,
   'common.save': 'Save',
   'common.cancel': 'Cancel',
   'common.delete': 'Delete',
@@ -1376,6 +1380,14 @@ export const en = {
   'documentDetail.deleteFailed': 'Delete failed',
   'documentDetail.back': 'Back',
   'documentDetail.subtitle': 'View parsed content, source references, and chunk preview.',
+  'documentDetail.vision.action': 'Read with AI (from the image)',
+  'documentDetail.vision.hint':
+    'Send the image of {count} page(s) read by local OCR to your configured AI model, which reads it again (handwriting and marks included). Check the result on the proofread page.',
+  'documentDetail.vision.stop': 'Stop reading',
+  'documentDetail.vision.done': '{count} page(s) read by the AI model',
+  'documentDetail.vision.none': 'The AI model could not read any page; the OCR text is kept',
+  'documentDetail.vision.failedPages': 'Not read (OCR text kept): page(s) {pages}',
+  'documentDetail.vision.failed': 'Reading with the AI model failed; the OCR text is kept',
   'documentDetail.tab.chunks': 'Chunks',
   'documentDetail.tab.overview': 'Overview',
   'documentDetail.tab.metadata': 'Metadata',
@@ -1993,6 +2005,7 @@ export const en = {
   'symbolGroup.chemistry': 'Chemistry',
   'symbolGroup.biology': 'Biology',
   'symbolGroup.medicine': 'Medicine',
+  'symbolGroup.economics': 'Economics',
   'symbolGroup.de': 'German letters',
   'symbolGroup.hu': 'Hungarian letters',
   'symbolGroup.operators': 'Operators',
@@ -2563,6 +2576,7 @@ export const en = {
   'subject.medicine': 'Medicine (clinical / dental)',
   'subject.computerScience': 'Computer Science',
   'subject.statistics': 'Statistics',
+  'subject.economics': 'Economics',
   'subject.other': 'Other',
   'subject.language': 'Foreign language',
   'project.targetLanguage': 'Language being learnt',
@@ -2718,6 +2732,14 @@ export const en = {
     'This image contains handwriting or marking, so the recognised text may be inaccurate. For answer checking and Q&A, consider a model that can read images.',
   'errors.layoutUncertain':
     '{count} passages contain fractions, tables, exponents or matrices whose layout could not be restored reliably. Check them against the original page.',
+  'errors.visionTranscribed':
+    'Page(s) {pages} were read by your AI model from the page image. Check them against the original on the proofread page.',
+  'errors.markedAnswersFound':
+    'Marked answers read for {count} multiple-choice questions (from the highlighted / circled option letters). Confirm them when you link this answer key.',
+  'errors.markedAnswersAmbiguous':
+    'The mark covers several options in question(s) {questions}; choose the answer by hand.',
+  'errors.noTextLayerOcr':
+    'Page(s) {pages} have no text layer, so their text was recognised from an image of the page. It may be inaccurate: check it against the original page, or read it again with a vision model.',
   'errors.undecodableCharacters':
     '{count} characters could not be decoded because this file\u2019s fonts have no Unicode mapping. They are kept as-is; re-export the file with embedded fonts or run OCR to recover them.',
   'errors.cryptoUnavailable': 'Web Crypto is unavailable; cannot store secrets securely',
@@ -2911,6 +2933,8 @@ export const en = {
 
   'tutor.visualSources': 'Figures from the source',
   'tutor.visualUnavailable': 'The original figure could not be displayed.',
+  'tutor.visualFormatUnsupported':
+    'This picture is in {format} format, which browsers cannot display.',
   'tutor.visualizations': 'Visualizations',
   'viz.ariaGraph': 'Graph of {expressions}',
   'viz.ariaInequality': 'Shaded region for {expressions}',
@@ -4230,6 +4254,15 @@ export const en = {
     'The number matches, but the unit "{given}" is wrong: converted, your answer is {value} {unit}, which is not the result. Check the unit (expected: {unit}).',
   'answerDims.valueWrongUnitRight': 'The unit is right, but the value is not.',
   'answerDims.valueWrong': 'The value is not right.',
+  'econAnswer.absoluteValue':
+    'This course reports the price elasticity of demand as an absolute value: your negative answer was read as its magnitude.',
+  'econAnswer.sign': 'The size of the number is right, but its sign is not.',
+  'econAnswer.fullAmount':
+    'Read as a full amount: the question states amounts in thousands (or millions) — write the unit with your answer.',
+  'econAnswer.decimalForPercent':
+    'Read as a fraction of 1 (0.1 = 10%); the answer is asked as a percentage.',
+  'econAnswer.percentForDecimal':
+    'Read as a percentage (10% = 0.1); the answer is asked as a decimal.',
   'answerDims.unitConverted': 'Your unit {given} was converted to {unit} for grading.',
   'answerDims.title': 'Value · unit · significant figures',
   'answerDims.row.value': 'Value',
@@ -4380,6 +4413,7 @@ export const en = {
   'proofread.risk.table': 'Table',
   'proofread.risk.subpart': 'Sub-part boundary?',
   'proofread.risk.number_mismatch': 'Number not in source',
+  'proofread.risk.unreadable': 'Unreadable or changed by hand?',
   'proofread.subparts': 'Sub-parts: {labels}',
   'proofread.noSubparts': 'No sub-parts recognised.',
   'proofread.splitAtCursor': 'New sub-part at cursor',

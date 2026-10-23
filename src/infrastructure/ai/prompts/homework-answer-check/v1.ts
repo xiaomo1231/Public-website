@@ -9,6 +9,12 @@ export interface HomeworkAnswerCheckInput {
   referenceKind: 'professor' | 'ai_solution'
   sourceText: string
   language: 'zh' | 'en'
+  /**
+   * Items of the professor's rubric box ("2 pts: Rightward shift of S"),
+   * read locally from the professor answer. Absent ⇒ the prompt is exactly
+   * as before.
+   */
+  markingScheme?: string[]
 }
 
 export function buildSystemPrompt(): string {
@@ -33,6 +39,15 @@ export function buildUserPrompt(input: HomeworkAnswerCheckInput): string {
       ? untrustedContentWrapper('QUESTION SOURCE PASSAGES', input.sourceText)
       : '',
     untrustedContentWrapper('REFERENCE ANSWER', input.referenceAnswer),
+    input.markingScheme && input.markingScheme.length > 0
+      ? [
+          "The professor's marking scheme for this question (points per item) is below. Check the student answer against EACH item: name the met items in matchedPoints and the unmet ones in missingPoints, each starting with its points.",
+          untrustedContentWrapper(
+            'PROFESSOR MARKING SCHEME',
+            input.markingScheme.map((item) => `- ${item}`).join('\n'),
+          ),
+        ].join('\n')
+      : '',
     untrustedContentWrapper('STUDENT ANSWER', input.studentAnswer),
     'Return JSON only.',
   ]

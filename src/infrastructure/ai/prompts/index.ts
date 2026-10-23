@@ -14,8 +14,8 @@ import * as TranslatorV2 from './translator/v2'
 import * as ContextualTutorV3 from './contextual-tutor/v3'
 import * as ProfessorProfileV1 from './professor-profile/v1'
 import * as MistakeAnalyzerV2 from './mistake-analyzer/v2'
-import * as QuizGeneratorV9 from './quiz-generator/v9'
-import * as VisualizationGeneratorV10 from './visualization-generator/v10'
+import * as QuizGeneratorV10 from './quiz-generator/v10'
+import * as VisualizationGeneratorV11 from './visualization-generator/v11'
 import * as HomeworkAnalyzerV2 from './homework-analyzer/v2'
 import * as HomeworkQuestionV5 from './homework-question/v5'
 import * as HomeworkQaV1 from './homework-qa/v1'
@@ -43,14 +43,16 @@ import * as InterviewScenarioV1 from './interview-scenario/v1'
 import * as InterviewPatientV1 from './interview-patient/v1'
 import * as InterviewSummaryCheckV1 from './interview-summary-check/v1'
 import * as OralExamV2 from './oral-exam/v2'
-import * as PracticeGenerateV3 from './practice-generate/v3'
+import * as PracticeGenerateV4 from './practice-generate/v4'
 import * as PracticeReviewV1 from './practice-review/v1'
-import * as MockPaperV1 from './mock-paper/v1'
+import * as MockPaperV3 from './mock-paper/v3'
 import * as GuidedStepsV1 from './guided-steps/v1'
 import * as QuestionStyleV2 from './question-style/v2'
 import * as QuestionTranslateV2 from './question-translate/v2'
 import * as StudyPlanSummaryV1 from './study-plan-summary/v1'
 import * as HandwritingTranscribeV1 from './handwriting-transcribe/v1'
+import * as EconGraphReadV1 from './econ-graph-read/v1'
+import * as PageTranscribeV1 from './page-transcribe/v1'
 
 export const PROMPT_VERSIONS = {
   documentAnalyzer: 'v3',
@@ -63,8 +65,8 @@ export const PROMPT_VERSIONS = {
   contextualTutor: 'v3',
   professorProfile: 'v1',
   mistakeAnalyzer: 'v2',
-  quizGenerator: 'v9',
-  visualizationGenerator: 'v10',
+  quizGenerator: 'v10',
+  visualizationGenerator: 'v11',
   homeworkAnalyzer: 'v2',
   homeworkQuestion: 'v5',
   homeworkQa: 'v1',
@@ -92,14 +94,16 @@ export const PROMPT_VERSIONS = {
   interviewPatient: 'v1',
   interviewSummaryCheck: 'v1',
   oralExam: 'v2',
-  practiceGenerate: 'v3',
+  practiceGenerate: 'v4',
   practiceReview: 'v1',
-  mockPaper: 'v1',
+  mockPaper: 'v3',
   guidedSteps: 'v1',
   questionStyle: 'v2',
   questionTranslate: 'v2',
   studyPlanSummary: 'v1',
   handwritingTranscribe: 'v1',
+  econGraphRead: 'v1',
+  pageTranscribe: 'v1',
 } as const
 
 export const prompts = {
@@ -113,8 +117,8 @@ export const prompts = {
   contextualTutor: ContextualTutorV3,
   professorProfile: ProfessorProfileV1,
   mistakeAnalyzer: MistakeAnalyzerV2,
-  quizGenerator: QuizGeneratorV9,
-  visualizationGenerator: VisualizationGeneratorV10,
+  quizGenerator: QuizGeneratorV10,
+  visualizationGenerator: VisualizationGeneratorV11,
   homeworkAnalyzer: HomeworkAnalyzerV2,
   homeworkQuestion: HomeworkQuestionV5,
   homeworkQa: HomeworkQaV1,
@@ -144,16 +148,19 @@ export const prompts = {
   interviewPatient: InterviewPatientV1,
   interviewSummaryCheck: InterviewSummaryCheckV1,
   oralExam: OralExamV2,
-  practiceGenerate: PracticeGenerateV3,
+  practiceGenerate: PracticeGenerateV4,
   practiceReview: PracticeReviewV1,
   /** AI 模拟卷: one question per request, then a batched review. */
-  mockPaper: MockPaperV1,
+  mockPaper: MockPaperV3,
   guidedSteps: GuidedStepsV1,
   questionStyle: QuestionStyleV2,
   questionTranslate: QuestionTranslateV2,
   studyPlanSummary: StudyPlanSummaryV1,
   /** 手写识别: transcribe a handwritten answer exactly (no corrections, `[?]` marks). */
   handwritingTranscribe: HandwritingTranscribeV1,
+  econGraphRead: EconGraphReadV1,
+  /** A photographed / scanned page read by the vision model (instead of local OCR). */
+  pageTranscribe: PageTranscribeV1,
 } as const
 
 export type { DocumentAnalyzerInput, DocumentAnalysisOutput } from './document-analyzer/v3'
@@ -171,7 +178,7 @@ export type {
   GeneratedQuizQuestion,
   QuizQuestionType,
 } from './quiz-generator/v9'
-export type { VisualizationInput, VisualizationOutput } from './visualization-generator/v10'
+export type { VisualizationInput, VisualizationOutput } from './visualization-generator/v11'
 export type { HomeworkAnalyzerInput, HomeworkAnalyzerOutput } from './homework-analyzer/v1'
 export type { HomeworkQuestionInput, HomeworkQuestionOutput } from './homework-question/v5'
 export type { HomeworkQaInput, HomeworkQaHistoryItem } from './homework-qa/v1'

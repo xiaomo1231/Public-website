@@ -1,3 +1,4 @@
+import { marketFeedback } from './marketFeedback'
 import { aiConcurrency, type AIService } from './aiService'
 import { hasPromptCorrection } from '@/entities/homework/proofread'
 import type { AppDatabase } from '@/infrastructure/db/database'
@@ -19,6 +20,7 @@ import { buildCandidateChunkLabel } from '@/entities/courseContent/topicDependen
 import { resolveMaterialType, type Document } from '@/entities/document/types'
 import { renderPdfPageImage } from '@/infrastructure/files/pdfExtractor'
 import { detectExamMinutes } from '@/entities/exam/paper'
+import { formatRubricItem, parseRubricItems } from '@/entities/exam/marks'
 import { answerSubparts, splitHomeworkSubparts } from '@/entities/homework/splitQuestion'
 import type { DocumentChunk } from '@/entities/chunk/types'
 import type { SourceReference } from '@/entities/courseAnalysis/types'
@@ -470,7 +472,17 @@ export class HomeworkService {
                 : 'homework.check.objectiveIncorrect',
           ),
           ...sigFig.notes,
-        ].join(' '),
+          // Graph parts (economics): what was right item by item, and the rule.
+          ...('market' in local ? (local.market ?? []) : []).flatMap((item) =>
+            item ? [marketFeedback(item)] : [],
+          ),
+        ]
+          .filter(Boolean)
+          .join(' '),
+        // Partial credit of graph parts: the share of items right.
+        ...('score' in local && local.score !== undefined && verdict === 'partial'
+          ? { similarityPercent: Math.round(local.score * 100) }
+          : {}),
         referenceKind: reference.kind,
         inputHash,
         language,
@@ -498,6 +510,10 @@ export class HomeworkService {
             referenceKind: reference.kind,
             sourceText: await this.promptSource(question),
             language,
+            // The professor's rubric box, when the key prints one ("2 pts: …").
+            ...(reference.kind === 'professor' && parseRubricItems(reference.text).length > 0
+              ? { markingScheme: parseRubricItems(reference.text).map(formatRubricItem) }
+              : {}),
           }),
         },
       ]

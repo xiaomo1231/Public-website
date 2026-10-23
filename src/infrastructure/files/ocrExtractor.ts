@@ -12,6 +12,7 @@
  *  - thrown exceptions (extractor level)
  *  - warnings + low confidence (result level)
  */
+import { illuminationNormalizedImage } from './ocrPreprocess'
 
 export interface OcrExtractionResult {
   text: string
@@ -187,66 +188,151 @@ interface Recognized {
  * confident. Explicit `languages` skips both rules. One worker is used and
  * always terminated.
  */
-export async function extractOcr(
-  blob: Blob,
-  opts: { languages?: string[]; preferChinese?: boolean } = {},
-): Promise<OcrExtractionResult> {
-  const first = opts.languages ?? [...(opts.preferChinese ? OCR_CHINESE : OCR_ENGLISH)]
-  const canRetry = !opts.languages && !opts.preferChinese
-  let worker: TesseractWorker | null = null
-  try {
-    const tesseract = (await import('tesseract.js')) as unknown as {
-      createWorker: (langs: string[], oem?: number, opts?: unknown) => Promise<TesseractWorker>
+export interface OcrOptions {
+  languages?: string[]
+  preferChinese?: boolean
+  /**
+   * A photographed page: when the first pass is not confident, read an
+   * illumination-normalised copy too (shadows divided out, see
+   * `ocrPreprocess.ts`) and keep the more confident result.
+   */
+  normalizeLighting?: boolean
+}
+
+/** Below this confidence a photo also gets the lighting-normalised pass. */
+const LIGHTING_RETRY_CONFIDENCE = 85
+
+type TesseractModule = {
+  createWorker: (langs: string[], oem?: number, opts?: unknown) => Promise<TesseractWorker>
+}
+
+/** One tesseract worker reused for several images; the language set can change. */
+class OcrEngine {
+  private worker: TesseractWorker | null = null
+  private langs = ''
+
+  constructor(private tesseract: TesseractModule) {}
+
+  async use(langs: readonly string[]): Promise<TesseractWorker> {
+    const key = langs.join('+')
+    if (this.worker && this.langs === key) return this.worker
+    if (this.worker && typeof this.worker.reinitialize === 'function') {
+      await this.worker.reinitialize([...langs], 1)
+    } else {
+      await this.worker?.terminate().catch(() => undefined)
+      this.worker = await this.tesseract.createWorker([...langs], 1, {})
     }
-    worker = await tesseract.createWorker(first, 1, {})
-    const read = async (chinese: boolean): Promise<Recognized> => {
-      // `blocks` gives per-word confidence, used to spot hand-writing.
-      const { data } = await worker!.recognize(blob, {}, { text: true, blocks: true })
-      const raw = (data.text ?? '').trim()
-      return {
-        text: chinese ? tidyCjkSpacing(raw) : raw,
-        confidence: typeof data.confidence === 'number' ? data.confidence : 0,
-        words: wordsOf(data.blocks),
-      }
-    }
-    let best = await read(first.includes('chi_sim'))
-    if (canRetry && looksLikeMisreadScript(best.text, best.confidence)) {
-      if (typeof worker.reinitialize === 'function') {
-        await worker.reinitialize([...OCR_CHINESE], 1)
-      } else {
-        await worker.terminate().catch(() => undefined)
-        worker = await tesseract.createWorker([...OCR_CHINESE], 1, {})
-      }
-      const chinese = await read(true)
-      if (chinese.text && chinese.confidence > best.confidence) best = chinese
-    }
-    const { text, confidence, words } = best
-    const warnings: string[] = []
-    if (confidence < 60) {
-      warnings.push(`Low OCR confidence: ${confidence.toFixed(1)}%`)
-    }
-    if (looksLikeMath(text)) {
-      warnings.push('Image appears to contain math symbols. Verify before relying on OCR text.')
-    }
-    const handwriting = looksLikeHandwritingNoise({
-      words,
-      confidence,
-      redInkRatio: await estimateRedInkRatio(blob),
-    })
-    return {
-      text,
-      confidence,
-      warnings,
-      language: detectLanguage(text),
-      ...(handwriting ? { handwriting } : {}),
-    }
-  } catch (err) {
-    throw new Error(`OCR failed: ${(err as Error).message}`)
-  } finally {
+    this.langs = key
+    return this.worker!
+  }
+
+  async close(): Promise<void> {
     try {
-      await worker?.terminate()
+      await this.worker?.terminate()
     } catch {
       /* ignore */
     }
+    this.worker = null
+  }
+}
+
+async function loadTesseract(): Promise<TesseractModule> {
+  return (await import('tesseract.js')) as unknown as TesseractModule
+}
+
+async function recognizeImage(
+  engine: OcrEngine,
+  blob: Blob,
+  opts: OcrOptions,
+): Promise<OcrExtractionResult> {
+  const first = opts.languages ?? [...(opts.preferChinese ? OCR_CHINESE : OCR_ENGLISH)]
+  const canRetry = !opts.languages && !opts.preferChinese
+  const read = async (image: Blob, langs: readonly string[]): Promise<Recognized> => {
+    const worker = await engine.use(langs)
+    // `blocks` gives per-word confidence, used to spot hand-writing.
+    const { data } = await worker.recognize(image, {}, { text: true, blocks: true })
+    const raw = (data.text ?? '').trim()
+    return {
+      text: langs.includes('chi_sim') ? tidyCjkSpacing(raw) : raw,
+      confidence: typeof data.confidence === 'number' ? data.confidence : 0,
+      words: wordsOf(data.blocks),
+    }
+  }
+  let langs: readonly string[] = first
+  let best = await read(blob, langs)
+  if (canRetry && looksLikeMisreadScript(best.text, best.confidence)) {
+    const chinese = await read(blob, OCR_CHINESE)
+    if (chinese.text && chinese.confidence > best.confidence) {
+      best = chinese
+      langs = OCR_CHINESE
+    }
+  }
+  if (opts.normalizeLighting && best.confidence < LIGHTING_RETRY_CONFIDENCE) {
+    const cleaned = await illuminationNormalizedImage(blob)
+    if (cleaned) {
+      const lit = await read(cleaned, langs)
+      if (lit.text && lit.confidence > best.confidence) best = lit
+    }
+  }
+  return finishResult(best, blob)
+}
+
+/**
+ * OCR several page images (one PDF's text-less pages) with a single worker.
+ * A page that fails yields `null` for that page only.
+ */
+export async function extractOcrPages(
+  blobs: readonly Blob[],
+  opts: OcrOptions = {},
+): Promise<Array<OcrExtractionResult | null>> {
+  if (blobs.length === 0) return []
+  const engine = new OcrEngine(await loadTesseract())
+  try {
+    const out: Array<OcrExtractionResult | null> = []
+    for (const blob of blobs) {
+      try {
+        out.push(await recognizeImage(engine, blob, opts))
+      } catch {
+        out.push(null)
+      }
+    }
+    return out
+  } finally {
+    await engine.close()
+  }
+}
+
+export async function extractOcr(blob: Blob, opts: OcrOptions = {}): Promise<OcrExtractionResult> {
+  let engine: OcrEngine | null = null
+  try {
+    engine = new OcrEngine(await loadTesseract())
+    return await recognizeImage(engine, blob, opts)
+  } catch (err) {
+    throw new Error(`OCR failed: ${(err as Error).message}`)
+  } finally {
+    await engine?.close()
+  }
+}
+
+async function finishResult(best: Recognized, blob: Blob): Promise<OcrExtractionResult> {
+  const { text, confidence, words } = best
+  const warnings: string[] = []
+  if (confidence < 60) {
+    warnings.push(`Low OCR confidence: ${confidence.toFixed(1)}%`)
+  }
+  if (looksLikeMath(text)) {
+    warnings.push('Image appears to contain math symbols. Verify before relying on OCR text.')
+  }
+  const handwriting = looksLikeHandwritingNoise({
+    words,
+    confidence,
+    redInkRatio: await estimateRedInkRatio(blob),
+  })
+  return {
+    text,
+    confidence,
+    warnings,
+    language: detectLanguage(text),
+    ...(handwriting ? { handwriting } : {}),
   }
 }

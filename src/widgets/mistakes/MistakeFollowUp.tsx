@@ -1,3 +1,5 @@
+import { MarketPartsAnswer } from '@/widgets/econ/MarketAnswerInput'
+import { hasMarketParts, onlyMarketParts } from '@/entities/econ/partAnswers'
 import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { BookOpen, CalendarClock, Loader2, RotateCcw, Shuffle } from 'lucide-react'
@@ -110,13 +112,19 @@ export function VariantRunner({
       <RichText text={questionText(variant)} format="markdown" className="space-y-2" />
       {!result && (
         <>
-          <Textarea
-            rows={3}
-            value={answer}
-            onChange={(event) => setAnswer(event.target.value)}
-            aria-label={t('followUp.answerLabel')}
-            placeholder={t('followUp.answerPlaceholder')}
-          />
+          {/* Graph parts (economics): answered on the diagram. */}
+          {hasMarketParts(variant.parts) && (
+            <MarketPartsAnswer parts={variant.parts} value={answer} onChange={setAnswer} />
+          )}
+          {!onlyMarketParts(variant.parts) && (
+            <Textarea
+              rows={3}
+              value={answer}
+              onChange={(event) => setAnswer(event.target.value)}
+              aria-label={t('followUp.answerLabel')}
+              placeholder={t('followUp.answerPlaceholder')}
+            />
+          )}
           <div className="flex flex-wrap items-center gap-2">
             <Button size="sm" onClick={() => void check()} disabled={busy || !answer.trim()}>
               {busy && <Loader2 className="h-4 w-4 animate-spin" />}

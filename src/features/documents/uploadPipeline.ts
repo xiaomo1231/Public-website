@@ -159,6 +159,13 @@ export async function uploadDocument(
     onProgress: (p) => onStage?.({ phase: 'processing', progress: p.progress, message: p.stage }),
   })
 
+  // A photographed exam / homework page: read it with the vision model when
+  // the settings allow (local OCR text stays when that is not possible).
+  if (type === 'image') {
+    const { autoTranscribeAfterUpload } = await import('@/services/pageTranscriptionService')
+    await autoTranscribeAfterUpload(document.id)
+  }
+
   return document
 }
 

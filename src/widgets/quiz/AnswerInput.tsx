@@ -11,6 +11,8 @@ import { OrderingInput } from './OrderingInput'
 import { FillBlankInput, MatchingInput, MultipleSelectInput } from './ExamFormatInputs'
 import { ArticleGenderInput, ParadigmTableInput } from './LanguageDrillInputs'
 import { ForceListInput, NomenclatureInput, VectorInput } from './ScienceAnswerInputs'
+import { MarketAnswerInput } from '@/widgets/econ/MarketAnswerInput'
+import { isMarketQuestionType } from '@/entities/econ/graphAnswerText'
 import {
   gradedOptionStatusKey,
   optionKeyClass,
@@ -103,6 +105,17 @@ export function AnswerInput({
         onChange={onChange}
         disabled={disabled}
         {...(subject ? { subject } : {})}
+        {...(onSubmit ? { onSubmit } : {})}
+      />
+    )
+  }
+  if (question.market && isMarketQuestionType(question.type)) {
+    return (
+      <MarketAnswerInput
+        question={question.market}
+        value={value}
+        onChange={onChange}
+        disabled={disabled}
         {...(onSubmit ? { onSubmit } : {})}
       />
     )

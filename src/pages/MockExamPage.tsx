@@ -34,6 +34,9 @@ import { useGenerationRun } from '@/shared/lib/useGenerationRun'
 import { friendlyAIError } from '@/shared/lib/aiErrors'
 import { useTranslation } from '@/i18n'
 import { formatRemaining } from '@/widgets/exam/time'
+import { QuestionMarketFigure } from '@/widgets/econ/QuestionMarketFigure'
+import { MarketPartsAnswer } from '@/widgets/econ/MarketAnswerInput'
+import { hasMarketParts, onlyMarketParts, sharedFigureLabel } from '@/entities/econ/partAnswers'
 
 /**
  * 模拟考试 on a past paper: the original questions in paper order, a timer, no
@@ -342,7 +345,26 @@ export function MockExamPage(): JSX.Element {
                     format="markdown"
                     className="space-y-2"
                   />
+                  {/* A figure group's shared diagram is printed once, before its first question. */}
+                  {sharedFigureLabel(state.questions, index) ? (
+                    <p className="text-xs text-muted-foreground" data-same-figure>
+                      {t('marketQ.figure.sameAsAbove', {
+                        label: sharedFigureLabel(state.questions, index)!,
+                      })}
+                    </p>
+                  ) : (
+                    <QuestionMarketFigure question={view.question} />
+                  )}
+                  {currentMode !== 'paper' && hasMarketParts(view.question.practice?.parts) && (
+                    <MarketPartsAnswer
+                      parts={view.question.practice!.parts}
+                      value={attempt.answers[view.question.id] ?? ''}
+                      onChange={(text) => saveAnswer(view.question.id, text)}
+                      showFigure={false}
+                    />
+                  )}
                   <ExamAnswerInput
+                    hideText={onlyMarketParts(view.question.practice?.parts)}
                     mode={currentMode}
                     setId={set.id}
                     questionId={view.question.id}

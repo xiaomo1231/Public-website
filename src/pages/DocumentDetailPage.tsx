@@ -46,6 +46,7 @@ import { ProgressiveList } from '@/shared/ui/ProgressiveList'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/shared/ui/Tabs'
 import { TruncatedText } from '@/shared/ui/TruncatedText'
 import { ChunkPreview } from '@/widgets/documents/ChunkPreview'
+import { VisionTranscribeButton } from '@/widgets/documents/VisionTranscribeButton'
 import { ProjectFlowNav } from '@/widgets/project/ProjectFlowNav'
 import { formatDate, formatDateTime, relativeTime } from '@/shared/lib/utils'
 import { formatBytes } from '@/shared/lib/format'
@@ -279,6 +280,13 @@ export function DocumentDetailPage(): JSX.Element {
                 ))}
               </select>
             </label>
+            {document.status === 'ready' && (
+              <VisionTranscribeButton
+                documentId={document.id}
+                refreshKey={document.processedAt}
+                onDone={() => void refresh()}
+              />
+            )}
             <Button
               variant="destructive"
               onClick={() => void requestDelete()}

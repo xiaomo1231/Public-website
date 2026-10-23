@@ -9,7 +9,12 @@ import type { DocumentChunk, NewChunkInput } from '@/entities/chunk/types'
 import type { VisualSource } from '@/entities/visualSource/types'
 import { getDb, type AppDatabase } from '@/infrastructure/db/database'
 import { VisualSourceRepository } from '@/entities/visualSource/repository'
-import { fallbackVisualCaption, slideVisualCaption } from '@/entities/visualSource/types'
+import {
+  fallbackVisualCaption,
+  slideVisualCaption,
+  textlessPageCaption,
+  unsupportedSlideVisualCaption,
+} from '@/entities/visualSource/types'
 import {
   classifyVisualType,
   looksLikeUnreliableVisualText,
@@ -17,6 +22,7 @@ import {
 import {
   extractPdf,
   openPdfPageRenderer,
+  type ExtractedPage as ExtractedPdfPage,
   type RenderedPageImage,
 } from '@/infrastructure/files/pdfExtractor'
 import { extractDocx } from '@/infrastructure/files/docxExtractor'
@@ -25,7 +31,7 @@ import {
   extractPptxSlideImages,
   type PptxSlideImage,
 } from '@/infrastructure/files/pptxExtractor'
-import { extractOcr, hasCjk } from '@/infrastructure/files/ocrExtractor'
+import { extractOcr, extractOcrPages, hasCjk } from '@/infrastructure/files/ocrExtractor'
 import {
   chunksFromDocx,
   chunksFromOcr,
@@ -108,6 +114,19 @@ function sessionFromPageRenderer(render: PageImageRenderer): PageImageRenderSess
 /** A page whose extracted text is shorter than this is treated as figure-dominant. */
 const FIGURE_PAGE_MAX_CHARS = 40
 
+/**
+ * A PDF page with fewer extractable characters than this has no usable text
+ * layer (a scan, or glyphs drawn as vector paths): it is rendered and read
+ * with OCR instead.
+ */
+const TEXTLESS_PAGE_MAX_CHARS = 15
+
+/** OCR of several page images; injected so tests can supply a fake. */
+export type PageOcr = (
+  blobs: readonly Blob[],
+  opts: { preferChinese?: boolean },
+) => Promise<Array<{ text: string; confidence: number } | null>>
+
 /** Sentinel: the document vanished before its results were committed. */
 class DocumentDeletedDuringProcessing extends AppError {
   constructor() {
@@ -124,6 +143,7 @@ export class ProcessingService {
   private visuals: VisualSourceRepository
   private openPageImages: PageImageRenderSessionOpener
   private structure: CourseStructureService
+  private ocrPages: PageOcr
 
   constructor(deps: {
     documents: DocumentRepository
@@ -134,8 +154,10 @@ export class ProcessingService {
     renderPageImage?: PageImageRenderer
     openPageImages?: PageImageRenderSessionOpener
     structure?: CourseStructureService
+    ocrPages?: PageOcr
     db?: AppDatabase
   }) {
+    this.ocrPages = deps.ocrPages ?? ((blobs, opts) => extractOcrPages(blobs, opts))
     this.db = deps.db ?? getDb()
     this.documents = deps.documents
     this.chunks = deps.chunks
@@ -243,7 +265,10 @@ export class ProcessingService {
         warnings.push(t('errors.ocrLowConfidence', { value: `${extraction.confidence}%` }))
       if (extraction.handwriting) warnings.push(t('errors.ocrHandwriting'))
       // Fractions / tables / exponents kept as raw text: suggest checking the page.
-      const uncertainLayout = newChunks.filter((chunk) => needsVisualProofread(chunk)).length
+      // (OCR pages are reported once, as pages without a text layer.)
+      const uncertainLayout = newChunks.filter(
+        (chunk) => chunk.contentType !== 'ocr' && needsVisualProofread(chunk),
+      ).length
       if (uncertainLayout > 0)
         warnings.push(t('errors.layoutUncertain', { count: uncertainLayout }))
       if (report.suspicious) {
@@ -301,7 +326,12 @@ export class ProcessingService {
             textLength: extraction.textLength,
             chunkCount: newChunks.length,
             processedAt: Date.now(),
-            metadata: extraction.metadata,
+            // Re-processing replaces any vision-model reading with local text.
+            metadata: {
+              ...extraction.metadata,
+              transcribedPages: undefined,
+              transcribedModel: undefined,
+            },
             ...(syllabus ? { syllabus } : {}),
           })
           await this.jobs.setStage(jobId, 'done', 100)
@@ -367,11 +397,24 @@ export class ProcessingService {
     switch (document.type) {
       case 'pdf': {
         const result = await extractPdf(blob)
+        const ocr = await this.ocrTextlessPages(document, stored, result.pages)
+        const warnings = result.warnings.slice()
+        if (ocr.pages.length > 0)
+          warnings.push(t('errors.noTextLayerOcr', { pages: ocr.pages.join(', ') }))
+        const marked = result.pages.flatMap((page) => page.markedOptions ?? [])
+        const ambiguous = result.pages.flatMap((page) => page.ambiguousMarks ?? [])
+        if (marked.length > 0)
+          warnings.push(t('errors.markedAnswersFound', { count: marked.length }))
+        if (ambiguous.length > 0)
+          warnings.push(t('errors.markedAnswersAmbiguous', { questions: ambiguous.join(', ') }))
+        const textLength = result.pages.reduce((sum, page) => sum + page.text.length, 0)
         return {
-          textLength: result.textLength,
+          textLength,
           metadata: result.metadata,
-          warnings: result.warnings,
+          warnings,
           raw: { pages: result.pages },
+          ...(ocr.images.size > 0 ? { ocrImages: ocr.images } : {}),
+          ...(ocr.lowConfidence ? { lowConfidence: true, confidence: ocr.confidence } : {}),
         }
       }
       case 'docx': {
@@ -399,6 +442,9 @@ export class ProcessingService {
       case 'image': {
         const result = await extractOcr(blob, {
           preferChinese: await this.prefersChineseOcr(document),
+          // Photos of pages: shadows are divided out for a second pass when
+          // the first is not confident (the more confident one is kept).
+          normalizeLighting: true,
         })
         return {
           textLength: result.text.length,
@@ -415,6 +461,90 @@ export class ProcessingService {
         throw new ValidationError(t('errors.unsupportedType', { type: exhaustive as string }))
       }
     }
+  }
+
+  /**
+   * Pages without a usable text layer (scans, or glyphs drawn as vector
+   * paths — some exam PDFs have no text at all) are rendered and read with
+   * local OCR. The page text is replaced by the OCR text, the page is marked
+   * (`ocr`), and the rendering is kept to be stored as the page's original
+   * picture. Without a canvas (tests, old browsers) nothing changes.
+   */
+  private async ocrTextlessPages(
+    document: Document,
+    stored: { bytes: ArrayBuffer; mimeType: string },
+    pages: ExtractedPdfPage[],
+  ): Promise<{
+    pages: number[]
+    images: Map<number, RenderedPageImage>
+    lowConfidence: boolean
+    confidence: number
+  }> {
+    const empty = { pages: [], images: new Map(), lowConfidence: false, confidence: 0 }
+    const textless = pages.filter(
+      (page) => page.text.replace(/\s/g, '').length < TEXTLESS_PAGE_MAX_CHARS,
+    )
+    if (textless.length === 0) return empty
+    const images = new Map<number, RenderedPageImage>()
+    let session: PageImageRenderSession | null = null
+    try {
+      session = await this.openPageImages({
+        documentId: document.id,
+        projectId: document.projectId,
+        type: document.type,
+        bytes: stored.bytes,
+        mimeType: stored.mimeType,
+      })
+      if (!session) return empty
+      for (const page of textless) {
+        const rendered = await session.render(page.pageNumber)
+        if (rendered) images.set(page.pageNumber, rendered)
+      }
+    } catch (err) {
+      logger.warn('Rendering text-less pages failed', {
+        id: document.id,
+        error: (err as Error)?.message,
+      })
+    } finally {
+      await session?.close().catch(() => undefined)
+    }
+    if (images.size === 0) return empty
+    const order = [...images.keys()]
+    let results: Array<{ text: string; confidence: number } | null> = []
+    try {
+      results = await this.ocrPages(
+        order.map((n) => new Blob([images.get(n)!.bytes], { type: images.get(n)!.mimeType })),
+        { preferChinese: await this.prefersChineseOcr(document) },
+      )
+    } catch (err) {
+      logger.warn('OCR of text-less pages failed', {
+        id: document.id,
+        error: (err as Error)?.message,
+      })
+    }
+    const done: number[] = []
+    let confidenceSum = 0
+    order.forEach((pageNumber, index) => {
+      const result = results[index]
+      const page = pages.find((p) => p.pageNumber === pageNumber)
+      if (!page || !result || !result.text.trim()) return
+      page.text = result.text.trim()
+      page.headings = []
+      page.tables = []
+      delete page.lineFlags
+      page.hasContent = true
+      page.ocr = { confidence: result.confidence }
+      done.push(pageNumber)
+      confidenceSum += result.confidence
+    })
+    const confidence = done.length > 0 ? Math.round(confidenceSum / done.length) : 0
+    // A page keeps its rendering when it was read, or when it is a picture
+    // page anyway; a blank page keeps nothing.
+    for (const pageNumber of order) {
+      const page = pages.find((p) => p.pageNumber === pageNumber)
+      if (!page?.ocr && !(page?.imageCount && page.imageCount > 0)) images.delete(pageNumber)
+    }
+    return { pages: done, images, lowConfidence: done.length > 0 && confidence < 60, confidence }
   }
 
   /**
@@ -489,6 +619,32 @@ export class ProcessingService {
 
     try {
       for (const page of pages) {
+        // A text-less page read with OCR keeps the rendering it was read from:
+        // the proofread page and the vision model compare against it.
+        const ocrImage = extraction.ocrImages?.get(page.pageNumber)
+        if (ocrImage) {
+          const pageChunks = chunksByPage.get(page.pageNumber) ?? []
+          const read = !!page.ocr
+          result.push({
+            source: {
+              id: crypto.randomUUID(),
+              projectId: document.projectId,
+              documentId: document.id,
+              pageNumber: page.pageNumber,
+              type: read ? 'screenshot' : classifyVisualType('', true),
+              caption: read
+                ? textlessPageCaption(page.pageNumber)
+                : fallbackVisualCaption(page.pageNumber),
+              sourceChunkIds: pageChunks.map((c) => c.id),
+              imageMimeType: ocrImage.mimeType,
+              ...(ocrImage.width > 0 ? { width: ocrImage.width } : {}),
+              ...(ocrImage.height > 0 ? { height: ocrImage.height } : {}),
+              createdAt: Date.now(),
+            },
+            image: ocrImage,
+          })
+          continue
+        }
         if (!page.imageCount || page.imageCount <= 0) continue
         const pageChunks = chunksByPage.get(page.pageNumber) ?? []
         const pageText = pageChunks.map((c) => c.text).join('\n')
@@ -577,21 +733,35 @@ export class ProcessingService {
     const result: PreparedVisualSource[] = []
     for (const image of images) {
       const slideChunks = chunksBySlide.get(image.slideNumber) ?? []
+      const displayable = image.bytes.byteLength > 0 && image.mimeType.length > 0
       const source: VisualSource = {
         id: crypto.randomUUID(),
         projectId: document.projectId,
         documentId: document.id,
         pageNumber: image.slideNumber,
         type: 'illustration',
-        caption: slideVisualCaption(image.slideNumber),
+        caption: image.unsupportedFormat
+          ? unsupportedSlideVisualCaption(
+              image.slideNumber,
+              image.unsupportedFormat,
+              image.substitute === 'thumbnail',
+            )
+          : slideVisualCaption(image.slideNumber),
         sourceChunkIds: slideChunks.map((chunk) => chunk.id),
-        imageMimeType: image.mimeType,
+        imageMimeType: displayable ? image.mimeType : '',
+        ...(image.unsupportedFormat ? { unsupportedFormat: image.unsupportedFormat } : {}),
         createdAt: Date.now(),
       }
-      result.push({
-        source,
-        image: { bytes: image.bytes, mimeType: image.mimeType, width: 0, height: 0 },
-      })
+      // An EMF / WMF picture without a displayable fallback keeps only its
+      // provenance: the figure says the format cannot be shown.
+      result.push(
+        displayable
+          ? {
+              source,
+              image: { bytes: image.bytes, mimeType: image.mimeType, width: 0, height: 0 },
+            }
+          : { source },
+      )
     }
     return result
   }
@@ -639,6 +809,10 @@ interface ExtractionOutput {
       headings: Array<{ text: string }>
       /** Image-painting operators on the page; 0/absent means text-only. */
       imageCount?: number
+      /** The page had no text layer; `text` is OCR of its rendering. */
+      ocr?: { confidence: number }
+      /** Options marked over their letter (an MC answer key). */
+      markedOptions?: ExtractedPdfPage['markedOptions']
     }>
     blocks?: Array<{
       type: 'heading' | 'paragraph' | 'table' | 'list'
@@ -659,6 +833,8 @@ interface ExtractionOutput {
   confidence?: number
   /** An image OCR result that looks hand-written or marked (see ocrExtractor). */
   handwriting?: boolean
+  /** Renderings of text-less PDF pages that were read with OCR, by page. */
+  ocrImages?: Map<number, RenderedPageImage>
 }
 
 type NewChunk = NewChunkInput

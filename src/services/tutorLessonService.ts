@@ -14,6 +14,7 @@ import {
   looksLikeAlgorithmText,
   looksLikeBiochemistryText,
   looksLikeMorphologyText,
+  looksLikeMarketText,
   looksLikePharmacokineticsText,
   looksLikePhysiologyText,
   looksLikeBiologyFigureText,
@@ -36,6 +37,7 @@ const FORMULA_SUBJECTS = new Set<Subject>([
   'calculus',
   'cs',
   'medicine',
+  'economics',
 ])
 import type { TutorVisualization } from '@/entities/tutorVisualization/types'
 import { VisualSourceRepository } from '@/entities/visualSource/repository'
@@ -530,6 +532,7 @@ export class TutorLessonService {
       (science.biochemistry && looksLikeBiochemistryText(content)) ||
       (science.pharmacokinetics && looksLikePharmacokineticsText(content)) ||
       (science.morphology && looksLikeMorphologyText(content)) ||
+      (science.market && looksLikeMarketText(content)) ||
       // Science lessons are built on formulas: any stated relation is worth
       // offering to the interactive formula explorer.
       (subject !== undefined && FORMULA_SUBJECTS.has(subject) && looksLikeFormulaText(content))
@@ -595,6 +598,7 @@ export class TutorLessonService {
           type: visual.type,
           caption: visual.caption,
           hasImage: visual.imageMimeType.length > 0,
+          ...(visual.unsupportedFormat ? { unsupportedFormat: visual.unsupportedFormat } : {}),
         })
       }
     }

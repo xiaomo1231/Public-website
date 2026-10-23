@@ -105,6 +105,12 @@ export interface FigureFamilies {
   pharmacokinetics: boolean
   /** Dental charts, timelines, neural pathways and anatomy tables. */
   morphology: boolean
+  /**
+   * Supply-and-demand market diagrams (economics). Only the flag: the
+   * `market_2d` rules are added by the visualization prompt that draws them;
+   * v10's own prompt text does not read it.
+   */
+  market: boolean
 }
 
 export function scienceFiguresFor(subject: Subject | undefined): FigureFamilies {
@@ -117,7 +123,7 @@ export function scienceFiguresFor(subject: Subject | undefined): FigureFamilies 
     tests: is('stats', 'biology', 'medicine'),
     physics: is('physics'),
     calculus: is('calculus'),
-    regression: is('stats', 'biology', 'chemistry', 'physics', 'medicine'),
+    regression: is('stats', 'biology', 'chemistry', 'physics', 'medicine', 'economics'),
     kinetics: is('chemistry'),
     enzyme: is('biology', 'chemistry', 'medicine'),
     population: is('biology'),
@@ -126,6 +132,7 @@ export function scienceFiguresFor(subject: Subject | undefined): FigureFamilies 
     biochemistry: is('medicine', 'biology', 'chemistry'),
     pharmacokinetics: is('medicine'),
     morphology: is('medicine'),
+    market: is('economics'),
   }
 }
 

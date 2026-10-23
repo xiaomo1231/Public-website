@@ -37,7 +37,7 @@ import type {
   QuizGenerationOutput,
   GeneratedQuizQuestion as RawGeneratedQuizQuestion,
   QuizSystemPromptOptions,
-} from '@/infrastructure/ai/prompts/quiz-generator/v9'
+} from '@/infrastructure/ai/prompts/quiz-generator/v10'
 import {
   genderAnswerText,
   paradigmAnswerText,
@@ -79,7 +79,7 @@ import type { SourceReference } from '@/entities/courseAnalysis/types'
 import { logger } from '@/infrastructure/logger/logger'
 import { AppError } from '@/infrastructure/errors/AppError'
 import { t } from '@/i18n'
-import { loadProjectSubjectContext } from './projectSubject'
+import { loadProjectSubject, loadProjectSubjectContext } from './projectSubject'
 import { ShortAnswerGrader, tooShortEvaluation } from './shortAnswerGrader'
 import { OralExamService } from './oralExamService'
 import { checkBlanksWithAi } from './fillBlankChecker'
@@ -104,7 +104,16 @@ import {
 } from '@/infrastructure/chemistry/nomenclature'
 import { formatForces, isForceType, type ForceSpec } from '@/entities/question/forceList'
 import type { SigFigBasis } from '@/entities/question/answerDimensions'
-import type { ProfessorConvention } from '@/infrastructure/ai/prompts/quiz-generator/v9'
+import type { ProfessorConvention } from '@/infrastructure/ai/prompts/quiz-generator/v10'
+import type { MarketQuestion } from '@/entities/econ/graphQuestion'
+import { isMarketQuestionType } from '@/entities/econ/graphAnswerText'
+import { createRng } from '@/entities/homework/practice/random'
+import {
+  familiesForTopic,
+  generateMarketQuestion,
+  type MarketLanguage,
+} from '@/entities/econ/graphGenerator'
+import { verifyMarketCheck } from '@/entities/econ/graphVerify'
 import {
   DEFAULT_QUESTION_LANGUAGE,
   examModeKey,
@@ -242,7 +251,10 @@ export function quizLanguage(
 }
 
 /** A generated question after validation: language drills carry their checked data. */
-export type GeneratedQuizQuestion = Omit<RawGeneratedQuizQuestion, 'sigFigs' | 'forces'> & {
+export type GeneratedQuizQuestion = Omit<
+  RawGeneratedQuizQuestion,
+  'sigFigs' | 'forces' | 'market' | 'target' | 'draw'
+> & {
   gender?: GenderNoun
   paradigm?: ParadigmTable
   sigFigs?: number
@@ -250,6 +262,13 @@ export type GeneratedQuizQuestion = Omit<RawGeneratedQuizQuestion, 'sigFigs' | '
   vector?: VectorSpec
   nomenclature?: NomenclatureSpec
   forces?: ForceSpec[]
+  /** Economics graph questions: the checked market and what is asked. */
+  market?: MarketQuestion
+}
+
+/** The language a locally built graph question is written in. */
+function marketLanguage(language: string | undefined): MarketLanguage {
+  return !language || language.startsWith('zh') || language === 'exam:zh' ? 'zh' : 'en'
 }
 
 /** A formula reduced for a "does the prompt show it" check. */
@@ -267,6 +286,9 @@ const SUBJECT_TYPES: QuestionType[] = [
   'vector',
   'nomenclature',
   'force_list',
+  'shift_id',
+  'area_read',
+  'draw_diagram',
 ]
 
 /**
@@ -848,6 +870,7 @@ export class QuizService {
         ...(question.vector ? { vector: question.vector } : {}),
         ...(question.nomenclature ? { nomenclature: question.nomenclature } : {}),
         ...(question.forces ? { forces: question.forces } : {}),
+        ...(question.market ? { market: question.market } : {}),
         ...(question.rubric?.length
           ? {
               rubric: question.rubric.map((text, index) => ({ id: `p${index + 1}`, text })),
@@ -1118,6 +1141,48 @@ export class QuizService {
     const types = [...allowedTypes].sort()
     let pending = [...plan]
     let lastError: unknown = null
+
+    // Economics graph questions are built locally when the topic names a
+    // scenario (tax, ceiling, shifts …): the market, the template stem and
+    // every answer come from the engine — no AI request, nothing to trust.
+    // A graph slot whose topic names none goes to the AI (quiz-generator v10).
+    const local: Array<{ question: GeneratedQuizQuestion; entry: PlanEntry }> = []
+    for (const entry of pending) {
+      if (!isMarketQuestionType(entry.type)) continue
+      if (!control.shouldContinue()) return { paused: true, pending, lastError }
+      const group = groups[entry.group ?? 0]
+      const families = familiesForTopic(
+        [context.topicName, ...(group?.knowledgePoints ?? [])].join(' '),
+      )
+      if (!families) continue
+      const built = generateMarketQuestion({
+        kind: entry.type,
+        families,
+        rng: createRng(`${context.topicName}:${entry.slot}:${asked.length}:${Math.random()}`),
+        language: marketLanguage(context.language),
+      })
+      local.push({
+        entry,
+        question: {
+          prompt: built.stem,
+          type: entry.type,
+          correctAnswer: built.answer,
+          solution: built.solution,
+          knowledgePoint: group?.knowledgePoints[0] ?? '',
+          difficulty: entry.difficulty,
+          hints: [],
+          market: built.question,
+        },
+      })
+    }
+    if (local.length > 0) {
+      const done = new Set(local.map((item) => item.entry))
+      pending = pending.filter((entry) => !done.has(entry))
+      asked.push(...local.map((item) => item.question.prompt))
+      await onBatch(local, pending)
+    }
+    if (pending.length === 0) return { paused: false, pending, lastError }
+
     // Top-up rounds share the passages out like the first round did, instead
     // of sending every passage for a question or two.
     let shares = 0
@@ -1408,7 +1473,8 @@ export class QuizService {
         type === 'paradigm_table' ||
         type === 'vector' ||
         type === 'nomenclature' ||
-        type === 'force_list'
+        type === 'force_list' ||
+        isMarketQuestionType(type)
       let rawAnswer = typeof q.correctAnswer === 'string' ? q.correctAnswer.trim() : ''
       // True/false answers arrive as "正确", "×", JSON booleans…; the grader
       // compares "true"/"false", so anything unreadable is dropped.
@@ -1525,6 +1591,38 @@ export class QuizService {
         })
         if (forces.length === 0 || forces.length > 8 || forces.length !== raw.length) continue
         correctAnswer = formatForces(forces)
+      }
+      // Economics graph question: the market must parse and solve, what it
+      // asks must apply, and the answer is the engine's (the model's stated
+      // answer is checked and replaced when it disagrees).
+      let market: MarketQuestion | undefined
+      let marketSolution: string | undefined
+      if (isMarketQuestionType(type)) {
+        const verified = verifyMarketCheck(
+          {
+            prompt: q.prompt,
+            answer: rawAnswer,
+            solution: typeof q.solution === 'string' ? q.solution : '',
+          },
+          {
+            kind: type,
+            market: (raw as Partial<RawGeneratedQuizQuestion>).market,
+            target: (raw as Partial<RawGeneratedQuizQuestion>).target,
+            draw: (raw as Partial<RawGeneratedQuizQuestion>).draw,
+          },
+          marketLanguage(/[一-鿿]/.test(q.prompt) ? 'zh' : 'en'),
+        )
+        if (!verified.ok) {
+          logger.debug('Dropped a graph question the market engine rejects', {
+            reason: verified.reason,
+          })
+          continue
+        }
+        if (verified.corrected)
+          logger.debug('Corrected a graph question answer to the engine value')
+        market = verified.question
+        correctAnswer = verified.answer
+        marketSolution = verified.solution
       }
       // A short answer is scored by its points, so it needs 2–6 distinct
       // ones; with fewer it cannot be graded fairly and is dropped.
@@ -1665,7 +1763,8 @@ export class QuizService {
         ...(blanks ? { blanks } : {}),
         ...(gender ? { gender } : {}),
         ...(paradigm ? { paradigm } : {}),
-        solution: typeof q.solution === 'string' ? q.solution : '',
+        ...(market ? { market } : {}),
+        solution: marketSolution ?? (typeof q.solution === 'string' ? q.solution : ''),
         // Empty when the model gave none: the caller resolves it from the
         // question's group / topic, with 'General' only as the last resort.
         knowledgePoint: typeof q.knowledgePoint === 'string' ? q.knowledgePoint.trim() : '',
@@ -1779,8 +1878,15 @@ export class QuizService {
             userAnswer,
             question.type === 'fill_blank' || question.type === 'paradigm_table'
               ? { targetLanguage: await projectTargetLanguage(quiz.projectId, this.db) }
-              : question.type === 'numeric' && question.sigFigs
-                ? { sigFigPolicy: await projectSigFigPolicy(quiz.projectId, this.db) }
+              : question.type === 'numeric'
+                ? {
+                    ...(question.sigFigs
+                      ? { sigFigPolicy: await projectSigFigPolicy(quiz.projectId, this.db) }
+                      : {}),
+                    ...(question.unit
+                      ? {}
+                      : { subject: await loadProjectSubject(quiz.projectId, this.db) }),
+                  }
                 : {},
           )
     // Blanks that did not match locally may be exact synonyms: the AI says
@@ -1799,7 +1905,13 @@ export class QuizService {
         opts.signal ? { signal: opts.signal } : {},
       )
     }
-    if (evaluation.isCorrect === null && opts.aiFallback && question.type !== 'short_answer') {
+    if (
+      evaluation.isCorrect === null &&
+      opts.aiFallback &&
+      question.type !== 'short_answer' &&
+      // A graph answer the engine cannot read is not guessed by the AI.
+      !isMarketQuestionType(question.type)
+    ) {
       evaluation = await this.evaluateWithAI(question, userAnswer, evaluation, opts.signal)
     }
 

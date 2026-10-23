@@ -530,9 +530,11 @@ export class PracticeSetService {
       {
         role: 'system',
         content: prompts.subjectProfile.withSubject(
-          prompts.practiceGenerate.buildSystemPrompt(
-            practiceSigFigs(context) ? { sigFigs: true } : {},
-          ),
+          prompts.practiceGenerate.buildSystemPrompt({
+            ...(practiceSigFigs(context) ? { sigFigs: true } : {}),
+            // Economics: supply-and-demand diagram questions the app solves.
+            ...(context.subject?.subject === 'economics' ? { economics: true } : {}),
+          }),
           context.subject,
         ),
       },
@@ -590,7 +592,9 @@ export class PracticeSetService {
       let error = ''
       for (const [index, raw] of question.parts.entries()) {
         const requirement = slot.mode === 'full' ? slot.parts[index] : undefined
-        const verified = verifyAiPart(raw, requirement, context.language)
+        const verified = verifyAiPart(raw, requirement, context.language, {
+          economics: context.subject?.subject === 'economics',
+        })
         if (!verified.ok) {
           error = verified.reason
           break

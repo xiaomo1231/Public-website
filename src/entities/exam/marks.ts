@@ -79,12 +79,85 @@ export function parseQuestionMarks(prompt: string): QuestionMarks {
 }
 
 /**
+ * One item of a professor's rubric box ("2 pts: Rightward shift of S",
+ * "3 marks – explains the direction of change", "2分：画出新均衡").
+ */
+export interface RubricItem {
+  points: number
+  /** The item's wording, verbatim (continuation lines joined with a space). */
+  text: string
+  /** A sub-heading printed above the item inside the box ("Graph"). */
+  group?: string
+}
+
+const RUBRIC_ITEM =
+  /^\s*[-•*]?\s*(\d{1,3}(?:\.5)?)\s*(?:pts?\.?|points?|marks?|分)\s*[:：–—-]\s*(.+)$/i
+/** A new question part or question starts: the rubric box has ended. */
+const PART_START = /^\s*(?:[(（][a-z][)）]|[a-z][)）]\s|\(?\d{1,3}[.)]\s|question\b|problem\b)/i
+/** A short heading inside a rubric box ("Graph", "Explanation"). */
+const RUBRIC_HEADING = /^[A-Z一-鿿][\w一-鿿 ]{0,24}:?$/
+
+/**
+ * Items of the professor's rubric boxes in an answer key: each starts with
+ * its points ("2 pts:"); the lines after it belong to it until the next item,
+ * a short heading inside the box ("Graph"), or the next question part. Only
+ * printed points are read — a hand-corrected value ("8" crossed out to "10")
+ * is not, so the printed value is kept and the proofread page shows the box.
+ */
+export function parseRubricItems(text: string | undefined): RubricItem[] {
+  if (!text) return []
+  const lines = text
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+  const items: RubricItem[] = []
+  let current: RubricItem | undefined
+  let continued = 0
+  let group: string | undefined
+  for (const [index, line] of lines.entries()) {
+    const item = RUBRIC_ITEM.exec(line)
+    if (item) {
+      const points = Number(item[1])
+      if (!Number.isFinite(points) || points <= 0 || points > 200) continue
+      current = { points, text: item[2]!.trim(), ...(group ? { group } : {}) }
+      items.push(current)
+      continued = 0
+      continue
+    }
+    if (!current) continue
+    // A heading followed by an item opens a group inside the same box.
+    if (RUBRIC_HEADING.test(line) && RUBRIC_ITEM.test(lines[index + 1] ?? '')) {
+      group = line.replace(/:$/, '')
+      current = undefined
+      continue
+    }
+    if (PART_START.test(line) || marksIn(line).length > 0 || continued >= 6) {
+      current = undefined
+      group = undefined
+      continue
+    }
+    current.text = `${current.text} ${line}`.replace(/\s+/g, ' ')
+    continued++
+  }
+  return items
+}
+
+/** A rubric item as one line, as printed ("2 pts: Rightward shift of S"). */
+export function formatRubricItem(item: RubricItem): string {
+  const unit = item.points === 1 ? 'pt' : 'pts'
+  return `${item.group ? `${item.group} · ` : ''}${item.points} ${unit}: ${item.text}`
+}
+
+/**
  * Lines of a professor answer key that carry marks ("M1", "A1", "B1", "[2]",
- * "(1 mark)", "2分"): the professor's own marking scheme, shown verbatim and
- * never mixed with platform estimates. Empty when the key states no marks.
+ * "(1 mark)", "2分", rubric boxes "2 pts: …"): the professor's own marking
+ * scheme, shown verbatim and never mixed with platform estimates. Empty when
+ * the key states no marks.
  */
 export function markingSchemeLines(answerText: string | undefined): string[] {
   if (!answerText) return []
+  const rubric = parseRubricItems(answerText)
+  if (rubric.length > 0) return rubric.map(formatRubricItem).slice(0, 30)
   const lines = answerText
     .split(/\r?\n/)
     .map((line) => line.trim())

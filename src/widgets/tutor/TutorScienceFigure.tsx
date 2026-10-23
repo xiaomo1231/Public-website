@@ -52,6 +52,7 @@ import {
   TutorNeuralPathwayFigure,
   TutorTimelineFigure,
 } from './TutorMorphologyFigure'
+import { TutorMarketFigure } from './TutorEconFigure'
 
 interface ScienceProps {
   visualization: ScienceVisualization
@@ -142,6 +143,8 @@ export function ScienceFigureBody({
       return <TutorNeuralPathwayFigure visualization={visualization} layout={layout} t={t} />
     case 'anatomy_table_2d':
       return <TutorAnatomyTableFigure visualization={visualization} t={t} />
+    case 'market_2d':
+      return <TutorMarketFigure visualization={visualization} layout={layout} t={t} />
   }
 }
 

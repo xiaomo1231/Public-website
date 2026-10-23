@@ -12,7 +12,14 @@ import { walkthroughSubparts } from './splitQuestion'
  */
 
 export type ProofreadRiskKind =
-  'minus_sign' | 'flattened_power' | 'matrix' | 'fraction' | 'table' | 'subpart' | 'number_mismatch'
+  | 'minus_sign'
+  | 'flattened_power'
+  | 'matrix'
+  | 'fraction'
+  | 'table'
+  | 'subpart'
+  | 'number_mismatch'
+  | 'unreadable'
 
 export interface ProofreadRisk {
   kind: ProofreadRiskKind
@@ -201,6 +208,10 @@ export function findProofreadRisks(text: string, sourceText?: string): Proofread
         push('number_mismatch', match.index!, match.index! + match[0].length)
     }
   }
+  // `[?]` / `[?:guess]` left by a recogniser (OCR or the vision model): an
+  // unreadable part, or a printed mark changed by hand (`8 [?:handwritten 10]`).
+  for (const match of text.matchAll(/\[\?(?::[^\]\n]{0,80})?\]/g))
+    push('unreadable', match.index!, match.index! + match[0].length)
   return risks.sort((a, b) => a.start - b.start || a.end - b.end)
 }
 
@@ -232,9 +243,14 @@ export function chunkLowConfidence(chunk: unknown): boolean {
     lowConfidence?: unknown
     confidence?: unknown
     uncertainRegions?: unknown
+    contentType?: unknown
+    layoutWarnings?: unknown
   }
   return (
     row.lowConfidence === true ||
+    // Text recognised from a page picture (no text layer / a photo).
+    row.contentType === 'ocr' ||
+    (Array.isArray(row.layoutWarnings) && row.layoutWarnings.includes('ocr')) ||
     (typeof row.confidence === 'number' && row.confidence < 0.6) ||
     (Array.isArray(row.uncertainRegions) && row.uncertainRegions.length > 0)
   )

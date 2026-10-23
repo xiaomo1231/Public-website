@@ -33,6 +33,8 @@ import {
   type AiMockConfig,
   type AiMockInfo,
   type DefaultReason,
+  type MockFigureEngine,
+  type MockFigureSpec,
   type MockLanguage,
   type MockSlotState,
   type MockTopicInput,
@@ -57,7 +59,10 @@ import { MasteryService } from './masteryService'
 import { SyllabusService } from './syllabusService'
 import { loadCourseLanguage } from './courseLanguage'
 import { loadProjectSubjectContext } from './projectSubject'
+import { readMarketFigureSpec } from './econMockFigureEngine'
 import { loadProfessorConventions } from './projectGradingRules'
+import { logger } from '@/infrastructure/logger/logger'
+import type { MockFigureGroupInput } from '@/infrastructure/ai/prompts/mock-paper/v2'
 import { loadProfessorHabits } from './questionHabitsService'
 
 /**
@@ -69,7 +74,7 @@ import { loadProfessorHabits } from './questionHabitsService'
  * answer, marking scheme and mark estimate on it is 平台拟定.
  *
  * Generation (the student starts it after a pre-flight and an estimate):
- *   1. one request per question (`mock-paper/v1`) through the shared adaptive
+ *   1. one request per question (`mock-paper/v2`) through the shared adaptive
  *      pool (同时进行的 AI 请求数), each with the whole output cap;
  *   2. local checks (`verifyMockQuestion`: structure, marks, recomputed
  *      answers, options, scheme);
@@ -159,6 +164,33 @@ function clip(text: string, max: number): string {
   return text.length > max ? `${text.slice(0, max - 1)}…` : text
 }
 
+/**
+ * The figure-group part of a slot's prompt (mock-paper/v2): only when the
+ * group's shared figure was drawn; otherwise nothing, and the question is
+ * written as an ordinary one (the prompt is v1's).
+ */
+function figureGroupInput(
+  info: Pick<AiMockInfo, 'slots' | 'figures'>,
+  slot: MockSlotState,
+): { figureGroup?: MockFigureGroupInput } {
+  const group = slot.figureGroup
+  const figure = group ? info.figures?.[group.id] : undefined
+  if (!group || !figure) return {}
+  const members = info.slots.filter((item) => item.figureGroup?.id === group.id)
+  const siblings = members
+    .filter((item) => item.id !== slot.id && item.candidate)
+    .map((item) => clip(item.candidate!.prompt, 400))
+  return {
+    figureGroup: {
+      position: group.position,
+      size: group.size,
+      labels: members.map((item) => item.label),
+      figure: figure.description,
+      ...(siblings.length ? { siblings } : {}),
+    },
+  }
+}
+
 function reasonText(code: MockRejectCode): string {
   return t(`aiMock.reason.${code}` as TranslationKey)
 }
@@ -205,15 +237,35 @@ export function lastCheckedFraction(
     : null
 }
 
+/** The shared market figure printed with a slot of a figure group, when one was drawn. */
+function marketFigureOf(
+  info: Pick<AiMockInfo, 'figures'>,
+  slot: MockSlotState,
+): Pick<HomeworkQuestion, 'marketFigure'> {
+  const groupId = slot.figureGroup?.id
+  const figure = groupId ? readMarketFigureSpec(info.figures?.[groupId])?.figure : undefined
+  return figure && groupId ? { marketFigure: { figure, groupId } } : {}
+}
+
 export class AiMockPaperService {
   private ai: AIService | null
   private db: AppDatabase
   private homework: HomeworkRepository
+  private figureEngine: MockFigureEngine | undefined
 
-  constructor(deps: { ai: AIService | null; db?: AppDatabase }) {
+  constructor(deps: {
+    ai: AIService | null
+    db?: AppDatabase
+    /**
+     * Draws the shared figure of a figure group (several questions on one
+     * graph). Optional: without it grouped questions are written normally.
+     */
+    figureEngine?: MockFigureEngine
+  }) {
     this.ai = deps.ai
     this.db = deps.db ?? getDb()
     this.homework = new HomeworkRepository(this.db)
+    this.figureEngine = deps.figureEngine
   }
 
   hasAI(): boolean {
@@ -278,11 +330,15 @@ export class AiMockPaperService {
       })),
     )
     const minutes = set.exam?.durationMinutes ?? set.exam?.detectedMinutes
+    // The professor's habit "several questions share one figure" loosens
+    // the detection of figure groups on the paper.
+    const { figureGroups } = await loadProfessorConventions(set.projectId, this.db)
     return mirrorStructure({
       setId: set.id,
       title: set.title,
       ...(minutes !== undefined ? { minutes } : {}),
       hasFormulaSheet: sheet !== null,
+      ...(figureGroups ? { figureGroups: true } : {}),
       questions: questions.map((question) => ({
         id: question.id,
         ...(question.number ? { number: question.number } : {}),
@@ -454,13 +510,17 @@ export class AiMockPaperService {
       ...(config.examId ? { examId: config.examId } : {}),
       templateSetId: template.id,
     })
+    const language = await this.language(projectId, template)
+    const subject = await loadProjectSubjectContext(projectId, this.db)
+    const figures = await this.drawFigures(slots, language, subject?.subject)
     const info: AiMockInfo = {
       config: { ...config, questionCount: count, minutes },
       reasons: defaults.reasons,
-      language: await this.language(projectId, template),
+      language,
       slots,
       hasFormulaSheet: structure.hasFormulaSheet,
       ...(structure.totalMarks !== undefined ? { totalMarks: structure.totalMarks } : {}),
+      ...(figures ? { figures } : {}),
     }
     const existing = (await this.listPapers(projectId)).length
     const now = Date.now()
@@ -486,6 +546,52 @@ export class AiMockPaperService {
     }
     await this.homework.upsertSet(set)
     return set
+  }
+
+  /**
+   * The shared figure of each figure group, from the figure engine. No
+   * engine, or a figure it cannot draw (null / an error), leaves that group's
+   * questions to be written as ordinary questions.
+   */
+  private async drawFigures(
+    slots: readonly MockSlotState[],
+    language: MockLanguage,
+    subject?: string,
+  ): Promise<Record<string, MockFigureSpec> | undefined> {
+    const engine = this.figureEngine
+    if (!engine) return undefined
+    const groups = new Map<string, MockSlotState[]>()
+    for (const slot of slots) {
+      const id = slot.figureGroup?.id
+      if (id) groups.set(id, [...(groups.get(id) ?? []), slot])
+    }
+    const figures: Record<string, MockFigureSpec> = {}
+    for (const [groupId, members] of groups) {
+      const first = members[0]!
+      try {
+        const figure = await engine({
+          groupId,
+          topic: { id: first.topicIds[0] ?? '', name: first.topicNames[0] ?? '' },
+          slots: members.map((slot) => ({
+            id: slot.id,
+            label: slot.label,
+            kind: slot.kind,
+            parts: slot.parts,
+            ...(slot.marks !== undefined ? { marks: slot.marks } : {}),
+            ...(slot.optionCount ? { optionCount: slot.optionCount } : {}),
+          })),
+          language,
+          ...(subject ? { subject } : {}),
+        })
+        if (figure?.description.trim()) figures[groupId] = figure
+      } catch (err) {
+        logger.warn('aiMock.figureEngine failed; writing the group normally', {
+          groupId,
+          error: (err as Error).message,
+        })
+      }
+    }
+    return Object.keys(figures).length ? figures : undefined
   }
 
   /** 继续: write what is left (failed requests are tried again). */
@@ -779,6 +885,34 @@ export class AiMockPaperService {
     const info = await this.info(setId)
     const slot = info.slots.find((item) => item.id === slotId)
     if (!slot || slot.status !== 'pending') return
+    // A figure group drawn by the market engine: the question was written
+    // locally with it (answers and options from the engine). Checked like an
+    // AI reply, then kept without an AI review; a failure falls back to the AI.
+    const localRaw = slot.figureGroup
+      ? readMarketFigureSpec(info.figures?.[slot.figureGroup.id])?.questions[slot.id]
+      : undefined
+    if (localRaw && slot.attempts === 0) {
+      const local = verifyMockQuestion(localRaw, slot, {
+        language: info.language,
+        seed: setId,
+        economics: true,
+      })
+      if (local.ok) {
+        await this.updateSlot(setId, slotId, (current) => {
+          const { error: _error, rejected: _rejected, ...rest } = current
+          void _error
+          void _rejected
+          return {
+            ...rest,
+            attempts: current.attempts + 1,
+            status: 'written',
+            candidate: local.candidate,
+          }
+        })
+        await this.saveQuestion(setId, slotId)
+        return
+      }
+    }
     const topic = context.topics.get(slot.topicIds[0] ?? '')
     const template = slot.templateQuestionId ? context.templates.get(slot.templateQuestionId) : ''
     const others = [
@@ -790,7 +924,11 @@ export class AiMockPaperService {
       {
         role: 'system',
         content: prompts.subjectProfile.withSubject(
-          prompts.mockPaper.buildSystemPrompt(context.sigFigs ? { sigFigs: true } : {}),
+          prompts.mockPaper.buildSystemPrompt({
+            ...(context.sigFigs ? { sigFigs: true } : {}),
+            // Economics: supply-and-demand diagram parts the app solves itself.
+            ...(context.subject?.subject === 'economics' ? { economics: true } : {}),
+          }),
           context.subject,
         ),
       },
@@ -816,6 +954,7 @@ export class AiMockPaperService {
           ...(context.noneOptionLabel ? { noneOptionLabel: context.noneOptionLabel } : {}),
           ...(slot.rejected ? { rejected: slot.rejected } : {}),
           ...(others.length ? { otherTopics: others } : {}),
+          ...figureGroupInput(info, slot),
         }),
       },
     ]
@@ -825,6 +964,7 @@ export class AiMockPaperService {
       ? verifyMockQuestion(raw, slot, {
           language: info.language,
           seed: setId,
+          ...(context.subject?.subject === 'economics' ? { economics: true } : {}),
           ...(context.conventions.includes('none_of_above')
             ? { noneOption: context.noneOptionLabel ?? '' }
             : {}),
@@ -947,6 +1087,7 @@ export class AiMockPaperService {
           topicIds: slot.topicIds,
           difficulty: slot.difficulty,
         },
+        ...marketFigureOf(info, slot),
         draftText: '',
         revealedHints: 0,
         solutionRevealed: false,

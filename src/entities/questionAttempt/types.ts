@@ -2,6 +2,7 @@ import type { TranslationKey } from '@/i18n/types'
 import type { AnswerDimensions, SigFigRuleApplied } from '@/entities/question/answerDimensions'
 import type { VectorComparison } from '@/infrastructure/math/vectorAnswer'
 import type { ForceListResult } from '@/entities/question/forceList'
+import type { MarketGradeResult } from '@/entities/econ/graphQuestion'
 
 export type EvaluationMethod =
   | 'exact'
@@ -22,6 +23,7 @@ export type EvaluationMethod =
   | 'vector'
   | 'nomenclature'
   | 'force_list'
+  | 'market'
   | 'option_id'
   | 'ai'
   | 'unverified'
@@ -45,6 +47,7 @@ export const EVAL_METHOD_LABEL_KEYS: Record<EvaluationMethod, TranslationKey> = 
   vector: 'evalMethod.vector',
   nomenclature: 'evalMethod.nomenclature',
   force_list: 'evalMethod.force_list',
+  market: 'evalMethod.market',
   option_id: 'evalMethod.option_id',
   ai: 'evalMethod.ai',
   unverified: 'evalMethod.unverified',
@@ -85,6 +88,8 @@ export interface QuestionEvaluation {
   vector?: VectorComparison
   /** Free-body diagram answers: matched, missing and extra forces. */
   forces?: ForceListResult
+  /** Economics graph questions: each item / component, with the points earned. */
+  market?: MarketGradeResult
   /**
    * The student disputed this AI judgement. A disputed answer is kept for
    * reference but excluded from the score, the mistake book and mastery.

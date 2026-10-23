@@ -19,6 +19,12 @@ export interface TestPptxSlide {
   notesFileNumber?: number
   /** Images embedded in this slide (written to `ppt/media`). */
   images?: TestPptxImage[]
+  /**
+   * Raw `p:spTree` children appended after the title / body shapes (drawings,
+   * groups, `mc:AlternateContent`, tables). Image `k` (1-based) of the slide
+   * is referenced as `r:embed="rIdImg{k}"`.
+   */
+  shapesXml?: string
 }
 
 export interface TestPptxOptions {
@@ -29,6 +35,8 @@ export interface TestPptxOptions {
    * file order. A slide left out is an orphan part that is not in the deck.
    */
   order?: number[]
+  /** Bytes of `docProps/thumbnail.jpeg` (PowerPoint's thumbnail of slide 1). */
+  thumbnail?: Uint8Array
 }
 
 const REL = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships'
@@ -91,6 +99,7 @@ export async function makeTestPptx(options: TestPptxOptions = {}): Promise<Blob>
 </Relationships>`
 
   const zip = new JSZip()
+  if (options.thumbnail) zip.file('docProps/thumbnail.jpeg', options.thumbnail)
   zip.file('[Content_Types].xml', contentTypes)
   zip.folder('_rels')!.file('.rels', rels)
   zip.folder('ppt')!.file('presentation.xml', presentationXml)
@@ -146,11 +155,16 @@ function makeSlideXml(slide: TestPptxSlide): string {
     : ''
   return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <p:sld xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
-       xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+       xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"
+       xmlns:r="${REL}"
+       xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+       xmlns:a14="http://schemas.microsoft.com/office/drawing/2010/main"
+       xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math">
   <p:cSld>
     <p:spTree>
       ${titleShape}
       ${bodyShape}
+      ${slide.shapesXml ?? ''}
     </p:spTree>
   </p:cSld>
 </p:sld>`

@@ -28,6 +28,8 @@ export interface TutorVisual {
   caption: string
   /** False when the page could not be rendered; only provenance is available. */
   hasImage: boolean
+  /** The original is an EMF / WMF picture no browser can display. */
+  unsupportedFormat?: string
 }
 
 /** A LaTeX symbol discovered in a lesson's own text. */

@@ -30,6 +30,11 @@ export interface VisualSource {
   imageMimeType: string
   width?: number
   height?: number
+  /**
+   * The original picture is an EMF / WMF / TIFF image no browser can display
+   * (lower-case extension). Optional; no Dexie upgrade.
+   */
+  unsupportedFormat?: string
   createdAt: number
 }
 
@@ -49,4 +54,21 @@ export function fallbackVisualCaption(pageNumber: number): string {
 /** Caption for an image preserved directly from a slide. */
 export function slideVisualCaption(slideNumber: number): string {
   return `Image from slide ${slideNumber}.`
+}
+
+/** Caption for the rendering of a PDF page that had no text layer (read with OCR). */
+export function textlessPageCaption(pageNumber: number): string {
+  return `Page ${pageNumber} as printed (no text layer; its text was recognised from this image).`
+}
+
+/** Caption for a slide picture in a format browsers cannot display (EMF / WMF). */
+export function unsupportedSlideVisualCaption(
+  slideNumber: number,
+  format: string,
+  thumbnail = false,
+): string {
+  const kind = format.toUpperCase()
+  return thumbnail
+    ? `Thumbnail of slide ${slideNumber}; the original ${kind} image cannot be displayed in a browser.`
+    : `Image from slide ${slideNumber} (${kind} format, which browsers cannot display).`
 }

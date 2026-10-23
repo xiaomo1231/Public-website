@@ -8,6 +8,12 @@
 // browser lacks it. See AGENTS.md §5 (pdf.js runtime APIs).
 import * as pdfjsLib from 'pdfjs-dist/legacy/build/pdf.mjs'
 import type { LayoutWarning } from '@/entities/chunk/layoutWarnings'
+import {
+  findMarkedOptions,
+  type MarkBox,
+  type MarkedOption,
+  type PositionedText,
+} from './markedOptions'
 import { findRunningLines, looksLikeHeadingLine, runningLineKey } from './headingHeuristics'
 import { classifyFontName, type FontEncodingKind } from './fontGlyphs'
 import {
@@ -74,6 +80,115 @@ export interface ExtractedPage {
    * extracted text.
    */
   imageCount: number
+  /**
+   * Set when the page had no text layer and `text` was recognised from a
+   * rendering of the page (OCR). Filled in by the processing pipeline.
+   */
+  ocr?: { confidence: number }
+  /**
+   * Options marked by a stamp / circle / highlight over their letter (an
+   * answer key that is the paper with the chosen options highlighted).
+   */
+  markedOptions?: MarkedOption[]
+  /** Question numbers whose mark covers several options (left to the student). */
+  ambiguousMarks?: string[]
+}
+
+type OperatorList = { fnArray: number[]; argsArray: unknown[] }
+
+function multiply(m: number[], n: number[]): number[] {
+  return [
+    m[0]! * n[0]! + m[2]! * n[1]!,
+    m[1]! * n[0]! + m[3]! * n[1]!,
+    m[0]! * n[2]! + m[2]! * n[3]!,
+    m[1]! * n[2]! + m[3]! * n[3]!,
+    m[0]! * n[4]! + m[2]! * n[5]! + m[4]!,
+    m[1]! * n[4]! + m[3]! * n[5]! + m[5]!,
+  ]
+}
+
+function isMatrix(value: unknown): value is number[] {
+  return (
+    (Array.isArray(value) || ArrayBuffer.isView(value)) &&
+    (value as ArrayLike<number>).length === 6 &&
+    Array.from(value as ArrayLike<number>).every((n) => typeof n === 'number' && Number.isFinite(n))
+  )
+}
+
+/**
+ * Page-space boxes of the images painted on a page. An image fills the unit
+ * square under the current transformation matrix, so the matrix is tracked
+ * through `save` / `restore` / `transform` and form XObjects. Best effort:
+ * an operator list it cannot follow yields no boxes.
+ */
+function imageBoxes(ops: OperatorList): MarkBox[] {
+  const O = (pdfjsLib as unknown as { OPS?: Record<string, number> }).OPS
+  if (!O) return []
+  const painters = imageOperators()
+  const boxes: MarkBox[] = []
+  let ctm = [1, 0, 0, 1, 0, 0]
+  const stack: number[][] = []
+  ops.fnArray.forEach((fn, k) => {
+    const args = ops.argsArray[k] as unknown[] | null | undefined
+    if (fn === O.save) stack.push(ctm)
+    else if (fn === O.restore) ctm = stack.pop() ?? ctm
+    else if (fn === O.transform && args && args.length === 6) {
+      const m = args.map(Number)
+      if (m.every(Number.isFinite)) ctm = multiply(ctm, m)
+    } else if (fn === O.paintFormXObjectBegin) {
+      stack.push(ctm)
+      if (isMatrix(args?.[0])) ctm = multiply(ctm, Array.from(args[0] as ArrayLike<number>))
+    } else if (fn === O.paintFormXObjectEnd) ctm = stack.pop() ?? ctm
+    else if (painters.has(fn)) {
+      const xs = [ctm[4]!, ctm[4]! + ctm[0]!, ctm[4]! + ctm[2]!, ctm[4]! + ctm[0]! + ctm[2]!]
+      const ys = [ctm[5]!, ctm[5]! + ctm[1]!, ctm[5]! + ctm[3]!, ctm[5]! + ctm[1]! + ctm[3]!]
+      boxes.push({
+        x0: Math.min(...xs),
+        x1: Math.max(...xs),
+        y0: Math.min(...ys),
+        y1: Math.max(...ys),
+      })
+    }
+  })
+  return boxes
+}
+
+/** Highlight / circle / box / ink annotations as mark boxes. */
+async function annotationMarks(page: {
+  getAnnotations?: () => Promise<unknown[]>
+}): Promise<MarkBox[]> {
+  if (typeof page.getAnnotations !== 'function') return []
+  try {
+    const annotations = await page.getAnnotations()
+    const out: MarkBox[] = []
+    for (const raw of annotations) {
+      const annotation = raw as { subtype?: string; rect?: number[] }
+      if (
+        !/^(?:Highlight|Circle|Square|Ink|Polygon|Squiggly|Underline)$/.test(
+          annotation.subtype ?? '',
+        )
+      )
+        continue
+      const rect = annotation.rect
+      if (!rect || rect.length !== 4 || !rect.every(Number.isFinite)) continue
+      out.push({
+        x0: Math.min(rect[0]!, rect[2]!),
+        x1: Math.max(rect[0]!, rect[2]!),
+        y0: Math.min(rect[1]!, rect[3]!),
+        y1: Math.max(rect[1]!, rect[3]!),
+      })
+    }
+    return out
+  } catch {
+    return []
+  }
+}
+
+function positionedText(item: PdfTextItem): PositionedText | null {
+  const t = item.transform
+  if (!t || t.length < 6) return null
+  const height = Math.abs(item.height ?? 0) || Math.hypot(t[2] ?? 0, t[3] ?? 0) || 10
+  return { str: item.str ?? '', x: t[4]!, y: t[5]!, width: Math.abs(item.width ?? 0), height }
 }
 
 export interface PageLineFlag {
@@ -514,6 +629,7 @@ async function readPdf(
       // Best-effort image detection. A failure here must not fail the page:
       // the text extraction below is what the pipeline depends on.
       let imageCount = 0
+      const markBoxes: MarkBox[] = []
       try {
         const operators = imageOperators()
         if (operators.size > 0) {
@@ -521,12 +637,23 @@ async function readPdf(
           for (const fn of ops.fnArray) {
             if (operators.has(fn)) imageCount++
           }
+          if (imageCount > 0) markBoxes.push(...imageBoxes(ops))
         }
       } catch {
         /* image detection is optional */
       }
+      markBoxes.push(...(await annotationMarks(page)))
       const textContent = await page.getTextContent()
       const items = (textContent.items as unknown[]).filter(isTextItem)
+      // A multiple-choice key marked by highlight stamps / circles over the
+      // chosen option letters (see markedOptions.ts).
+      const marks =
+        markBoxes.length > 0
+          ? findMarkedOptions(
+              items.map(positionedText).filter(Boolean) as PositionedText[],
+              markBoxes,
+            )
+          : undefined
       const fontKind = fontKindLookup(page, textContent.styles)
       const assembled = assemblePage(joinTitleLines(layoutTextItems(items, fontKind)))
       const pageText = assembled.text
@@ -543,6 +670,8 @@ async function readPdf(
         hasContent: pageText.trim().length > 0,
         imageCount,
         ...(assembled.lineFlags ? { lineFlags: assembled.lineFlags } : {}),
+        ...(marks && marks.marked.length > 0 ? { markedOptions: marks.marked } : {}),
+        ...(marks && marks.ambiguous.length > 0 ? { ambiguousMarks: marks.ambiguous } : {}),
       })
       page.cleanup()
     } catch (err) {

@@ -4,6 +4,7 @@ import { fnv1a } from '@/shared/lib/hash'
 import type { MistakeType } from './types'
 import type { QuestionEvaluation } from '@/entities/questionAttempt/types'
 import { answerIssueTags } from '@/entities/question/answerDimensions'
+import { marketErrorDimension } from '@/entities/econ/graphQuestion'
 
 /**
  * 错题跟进: after a wrong answer the student can look at the explanation, try
@@ -191,9 +192,15 @@ const TYPE_DIMENSION: Partial<Record<MistakeType, ErrorDimension>> = {
  * separately), else the mistake category. `undefined` when nothing says.
  */
 export function errorDimensionOf(input: {
-  evaluation?: Pick<QuestionEvaluation, 'dimensions'>
+  evaluation?: Pick<QuestionEvaluation, 'dimensions' | 'market'>
   mistakeType?: MistakeType
 }): ErrorDimension | undefined {
+  // Graph questions: the item that failed (a direction, the drawing, a value).
+  const market = input.evaluation?.market
+  if (market && market.kind !== 'area_read') {
+    const dimension = marketErrorDimension(market)
+    if (dimension) return dimension
+  }
   const tags = input.evaluation ? answerIssueTags(input.evaluation) : []
   if (tags.includes('unit')) return 'unit'
   if (tags.includes('value')) return 'value'

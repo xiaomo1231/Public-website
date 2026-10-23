@@ -7,6 +7,7 @@ import type { HomeworkReviewGuide } from './reviewGuide'
 import type { HomeworkAnswerCheck } from './answerCheck'
 import type { PracticeQuestionInfo, PracticeSetInfo } from './practice/types'
 import type { GuidedProgress } from './guided'
+import type { MarketFigure } from '@/entities/econ/graphQuestion'
 import type { ExamSetInfo } from '@/entities/exam/types'
 import type { EvalRole } from '@/entities/evaluation/evalRole'
 import type { EvaluationRecord } from '@/entities/evaluation/types'
@@ -276,6 +277,13 @@ export interface HomeworkQuestion {
   answerCheck?: HomeworkAnswerCheck
   /** 引导练习 progress (see `entities/homework/guided.ts`); counts as student work. */
   guidedProgress?: GuidedProgress
+  /**
+   * Economics: the supply-and-demand diagram printed with this question (an
+   * AI mock paper's shared figure, or a question built from a recognised
+   * course graph). Questions sharing one figure carry the same `groupId`.
+   * Graph parts (`practice.parts[].grader.kind === 'market'`) carry their own.
+   */
+  marketFigure?: { figure: MarketFigure; groupId?: string }
   /** 中文翻译 of `prompt` (see `entities/homework/questionTranslation.ts`), made on request. */
   translation?: QuestionTranslation
   /** 小题 ⇄ 教授答案对应 (AI, checked locally; see `entities/homework/professorMap.ts`). */

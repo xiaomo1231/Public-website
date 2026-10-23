@@ -12,6 +12,14 @@ import {
   sigFigRelativeTolerance,
 } from '@/infrastructure/math/significantFigures'
 import { compareVector } from '@/infrastructure/math/vectorAnswer'
+import {
+  compareEconNumber,
+  econSpecFromText,
+  readEconNumber,
+  type EconNote,
+  type EconNumberSpec,
+} from '@/infrastructure/math/economicsAnswer'
+import type { Subject } from '@/entities/project/types'
 import { compareFormula, nameAccepted } from '@/infrastructure/chemistry/nomenclature'
 import {
   DEFAULT_SIG_FIG_POLICY,
@@ -21,6 +29,15 @@ import {
   type UnitStatus,
 } from '@/entities/question/answerDimensions'
 import { forceListScore, gradeForceList } from '@/entities/question/forceList'
+import {
+  exactDecimal,
+  formatTargetValue,
+  gradeMarketQuestion,
+  marketValue,
+  solveQuestion,
+  targetEconSpec,
+} from '@/entities/econ/graphQuestion'
+import { marketFeedback } from './marketFeedback'
 import { dimensionsNote } from './answerDimensionsFeedback'
 import { compareEquations, parseEquation } from '@/infrastructure/chemistry/equation'
 import { orderingItems, scoreOrdering } from '@/infrastructure/math/orderingAnswer'
@@ -56,6 +73,22 @@ export interface DeterministicOptions {
    * counts. Default: hint only, no deduction (平台拟定规则).
    */
   sigFigPolicy?: SigFigPolicy | undefined
+  /**
+   * The course subject. Economics reads numeric answers as money and
+   * percentages (`$1,800`, `85 000`, `10%`, `60k`, absolute-value elasticity;
+   * see `economicsAnswer.ts`); every other subject is unaffected.
+   */
+  subject?: Subject | undefined
+}
+
+/** The economics reading rules of a numeric question, or null when they do not apply. */
+export function econSpecFor(
+  question: Pick<Question, 'type' | 'prompt' | 'unit' | 'econ'>,
+  subject?: Subject,
+): EconNumberSpec | null {
+  if (question.type !== 'numeric' || question.unit) return null
+  if (!question.econ && subject !== 'economics') return null
+  return econSpecFromText(question.prompt, question.econ)
 }
 
 /**
@@ -72,14 +105,28 @@ export function evaluateDeterministic(
       return evaluateOption(question, userAnswer, false)
     case 'true_false':
       return evaluateOption(question, userAnswer, true)
-    case 'numeric':
-      return evaluateNumeric(question, userAnswer, options.sigFigPolicy ?? DEFAULT_SIG_FIG_POLICY)
+    case 'numeric': {
+      const policy = options.sigFigPolicy ?? DEFAULT_SIG_FIG_POLICY
+      const econ = econSpecFor(question, options.subject)
+      return econ
+        ? evaluateEconNumber(question, userAnswer, econ, policy)
+        : evaluateNumeric(question, userAnswer, policy)
+    }
     case 'vector':
       return evaluateVector(question, userAnswer)
     case 'nomenclature':
       return evaluateNomenclature(question, userAnswer)
     case 'force_list':
       return evaluateForceList(question, userAnswer)
+    case 'shift_id':
+    case 'draw_diagram':
+      return evaluateMarketGraph(question, userAnswer)
+    case 'area_read':
+      return evaluateMarketValue(
+        question,
+        userAnswer,
+        options.sigFigPolicy ?? DEFAULT_SIG_FIG_POLICY,
+      )
     case 'math_expr':
       return evaluateMath(question, userAnswer)
     case 'code_output':
@@ -367,6 +414,76 @@ function evaluatePlainNumber(given: string, expected: string): QuestionEvaluatio
   }
 }
 
+const ECON_NOTE_KEYS: Record<EconNote, TranslationKey> = {
+  'absolute-value': 'econAnswer.absoluteValue',
+  sign: 'econAnswer.sign',
+  'full-amount': 'econAnswer.fullAmount',
+  'decimal-for-percent': 'econAnswer.decimalForPercent',
+  'percent-for-decimal': 'econAnswer.percentForDecimal',
+}
+
+/**
+ * A numeric answer in an economics course: money, thousands separators,
+ * percentages, amounts stated in thousands and the absolute-value elasticity
+ * convention (`compareEconNumber`). Value (and significant figures, when the
+ * question requires them) feed the same dimension feedback as other numbers.
+ */
+function evaluateEconNumber(
+  question: Question,
+  userAnswer: string,
+  spec: EconNumberSpec,
+  policy: SigFigPolicy,
+): QuestionEvaluation {
+  const given = userAnswer.trim()
+  const expected = question.correctAnswer.trim()
+  if (!given) {
+    return {
+      isCorrect: false,
+      method: 'numeric',
+      confidence: 1,
+      expected,
+      normalizedUser: '',
+      note: t('errors.emptyAnswer'),
+    }
+  }
+  const base = {
+    method: 'numeric_tolerance' as const,
+    expected,
+    normalizedUser: given,
+    normalizedExpected: expected,
+  }
+  const comparison = compareEconNumber(given, expected, spec)
+  if (comparison.outcome === 'unreadable') {
+    return {
+      ...base,
+      isCorrect: null,
+      method: 'unverified',
+      confidence: 0,
+      note:
+        readEconNumber(given) === null
+          ? t('errors.numberUnreadable', { answer: UNVERIFIED_NOTE() })
+          : UNVERIFIED_NOTE(),
+    }
+  }
+  const dimensions: AnswerDimensions = {
+    value: comparison.outcome === 'correct' ? 'correct' : 'wrong',
+  }
+  // Significant figures are judged on the digits alone ($ , % and separators dropped).
+  const digits = given
+    .replace(/[$€£¥%]/g, '')
+    // Any horizontal space (incl. no-break / thin spaces) as a thousands separator.
+    .replace(/(\d)(?:,|[^\S\r\n])(?=\d{3}\b)/g, '$1')
+    .trim()
+  const sigFigs = sigFigDimension(question, digits, false)
+  if (sigFigs) dimensions.sigFigs = sigFigs
+  const result = finishNumeric(base, dimensions, policy, { given: digits })
+  if (!comparison.note) return result
+  const econNote = t(ECON_NOTE_KEYS[comparison.note])
+  // A wrong sign says everything the generic "the value is not right" would.
+  if (comparison.note === 'sign') return { ...result, note: econNote }
+  return { ...result, note: [econNote, result.note].filter(Boolean).join(' ') }
+}
+
 /**
  * A physical quantity. Three separate checks: the VALUE (converted from the
  * student's unit into the expected one), the UNIT (missing / another kind of
@@ -639,6 +756,84 @@ function evaluateForceList(question: Question, userAnswer: string): QuestionEval
     confidence: 1,
     score: { earned: Math.round(earned * 100) / 100, total: reference.length },
     ...(parts.length ? { note: parts.join(' ') } : {}),
+  }
+}
+
+/**
+ * Economics graph question (shift identification / drawing): graded item by
+ * item against the market engine; partial credit per item (the professor's
+ * rubric when it maps onto the items, else one point each — 平台评分).
+ */
+function evaluateMarketGraph(question: Question, userAnswer: string): QuestionEvaluation {
+  const expected = expectedAnswerText(question)
+  const base = {
+    method: 'market' as const,
+    expected,
+    normalizedUser: displayAnswer(question, userAnswer),
+    normalizedExpected: expected,
+  }
+  const result = question.market ? gradeMarketQuestion(question.market, userAnswer) : null
+  if (!result)
+    return {
+      ...base,
+      isCorrect: userAnswer.trim() ? null : false,
+      method: userAnswer.trim() ? 'unverified' : 'market',
+      confidence: userAnswer.trim() ? 0 : 1,
+      note: userAnswer.trim() ? UNVERIFIED_NOTE() : t('errors.emptyAnswer'),
+    }
+  if (result.unreadable)
+    return {
+      ...base,
+      isCorrect: null,
+      method: 'unverified',
+      confidence: 0,
+      market: result,
+      note: marketFeedback(result),
+    }
+  return {
+    ...base,
+    isCorrect: result.earned >= result.total && result.items.every((item) => item.correct),
+    confidence: 1,
+    market: result,
+    score: { earned: result.earned, total: result.total },
+    note: marketFeedback(result),
+  }
+}
+
+/**
+ * Economics value read from a diagram: the engine computes the value; the
+ * answer is read like any economics number (money, thousands, %, absolute
+ * elasticity) and judged with the same value / significant-figure rules.
+ */
+function evaluateMarketValue(
+  question: Question,
+  userAnswer: string,
+  policy: SigFigPolicy,
+): QuestionEvaluation {
+  const market = question.market
+  const solution = market ? solveQuestion(market) : null
+  const value = solution && market?.target ? marketValue(solution, market.target) : null
+  if (!market || !market.target || !value)
+    return {
+      isCorrect: null,
+      method: 'unverified',
+      confidence: 0,
+      expected: question.correctAnswer,
+      note: UNVERIFIED_NOTE(),
+    }
+  const shown = formatTargetValue(value, market.target, market.figure)
+  const evaluation = evaluateEconNumber(
+    { ...question, correctAnswer: exactDecimal(value) },
+    userAnswer,
+    targetEconSpec(market.target, market.figure),
+    policy,
+  )
+  const graded = gradeMarketQuestion(market, userAnswer)
+  return {
+    ...evaluation,
+    expected: shown,
+    normalizedExpected: shown,
+    ...(graded ? { market: graded } : {}),
   }
 }
 

@@ -16,8 +16,16 @@ import type { AnswerDimensions } from '@/entities/question/answerDimensions'
 import { compareEquations, imbalances, parseEquation } from '@/infrastructure/chemistry/equation'
 import { parseMatrix, rref, solutionKind, type SolutionKind } from '@/infrastructure/math/rref'
 import { compareVector } from '@/infrastructure/math/vectorAnswer'
+import {
+  compareEconNumber,
+  econSpecFromText,
+  readEconNumber,
+  type EconNumberSpec,
+} from '@/infrastructure/math/economicsAnswer'
 import { compareFormula, nameAccepted } from '@/infrastructure/chemistry/nomenclature'
 import { walkthroughSubparts } from '../splitQuestion'
+import { verifyMarketCheck } from '@/entities/econ/graphVerify'
+import { gradeMarketQuestion, type MarketGradeResult } from '@/entities/econ/graphQuestion'
 import { freeCount, linearSystemPart, type PracticeLanguage } from './linearSystem'
 import type { PracticeGrader, PracticePart, PracticeQuestionInfo, PracticeSlotPart } from './types'
 
@@ -58,6 +66,73 @@ function firstNumber(text: string): string {
   return match ? match[0].replace('−', '-').replace(/\s+/g, '') : ''
 }
 
+/** An economics number in a text: `$1,800`, `−$20`, `85 000`, `10%`, `60k`, `1.25`. */
+const ECON_NUMBER_TOKEN =
+  /[-+−]?\s*(?:US\$|[$€£¥]\s*)?[-+−]?(?:\d{1,3}(?:,\d{3})+|\d{1,3}(?:[^\S\r\n]\d{3})+|\d+)?(?:\.\d+)?(?:\s*(?:k|thousand|million|bn|billion)\b)?\s*%?/gi
+
+function firstEconNumber(text: string): string {
+  for (const match of text.matchAll(ECON_NUMBER_TOKEN)) {
+    const token = match[0].trim()
+    if (/\d/.test(token) && readEconNumber(token)) return token
+  }
+  return ''
+}
+
+/** A `check` that states economics reading rules itself (`absolute`, `scale`, `percent`). */
+function econCheckSpec(check: Record<string, unknown> | null): EconNumberSpec {
+  if (!check) return {}
+  const scale = typeof check.scale === 'number' && check.scale > 1 ? check.scale : undefined
+  return {
+    ...(check.absolute === true ? { absolute: true } : {}),
+    ...(scale ? { scale } : {}),
+    ...(check.percent === true ? { percent: true } : {}),
+  }
+}
+
+function hasEconCheck(check: Record<string, unknown> | null): boolean {
+  return Object.keys(econCheckSpec(check)).length > 0
+}
+
+/**
+ * A numeric economics answer: the stated answer may be money or a percentage
+ * (`$1,800`, `10%`); it must agree with the recomputed value under the
+ * economics reading rules (`compareEconNumber`, absolute-value elasticity
+ * included). The stated wording is kept as the answer shown and graded against.
+ */
+function verifyEconNumeric(
+  raw: RawPart,
+  value: number,
+  check: Record<string, unknown> | null,
+  label: { label?: string },
+): VerifyResult {
+  const spec = econSpecFromText(raw.prompt, econCheckSpec(check))
+  const token = firstEconNumber(raw.answer)
+  if (!token) return { ok: false, reason: 'answer-differs-from-computation' }
+  // The stated answer against the computation, read as a student's answer
+  // would be: the computed value may be in the stated unit or a full amount
+  // (thousands), a fraction for a percentage, or −ε for |ε|.
+  const agrees = [value, ...(spec.scale && spec.scale > 1 ? [value * spec.scale] : [])].some(
+    (candidate) => compareEconNumber(formatValue(candidate), token, spec).outcome === 'correct',
+  )
+  if (!agrees) return { ok: false, reason: 'answer-differs-from-computation' }
+  return {
+    ok: true,
+    part: {
+      ...label,
+      prompt: raw.prompt,
+      answer: token,
+      solution: raw.solution,
+      grader: {
+        kind: 'numeric',
+        expected: spec.absolute ? Math.abs(value) : value,
+        relTol: 1e-2,
+        econ: spec,
+        expectedText: token,
+      },
+    },
+  }
+}
+
 /**
  * Whether a prompt writes the system of `matrix`: every integer entry other
  * than 0 and ±1 (often left implicit, "x + y") appears as a number in it.
@@ -79,6 +154,8 @@ export function verifyAiPart(
   raw: RawPart,
   requirement: PracticeSlotPart | undefined,
   language: PracticeLanguage,
+  /** `economics`: a numeric answer without a unit is money / a percentage (`$1,800`, `10%`). */
+  options: { economics?: boolean } = {},
 ): VerifyResult {
   const label = raw.label ? { label: raw.label } : {}
   const check = raw.check ?? null
@@ -86,6 +163,23 @@ export function verifyAiPart(
   // A slot that mirrors a linear system must stay one, with the same type.
   if (requirement?.system && type !== 'linear_system')
     return { ok: false, reason: 'missing-linear-system' }
+
+  // Economics graph question: the market is solved here; the stated answer
+  // is replaced by the engine's when it disagrees.
+  if (type === 'market' && check) {
+    const verified = verifyMarketCheck(raw, check, language)
+    if (!verified.ok) return { ok: false, reason: verified.reason }
+    return {
+      ok: true,
+      part: {
+        ...label,
+        prompt: raw.prompt,
+        answer: verified.answer,
+        solution: verified.solution,
+        grader: { kind: 'market', question: verified.question },
+      },
+    }
+  }
 
   if (type === 'linear_system') {
     const matrix = parseMatrix(check?.augmented)
@@ -119,6 +213,8 @@ export function verifyAiPart(
     const value = typeof check?.expression === 'string' ? parseNumeric(check.expression) : null
     if (value === null) return { ok: false, reason: 'unreadable-expression' }
     const unit = typeof check?.unit === 'string' ? check.unit.trim() : ''
+    if (!unit && (options.economics || hasEconCheck(check)))
+      return verifyEconNumeric(raw, value, check, label)
     // The first number of the stated answer ("The speed is 5 m/s" → 5); the
     // letters e / E of the words around it are not part of it.
     // Significant figures the answer must carry (chemistry / physics): the
@@ -211,6 +307,10 @@ export function checkPracticeAnswer(
   expectedAnswer: string
   /** Per part: value / unit / significant figures, for parts that require significant figures. */
   dimensions: Array<AnswerDimensions | undefined>
+  /** Per part: the item-by-item result of a graph (market) part. */
+  market?: Array<MarketGradeResult | undefined>
+  /** Share of the answer that is right (graph parts give partial credit), 0–1. */
+  score?: number
 } | null {
   const text = draft.trim()
   if (!text || info.parts.length === 0) return null
@@ -224,22 +324,37 @@ export function checkPracticeAnswer(
       answers.push(found.text)
     }
   }
-  const results: boolean[] = []
+  const results: number[] = []
   const dimensions: Array<AnswerDimensions | undefined> = []
+  const market: Array<MarketGradeResult | undefined> = []
   for (let index = 0; index < info.parts.length; index += 1) {
-    const result = gradePart(info.parts[index]!.grader, answers[index]!)
+    const grader = info.parts[index]!.grader
+    if (grader.kind === 'market') {
+      // Item-by-item partial credit within the part.
+      const graded = answers[index]!.trim()
+        ? gradeMarketQuestion(grader.question, answers[index]!)
+        : null
+      if (!graded || graded.unreadable || graded.total <= 0) return null
+      results.push(graded.earned / graded.total)
+      market.push(graded)
+      dimensions.push(undefined)
+      continue
+    }
+    const result = gradePart(grader, answers[index]!)
     if (result === null) return null
-    results.push(result)
-    dimensions.push(partDimensions(info.parts[index]!.grader, answers[index]!) ?? undefined)
+    results.push(result ? 1 : 0)
+    market.push(undefined)
+    dimensions.push(partDimensions(grader, answers[index]!) ?? undefined)
   }
-  const correct = results.filter(Boolean).length
+  const score = results.reduce((sum, value) => sum + value, 0) / results.length
   const expectedAnswer = info.parts
     .map((part) => (part.label ? `(${part.label}) ${part.answer}` : part.answer))
     .join('; ')
   return {
-    verdict: correct === results.length ? 'correct' : correct === 0 ? 'incorrect' : 'partial',
+    verdict: score >= 1 - 1e-9 ? 'correct' : score <= 1e-9 ? 'incorrect' : 'partial',
     expectedAnswer,
     dimensions,
+    ...(market.some(Boolean) ? { market, score } : {}),
   }
 }
 
@@ -252,6 +367,14 @@ export function gradePart(grader: PracticeGrader, answer: string): boolean | nul
     case 'expression':
       return compareMath(text, grader.expected).equivalent
     case 'numeric': {
+      if (grader.econ) {
+        const outcome = compareEconNumber(
+          text,
+          grader.expectedText ?? String(grader.expected),
+          grader.econ,
+        ).outcome
+        return outcome === 'unreadable' ? null : outcome === 'correct'
+      }
       if (!grader.sigFigs) return numericEquivalent(text, String(grader.expected), grader.relTol)
       const dims = partDimensions(grader, text)
       return dims ? (dims.value === 'unreadable' ? null : dims.value === 'correct') : null
@@ -286,6 +409,11 @@ export function gradePart(grader: PracticeGrader, answer: string): boolean | nul
         : outcome === 'unreadable' || outcome === 'unreadable-unit'
           ? null
           : false
+    }
+    case 'market': {
+      const graded = gradeMarketQuestion(grader.question, text)
+      if (!graded || graded.unreadable) return null
+      return graded.items.every((item) => item.correct)
     }
     case 'nomenclature': {
       if (grader.direction === 'formula_to_name')

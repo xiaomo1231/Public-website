@@ -23,6 +23,7 @@ import {
 } from '@/shared/lib/mathInput'
 import {
   parseNumeric,
+  previewEconNumber,
   previewEquation,
   previewExpression,
   previewQuantity,
@@ -43,6 +44,7 @@ const GROUP_LABEL_KEYS: Record<SymbolGroupId, TranslationKey> = {
   chemistry: 'symbolGroup.chemistry',
   biology: 'symbolGroup.biology',
   medicine: 'symbolGroup.medicine',
+  economics: 'symbolGroup.economics',
   de: 'symbolGroup.de',
   hu: 'symbolGroup.hu',
   chemEquation: 'symbolGroup.chemEquation',
@@ -317,7 +319,12 @@ export function MathField({
         </div>
       )}
 
-      <AnswerPreview mode={mode} value={value} showRendered={showRenderedPreview} />
+      <AnswerPreview
+        mode={mode}
+        value={value}
+        showRendered={showRenderedPreview}
+        {...(subject ? { subject } : {})}
+      />
     </div>
   )
 }
@@ -327,10 +334,12 @@ function AnswerPreview({
   mode,
   value,
   showRendered,
+  subject,
 }: {
   mode: MathInputMode
   value: string
   showRendered: boolean
+  subject?: string
 }): JSX.Element | null {
   const { t } = useTranslation()
   const trimmed = value.trim()
@@ -352,7 +361,7 @@ function AnswerPreview({
       warn = true
     }
   } else if (mode === 'number') {
-    const parsed = parseNumeric(trimmed)
+    const parsed = subject === 'economics' ? previewEconNumber(trimmed) : parseNumeric(trimmed)
     if (parsed === null) {
       content = <>{t('mathPreview.numberError')}</>
       warn = true

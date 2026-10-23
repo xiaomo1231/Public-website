@@ -12,6 +12,7 @@ import {
   Eye,
   EyeOff,
   Lightbulb,
+  LineChart,
   ListChecks,
   Loader2,
   MessageCircle,
@@ -48,6 +49,11 @@ import { cn } from '@/shared/lib/utils'
 import { useTranslation } from '@/i18n'
 import { appendSpeechText, useSpeechInput } from '@/features/homework/useSpeechInput'
 import { AnswerImages } from '@/widgets/handwriting/AnswerImages'
+import { MarketPartsAnswer } from '@/widgets/econ/MarketAnswerInput'
+import { MarketQuestionFigure } from '@/widgets/econ/MarketQuestionFigure'
+import { hasMarketParts, onlyMarketParts } from '@/entities/econ/partAnswers'
+import { EconGraphImportDialog } from '@/widgets/econ/EconGraphImportDialog'
+import { useEconGraphImport } from '@/features/econ/useEconGraphImport'
 import { answerImageKey, type HomeworkAnswerImage } from '@/entities/homework/answerImages'
 import { HomeworkReviewPanel } from './HomeworkReviewPanel'
 import type { PracticeSource } from './practice/practiceSource'
@@ -87,6 +93,8 @@ export function HomeworkQuestionView({
     question.answerStatus === 'matched' && isDeferredProfessorAnswer(question.answerText ?? '')
 
   const [draft, setDraft] = useState(question.draftText)
+  const graphImport = useEconGraphImport(question.projectId)
+  const [graphOpen, setGraphOpen] = useState(false)
   const [saved, setSaved] = useState(true)
   const [hints, setHints] = useState(question.hints)
   const [revealed, setRevealed] = useState(question.revealedHints)
@@ -381,6 +389,32 @@ export function HomeworkQuestionView({
               className="max-w-[74ch] [&_p]:mb-3"
               paragraphClassName="text-[16px] leading-[1.75] sm:text-[17px]"
             />
+            {/* Economics: the diagram printed with the question (engine-drawn). */}
+            {question.marketFigure && !hasMarketParts(question.practice?.parts) && (
+              <MarketQuestionFigure figure={question.marketFigure.figure} />
+            )}
+            {/* Economics: rebuild the question's graph and practise similar questions. */}
+            {graphImport && !question.practice && (
+              <div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="min-h-11"
+                  onClick={() => setGraphOpen(true)}
+                  data-econ-graph-action
+                >
+                  <LineChart className="h-4 w-4" aria-hidden />
+                  {t('econGraph.action')}
+                </Button>
+                <EconGraphImportDialog
+                  open={graphOpen}
+                  onOpenChange={setGraphOpen}
+                  question={question}
+                  service={graphImport}
+                />
+              </div>
+            )}
           </CardHeader>
           <CardContent className="space-y-3">
             {practiceSource ? (
@@ -548,21 +582,33 @@ export function HomeworkQuestionView({
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                <MathField
-                  mode="text"
-                  multiline
-                  subject={project?.subject}
-                  language={targetLanguageOf(project)}
-                  fieldRef={workingRef}
-                  value={draft}
-                  onChange={setDraft}
-                  placeholder={t('homework.draftPlaceholder')}
-                  rows={5}
-                  aria-label={t('homework.draft')}
-                  // Working may mix prose and LaTeX; show it rendered when it does.
-                  showRenderedPreview
-                  {...(availableReference ? { onSubmit: () => void checkDraft() } : {})}
-                />
+                {/* Graph parts are answered on the diagram; their answers go
+                    into the working below like the other parts. */}
+                {hasMarketParts(question.practice?.parts) && (
+                  <MarketPartsAnswer
+                    parts={question.practice!.parts}
+                    value={draft}
+                    onChange={setDraft}
+                    disabled={checking}
+                  />
+                )}
+                {!onlyMarketParts(question.practice?.parts) && (
+                  <MathField
+                    mode="text"
+                    multiline
+                    subject={project?.subject}
+                    language={targetLanguageOf(project)}
+                    fieldRef={workingRef}
+                    value={draft}
+                    onChange={setDraft}
+                    placeholder={t('homework.draftPlaceholder')}
+                    rows={5}
+                    aria-label={t('homework.draft')}
+                    // Working may mix prose and LaTeX; show it rendered when it does.
+                    showRenderedPreview
+                    {...(availableReference ? { onSubmit: () => void checkDraft() } : {})}
+                  />
+                )}
                 {imageService && (
                   <AnswerImages
                     questionId={question.id}

@@ -8,6 +8,7 @@ export type Subject =
   | 'cs'
   | 'stats'
   | 'medicine'
+  | 'economics'
   | 'language'
   | 'other'
 
@@ -51,6 +52,7 @@ export const SUBJECT_LABEL_KEYS: Record<Subject, TranslationKey> = {
   cs: 'subject.computerScience',
   stats: 'subject.statistics',
   medicine: 'subject.medicine',
+  economics: 'subject.economics',
   language: 'subject.language',
   other: 'subject.other',
 }

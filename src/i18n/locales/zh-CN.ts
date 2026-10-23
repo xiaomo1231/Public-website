@@ -2,11 +2,15 @@ import type { TranslationKey } from './en'
 import { studyPlanZhCN } from './studyPlan.zh-CN'
 import { aiMockZhCN } from './aiMock.zh-CN'
 import { handwritingZhCN } from './handwriting.zh-CN'
+import { marketZhCN } from './market.zh-CN'
+import { marketQuestionZhCN } from './marketQuestion.zh-CN'
 
 export const zhCN: Record<TranslationKey, string> = {
   ...studyPlanZhCN,
   ...aiMockZhCN,
   ...handwritingZhCN,
+  ...marketZhCN,
+  ...marketQuestionZhCN,
   'common.save': '保存',
   'common.cancel': '取消',
   'common.delete': '删除',
@@ -1258,6 +1262,14 @@ export const zhCN: Record<TranslationKey, string> = {
   'documentDetail.deleteFailed': '删除失败',
   'documentDetail.back': '返回',
   'documentDetail.subtitle': '查看解析后的内容、来源引用和分块预览。',
+  'documentDetail.vision.action': '用 AI 看图识别',
+  'documentDetail.vision.hint':
+    '把本地 OCR 识别的 {count} 页图片发送给你配置的 AI 模型重新识别（含手写与圈选标记），结果请在校对页检查',
+  'documentDetail.vision.stop': '停止识别',
+  'documentDetail.vision.done': 'AI 模型已识别 {count} 页',
+  'documentDetail.vision.none': 'AI 模型未能识别任何一页，已保留 OCR 文字',
+  'documentDetail.vision.failedPages': '未识别（保留 OCR 文字）：第 {pages} 页',
+  'documentDetail.vision.failed': 'AI 看图识别失败，已保留 OCR 文字',
   'documentDetail.tab.chunks': '分块',
   'documentDetail.tab.overview': '概览',
   'documentDetail.tab.metadata': '元数据',
@@ -1831,6 +1843,7 @@ export const zhCN: Record<TranslationKey, string> = {
   'symbolGroup.chemistry': '化学',
   'symbolGroup.biology': '生物',
   'symbolGroup.medicine': '医学',
+  'symbolGroup.economics': '经济学',
   'symbolGroup.de': '德语字母',
   'symbolGroup.hu': '匈牙利语字母',
   'symbolGroup.operators': '运算',
@@ -2368,6 +2381,7 @@ export const zhCN: Record<TranslationKey, string> = {
   'subject.medicine': '医学（临床 / 口腔）',
   'subject.computerScience': '计算机科学',
   'subject.statistics': '统计学',
+  'subject.economics': '经济学',
   'subject.other': '其他',
   'subject.language': '外语',
   'project.targetLanguage': '所学语言',
@@ -2516,6 +2530,12 @@ export const zhCN: Record<TranslationKey, string> = {
     '这张图片含手写或批改痕迹，识别文字可能不准；作业检查与问答可改用支持看图的模型',
   'errors.layoutUncertain':
     '有 {count} 段含分数、表格、上标或矩阵，版式无法可靠还原，建议对照原图校对',
+  'errors.visionTranscribed': '第 {pages} 页已由你的 AI 模型看图识别，请在校对页对照原图检查',
+  'errors.markedAnswersFound':
+    '根据高亮 / 圈选的选项字母读出 {count} 道选择题的标记答案，关联答案时请确认',
+  'errors.markedAnswersAmbiguous': '第 {questions} 题的标记覆盖了多个选项，请手动选择答案',
+  'errors.noTextLayerOcr':
+    '第 {pages} 页无文字层，已用图片识别。文字可能不准，建议对照原图校对，或改用支持看图的模型识别',
   'errors.undecodableCharacters':
     '有 {count} 个字符无法解码，因为该文件的字体缺少 Unicode 映射。这些字符已原样保留；可重新导出嵌入字体的文件，或使用 OCR 识别。',
   'errors.cryptoUnavailable': '当前环境不支持 Web Crypto，无法安全存储密钥',
@@ -2694,6 +2714,7 @@ export const zhCN: Record<TranslationKey, string> = {
 
   'tutor.visualSources': '来自课程资料的图片',
   'tutor.visualUnavailable': '无法显示原始图片。',
+  'tutor.visualFormatUnsupported': '此图格式（{format}）浏览器无法显示。',
   'tutor.visualizations': '数学可视化',
   'viz.ariaGraph': '{expressions} 的图像',
   'viz.ariaInequality': '{expressions} 的区域',
@@ -3926,6 +3947,11 @@ export const zhCN: Record<TranslationKey, string> = {
     '数字与答案一致，但单位「{given}」不对：按这个单位换算后为 {value} {unit}，与结果不符。请检查单位（应为 {unit}）。',
   'answerDims.valueWrongUnitRight': '单位正确，但数值不对。',
   'answerDims.valueWrong': '数值不对。',
+  'econAnswer.absoluteValue': '本课程把需求价格弹性记为绝对值：你写的负数已按其绝对值判定。',
+  'econAnswer.sign': '数值大小正确，但正负号不对。',
+  'econAnswer.fullAmount': '已按完整金额读取：题目的数量以千（或百万）为单位，作答时请写明单位。',
+  'econAnswer.decimalForPercent': '已按小数读取（0.1 = 10%）；本题要求写成百分数。',
+  'econAnswer.percentForDecimal': '已按百分数读取（10% = 0.1）；本题要求写成小数。',
   'answerDims.unitConverted': '已把你的单位 {given} 换算为 {unit} 判分。',
   'answerDims.title': '数值 · 单位 · 有效数字',
   'answerDims.row.value': '数值',
@@ -4069,6 +4095,7 @@ export const zhCN: Record<TranslationKey, string> = {
   'proofread.risk.table': '表格',
   'proofread.risk.subpart': '小题分界？',
   'proofread.risk.number_mismatch': '原文中没有这个数',
+  'proofread.risk.unreadable': '看不清或手改过？',
   'proofread.subparts': '小题：{labels}',
   'proofread.noSubparts': '没有识别出小题。',
   'proofread.splitAtCursor': '在光标处开始新小题',

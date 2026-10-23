@@ -44,6 +44,13 @@ const RULES: ReadonlyArray<[Subject, RegExp]> = [
     'discrete_math',
     /离散|组合数学|图论|集合论|数理逻辑|discrete|combinatoric|graph\s+theory|set\s+theory/i,
   ],
+  // Economics after statistics ("Business Statistics" / "Statistics for
+  // Economics" stay statistics) and before medicine ("Health Economics").
+  // Course codes such as "ECON 110" / "ECON110" count; 经济法 (law) does not.
+  [
+    'economics',
+    /经济学|微观经济|宏观经济|计量经济|经济(?!法)|微观|宏观|\becon\s*-?\s*\d{2,4}\b|econom/i,
+  ],
   // Medicine (clinical and dental basic sciences) before biology, so 人体解剖 /
   // 生理学 / 医学生物化学 of a medical curriculum are not read as biology.
   // Plant / animal physiology stays biology.

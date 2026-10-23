@@ -10,6 +10,8 @@ import { AnswerInput } from './AnswerInput'
 import { QuestionSource } from './QuestionSource'
 import { ShortAnswerFeedback } from './ShortAnswerFeedback'
 import { AnswerDimensionsView } from './AnswerDimensionsView'
+import { MarketQuestionFigure } from '@/widgets/econ/MarketQuestionFigure'
+import { MarketGradeView } from '@/widgets/econ/MarketGradeView'
 import { QuestionOriginBadge } from '@/shared/ui/QuestionOriginBadge'
 import { quizQuestionOrigin, rubricSourceOf } from '@/entities/question/origin'
 import { isKeyboardChoice, keyboardKeysLabel, useQuizKeyboard } from './quizKeyboard'
@@ -90,6 +92,11 @@ export function QuestionCard({
           format="markdown"
           paragraphClassName="text-[15px] font-medium leading-[1.7] lecture:font-heading lecture:text-[21px] lecture:font-semibold lecture:leading-[1.75] lecture:text-foreground lab:text-[17px] lab:font-normal lab:leading-[1.75]"
         />
+
+        {/* Economics graph questions: the diagram, drawn by the market engine. */}
+        {question.market && question.market.kind !== 'draw_diagram' && (
+          <MarketQuestionFigure figure={question.market.figure} />
+        )}
 
         <AnswerInput
           question={question}
@@ -236,6 +243,7 @@ function EvaluationBox({ evaluation }: { evaluation: QuestionEvaluation }): JSX.
         evaluation.method === 'article_gender' ||
         evaluation.method === 'paradigm_cells' ||
         evaluation.method === 'force_list' ||
+        evaluation.method === 'market' ||
         // A significant-figure deduction under the course rule.
         evaluation.sigFigRule?.deducted === true) &&
         evaluation.score &&
@@ -295,6 +303,7 @@ function EvaluationBox({ evaluation }: { evaluation: QuestionEvaluation }): JSX.
       )}
       {evaluation.note && <p className="text-xs text-muted-foreground">{evaluation.note}</p>}
       <AnswerDimensionsView evaluation={evaluation} />
+      {evaluation.market && <MarketGradeView result={evaluation.market} />}
       {evaluation.explanation && <p>{evaluation.explanation}</p>}
       {isCorrect !== true &&
         evaluation.expected &&

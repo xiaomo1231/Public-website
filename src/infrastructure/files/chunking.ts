@@ -6,6 +6,11 @@ import type {
 import type { DocumentChunk, NewChunkInput } from '@/entities/chunk/types'
 import { buildSourceReference } from '@/entities/chunk/types'
 import { mergeLayoutWarnings, type LayoutWarning } from '@/entities/chunk/layoutWarnings'
+import { toMarkdownTable } from '@/shared/lib/markdownTable'
+import { markedAnswerLine, type MarkedOption } from './markedOptions'
+
+/** Section of the chunks that list an answer key's marked options. */
+export const MARKED_ANSWERS_SECTION = 'Marked answers (from highlighted options)'
 
 /**
  * Generic text chunker.
@@ -250,11 +255,30 @@ export function chunksFromPdf(
     headings: Array<{ text: string }>
     /** Per `text.split('\n')` line: table block id and layout warnings. */
     lineFlags?: Array<{ table?: number; warnings?: LayoutWarning[] } | null>
+    /** No text layer: `text` is OCR of the rendered page. */
+    ocr?: { confidence: number }
+    /** Options marked by a stamp / highlight over their letter (an MC answer key). */
+    markedOptions?: MarkedOption[]
   }>,
 ): NewChunkInput[] {
   const lines: ChunkLine[] = []
   let section: string | undefined
   for (const page of pages) {
+    if (page.ocr) {
+      // Recognised from a picture: every line is low confidence.
+      for (const raw of page.text.split('\n')) {
+        const text = raw.trim()
+        if (!text) continue
+        lines.push({
+          contentType: 'ocr',
+          text,
+          pageNumber: page.pageNumber,
+          section,
+          layoutWarnings: ['ocr'],
+        })
+      }
+      continue
+    }
     const split = page.text.split('\n')
     // Flags are only trusted when they line up with the text exactly.
     const flags = page.lineFlags?.length === split.length ? page.lineFlags : undefined
@@ -295,6 +319,19 @@ export function chunksFromPdf(
         ...(warnings ? { layoutWarnings: warnings } : {}),
       })
     })
+  }
+  // The marked options of an answer key, after all pages: one labelled line
+  // per question ("Answer 7: (c) 1.25; lower"), so the answer parser pairs
+  // each with its question and the paper's own text is not taken as answers.
+  for (const page of pages) {
+    for (const mark of page.markedOptions ?? []) {
+      lines.push({
+        contentType: 'paragraph',
+        text: markedAnswerLine(mark),
+        pageNumber: page.pageNumber,
+        section: MARKED_ANSWERS_SECTION,
+      })
+    }
   }
   const packed = pack(lines)
   return packed.map((line, idx) => ({
@@ -371,6 +408,8 @@ export function chunksFromPptx(
     notes: string
     tables: string[][][]
     imageCount: number
+    /** Structured captions of diagrams drawn with shapes (see `pptxDrawing.ts`). */
+    figures?: string[]
   }>,
 ): NewChunkInput[] {
   const lines: ChunkLine[] = []
@@ -389,6 +428,16 @@ export function chunksFromPptx(
         pageNumber: slide.slideNumber,
         section: slide.title,
       })
+    // A drawn diagram is described once, in its own caption chunk, so its
+    // labels never read as stray lines of the slide text.
+    for (const figure of slide.figures ?? []) {
+      lines.push({
+        contentType: 'caption',
+        text: figure,
+        pageNumber: slide.slideNumber,
+        section: slide.title,
+      })
+    }
     if (slide.notes)
       lines.push({
         contentType: 'note',
@@ -397,9 +446,11 @@ export function chunksFromPptx(
         section: slide.title,
       })
     for (const table of slide.tables) {
+      const rows = table.filter((row) => row.some((cell) => cell.trim()))
+      if (rows.length === 0) continue
       lines.push({
         contentType: 'table',
-        text: table.map((r) => r.join(' | ')).join('\n'),
+        text: toMarkdownTable(rows),
         pageNumber: slide.slideNumber,
         section: slide.title,
       })

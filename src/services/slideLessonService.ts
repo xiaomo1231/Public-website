@@ -643,6 +643,7 @@ function toTutorVisual(visual: {
   type: TutorVisual['type']
   caption: string
   imageMimeType: string
+  unsupportedFormat?: string
 }): TutorVisual {
   return {
     id: visual.id,
@@ -651,6 +652,7 @@ function toTutorVisual(visual: {
     type: visual.type,
     caption: visual.caption,
     hasImage: visual.imageMimeType.length > 0,
+    ...(visual.unsupportedFormat ? { unsupportedFormat: visual.unsupportedFormat } : {}),
   }
 }
 

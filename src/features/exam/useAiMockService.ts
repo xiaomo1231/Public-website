@@ -3,6 +3,7 @@ import { getDb } from '@/infrastructure/db/database'
 import { AIService } from '@/services/aiService'
 import { SettingsService } from '@/services/settingsService'
 import { AiMockPaperService } from '@/services/aiMockPaperService'
+import { econMockFigureEngine } from '@/services/econMockFigureEngine'
 import { createGenerationRun, type GenerationRun } from '@/shared/lib/generationControl'
 import { useGenerationRun, type UseGenerationRunResult } from '@/shared/lib/useGenerationRun'
 
@@ -10,7 +11,9 @@ import { useGenerationRun, type UseGenerationRunResult } from '@/shared/lib/useG
 export async function buildAiMockPaperService(): Promise<AiMockPaperService> {
   const settings = await new SettingsService().get()
   const ai = settings.apiKey.trim() ? new AIService({ config: settings, usageKind: 'quiz' }) : null
-  return new AiMockPaperService({ ai, db: getDb() })
+  // Economics papers: figure groups get a shared, locally computed market
+  // diagram (the engine returns null for other subjects).
+  return new AiMockPaperService({ ai, db: getDb(), figureEngine: econMockFigureEngine })
 }
 
 export function useAiMockService(): AiMockPaperService | null {

@@ -25,7 +25,10 @@ export function ExamAnswerInput({
   service,
   store,
   registerFlush,
+  hideText,
 }: {
+  /** Every part is answered on a diagram above: no text box (pages may still be added). */
+  hideText?: boolean
   mode: ExamAnswerMode
   setId: string
   questionId: string
@@ -75,16 +78,20 @@ export function ExamAnswerInput({
 
   return (
     <>
-      <Label htmlFor={`exam-answer-${questionId}`} className="sr-only">
-        {t('mockExam.answerFor', { number })}
-      </Label>
-      <Textarea
-        id={`exam-answer-${questionId}`}
-        rows={4}
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        placeholder={t('mockExam.answerPlaceholder')}
-      />
+      {!hideText && (
+        <>
+          <Label htmlFor={`exam-answer-${questionId}`} className="sr-only">
+            {t('mockExam.answerFor', { number })}
+          </Label>
+          <Textarea
+            id={`exam-answer-${questionId}`}
+            rows={4}
+            value={value}
+            onChange={(event) => onChange(event.target.value)}
+            placeholder={t('mockExam.answerPlaceholder')}
+          />
+        </>
+      )}
       <AnswerImages questionId={questionId} service={store} />
     </>
   )

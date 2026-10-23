@@ -261,7 +261,7 @@ describe('the professor-style block in question prompts', () => {
       keyPoints: '- 主元',
       slots: [{ id: 's1', mode: 'compact' as const, partLabels: [], knowledgePoints: ['主元'] }],
     }
-    expect(prompts.practiceGenerate.VERSION).toBe('v3')
+    expect(prompts.practiceGenerate.VERSION).toBe('v4')
     expect(prompts.practiceGenerate.buildUserPrompt(practice)).toBe(
       PracticeV1.buildUserPrompt(practice),
     )

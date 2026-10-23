@@ -273,7 +273,7 @@ describe('quiz generation', () => {
   it('is offered for every subject and described in the generator prompt', () => {
     expect(questionTypesForSubject('physics')).toContain('short_answer')
     expect(prompts.quizGenerator.buildSystemPrompt()).toContain('`short_answer`')
-    expect(prompts.quizGenerator.VERSION).toBe('v9')
+    expect(prompts.quizGenerator.VERSION).toBe('v10')
   })
 })
 

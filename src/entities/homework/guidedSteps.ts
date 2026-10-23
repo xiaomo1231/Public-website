@@ -34,6 +34,8 @@ const SUBJECT_KINDS: Partial<Record<Subject, readonly GuidedBlankKind[]>> = {
   stats: ['number', 'expression', 'text'],
   biology: ['number', 'quantity', 'text'],
   medicine: ['number', 'quantity', 'text'],
+  // Money and percentages are `number` blanks (read as `$1,800`, `10%`, `60k`).
+  economics: ['number', 'expression', 'text'],
   cs: ['exact'],
 }
 

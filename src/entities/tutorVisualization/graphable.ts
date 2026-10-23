@@ -215,3 +215,10 @@ export function hasGraphableMath(markdown: string): boolean {
     looksLikeDistributionText(markdown)
   )
 }
+
+/** Supply-and-demand vocabulary: a lesson that may carry a market diagram. */
+export function looksLikeMarketText(text: string): boolean {
+  return /(?:\bdemand\b|\bsupply\b|equilibrium (?:price|quantity)|market equilibrium|elasticit|consumer surplus|producer surplus|deadweight|price (?:ceiling|floor)|\bquotas?\b|tariff|world price|tax incidence|per[- ]unit (?:tax|subsidy)|subsid|供给|需求|均衡价格|均衡数量|市场均衡|弹性|消费者剩余|生产者剩余|无谓损失|价格上限|价格下限|最高限价|最低限价|限价|配额|关税|世界价格|税收归宿|补贴)/i.test(
+    text,
+  )
+}

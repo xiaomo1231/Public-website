@@ -128,7 +128,12 @@ function ActiveBlankStep({
       return
     }
     const next = Object.fromEntries(
-      step.blanks.map((blank) => [blank.id, gradeBlank(blank, record.values[blank.id] ?? '')]),
+      step.blanks.map((blank) => [
+        blank.id,
+        gradeBlank(blank, record.values[blank.id] ?? '', {
+          economics: subject === 'economics',
+        }),
+      ]),
     )
     setGrades(next)
     if (stepComplete(Object.values(next))) onChange({ ...record, done: true })

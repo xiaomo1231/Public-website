@@ -29,6 +29,7 @@ export type SymbolGroupId =
   | 'chemistry'
   | 'biology'
   | 'medicine'
+  | 'economics'
   | 'de'
   | 'hu'
   | 'chemEquation'
@@ -144,6 +145,21 @@ const TEXT_GROUPS: Record<SymbolGroupId, SymbolItem[]> = {
     sym('mmol/L'),
     sym('°C'),
   ],
+  economics: [
+    sym('$'),
+    sym('%'),
+    ...each('↑↓→Δ'),
+    sym('ε'),
+    tpl('|ε|', '||', 1),
+    sym('Q*'),
+    sym('P*'),
+    sym('D₁'),
+    sym('D₂'),
+    sym('S₁'),
+    sym('S₂'),
+    sym('½'),
+    ...each('×÷≈≤≥'),
+  ],
   // Letters of the course language (German, Hungarian) for a keyboard without them.
   de: [...each('äöüßÄÖÜ'), sym('„'), sym('“')],
   hu: each('áéíóöőúüűÁÉÍÓÖŐÚÜŰ'),
@@ -164,6 +180,7 @@ const TEXT_ORDER: Record<string, SymbolGroupId[]> = {
   biology: ['biology', 'basic', 'scripts', 'greek', 'arrows'],
   cs: ['basic', 'sets', 'arrows', 'scripts', 'greek'],
   medicine: ['medicine', 'biology', 'basic', 'scripts', 'greek'],
+  economics: ['economics', 'basic', 'greek', 'scripts', 'arrows'],
   other: ['basic', 'greek', 'calculus', 'sets', 'scripts', 'arrows'],
 }
 
@@ -217,6 +234,18 @@ const NUMBER_GROUPS: SymbolGroup[] = [
       sym('^'),
     ],
   },
+]
+
+/**
+ * Numeric answers in an economics course: money and percentages are read by
+ * the economics number reader (`$1,800`, `10%`, `60k`), so they get buttons.
+ */
+const ECONOMICS_NUMBER_GROUPS: SymbolGroup[] = [
+  {
+    id: 'economics',
+    items: [sym('$'), sym('%'), sym('−', '-'), sym(','), sym('k'), tpl('a/b', '()/()', 1)],
+  },
+  ...NUMBER_GROUPS,
 ]
 
 const QUANTITY_GROUPS: SymbolGroup[] = [
@@ -291,7 +320,7 @@ export function symbolGroupsFor(
   language?: string,
 ): SymbolGroup[] {
   if (mode === 'expression') return EXPRESSION_GROUPS
-  if (mode === 'number') return NUMBER_GROUPS
+  if (mode === 'number') return subject === 'economics' ? ECONOMICS_NUMBER_GROUPS : NUMBER_GROUPS
   if (mode === 'quantity') return QUANTITY_GROUPS
   if (mode === 'chemistry') return CHEMISTRY_GROUPS
   const order = TEXT_ORDER[subject ?? 'other'] ?? TEXT_ORDER.other!

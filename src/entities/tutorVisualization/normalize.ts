@@ -31,6 +31,7 @@ import { asRecord, readNumber, sanitizeText } from './sanitize'
 import { SCIENCE_NORMALIZERS } from './normalizeScience'
 import { SUBJECT_NORMALIZERS } from './normalizeSubjects'
 import { MEDICAL_NORMALIZERS } from './normalizeMedicine'
+import { MARKET_NORMALIZERS } from './normalizeMarket'
 import {
   DISTRIBUTION_FAMILIES,
   isDiscrete,
@@ -754,7 +755,10 @@ function normalizeOne(raw: unknown, index: number): Normalized {
   if (type === 'hasse_2d') return normalizeHasse(draft, base)
   if (type === 'distribution_2d') return normalizeDistribution(draft, base)
   const science =
-    SCIENCE_NORMALIZERS[type] ?? SUBJECT_NORMALIZERS[type] ?? MEDICAL_NORMALIZERS[type]
+    SCIENCE_NORMALIZERS[type] ??
+    SUBJECT_NORMALIZERS[type] ??
+    MEDICAL_NORMALIZERS[type] ??
+    MARKET_NORMALIZERS[type]
   if (science) return science(draft, base)
 
   const planeBase: CommonBase & { viewport?: VisualizationViewport } = {

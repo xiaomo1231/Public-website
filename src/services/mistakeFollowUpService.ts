@@ -41,9 +41,13 @@ import { parseNumeric } from '@/infrastructure/math/expressionEvaluator'
 import type { GeneratedPracticePart } from '@/infrastructure/ai/prompts/practice-generate/v1'
 import { resolveControl, type GenerationControl } from '@/shared/lib/generationControl'
 import { getUILanguage, t } from '@/i18n'
-import { loadProjectSubjectContext } from './projectSubject'
+import { loadProjectSubject, loadProjectSubjectContext } from './projectSubject'
 import { questionText, solutionText } from './practiceSetService'
 import { recordCheckedAnswer } from './practiceLearning'
+import { QuestionRepository } from '@/entities/question/repository'
+import { marketVariant, marketVariantSet } from '@/entities/econ/graphGenerator'
+import { marketErrorDimension, type MarketGradeResult } from '@/entities/econ/graphQuestion'
+import { marketFeedback } from './marketFeedback'
 
 /**
  * 错题跟进 for one mistake: the lecture pages it relates to, 再试一次 on the same
@@ -180,7 +184,13 @@ export class MistakeFollowUpService {
     const mistake = await this.requireMistake(mistakeId)
     const question = await this.retryQuestion(mistake)
     if (!question) throw new AppError(t('followUp.retryUnavailable'), 'VALIDATION_ERROR')
-    const evaluation = evaluateDeterministic(question, answer)
+    const evaluation = evaluateDeterministic(
+      question,
+      answer,
+      question.type === 'numeric'
+        ? { subject: await loadProjectSubject(question.projectId, this.db) }
+        : {},
+    )
     const verdict =
       evaluation.isCorrect === null ? 'uncertain' : evaluation.isCorrect ? 'correct' : 'incorrect'
     if (mistake.followUp)
@@ -223,7 +233,11 @@ export class MistakeFollowUpService {
 
     let variant: MistakeVariant | null = null
     let rejected: string | undefined
-    const local = await this.localVariant(mistake, purpose, followUp, language)
+    // A graph question: a new market of the same structure, every answer
+    // from the engine (no AI review needed — nothing in it is the model's).
+    const graph = await this.marketLocalVariant(mistake, purpose, followUp, language)
+    if (graph && !seen.has(graph.hash)) variant = graph
+    const local = variant ? null : await this.localVariant(mistake, purpose, followUp, language)
     if (local && !seen.has(local.hash)) {
       const review = await this.review(mistake, local, control)
       if (review.pass) variant = local
@@ -341,6 +355,24 @@ export class MistakeFollowUpService {
         if (grader?.kind === 'quantity') dimension = unitOrValue(grader, answer)
         else if (grader?.kind === 'numeric') dimension = 'value'
       }
+      // Graph parts: item-by-item feedback and the kind of error.
+      const graphs = (local.market ?? []).filter((item): item is MarketGradeResult => !!item)
+      if (graphs.length > 0) {
+        if (verdict !== 'correct' && !dimension)
+          dimension = graphs.map(marketErrorDimension).find(Boolean)
+        return {
+          verdict,
+          method: 'local',
+          expectedAnswer,
+          feedback:
+            graphs
+              .map((item) => marketFeedback(item))
+              .filter(Boolean)
+              .join(' ') ||
+            t(verdict === 'correct' ? 'followUp.check.correct' : 'followUp.check.incorrect'),
+          ...(dimension ? { dimension } : {}),
+        }
+      }
       return {
         verdict,
         method: 'local',
@@ -393,6 +425,59 @@ export class MistakeFollowUpService {
     }
   }
 
+  /**
+   * An economics graph question built locally with new numbers, when the
+   * mistake came from one (a quiz graph question, or a practice / mock-paper
+   * question whose parts are all graph parts).
+   */
+  private async marketLocalVariant(
+    mistake: Mistake,
+    purpose: MistakeVariant['purpose'],
+    followUp: MistakeFollowUp,
+    language: PracticeLanguage,
+  ): Promise<MistakeVariant | null> {
+    if (!mistake.questionId) return null
+    const rng = createRng(`${mistake.id}:${followUp.seen.length}:${followUp.history.length}:market`)
+    if (mistake.homeworkSetId) {
+      const question = await new HomeworkRepository(this.db).getQuestion(mistake.questionId)
+      const parts = question?.practice?.parts ?? []
+      if (parts.length === 0 || parts.some((part) => part.grader.kind !== 'market')) return null
+      const set = marketVariantSet(
+        parts.map((part) => ({
+          ...(part.label ? { label: part.label } : {}),
+          question: (part.grader as Extract<PracticeGrader, { kind: 'market' }>).question,
+        })),
+        rng,
+        language,
+      )
+      if (!set) return null
+      return makeVariant(
+        purpose,
+        'local',
+        set.stem,
+        set.parts.map((part) => ({
+          ...(part.label ? { label: part.label } : {}),
+          prompt: part.prompt,
+          answer: part.answer,
+          solution: part.solution,
+          grader: { kind: 'market', question: part.question },
+        })),
+      )
+    }
+    const question = await new QuestionRepository(this.db).get(mistake.questionId)
+    if (!question?.market) return null
+    const built = marketVariant(question.market, rng, language)
+    if (!built) return null
+    return makeVariant(purpose, 'local', '', [
+      {
+        prompt: built.stem,
+        answer: built.answer,
+        solution: built.solution,
+        grader: { kind: 'market', question: built.question },
+      },
+    ])
+  }
+
   /** A locally built linear system, when the mistake came from one. */
   private async localVariant(
     mistake: Mistake,
@@ -439,7 +524,9 @@ export class MistakeFollowUpService {
       {
         role: 'system',
         content: prompts.subjectProfile.withSubject(
-          prompts.practiceGenerate.buildSystemPrompt(),
+          prompts.practiceGenerate.buildSystemPrompt(
+            subject?.subject === 'economics' ? { economics: true } : {},
+          ),
           subject,
         ),
       },
@@ -478,7 +565,9 @@ export class MistakeFollowUpService {
           reason:
             'The stated answer is not the computed value to the requested significant figures.',
         }
-      const verified = verifyAiPart(raw, undefined, language)
+      const verified = verifyAiPart(raw, undefined, language, {
+        economics: subject?.subject === 'economics',
+      })
       if (!verified.ok)
         return { reason: `The stated answer did not check out (${verified.reason}).` }
       parts.push(verified.part)

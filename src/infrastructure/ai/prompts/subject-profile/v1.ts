@@ -294,6 +294,38 @@ const PROFILES: Record<Exclude<Subject, 'other' | 'language'>, SubjectProfile> =
       'For regression give the data table (x, y pairs); for a confidence interval give the sample mean, standard deviation, size and confidence level, and say whether σ is known.',
     ],
   },
+  economics: {
+    name: 'Economics (introductory micro- and macroeconomics: supply and demand, elasticity, welfare, government intervention, market structures)',
+    notation: [
+      'Market diagrams: price P on the vertical axis and quantity Q on the horizontal axis; curves are straight lines unless the question says otherwise. Label curves D and S, a shifted curve D1 → D2 (S1 → S2), and the equilibrium (Q*, P*); a new equilibrium (Q2*, P2*).',
+      'State the unit of every amount ($, $ per unit, units per week, thousands of units, %); when an axis is in thousands, say so and convert in the answer (½ × 60 × 2 thousand = $60,000).',
+    ],
+    reasoning: [
+      'Keep a change in quantity demanded (a movement along D, caused by the good’s own price) apart from a change in demand (a shift of D, caused by income, prices of substitutes and complements, tastes, expectations, the number of buyers); likewise a change in quantity supplied vs a change in supply (input prices, technology, expectations, the number of sellers, taxes and subsidies on producers).',
+      'Draw-and-explain questions: say which curve shifts, in which direction and why, then the previous and the new equilibrium P and Q, and finish with the direction of change of every variable asked.',
+      'Elasticity by the midpoint method, ε = (ΔQ / Q_avg) ÷ (ΔP / P_avg); report the price elasticity of demand as an absolute value unless the question asks for the sign; |ε| > 1 elastic, < 1 inelastic, = 1 unit elastic; through a given point, the relatively more elastic of two linear curves is the flatter one. Use the total revenue test (price and total revenue move in opposite directions when demand is elastic). Income and cross-price elasticities keep their sign (normal / inferior, substitutes / complements).',
+      'Welfare as areas on the diagram: consumer surplus, producer surplus, tax revenue and deadweight loss as triangles or rectangles (½ × base × height), each with its unit. The burden of a tax falls more on the less elastic side of the market.',
+      'A price ceiling binds only below the equilibrium price (shortage), a price floor only above it (surplus); a non-binding control changes nothing.',
+      'Keep positive statements (what is, testable) apart from normative ones (what ought to be).',
+    ],
+    answers: [
+      'Give the number with its unit and sign convention ($1,800; 85,000 units; 10%; |ε| = 1.25). Round as the question says, otherwise to two decimal places for elasticities and to whole dollars for money.',
+      'Multiple-choice questions often come in groups that all refer to one figure; answer each from the same figure.',
+    ],
+    pitfalls: [
+      'calling a movement along a curve a shift of the curve (or the reverse)',
+      'shifting the wrong curve, or shifting a curve in the wrong direction',
+      'computing elasticity from end-point percentages instead of the midpoint method',
+      'reading the flatter curve as less elastic',
+      'forgetting the "thousands" of an axis in an area',
+      'treating a non-binding price ceiling or floor as binding',
+      'putting the whole tax burden on one side regardless of elasticities',
+    ],
+    lesson: [
+      'Work every market from explicit lines so the diagram can be drawn exactly: give the demand and supply equations (e.g. Qd = 100 − 2P, Qs = 3P − 20) or their intercepts and slopes, the equilibrium they give, and for each change the curve that shifts and by how much (e.g. "supply shifts right by 10 units at every price", or the new equation); for a tax, subsidy, ceiling or floor give its amount or level.',
+      COURSE_FIGURES,
+    ],
+  },
 }
 
 /**
@@ -508,6 +540,8 @@ const PROFILE_REVISIONS: Partial<Record<Subject, number>> = {
   cs: 2,
   // r1: new (foreign-language courses); the target language is part of the key.
   language: 1,
+  // r1: new (introductory micro- and macroeconomics).
+  economics: 1,
 }
 
 /**

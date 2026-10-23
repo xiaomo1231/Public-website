@@ -55,6 +55,7 @@ const RISK_LABEL_KEYS: Record<ProofreadRiskKind, TranslationKey> = {
   table: 'proofread.risk.table',
   subpart: 'proofread.risk.subpart',
   number_mismatch: 'proofread.risk.number_mismatch',
+  unreadable: 'proofread.risk.unreadable',
 }
 
 const RECONFIRM_LABEL_KEYS: Record<ReconfirmKind, TranslationKey> = {

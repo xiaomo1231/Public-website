@@ -2,6 +2,7 @@ import type { AppDatabase } from '@/infrastructure/db/database'
 import { getDb } from '@/infrastructure/db/database'
 import type { NewQuestionInput, Question } from './types'
 import { normalizeQuestionOptions } from './types'
+import { isMarketQuestionType } from '@/entities/econ/graphAnswerText'
 import { logger } from '@/infrastructure/logger/logger'
 import { StorageError, ValidationError } from '@/infrastructure/errors/AppError'
 import { t } from '@/i18n'
@@ -63,11 +64,13 @@ export class QuestionRepository {
               ...(input.sigFigsBasis ? { sigFigsBasis: input.sigFigsBasis } : {}),
             }
           : {}),
+        ...(input.type === 'numeric' && input.econ ? { econ: input.econ } : {}),
         ...(input.type === 'vector' && input.vector ? { vector: input.vector } : {}),
         ...(input.type === 'nomenclature' && input.nomenclature
           ? { nomenclature: input.nomenclature }
           : {}),
         ...(input.type === 'force_list' && input.forces?.length ? { forces: input.forces } : {}),
+        ...(input.market && isMarketQuestionType(input.type) ? { market: input.market } : {}),
         ...(input.type === 'short_answer' && input.rubric?.length ? { rubric: input.rubric } : {}),
         ...(input.type === 'short_answer' && input.rubric?.length && input.rubricSource
           ? { rubricSource: input.rubricSource }

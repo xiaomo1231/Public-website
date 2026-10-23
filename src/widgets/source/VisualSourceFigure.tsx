@@ -64,7 +64,9 @@ export function VisualSourceFigure({ visual, documentName }: VisualSourceFigureP
       ) : unavailable ? (
         <div className="flex items-center gap-2 rounded-lg border border-dashed border-border px-3 py-4 text-[13px] text-muted-foreground">
           <ImageOff className="h-4 w-4 shrink-0" aria-hidden />
-          {t('tutor.visualUnavailable')}
+          {visual.unsupportedFormat
+            ? t('tutor.visualFormatUnsupported', { format: visual.unsupportedFormat.toUpperCase() })
+            : t('tutor.visualUnavailable')}
         </div>
       ) : (
         <div

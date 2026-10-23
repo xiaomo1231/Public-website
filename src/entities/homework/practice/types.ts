@@ -1,4 +1,6 @@
 import type { SolutionKind } from '@/infrastructure/math/rref'
+import type { EconNumberSpec } from '@/infrastructure/math/economicsAnswer'
+import type { MarketQuestion } from '@/entities/econ/graphQuestion'
 
 /**
  * 讲解末尾「做练习题」: new practice questions built from a finished
@@ -36,7 +38,19 @@ export type PracticeGrader =
     }
   | { kind: 'expression'; expected: string; constant?: boolean }
   /** `sigFigs`: the significant figures the answer must carry (value, unit and figures judged separately). */
-  | { kind: 'numeric'; expected: number; relTol: number; sigFigs?: number }
+  | {
+      kind: 'numeric'
+      expected: number
+      relTol: number
+      sigFigs?: number
+      /**
+       * Economics: read the answer as money / a percentage (`$1,800`, `10%`,
+       * `60k`; amounts in thousands, absolute-value elasticity), compared with
+       * `expectedText` (the stated answer, e.g. "$60,000") when present.
+       */
+      econ?: EconNumberSpec
+      expectedText?: string
+    }
   | { kind: 'quantity'; value: number; unit: string; sigFigs?: number }
   | { kind: 'chem_equation'; equation: string }
   /** AI 模拟卷 multiple choice: the correct option letter (`A` = first). */
@@ -50,6 +64,13 @@ export type PracticeGrader =
       formula: string
       names: string[]
     }
+  /**
+   * Economics graph question (a supply-and-demand diagram): shift
+   * identification, a value read from it, or a drawing. Graded locally by the
+   * market engine item by item (`gradeMarketQuestion`); the answer shown is
+   * the engine's.
+   */
+  | { kind: 'market'; question: MarketQuestion }
   | { kind: 'text' }
 
 /** One answerable part of a practice question (the whole question when it has no sub-parts). */

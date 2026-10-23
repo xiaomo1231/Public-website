@@ -172,9 +172,31 @@ const STATS_SYMBOLS: QuickItem[] = [
 ]
 
 /**
+ * Economics notation for a written answer (fixed, never taken from the answer):
+ * money, percentages, directions of change and the equilibrium labels.
+ */
+const ECONOMICS_SYMBOLS: QuickItem[] = [
+  { glyph: '$', insert: '$' },
+  { glyph: '%', insert: '%' },
+  { glyph: '↑', insert: '↑' },
+  { glyph: '↓', insert: '↓' },
+  { glyph: 'Δ', insert: 'Δ' },
+  { glyph: 'ε', insert: 'ε' },
+  { glyph: 'Q*', insert: 'Q*' },
+  { glyph: 'P*', insert: 'P*' },
+]
+
+/** Number blanks in an economics course: money and percentages are read too. */
+const ECONOMICS_NUMBER_TOOLS: QuickItem[] = [
+  { glyph: '$', insert: '$' },
+  { glyph: '%', insert: '%' },
+]
+
+/**
  * Quick inputs for one guided-practice blank. A written blank of a language
  * course gets that language's letters (ä ö ü ß …); other written blanks get
- * nothing extra, except statistics notation in a statistics course.
+ * nothing extra, except statistics notation in a statistics course and
+ * economics notation in an economics course.
  */
 export function blankQuickItems(
   blank: GuidedBlank,
@@ -185,7 +207,7 @@ export function blankQuickItems(
     case 'expression':
       return expressionQuickItems(blank.answer)
     case 'number':
-      return NUMBER_TOOLS
+      return subject === 'economics' ? [...ECONOMICS_NUMBER_TOOLS, ...NUMBER_TOOLS] : NUMBER_TOOLS
     case 'quantity':
       return [...quantityUnits(blank.answer), ...QUANTITY_TOOLS]
     case 'chemistry':
@@ -193,7 +215,7 @@ export function blankQuickItems(
     case 'text': {
       const letters = languageSymbolGroup(language)
       if (letters) return letters.items
-      return subject === 'stats' ? STATS_SYMBOLS : []
+      return subject === 'stats' ? STATS_SYMBOLS : subject === 'economics' ? ECONOMICS_SYMBOLS : []
     }
     default:
       return []
